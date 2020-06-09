@@ -159,35 +159,8 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"ui"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"users"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"web_sessions"/4/1
-28 splits:
- /Tenant/5/Table/11
- /Tenant/5/Table/12
- /Tenant/5/Table/13
- /Tenant/5/Table/14
- /Tenant/5/Table/15
- /Tenant/5/Table/16
- /Tenant/5/Table/17
- /Tenant/5/Table/18
- /Tenant/5/Table/19
- /Tenant/5/Table/20
- /Tenant/5/Table/21
- /Tenant/5/Table/22
- /Tenant/5/Table/23
- /Tenant/5/Table/24
- /Tenant/5/Table/25
- /Tenant/5/Table/26
- /Tenant/5/Table/27
- /Tenant/5/Table/28
- /Tenant/5/Table/29
- /Tenant/5/NamespaceTable/30
- /Tenant/5/NamespaceTable/Max
- /Tenant/5/Table/32
- /Tenant/5/Table/33
- /Tenant/5/Table/34
- /Tenant/5/Table/35
- /Tenant/5/Table/36
- /Tenant/5/Table/37
- /Tenant/5/Table/38
+1 splits:
+ /Tenant/5
 
 initial-keys tenant=999
 ----
@@ -250,32 +223,5 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"ui"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"users"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"web_sessions"/4/1
-28 splits:
- /Tenant/999/Table/11
- /Tenant/999/Table/12
- /Tenant/999/Table/13
- /Tenant/999/Table/14
- /Tenant/999/Table/15
- /Tenant/999/Table/16
- /Tenant/999/Table/17
- /Tenant/999/Table/18
- /Tenant/999/Table/19
- /Tenant/999/Table/20
- /Tenant/999/Table/21
- /Tenant/999/Table/22
- /Tenant/999/Table/23
- /Tenant/999/Table/24
- /Tenant/999/Table/25
- /Tenant/999/Table/26
- /Tenant/999/Table/27
- /Tenant/999/Table/28
- /Tenant/999/Table/29
- /Tenant/999/NamespaceTable/30
- /Tenant/999/NamespaceTable/Max
- /Tenant/999/Table/32
- /Tenant/999/Table/33
- /Tenant/999/Table/34
- /Tenant/999/Table/35
- /Tenant/999/Table/36
- /Tenant/999/Table/37
- /Tenant/999/Table/38
+1 splits:
+ /Tenant/999

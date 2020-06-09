@@ -104,7 +104,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
-	var descriptors []sqlbase.DescriptorProto
+	var descriptors []sqlbase.DescriptorInterface
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -142,7 +142,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.DatabaseDescriptor:
+		case *sqlbase.ImmutableDatabaseDescriptor:
 			if err := d.Validate(); err != nil {
 				return err
 			}

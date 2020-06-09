@@ -108,7 +108,7 @@ CREATE INDEX ON t.t1 (x);
 	}
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		newDesc := downgradeForeignKey(desc)
+		newDesc := sqlbase.NewImmutableTableDescriptor(*downgradeForeignKey(desc))
 		if err := catalogkv.WriteDescToBatch(ctx, false, s.ClusterSettings(), b, keys.SystemSQLCodec, desc.ID, newDesc); err != nil {
 			return err
 		}

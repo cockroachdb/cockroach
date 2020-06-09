@@ -343,7 +343,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ts := s.(*TestServer)
 	tds := db.NonTransactionalSender()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m", "m", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -442,7 +442,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			tds := db.NonTransactionalSender()
 
 			for _, sk := range tc.splitKeys {
-				if err := ts.node.storeCfg.DB.AdminSplit(ctx, sk, sk, hlc.MaxTimestamp /* expirationTime */); err != nil {
+				if err := ts.node.storeCfg.DB.AdminSplit(ctx, sk, hlc.MaxTimestamp /* expirationTime */); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -550,10 +550,9 @@ func TestSystemConfigGossip(t *testing.T) {
 
 	key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 	valAt := func(i int) *sqlbase.Descriptor {
-		return sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
-			ID:   sqlbase.ID(i),
-			Name: "foo",
-		})
+		return sqlbase.NewInitialDatabaseDescriptor(
+			sqlbase.ID(i), "foo",
+		).DescriptorProto()
 	}
 
 	// Register a callback for gossip updates.

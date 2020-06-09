@@ -46,7 +46,7 @@ import (
 
 type createTableNode struct {
 	n          *tree.CreateTable
-	dbDesc     *sqlbase.DatabaseDescriptor
+	dbDesc     *sqlbase.ImmutableDatabaseDescriptor
 	sourcePlan planNode
 
 	run createTableRun
@@ -203,7 +203,7 @@ func getTableCreateParams(
 			return nil, 0, err
 		}
 		// Still return data in this case.
-		return tKey, schemaID, makeObjectAlreadyExistsError(desc, tableName)
+		return tKey, schemaID, makeObjectAlreadyExistsError(desc.DescriptorProto(), tableName)
 	} else if err != nil {
 		return nil, 0, err
 	}
@@ -214,7 +214,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 	isTemporary := n.n.Temporary
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, n.n.Table.Table())
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.n.Table.Table())
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
@@ -270,7 +270,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	privs := n.dbDesc.GetPrivileges()
-	if n.dbDesc.ID == keys.SystemDatabaseID {
+	if n.dbDesc.GetID() == keys.SystemDatabaseID {
 		privs = sqlbase.NewDefaultPrivilegeDescriptor()
 	}
 
@@ -289,7 +289,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.ID, schemaID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
+			n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, schemaID, id, creationTime, privs, affected, isTemporary)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, privs, affected, isTemporary)
 		if err != nil {
 			return err
 		}
@@ -523,11 +523,11 @@ func qualifyFKColErrorWithDB(
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	schema, err := resolver.ResolveSchemaNameByID(ctx, txn, codec, db.ID, tbl.GetParentSchemaID())
+	schema, err := resolver.ResolveSchemaNameByID(ctx, txn, codec, db.GetID(), tbl.GetParentSchemaID())
 	if err != nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
 	}
-	return tree.ErrString(tree.NewUnresolvedName(db.Name, schema, tbl.Name, col))
+	return tree.ErrString(tree.NewUnresolvedName(db.GetName(), schema, tbl.Name, col))
 }
 
 // FKTableState is the state of the referencing table resolveFK() is called on.
@@ -1065,28 +1065,6 @@ var CreatePartitioningCCL = func(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
-// InitTableDescriptor returns a blank TableDescriptor.
-func InitTableDescriptor(
-	id, parentID, parentSchemaID sqlbase.ID,
-	name string,
-	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
-	temporary bool,
-) sqlbase.MutableTableDescriptor {
-	return *sqlbase.NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
-		ID:                      id,
-		Name:                    name,
-		ParentID:                parentID,
-		UnexposedParentSchemaID: parentSchemaID,
-		FormatVersion:           sqlbase.InterleavedFormatVersion,
-		Version:                 1,
-		ModificationTime:        creationTime,
-		Privileges:              privileges,
-		CreateAsOfTime:          creationTime,
-		Temporary:               temporary,
-	})
-}
-
 func getFinalSourceQuery(source *tree.Select, evalCtx *tree.EvalContext) string {
 	// Ensure that all the table names pretty-print as fully qualified, so we
 	// store that in the table descriptor.
@@ -1223,7 +1201,7 @@ func MakeTableDesc(
 	// been populated.
 	columnDefaultExprs := make([]tree.TypedExpr, len(n.Defs))
 
-	desc := InitTableDescriptor(
+	desc := sqlbase.InitTableDescriptor(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, temporary,
 	)
 
@@ -1988,16 +1966,20 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 	return newDefs, nil
 }
 
-func makeObjectAlreadyExistsError(collidingObject sqlbase.DescriptorProto, name string) error {
-	switch collidingObject.(type) {
-	case *TableDescriptor:
+func makeObjectAlreadyExistsError(collidingObject *sqlbase.Descriptor, name string) error {
+	switch collidingObject.Union.(type) {
+	case *sqlbase.Descriptor_Table:
 		return sqlbase.NewRelationAlreadyExistsError(name)
-	case *TypeDescriptor:
+	case *sqlbase.Descriptor_Type:
 		return sqlbase.NewTypeAlreadyExistsError(name)
-	case *DatabaseDescriptor:
+	case *sqlbase.Descriptor_Database:
 		return sqlbase.NewDatabaseAlreadyExistsError(name)
+	case *sqlbase.Descriptor_Schema:
+		// TODO(ajwerner): Add a case for an existing schema object.
+		return errors.AssertionFailedf("schema exists with name %v", name)
+	default:
+		return errors.AssertionFailedf("unknown type %T exists with name %v", collidingObject.Union, name)
 	}
-	return nil
 }
 
 // makeShardColumnDesc returns a new column descriptor for a hidden computed shard column

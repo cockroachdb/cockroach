@@ -33,7 +33,7 @@ import (
 
 type dropDatabaseNode struct {
 	n               *tree.DropDatabase
-	dbDesc          *sqlbase.DatabaseDescriptor
+	dbDesc          *sqlbase.ImmutableDatabaseDescriptor
 	td              []toDelete
 	schemasToDelete []string
 }
@@ -69,7 +69,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.ID)
+	schemas, err := p.Tables().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		case tree.DropRestrict:
 			return nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"database %q is not empty and RESTRICT was specified",
-				tree.ErrNameStringP(&dbDesc.Name))
+				tree.ErrNameString(dbDesc.GetName()))
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
@@ -130,10 +130,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 			)
 		}
 		if tbDesc.State == sqlbase.TableDescriptor_OFFLINE {
+			dbName := dbDesc.GetName()
 			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot drop a database with OFFLINE tables, ensure %s is"+
 					" dropped or made public before dropping database %s",
-				tbName.String(), tree.AsString((*tree.Name)(&dbDesc.Name)))
+				tbName.String(), tree.AsString((*tree.Name)(&dbName)))
 		}
 		if err := p.prepareDropWithTableDesc(ctx, tbDesc); err != nil {
 			return nil, err
@@ -173,7 +174,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tableDescs = append(tableDescs, toDel.desc)
 	}
 	if err := p.createDropDatabaseJob(
-		ctx, n.dbDesc.ID, droppedTableDetails, tree.AsStringWithFQNames(n.n, params.Ann()),
+		ctx, n.dbDesc.GetID(), droppedTableDetails, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
@@ -200,7 +201,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.ID)
+	descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
 
 	b := &kv.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
@@ -213,7 +214,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			ctx,
 			p.txn,
 			p.ExecCfg().Codec,
-			n.dbDesc.ID,
+			n.dbDesc.GetID(),
 			schemaToDelete,
 		); err != nil {
 			return err
@@ -221,7 +222,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	err := sqlbase.RemoveDatabaseNamespaceEntry(
-		ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.Name, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		ctx, p.txn, p.ExecCfg().Codec, n.dbDesc.GetName(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return err
@@ -230,7 +231,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	// No job was created because no tables were dropped, so zone config can be
 	// immediately removed, if applicable.
 	if len(tableDescs) == 0 && params.ExecCfg().Codec.ForSystemTenant() {
-		zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.ID))
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(n.dbDesc.GetID()))
 		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 		}
@@ -238,13 +239,13 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	}
 
-	p.Tables().AddUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, descs.DBDropped)
+	p.Tables().AddUncommittedDatabase(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
-	if err := p.removeDbComment(ctx, n.dbDesc.ID); err != nil {
+	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
 		return err
 	}
 
@@ -254,7 +255,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		p.txn,
 		EventLogDropDatabase,
-		int32(n.dbDesc.ID),
+		int32(n.dbDesc.GetID()),
 		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			DatabaseName         string

@@ -94,7 +94,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,
 		// see split/split_test.go.
-		shouldQ, priority := shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
+		shouldQ, priority := shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
 			repl.GetMaxBytes(), repl.ShouldBackpressureWrites(), cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)

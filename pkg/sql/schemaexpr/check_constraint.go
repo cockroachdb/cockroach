@@ -101,7 +101,7 @@ func (b *CheckConstraintBuilder) Build(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, colIDs, err := replaceVars(&b.desc.TableDescriptor, expr)
+	replacedExpr, colIDs, err := replaceVars(b.desc, expr)
 	if err != nil {
 		return nil, err
 	}

@@ -24,11 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-var _ DescriptorProto = &DatabaseDescriptor{}
-var _ DescriptorProto = &TableDescriptor{}
-var _ DescriptorProto = &TypeDescriptor{}
-var _ DescriptorProto = &SchemaDescriptor{}
-
 // DescriptorKey is the interface implemented by both
 // databaseKey and tableKey. It is used to easily get the
 // descriptor key and plain name.
@@ -37,21 +32,11 @@ type DescriptorKey interface {
 	Name() string
 }
 
-// DescriptorProto is the interface implemented by all Descriptors.
-// TODO(marc): this is getting rather large.
-type DescriptorProto interface {
-	protoutil.Message
-	GetPrivileges() *PrivilegeDescriptor
-	GetID() ID
-	SetID(ID)
-	TypeName() string
-	GetName() string
-	SetName(string)
-	GetAuditMode() TableDescriptor_AuditMode
-}
-
-// WrapDescriptor fills in a Descriptor.
-func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
+// wrapDescriptor fills in a Descriptor from a given member of its union.
+//
+// TODO(ajwerner): Replace this with the relevant type-specific DescriptorProto
+// methods.
+func wrapDescriptor(descriptor protoutil.Message) *Descriptor {
 	desc := &Descriptor{}
 	switch t := descriptor.(type) {
 	case *MutableTableDescriptor:
@@ -67,7 +52,7 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 	case *SchemaDescriptor:
 		desc.Union = &Descriptor_Schema{Schema: t}
 	default:
-		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
+		panic(fmt.Sprintf("unknown descriptor type: %T", descriptor))
 	}
 	return desc
 }
@@ -85,7 +70,7 @@ type MetadataSchema struct {
 
 type metadataDescriptor struct {
 	parentID ID
-	desc     DescriptorProto
+	desc     DescriptorInterface
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -103,7 +88,7 @@ func MakeMetadataSchema(
 }
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
-func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
+func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorInterface) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
@@ -150,7 +135,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID ID, desc DescriptorProto) {
+	addDescriptor := func(parentID ID, desc DescriptorInterface) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
@@ -178,8 +163,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
-		wrappedDesc := WrapDescriptor(desc)
-		if err := value.SetProto(wrappedDesc); err != nil {
+		descDesc := desc.DescriptorProto()
+		if err := value.SetProto(descDesc); err != nil {
 			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		ret = append(ret, roachpb.KeyValue{
@@ -197,8 +182,24 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		addDescriptor(sysObj.parentID, sysObj.desc)
 	}
 
-	for _, id := range ms.otherSplitIDs {
-		splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
+	// The splits slice currently has a split point for each of the object
+	// descriptors in ms.descs. If we're fetching the initial values for the
+	// system tenant, add any additional split point, which correspond to
+	// "pseudo" tables that don't have real descriptors.
+	//
+	// If we're fetching the initial values for a secondary tenant, things are
+	// different. Secondary tenants do not enforce split points at table
+	// boundaries. In fact, if we tried to split at table boundaries, those
+	// splits would quickly be merged away. The only enforced split points are
+	// between secondary tenants (e.g. between /tenant/<id> and /tenant/<id+1>).
+	// So we drop all descriptor split points and replace it with a single split
+	// point at the beginning of this tenant's keyspace.
+	if ms.codec.ForSystemTenant() {
+		for _, id := range ms.otherSplitIDs {
+			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
+		}
+	} else {
+		splits = []roachpb.RKey{roachpb.RKey(ms.codec.TenantPrefix())}
 	}
 
 	// Other key/value generation that doesn't fit into databases and
@@ -242,8 +243,8 @@ var systemTableIDCache = func() [2]map[string]ID {
 		ms := MetadataSchema{codec: codec}
 		addSystemDescriptorsToSchema(&ms)
 		for _, d := range ms.descs {
-			t, ok := d.desc.(*TableDescriptor)
-			if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
+			t := d.desc.TableDesc()
+			if t == nil || t.ParentID != keys.SystemDatabaseID || t.ID > keys.MaxReservedDescID {
 				// We only cache table descriptors under 'system' with a
 				// reserved table ID.
 				continue
@@ -286,7 +287,7 @@ func boolToInt(b bool) int {
 func LookupSystemTableDescriptorID(
 	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, dbID ID, tableName string,
 ) ID {
-	if dbID != SystemDB.ID {
+	if dbID != SystemDB.GetID() {
 		return InvalidID
 	}
 

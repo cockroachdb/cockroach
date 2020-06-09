@@ -394,15 +394,18 @@ var (
 	singleID1 = []ColumnID{1}
 )
 
+// SystemDatabaseName is the name of the system database.
+const SystemDatabaseName = "system"
+
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
-func MakeSystemDatabaseDesc() DatabaseDescriptor {
-	return DatabaseDescriptor{
-		Name: "system",
-		ID:   keys.SystemDatabaseID,
+func MakeSystemDatabaseDesc() *ImmutableDatabaseDescriptor {
+	return NewInitialDatabaseDescriptorWithPrivileges(
+		keys.SystemDatabaseID,
+		SystemDatabaseName,
 		// Assign max privileges to root user.
-		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
-	}
+		NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+	)
 }
 
 // These system config TableDescriptor literals should match the descriptor
@@ -419,7 +422,7 @@ var (
 	NamespaceTableName = "namespace"
 
 	// DeprecatedNamespaceTable is the descriptor for the deprecated namespace table.
-	DeprecatedNamespaceTable = TableDescriptor{
+	DeprecatedNamespaceTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    NamespaceTableName,
 		ID:                      keys.DeprecatedNamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -449,7 +452,7 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// NamespaceTable is the descriptor for the namespace table. Note that this
 	// table should only be written to via KV puts, not via the SQL layer. Some
@@ -463,7 +466,7 @@ var (
 	//
 	// TODO(solon): in 20.2, we should change the Name of this descriptor
 	// back to "namespace".
-	NamespaceTable = TableDescriptor{
+	NamespaceTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "namespace2",
 		ID:                      keys.NamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -494,10 +497,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = TableDescriptor{
+	DescriptorTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "descriptor",
 		ID:                      keys.DescriptorTableID,
 		Privileges:              NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
@@ -521,13 +524,13 @@ var (
 		NextIndexID:    2,
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	falseBoolString = "false"
 	trueBoolString  = "true"
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = TableDescriptor{
+	UsersTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "users",
 		ID:                      keys.UsersTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -550,10 +553,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = TableDescriptor{
+	ZonesTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "zones",
 		ID:                      keys.ZonesTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -583,11 +586,11 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// SettingsTable is the descriptor for the settings table.
 	// It contains all cluster settings for which a value has been set.
-	SettingsTable = TableDescriptor{
+	SettingsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "settings",
 		ID:                      keys.SettingsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -614,10 +617,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// DescIDSequence is the descriptor for the descriptor ID sequence.
-	DescIDSequence = TableDescriptor{
+	DescIDSequence = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "descriptor_id_seq",
 		ID:                      keys.DescIDSequenceID,
 		ParentID:                keys.SystemDatabaseID,
@@ -648,9 +651,9 @@ var (
 		},
 		Privileges:    NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescIDSequenceID]),
 		FormatVersion: InterleavedFormatVersion,
-	}
+	})
 
-	TenantsTable = TableDescriptor{
+	TenantsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "tenants",
 		ID:                      keys.TenantsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -679,7 +682,7 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TenantsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 )
 
 // These system TableDescriptor literals should match the descriptor that
@@ -689,7 +692,7 @@ var (
 // suggestions on writing and maintaining them.
 var (
 	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = TableDescriptor{
+	LeaseTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "lease",
 		ID:                      keys.LeaseTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -719,12 +722,12 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	uuidV4String = "uuid_v4()"
 
 	// EventLogTable is the descriptor for the event log table.
-	EventLogTable = TableDescriptor{
+	EventLogTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "eventlog",
 		ID:                      keys.EventLogTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -760,12 +763,12 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	uniqueRowIDString = "unique_rowid()"
 
 	// RangeEventTable is the descriptor for the range log table.
-	RangeEventTable = TableDescriptor{
+	RangeEventTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "rangelog",
 		ID:                      keys.RangeEventTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -803,10 +806,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// UITable is the descriptor for the ui table.
-	UITable = TableDescriptor{
+	UITable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "ui",
 		ID:                      keys.UITableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -829,13 +832,13 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	nowString   = "now():::TIMESTAMP"
 	nowTZString = "now():::TIMESTAMPTZ"
 
 	// JobsTable is the descriptor for the jobs table.
-	JobsTable = TableDescriptor{
+	JobsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "jobs",
 		ID:                      keys.JobsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -899,10 +902,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// WebSessions table to authenticate sessions over stateless connections.
-	WebSessionsTable = TableDescriptor{
+	WebSessionsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "web_sessions",
 		ID:                      keys.WebSessionsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -964,10 +967,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
 		NextMutationID: 1,
 		FormatVersion:  3,
-	}
+	})
 
 	// TableStatistics table to hold statistics about columns and column groups.
-	TableStatisticsTable = TableDescriptor{
+	TableStatisticsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "table_statistics",
 		ID:                      keys.TableStatisticsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1017,12 +1020,12 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	latLonDecimal = types.MakeDecimal(18, 15)
 
 	// LocationsTable is the descriptor for the locations table.
-	LocationsTable = TableDescriptor{
+	LocationsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "locations",
 		ID:                      keys.LocationsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1057,10 +1060,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// RoleMembersTable is the descriptor for the role_members table.
-	RoleMembersTable = TableDescriptor{
+	RoleMembersTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "role_members",
 		ID:                      keys.RoleMembersTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1123,10 +1126,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleMembersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// CommentsTable is the descriptor for the comments table.
-	CommentsTable = TableDescriptor{
+	CommentsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "comments",
 		ID:                      keys.CommentsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1157,9 +1160,9 @@ var (
 		Privileges:     newCommentPrivilegeDescriptor(SystemAllowedPrivileges[keys.CommentsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
-	ReportsMetaTable = TableDescriptor{
+	ReportsMetaTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "reports_meta",
 		ID:                      keys.ReportsMetaTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1194,13 +1197,13 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReportsMetaTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	ReplicationConstraintStatsTableTTL = time.Minute * 10
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationConstraintStatsTable = TableDescriptor{
+	ReplicationConstraintStatsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "replication_constraint_stats",
 		ID:                      keys.ReplicationConstraintStatsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1248,12 +1251,12 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationConstraintStatsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationCriticalLocalitiesTable = TableDescriptor{
+	ReplicationCriticalLocalitiesTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "replication_critical_localities",
 		ID:                      keys.ReplicationCriticalLocalitiesTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1297,13 +1300,13 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationCriticalLocalitiesTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	ReplicationStatsTableTTL = time.Minute * 10
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationStatsTable = TableDescriptor{
+	ReplicationStatsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "replication_stats",
 		ID:                      keys.ReplicationStatsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1349,9 +1352,9 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
-	ProtectedTimestampsMetaTable = TableDescriptor{
+	ProtectedTimestampsMetaTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "protected_ts_meta",
 		ID:                      keys.ProtectedTimestampsMetaTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1400,9 +1403,9 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ReplicationStatsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
-	ProtectedTimestampsRecordsTable = TableDescriptor{
+	ProtectedTimestampsRecordsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "protected_ts_records",
 		ID:                      keys.ProtectedTimestampsRecordsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1441,10 +1444,10 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// RoleOptionsTable is the descriptor for the role_options table.
-	RoleOptionsTable = TableDescriptor{
+	RoleOptionsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "role_options",
 		ID:                      keys.RoleOptionsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1478,9 +1481,9 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleOptionsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
-	StatementBundleChunksTable = TableDescriptor{
+	StatementBundleChunksTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "statement_bundle_chunks",
 		ID:                      keys.StatementBundleChunksTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1505,11 +1508,11 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.StatementBundleChunksTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// TODO(andrei): Add a foreign key reference to the statement_diagnostics table when
 	// it no longer requires us to create an index on statement_diagnostics_id.
-	StatementDiagnosticsRequestsTable = TableDescriptor{
+	StatementDiagnosticsRequestsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "statement_diagnostics_requests",
 		ID:                      keys.StatementDiagnosticsRequestsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1551,9 +1554,9 @@ var (
 			SystemAllowedPrivileges[keys.StatementDiagnosticsRequestsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
-	StatementDiagnosticsTable = TableDescriptor{
+	StatementDiagnosticsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "statement_diagnostics",
 		ID:                      keys.StatementDiagnosticsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1584,10 +1587,10 @@ var (
 			SystemAllowedPrivileges[keys.StatementDiagnosticsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 
 	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
-	ScheduledJobsTable = TableDescriptor{
+	ScheduledJobsTable = NewImmutableTableDescriptor(TableDescriptor{
 		Name:                    "scheduled_jobs",
 		ID:                      keys.ScheduledJobsTableID,
 		ParentID:                keys.SystemDatabaseID,
@@ -1640,7 +1643,7 @@ var (
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ScheduledJobsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
-	}
+	})
 )
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -1649,58 +1652,60 @@ var (
 // can be used to persist these descriptors to the cockroach store.
 func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Add system database.
-	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
+	target.AddDescriptor(keys.RootNamespaceID, SystemDB)
 
 	// Add system config tables.
-	target.AddDescriptor(keys.SystemDatabaseID, &DeprecatedNamespaceTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &NamespaceTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &DescriptorTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &UsersTable)
+	target.AddDescriptor(keys.SystemDatabaseID, DeprecatedNamespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, NamespaceTable)
+	target.AddDescriptor(keys.SystemDatabaseID, DescriptorTable)
+	target.AddDescriptor(keys.SystemDatabaseID, UsersTable)
 	if target.codec.ForSystemTenant() {
-		target.AddDescriptor(keys.SystemDatabaseID, &ZonesTable)
+		target.AddDescriptor(keys.SystemDatabaseID, ZonesTable)
 	}
-	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, SettingsTable)
 	if !target.codec.ForSystemTenant() {
 		// Only add the descriptor ID sequence if this is a non-system tenant.
 		// System tenants use the global descIDGenerator key. See #48513.
-		target.AddDescriptor(keys.SystemDatabaseID, &DescIDSequence)
+		target.AddDescriptor(keys.SystemDatabaseID, DescIDSequence)
 	}
 	if target.codec.ForSystemTenant() {
 		// Only add the tenant table if this is the system tenant.
-		target.AddDescriptor(keys.SystemDatabaseID, &TenantsTable)
+		target.AddDescriptor(keys.SystemDatabaseID, TenantsTable)
 	}
 
 	// Add all the other system tables.
-	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
-	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &RoleOptionsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, LeaseTable)
+	target.AddDescriptor(keys.SystemDatabaseID, EventLogTable)
+	target.AddDescriptor(keys.SystemDatabaseID, RangeEventTable)
+	target.AddDescriptor(keys.SystemDatabaseID, UITable)
+	target.AddDescriptor(keys.SystemDatabaseID, JobsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, WebSessionsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, RoleOptionsTable)
 
 	// Tables introduced in 2.0, added here for 2.1.
-	target.AddDescriptor(keys.SystemDatabaseID, &TableStatisticsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &LocationsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &RoleMembersTable)
+	target.AddDescriptor(keys.SystemDatabaseID, TableStatisticsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, LocationsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, RoleMembersTable)
 
 	// The CommentsTable has been introduced in 2.2. It was added here since it
 	// was introduced, but it's also created as a migration for older clusters.
-	target.AddDescriptor(keys.SystemDatabaseID, &CommentsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ReportsMetaTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationConstraintStatsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationStatsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ReplicationCriticalLocalitiesTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsMetaTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &ProtectedTimestampsRecordsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, CommentsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, ReportsMetaTable)
+	target.AddDescriptor(keys.SystemDatabaseID, ReplicationConstraintStatsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, ReplicationStatsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, ReplicationCriticalLocalitiesTable)
+	target.AddDescriptor(keys.SystemDatabaseID, ProtectedTimestampsMetaTable)
+	target.AddDescriptor(keys.SystemDatabaseID, ProtectedTimestampsRecordsTable)
 
 	// Tables introduced in 20.1.
-	target.AddDescriptor(keys.SystemDatabaseID, &StatementBundleChunksTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsRequestsTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &StatementDiagnosticsTable)
+
+	target.AddDescriptor(keys.SystemDatabaseID, StatementBundleChunksTable)
+	target.AddDescriptor(keys.SystemDatabaseID, StatementDiagnosticsRequestsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, StatementDiagnosticsTable)
 
 	// Tables introduced in 20.2.
-	target.AddDescriptor(keys.SystemDatabaseID, &ScheduledJobsTable)
+
+	target.AddDescriptor(keys.SystemDatabaseID, ScheduledJobsTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
@@ -1782,7 +1787,6 @@ func addSystemDatabaseToSchema(
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) {
 	addSystemDescriptorsToSchema(target)
-	// TODO(nvanbenschoten): only do this for the system tenant. Tracked in #48774.
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 }

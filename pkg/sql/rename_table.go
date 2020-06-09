@@ -114,10 +114,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	tableDesc.SetName(newTn.Table())
-	tableDesc.ParentID = targetDbDesc.ID
+	tableDesc.ParentID = targetDbDesc.GetID()
 
 	newTbKey := sqlbase.MakePublicTableNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.ID, newTn.Table()).Key(p.ExecCfg().Codec)
+		targetDbDesc.GetID(), newTn.Table()).Key(p.ExecCfg().Codec)
 
 	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 		return err
@@ -126,8 +126,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 	descID := tableDesc.GetID()
 	parentSchemaID := tableDesc.GetParentSchemaID()
 
-	renameDetails := sqlbase.TableDescriptor_NameInfo{
-		ParentID:       prevDbDesc.ID,
+	renameDetails := sqlbase.NameInfo{
+		ParentID:       prevDbDesc.GetID(),
 		ParentSchemaID: parentSchemaID,
 		Name:           oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
@@ -145,13 +145,13 @@ func (n *renameTableNode) startExec(params runParams) error {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
 	err = catalogkv.WriteDescToBatch(ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc.TableDesc())
+		p.EvalContext().Settings, b, p.ExecCfg().Codec, descID, tableDesc)
 	if err != nil {
 		return err
 	}
 
 	exists, id, err := sqlbase.LookupPublicTableID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.ID, newTn.Table(),
+		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), newTn.Table(),
 	)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
@@ -159,7 +159,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		return makeObjectAlreadyExistsError(desc, newTn.Table())
+		return makeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
 	} else if err != nil {
 		return err
 	}

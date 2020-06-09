@@ -44,14 +44,14 @@ import (
 // TestingGetDescriptorFromDB is a wrapper for getDescriptorFromDB.
 func TestingGetDescriptorFromDB(
 	ctx context.Context, db *gosql.DB, dbName string,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	return getDescriptorFromDB(ctx, db, dbName)
 }
 
 // getDescriptorFromDB returns the descriptor in bytes of the given table name.
 func getDescriptorFromDB(
 	ctx context.Context, db *gosql.DB, dbName string,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	var dbDescBytes []byte
 	// Due to the namespace migration, the row may not exist in system.namespace
 	// so a fallback to system.namespace_deprecated is required.
@@ -80,11 +80,15 @@ func getDescriptorFromDB(
 			}
 			return nil, errors.Wrap(err, "fetch database descriptor")
 		}
-		var dbDescWrapper sqlbase.Descriptor
-		if err := protoutil.Unmarshal(dbDescBytes, &dbDescWrapper); err != nil {
+		var desc sqlbase.Descriptor
+		if err := protoutil.Unmarshal(dbDescBytes, &desc); err != nil {
 			return nil, errors.Wrap(err, "unmarshal database descriptor")
 		}
-		return dbDescWrapper.GetDatabase(), nil
+		dbDesc := desc.GetDatabase()
+		if dbDesc == nil {
+			return nil, errors.Errorf("found non-database descriptor: %v", desc)
+		}
+		return sqlbase.NewImmutableDatabaseDescriptor(*dbDesc), nil
 	}
 	return nil, gosql.ErrNoRows
 }
@@ -149,7 +153,7 @@ func Load(
 	var kvBytes int64
 	backup := backupccl.BackupManifest{
 		Descriptors: []sqlbase.Descriptor{
-			{Union: &sqlbase.Descriptor_Database{Database: dbDesc}},
+			{Union: &sqlbase.Descriptor_Database{Database: dbDesc.DatabaseDesc()}},
 		},
 	}
 	for {
@@ -205,7 +209,7 @@ func Load(
 			var txn *kv.Txn
 			// At this point the CREATE statements in the loaded SQL do not
 			// use the SERIAL type so we need not process SERIAL types here.
-			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID, keys.PublicSchemaID,
+			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.GetID(), keys.PublicSchemaID,
 				0 /* table ID */, ts, privs, affected, nil, evalCtx, evalCtx.SessionData, false /* temporary */)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make table desc")

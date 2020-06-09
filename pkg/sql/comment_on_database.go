@@ -22,7 +22,7 @@ import (
 
 type commentOnDatabaseNode struct {
 	n      *tree.CommentOnDatabase
-	dbDesc *sqlbase.DatabaseDescriptor
+	dbDesc *sqlbase.ImmutableDatabaseDescriptor
 }
 
 // CommentOnDatabase add comment on a database.
@@ -35,7 +35,6 @@ func (p *planner) CommentOnDatabase(
 	if err != nil {
 		return nil, err
 	}
-
 	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
@@ -52,7 +51,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.DatabaseCommentType,
-			n.dbDesc.ID,
+			n.dbDesc.GetID(),
 			*n.n.Comment)
 		if err != nil {
 			return err
@@ -65,7 +64,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.DatabaseCommentType,
-			n.dbDesc.ID)
+			n.dbDesc.GetID())
 		if err != nil {
 			return err
 		}
@@ -75,7 +74,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 		params.ctx,
 		params.p.txn,
 		EventLogCommentOnDatabase,
-		int32(n.dbDesc.ID),
+		int32(n.dbDesc.GetID()),
 		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			DatabaseName string

@@ -38,14 +38,14 @@ var pgExtension = virtualSchema{
 
 func postgisColumnsTablePopulator(
 	matchingFamily types.Family,
-) func(context.Context, *planner, *DatabaseDescriptor, func(...tree.Datum) error) error {
-	return func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+) func(context.Context, *planner, *sqlbase.ImmutableDatabaseDescriptor, func(...tree.Datum) error) error {
+	return func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(
 			ctx,
 			p,
 			dbContext,
 			hideVirtual,
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
 				if !table.IsPhysicalTable() {
 					return nil
 				}
@@ -140,7 +140,7 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 	srtext varchar(2048),
 	proj4text varchar(2048)
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, projection := range geoprojbase.Projections {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(projection.SRID)),

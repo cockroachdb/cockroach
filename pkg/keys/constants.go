@@ -343,6 +343,7 @@ const (
 	DescriptorTablePrimaryKeyIndexID  = 1
 	DescriptorTableDescriptorColID    = 2
 	DescriptorTableDescriptorColFamID = 2
+	TenantsTablePrimaryKeyIndexID     = 1
 
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom

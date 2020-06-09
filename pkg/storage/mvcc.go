@@ -3334,17 +3334,20 @@ func MVCCFindSplitKey(
 		return nil, nil
 	}
 	var minSplitKey roachpb.Key
-	if _, _, err := keys.TODOSQLCodec.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
-		// The first key in this range represents a row in a SQL table. Advance the
-		// minSplitKey past this row to avoid the problems described above.
-		firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)
-		if err != nil {
-			return nil, err
+	if _, tenID, err := keys.DecodeTenantPrefix(it.UnsafeKey().Key); err == nil {
+		if _, _, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
+			// The first key in this range represents a row in a SQL table. Advance the
+			// minSplitKey past this row to avoid the problems described above.
+			firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)
+			if err != nil {
+				return nil, err
+			}
+			// Allow a split key before other rows in the same table or before any
+			// rows in interleaved tables.
+			minSplitKey = encoding.EncodeInterleavedSentinel(firstRowKey)
 		}
-		// Allow a split key before other rows in the same table or before any
-		// rows in interleaved tables.
-		minSplitKey = encoding.EncodeInterleavedSentinel(firstRowKey)
-	} else {
+	}
+	if minSplitKey == nil {
 		// The first key in the range does not represent a row in a SQL table.
 		// Allow a split at any key that sorts after it.
 		minSplitKey = it.Key().Key.Next()

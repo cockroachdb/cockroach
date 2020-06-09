@@ -118,11 +118,14 @@ type Collection struct {
 	// cache is purged whenever events would cause a scan of all descriptors to
 	// return different values, such as when the txn timestamp changes or when
 	// new descriptors are written in the txn.
-	allDescriptors []sqlbase.DescriptorProto
+	//
+	// TODO(ajwerner): This cache may be problematic in clusters with very large
+	// numbers of descriptors.
+	allDescriptors []sqlbase.DescriptorInterface
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
-	allDatabaseDescriptors []*sqlbase.DatabaseDescriptor
+	allDatabaseDescriptors []*sqlbase.ImmutableDatabaseDescriptor
 
 	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
 	// For each databaseID, all schemas visible under the database can be
@@ -326,7 +329,7 @@ func (tc *Collection) GetTableVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-table.
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		(tn.Catalog() == sqlbase.SystemDB.Name && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
+		(tn.Catalog() == sqlbase.SystemDatabaseName && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
 		dbID,
@@ -731,26 +734,26 @@ func (tc *Collection) GetUncommittedTableByID(id sqlbase.ID) UncommittedTable {
 // GetAllDescriptors returns all descriptors visible by the transaction,
 // first checking the Collection's cached descriptors for validity
 // before defaulting to a key-value scan, if necessary.
+//
+// TODO(ajwerner): Have this return []sqlbase.DescriptorInterface.
 func (tc *Collection) GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]sqlbase.DescriptorProto, error) {
+) ([]sqlbase.DescriptorInterface, error) {
 	if tc.allDescriptors == nil {
 		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
 		}
-
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
-		dbDescs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
-		typDescs := make(map[sqlbase.ID]*sqlbase.TypeDescriptor)
-		for i := range descs {
-			desc := descs[i]
-			switch t := desc.(type) {
-			case *sqlbase.DatabaseDescriptor:
-				dbDescs[t.ID] = t
-			case *sqlbase.TypeDescriptor:
-				typDescs[t.ID] = t
+		dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
+		typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
+		for _, desc := range descs {
+			switch desc := desc.(type) {
+			case *sqlbase.ImmutableDatabaseDescriptor:
+				dbDescs[desc.GetID()] = desc
+			case *sqlbase.ImmutableTypeDescriptor:
+				typDescs[desc.GetID()] = desc
 			}
 		}
 		// If we found any type descriptors, that means that some of the tables we
@@ -759,21 +762,21 @@ func (tc *Collection) GetAllDescriptors(
 			// Since we just scanned all the descriptors, we already have everything
 			// we need to hydrate our types. Set up an accessor for the type hydration
 			// method to look into the scanned set of descriptors.
-			typeLookup := func(id sqlbase.ID) (*tree.TypeName, *sqlbase.TypeDescriptor, error) {
+			typeLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
-				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.ID, typDesc.ParentSchemaID)
+				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.GetID(), typDesc.ParentSchemaID)
 				if err != nil {
 					return nil, nil, err
 				}
-				name := tree.MakeNewQualifiedTypeName(dbDesc.Name, schemaName, typDesc.Name)
+				name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), schemaName, typDesc.GetName())
 				return &name, typDesc, nil
 			}
 			// Now hydrate all table descriptors.
 			for i := range descs {
 				desc := descs[i]
-				if tbl, ok := desc.(*sqlbase.TableDescriptor); ok {
-					if err := sqlbase.HydrateTypesInTableDescriptor(tbl, typeLookup); err != nil {
+				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
+					if err := sqlbase.HydrateTypesInTableDescriptor(tblDesc.TableDesc(), typeLookup); err != nil {
 						// If we ran into an error hydrating the types, that means that we
 						// have some sort of corrupted descriptor state. Rather than disable
 						// uses of GetAllDescriptors, just log the error.
@@ -794,7 +797,7 @@ func (tc *Collection) GetAllDescriptors(
 // in the database cache, if necessary.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]*sqlbase.DatabaseDescriptor, error) {
+) ([]*sqlbase.ImmutableDatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {

@@ -36,11 +36,11 @@ type mutationTest struct {
 	testing.TB
 	*sqlutils.SQLRunner
 	kvDB      *kv.DB
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *sqlbase.TableDescriptor,
+	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *sqlbase.MutableTableDescriptor,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,
@@ -87,7 +87,7 @@ func (mt mutationTest) makeMutationsActive() {
 	if err := mt.kvDB.Put(
 		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
-		sqlbase.WrapDescriptor(mt.tableDesc),
+		mt.tableDesc.DescriptorProto(),
 	); err != nil {
 		mt.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 	if err := mt.kvDB.Put(
 		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
-		sqlbase.WrapDescriptor(mt.tableDesc),
+		mt.tableDesc.DescriptorProto(),
 	); err != nil {
 		mt.Fatal(err)
 	}
@@ -180,7 +180,8 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 	}
 
 	// read table descriptor
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 	// Add column "i" as a mutation in delete/write.
@@ -239,7 +240,8 @@ CREATE INDEX allidx ON t.test (k, v);
 	}
 
 	// read table descriptor
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
@@ -254,7 +256,8 @@ CREATE INDEX allidx ON t.test (k, v);
 					// Init table to start state.
 					mTest.Exec(t, `TRUNCATE TABLE t.test`)
 					// read table descriptor
-					mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+					mTest.tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+						kvDB, keys.SystemSQLCodec, "t", "test")
 
 					initRows := [][]string{{"a", "z", "q"}}
 					for _, row := range initRows {
@@ -500,7 +503,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 
 	// read table descriptor
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
@@ -515,7 +519,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 				t.Fatal(err)
 			}
 			// read table descriptor
-			mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+			mTest.tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+				kvDB, keys.SystemSQLCodec, "t", "test")
 
 			initRows := [][]string{{"a", "z"}, {"b", "y"}}
 			for _, row := range initRows {
@@ -651,7 +656,8 @@ CREATE INDEX allidx ON t.test (k, v);
 	}
 
 	// read table descriptor
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
@@ -679,7 +685,8 @@ CREATE INDEX allidx ON t.test (k, v);
 				}
 
 				// read table descriptor
-				mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+				mTest.tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+					kvDB, keys.SystemSQLCodec, "t", "test")
 
 				initRows := [][]string{{"a", "z", "q"}, {"b", "y", "r"}}
 				for _, row := range initRows {
@@ -852,7 +859,8 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	}
 
 	// Read table descriptor
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	mt := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
@@ -982,7 +990,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.Exec(t, `ALTER TABLE t.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	mt.tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	mt.tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make "ufo" live.
 	mt.makeMutationsActive()
@@ -1006,7 +1014,8 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	mt.tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	mt.tableDesc = sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make column "e" live.
 	mt.makeMutationsActive()
@@ -1156,13 +1165,14 @@ func TestAddingFKs(t *testing.T) {
 	}
 
 	// Step the referencing table back to the ADD state.
-	ordersDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "orders")
+	ordersDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "t", "orders")
 	ordersDesc.State = sqlbase.TableDescriptor_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(
 		context.Background(),
 		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, ordersDesc.ID),
-		sqlbase.WrapDescriptor(ordersDesc),
+		ordersDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)
 	}

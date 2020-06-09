@@ -88,17 +88,20 @@ type tableAndIndex struct {
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(
-	codec keys.SQLCodec, tables []*sqlbase.TableDescriptor, revs []BackupManifest_DescriptorRevision,
+	codec keys.SQLCodec,
+	tables []sqlbase.TableDescriptorInterface,
+	revs []BackupManifest_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
-			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
+		tableDesc := table.TableDesc()
+		for _, index := range tableDesc.AllNonDropIndexes() {
+			if err := sstIntervalTree.Insert(intervalSpan(tableDesc.IndexSpan(codec, index.ID)), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
-			added[tableAndIndex{tableID: table.ID, indexID: index.ID}] = true
+			added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
 		}
 	}
 	// If there are desc revisions, ensure that we also add any index spans
@@ -350,18 +353,22 @@ func backupPlanHook(
 
 		statsCache := p.ExecCfg().TableStatsCache
 		tableStatistics := make([]*stats.TableStatisticProto, 0)
-		var tables []*sqlbase.TableDescriptor
+		var tables []sqlbase.TableDescriptorInterface
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				if err := p.CheckPrivilege(ctx, dbDesc, privilege.SELECT); err != nil {
+				db := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
+				if err := p.CheckPrivilege(ctx, db, privilege.SELECT); err != nil {
 					return err
 				}
 			}
 			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-				if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
+				// TODO(ajwerner): This construction of a wrapper is unfortunate and should
+				// go away in this PR.
+				table := sqlbase.NewImmutableTableDescriptor(*tableDesc)
+				if err := p.CheckPrivilege(ctx, table, privilege.SELECT); err != nil {
 					return err
 				}
-				tables = append(tables, tableDesc)
+				tables = append(tables, table)
 
 				// If the table has any user defined types, error out.
 				for _, col := range tableDesc.Columns {

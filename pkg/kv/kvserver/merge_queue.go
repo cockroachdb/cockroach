@@ -142,7 +142,7 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey.Next()) {
+	if sysCfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey.Next()) {
 		// This range would need to be split if it extended just one key further.
 		// There is thus no possible right-hand neighbor that it could be merged
 		// with.
@@ -245,7 +245,7 @@ func (mq *mergeQueue) process(
 	// in a situation where we keep merging ranges that would be split soon after
 	// by a small increase in load.
 	conservativeLoadBasedSplitThreshold := 0.5 * lhsRepl.SplitByLoadQPSThreshold()
-	shouldSplit, _ := shouldSplitRange(mergedDesc, mergedStats,
+	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
 		lhsRepl.GetMaxBytes(), lhsRepl.shouldBackpressureWrites(), sysCfg)
 	if shouldSplit || mergedQPS >= conservativeLoadBasedSplitThreshold {
 		log.VEventf(ctx, 2,

@@ -48,7 +48,19 @@ import (
 
 // This file contains utility functions for tests (in other packages).
 
+// TestingGetMutableExistingTableDescriptor retrieves a MutableTableDescriptor
+// directly from the KV layer.
+func TestingGetMutableExistingTableDescriptor(
+	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
+) *MutableTableDescriptor {
+	return NewMutableExistingTableDescriptor(*GetTableDescriptor(kvDB, codec, database, table))
+}
+
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
+//
+// TODO(ajwerner): Move this to catalogkv and/or question the very existence of
+// this function. Consider renaming to TestingGetTableDescriptorByName or
+// removing it altogether.
 func GetTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *TableDescriptor {
@@ -77,7 +89,7 @@ func GetTableDescriptor(
 	descKey := MakeDescMetadataKey(codec, ID(gr.ValueInt()))
 	desc := &Descriptor{}
 	ts, err := kvDB.GetProtoTs(ctx, descKey, desc)
-	if err != nil || (*desc == Descriptor{}) {
+	if err != nil || desc.Equal(Descriptor{}) {
 		log.Fatalf(ctx, "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
 	tableDesc := desc.Table(ts)

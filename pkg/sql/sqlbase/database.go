@@ -9,13 +9,3 @@
 // licenses/APL.txt.
 
 package sqlbase
-
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-
-// MakeDatabaseDesc constructs a DatabaseDescriptor from an AST node.
-func MakeDatabaseDesc(p *tree.CreateDatabase) DatabaseDescriptor {
-	return DatabaseDescriptor{
-		Name:       string(p.Name),
-		Privileges: NewDefaultPrivilegeDescriptor(),
-	}
-}

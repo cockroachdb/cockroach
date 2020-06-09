@@ -28,7 +28,7 @@ import (
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
-	tbl := &sqlbase.SettingsTable
+	tbl := sqlbase.SettingsTable.TableDesc()
 
 	a := &sqlbase.DatumAlloc{}
 	codec := keys.TODOSQLCodec
