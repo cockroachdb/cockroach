@@ -271,7 +271,7 @@ func (it *spanResolverIterator) ReplicaInfo(
 	}
 
 	repl, err := it.oracle.ChoosePreferredReplica(
-		ctx, *it.it.Desc(), it.queryState)
+		ctx, it.it.Desc(), it.queryState)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}

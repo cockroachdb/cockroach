@@ -161,14 +161,12 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
-func NewRangeUnavailableError(
-	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
-) error {
+func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	// TODO(knz): This could should really use errors.Wrap or
 	// errors.WithSecondaryError.
 	return pgerror.Newf(pgcode.RangeUnavailable,
-		"key range id:%d is unavailable; missing nodes: %s. Original error: %v",
-		rangeID, nodeIDs, origErr)
+		"key range id:%d is unavailable. Original error: %v",
+		rangeID, origErr)
 }
 
 // NewWindowInAggError creates an error for the case when a window function is
