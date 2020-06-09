@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { Col, Row, Tabs } from "antd";
-import { Highlight } from "src/views/shared/components/sql/highlight";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import React from "react";
 import { Helmet } from "react-helmet";
@@ -28,7 +27,9 @@ import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button, BackIcon } from "src/components/button";
+import { Button } from "src/components/button";
+import { BackIcon } from "src/components/icon";
+import SqlBox from "src/views/shared/components/sql/box";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -98,9 +99,8 @@ export class TableMain extends React.Component<TableMainProps, {}> {
           <div className="page--header">
             <Button
               onClick={this.prevPage}
-              type="flat"
+              type="unstyled-link"
               size="small"
-              className="crl-button--link-to"
               icon={BackIcon}
               iconPosition="left"
             >
@@ -115,7 +115,10 @@ export class TableMain extends React.Component<TableMainProps, {}> {
               <TabPane tab="Overview" key="1">
                 <Row gutter={16}>
                   <Col className="gutter-row" span={16}>
-                    <div className="box-highlight"><Highlight value={ tableInfo.createStatement || "" } zone={dbResponse} /></div>
+                    <SqlBox
+                      value={ tableInfo.createStatement || "" }
+                      zone={dbResponse}
+                    />
                   </Col>
                   <Col className="gutter-row" span={8}>
                     <SummaryCard>

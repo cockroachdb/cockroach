@@ -27,7 +27,8 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { Button, BackIcon } from "src/components/button";
+import { Button } from "src/components/button";
+import { BackIcon } from "src/components/icon";
 import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";
 import "src/views/shared/components/summaryCard/styles.styl";
@@ -97,9 +98,8 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
         <div className="section page--header">
           <Button
             onClick={this.prevPage}
-            type="flat"
+            type="unstyled-link"
             size="small"
-            className="crl-button--link-to"
             icon={BackIcon}
             iconPosition="left"
           >
