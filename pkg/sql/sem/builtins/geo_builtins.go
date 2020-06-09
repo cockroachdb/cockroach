@@ -50,6 +50,7 @@ const spheroidDistanceMessage = `"\n\nWhen operating on a spheroid, this functio
 
 const (
 	defaultGeoJSONDecimalDigits = 9
+	defaultWKTDecimalDigits     = 15
 )
 
 // infoBuilder is used to build a detailed info string that is consistent between
@@ -595,43 +596,139 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB())
+				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
 			types.String,
-			infoBuilder{info: "Returns the WKT representation of a given Geometry."},
+			infoBuilder{
+				info: fmt.Sprintf("Returns the WKT representation of a given Geometry. A maximum of %d decimal digits is used.", defaultWKTDecimalDigits),
+			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"maximum_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+
+				if maxDecimalDigits < -1 {
+					return nil, errors.Newf("maximum_decimal_digits must be >= -1")
+				}
+
+				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB(), maxDecimalDigits)
+				return tree.NewDString(string(wkt)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKT representation of a given Geometry. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as possible.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkt, err := geo.EWKBToWKT(g.Geography.EWKB())
+				wkt, err := geo.EWKBToWKT(g.Geography.EWKB(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
 			types.String,
-			infoBuilder{info: "Returns the WKT representation of a given Geography."},
+			infoBuilder{
+				info: fmt.Sprintf("Returns the WKT representation of a given Geography. A default of %d decimal digits is used.", defaultWKTDecimalDigits),
+			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"maximum_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+
+				if maxDecimalDigits < -1 {
+					return nil, errors.Newf("maximum_decimal_digits must be >= -1")
+				}
+
+				wkt, err := geo.EWKBToWKT(g.Geography.EWKB(), maxDecimalDigits)
+				return tree.NewDString(string(wkt)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKT representation of a given Geography. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as possible.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_asewkt": makeBuiltin(
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB())
+				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
 			types.String,
-			infoBuilder{info: "Returns the EWKT representation of a given Geometry."},
+			infoBuilder{
+				info: fmt.Sprintf("Returns the EWKT representation of a given Geometry. A maximum of %d decimal digits is used.", defaultWKTDecimalDigits),
+			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"maximum_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+
+				if maxDecimalDigits < -1 {
+					return nil, errors.Newf("maximum_decimal_digits must be >= -1")
+				}
+
+				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB(), maxDecimalDigits)
+				return tree.NewDString(string(ewkt)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the WKT representation of a given Geometry. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as possible.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB())
+				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
 			types.String,
-			infoBuilder{info: "Returns the EWKT representation of a given Geography."},
+			infoBuilder{
+				info: fmt.Sprintf("Returns the EWKT representation of a given Geography. A default of %d decimal digits is used.", defaultWKTDecimalDigits),
+			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"maximum_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
+
+				if maxDecimalDigits < -1 {
+					return nil, errors.Newf("maximum_decimal_digits must be >= -1")
+				}
+
+				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB(), maxDecimalDigits)
+				return tree.NewDString(string(ewkt)), err
+			},
+			Info: infoBuilder{
+				info: "Returns the EWKT representation of a given Geography. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the `.`. Use -1 to print as many digits as possible.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_asbinary": makeBuiltin(
 		defProps(),
@@ -736,7 +833,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(strings.ToUpper(fmt.Sprintf("%x", g.EWKB()))), nil
+				return tree.NewDString(g.Geometry.EWKBHex()), nil
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geometry."},
@@ -744,7 +841,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				return tree.NewDString(strings.ToUpper(fmt.Sprintf("%x", g.EWKB()))), nil
+				return tree.NewDString(g.Geography.EWKBHex()), nil
 			},
 			types.String,
 			infoBuilder{info: "Returns the EWKB representation in hex of a given Geography."},

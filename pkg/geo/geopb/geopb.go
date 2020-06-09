@@ -10,12 +10,9 @@
 
 package geopb
 
-import (
-	"encoding/hex"
-	"strings"
-)
+import "fmt"
 
 // EWKBHex returns the EWKB-hex version of this data type
 func (b *SpatialObject) EWKBHex() string {
-	return strings.ToUpper(hex.EncodeToString(b.EWKB))
+	return fmt.Sprintf("%X", b.EWKB)
 }
