@@ -27,7 +27,7 @@ import (
 
 var (
 	// WGS84Spheroid represents the default WGS84 ellipsoid.
-	WGS84Spheroid = MakeSpheroid(6378137, 1/298.257223563)
+	WGS84Spheroid = NewSpheroid(6378137, 1/298.257223563)
 )
 
 // Spheroid is an object that can perform geodesic operations
@@ -39,10 +39,10 @@ type Spheroid struct {
 	SphereRadius float64
 }
 
-// MakeSpheroid creates a spheroid from a radius and flattening.
-func MakeSpheroid(radius float64, flattening float64) Spheroid {
+// NewSpheroid creates a spheroid from a radius and flattening.
+func NewSpheroid(radius float64, flattening float64) *Spheroid {
 	minorAxis := radius - radius*flattening
-	s := Spheroid{
+	s := &Spheroid{
 		Radius:       radius,
 		Flattening:   flattening,
 		SphereRadius: (radius*2 + minorAxis) / 3,

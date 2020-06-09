@@ -16,7 +16,7 @@ import (
 )
 
 // spheroidDistance returns the s12 (meter) component of spheroid.Inverse from s2 Points.
-func spheroidDistance(s geographiclib.Spheroid, a s2.Point, b s2.Point) float64 {
+func spheroidDistance(s *geographiclib.Spheroid, a s2.Point, b s2.Point) float64 {
 	inv, _, _ := s.Inverse(s2.LatLngFromPoint(a), s2.LatLngFromPoint(b))
 	return inv
 }
