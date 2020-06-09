@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -427,8 +428,9 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	}
 
 	// Add explicit columns and mark primary key columns as not null.
+	// Add the geoConfig if applicable.
 	notNullIndex := true
-	for _, colDef := range def.Columns {
+	for i, colDef := range def.Columns {
 		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol)
 
 		if typ == primaryIndex {
@@ -437,6 +439,15 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 
 		if col.Nullable {
 			notNullIndex = false
+		}
+
+		if i == 0 && def.Inverted {
+			switch col.Type.Family() {
+			case types.GeometryFamily:
+				idx.geoConfig = geoindex.DefaultGeometryIndexConfig()
+			case types.GeographyFamily:
+				idx.geoConfig = geoindex.DefaultGeographyIndexConfig()
+			}
 		}
 	}
 
