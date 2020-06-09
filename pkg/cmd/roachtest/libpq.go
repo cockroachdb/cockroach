@@ -99,11 +99,7 @@ func registerLibPQ(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
-<<<<<<< HEAD
-			blocklistName, expectedFailures, ignoredFailures, version, latestTag,
-=======
-			blacklistName, expectedFailures, ignoredFailures, version, supportedTag,
->>>>>>> roachtest: Pin and update libtq test suite
+			blocklistName, expectedFailures, ignoredFailures, version, supportedTag,
 		)
 	}
 
