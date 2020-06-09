@@ -17,11 +17,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 )
 
 func backupRestoreTestSetupEmptyWithParams(
@@ -399,4 +403,70 @@ func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 
 	// Ensure that the new backup succeeds.
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+}
+
+// TestClusterRestoreFailCleanup tests that a failed RESTORE is cleaned up.
+func TestClusterRestoreFailCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params := base.TestServerArgs{}
+	// Disable GC job so that the final check of crdb_internal.tables is
+	// guaranteed to not be cleaned up. Although this was never observed by a
+	// stress test, it is here for safety.
+	blockCh := make(chan struct{})
+	defer close(blockCh)
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+		RunBeforeResume: func(_ int64) error { <-blockCh; return nil },
+	}
+
+	const numAccounts = 1000
+	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitNone,
+	)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
+	// Populate system.users.
+	for i := 0; i < 1000; i++ {
+		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
+	}
+	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+
+	// Bugger the backup by injecting a failure while restoring the system data.
+	for _, server := range tcRestore.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.duringSystemTableRestoration = func() error {
+					return errors.New("injected error")
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDBRestore.ExpectErr(
+		t, "injected error",
+		`RESTORE FROM $1`, LocalFoo,
+	)
+	// Verify the failed RESTORE added some DROP tables.
+	// Note that the system tables here correspond to the temporary tables
+	// imported, not the system tables themselves.
+	sqlDBRestore.CheckQueryResults(t,
+		`SELECT name FROM crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+		[][]string{
+			{"bank"},
+			{"comments"},
+			{"jobs"},
+			{"locations"},
+			{"role_members"},
+			{"settings"},
+			{"ui"},
+			{"users"},
+			{"zones"},
+		},
+	)
 }
