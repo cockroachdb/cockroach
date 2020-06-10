@@ -259,11 +259,10 @@ type DistSenderConfig struct {
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
-		st:         cfg.Settings,
-		clock:      cfg.Clock,
-		gossip:     g,
-		metrics:    makeDistSenderMetrics(),
-		nodeDialer: cfg.NodeDialer,
+		st:      cfg.Settings,
+		clock:   cfg.Clock,
+		gossip:  g,
+		metrics: makeDistSenderMetrics(),
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -299,11 +298,11 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		panic("no RPCContext set in DistSenderConfig")
 	}
 	ds.rpcContext = cfg.RPCContext
+	ds.nodeDialer = cfg.NodeDialer
 	if ds.rpcRetryOptions.Closer == nil {
 		ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 	}
 	ds.clusterID = &cfg.RPCContext.ClusterID
-	ds.nodeDialer = cfg.NodeDialer
 	ds.asyncSenderSem = quotapool.NewIntPool("DistSender async concurrency",
 		uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
 	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func() {
