@@ -46,7 +46,9 @@ func runImport(
 ) (*roachpb.BulkOpSummary, error) {
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
-	conv, err := makeInputConverter(ctx, spec, flowCtx.NewEvalCtx(), kvCh)
+	evalCtx := flowCtx.NewEvalCtx()
+	evalCtx.DB = flowCtx.Cfg.DB
+	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

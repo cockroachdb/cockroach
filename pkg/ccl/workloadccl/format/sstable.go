@@ -33,6 +33,7 @@ func ToTableDescriptor(
 	t workload.Table, tableID sqlbase.ID, ts time.Time,
 ) (*sqlbase.TableDescriptor, error) {
 	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
 	stmt, err := parser.ParseOne(fmt.Sprintf(`CREATE TABLE "%s" %s`, t.Name, t.Schema))
 	if err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func ToTableDescriptor(
 	}
 	const parentID sqlbase.ID = keys.MaxReservedDescID
 	tableDesc, err := importccl.MakeSimpleTableDescriptor(
-		ctx, nil /* settings */, createTable, parentID, tableID, importccl.NoFKs, ts.UnixNano())
+		ctx, &semaCtx, nil /* settings */, createTable, parentID, tableID, importccl.NoFKs, ts.UnixNano())
 	if err != nil {
 		return nil, err
 	}

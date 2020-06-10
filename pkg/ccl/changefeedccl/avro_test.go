@@ -48,8 +48,9 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	const parentID = sqlbase.ID(keys.MaxReservedDescID + 1)
 	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
+	semaCtx := tree.MakeSemaContext()
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
-		ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
+		ctx, &semaCtx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}

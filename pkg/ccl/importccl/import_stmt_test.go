@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -19,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -56,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
+	"github.com/linkedin/goavro"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1009,6 +1012,135 @@ COPY t (a, b, c) FROM stdin;
 		sqlDB.Exec(t, `IMPORT TABLE t (s STRING) DELIMITED DATA ($1, $1)`, srv.URL)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
 	})
+}
+
+func TestImportUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	// Set up some initial state for the tests.
+	sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE TYPE greeting AS ENUM ('hello', 'hi');
+`)
+
+	// Create some AVRO encoded data.
+	var avroData string
+	{
+		var data bytes.Buffer
+		// Set up a simple schema for the import data.
+		schema := map[string]interface{}{
+			"type": "record",
+			"name": "t",
+			"fields": []map[string]interface{}{
+				{
+					"name": "a",
+					"type": "string",
+				},
+				{
+					"name": "b",
+					"type": "string",
+				},
+			},
+		}
+		schemaStr, err := json.Marshal(schema)
+		require.NoError(t, err)
+		codec, err := goavro.NewCodec(string(schemaStr))
+		require.NoError(t, err)
+		// Create an AVRO writer from the schema.
+		ocf, err := goavro.NewOCFWriter(goavro.OCFConfig{
+			W:     &data,
+			Codec: codec,
+		})
+		require.NoError(t, err)
+		row1 := map[string]interface{}{
+			"a": "hello",
+			"b": "hello",
+		}
+		row2 := map[string]interface{}{
+			"a": "hi",
+			"b": "hi",
+		}
+		// Add the data rows to the writer.
+		require.NoError(t, ocf.Append([]interface{}{row1, row2}))
+		// Retrieve the AVRO encoded data.
+		avroData = data.String()
+	}
+
+	tests := []struct {
+		create      string
+		typ         string
+		contents    string
+		intoCols    string
+		verifyQuery string
+		expected    [][]string
+	}{
+		// Test CSV imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "CSV",
+			contents:    "hello,hello\nhi,hi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test PGDump imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "PGDUMP",
+			contents:    `INSERT INTO t VALUES ('hello', 'hello'), ('hi', 'hi')`,
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test MySQL imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "MYSQLDUMP",
+			contents:    "INSERT INTO `t` VALUES ('hello', 'hello'), ('hi', 'hi')",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test AVRO imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "AVRO",
+			contents:    avroData,
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+	}
+
+	// Set up a directory for the data files.
+	err := os.Mkdir(filepath.Join(baseDir, "test"), 0777)
+	require.NoError(t, err)
+	// Test IMPORT and IMPORT INTO.
+	for _, into := range []bool{true, false} {
+		for _, test := range tests {
+			// Write the test data into a file.
+			err := ioutil.WriteFile(filepath.Join(baseDir, "test", "data"), []byte(test.contents), 0666)
+			require.NoError(t, err)
+			// Run the import statement.
+			if into {
+				sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE t (%s)", test.create))
+				sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ), "nodelocal://0/test/data")
+			} else {
+				sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE t (%s) %s DATA ($1)", test.create, test.typ), "nodelocal://0/test/data")
+			}
+			// Ensure that the table data is as we expect.
+			sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+			// Clean up after the test.
+			sqlDB.Exec(t, "DROP TABLE t")
+		}
+	}
 }
 
 const (
@@ -2644,9 +2776,10 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 	}
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -2739,9 +2872,10 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	}
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
 	if err != nil {
 		b.Fatal(err)
 	}

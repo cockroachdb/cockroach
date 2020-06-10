@@ -71,6 +71,7 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 type PlanHookState interface {
 	resolver.SchemaResolver
 	RunParams(ctx context.Context) runParams
+	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig

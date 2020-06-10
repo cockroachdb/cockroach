@@ -260,7 +260,7 @@ func readPostgresCreateTable(
 				}
 				removeDefaultRegclass(create)
 				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
-				desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), p.ExecCfg().Settings, create, parentID, id, fks, walltime)
+				desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), p.SemaCtx(), p.ExecCfg().Settings, create, parentID, id, fks, walltime)
 				if err != nil {
 					return nil, err
 				}
