@@ -955,10 +955,25 @@ func TestEvictCacheOnError(t *testing.T) {
 	// Currently lease holder and cached range descriptor are treated equally.
 	// TODO(bdarnell): refactor to cover different types of retryable errors.
 	const errString = "boom"
-	testDesc := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: testMetaEndKey,
-		EndKey:   roachpb.RKeyMax,
+
+	// One of the subtests returns a RangeKeyMismatchError simulating the request
+	// falling on the lhs after a split, whereas the request wanted the rhs.
+	splitKey := roachpb.RKey("a")
+	lhs := roachpb.RangeDescriptor{
+		RangeID:  testUserRangeDescriptor.RangeID,
+		StartKey: testUserRangeDescriptor.StartKey,
+		EndKey:   splitKey,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	rhs := roachpb.RangeDescriptor{
+		RangeID:  testUserRangeDescriptor.RangeID,
+		StartKey: splitKey,
+		EndKey:   testUserRangeDescriptor.EndKey,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
@@ -973,11 +988,14 @@ func TestEvictCacheOnError(t *testing.T) {
 		shouldClearLeaseHolder bool
 		shouldClearReplica     bool
 	}{
-		{false, errors.New(errString), false, false},                                     // non-retryable replica error
-		{false, &roachpb.RangeKeyMismatchError{MismatchedRange: testDesc}, false, false}, // RangeKeyMismatch replica error
-		{false, &roachpb.RangeNotFoundError{}, false, false},                             // RangeNotFound replica error
-		{false, nil, false, false},                                                       // RPC error
-		{true, nil, false, false},                                                        // canceled context
+		{false, errors.New(errString), false, false}, // non-retryable replica error
+		{false, &roachpb.RangeKeyMismatchError{
+			MismatchedRange: lhs,
+			SuggestedRange:  &rhs,
+		}, false, false}, // RangeKeyMismatch replica error
+		{false, &roachpb.RangeNotFoundError{}, false, false}, // RangeNotFound replica error
+		{false, nil, false, false},                           // RPC error
+		{true, nil, false, false},                            // canceled context
 	}
 
 	for i, tc := range testCases {
@@ -1032,7 +1050,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			}
 			ds := NewDistSender(cfg)
 			ds.leaseHolderCache.Update(context.Background(), 1, leaseHolder.StoreID)
-			key := roachpb.Key("a")
+			key := roachpb.Key("b")
 			put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
 			if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
