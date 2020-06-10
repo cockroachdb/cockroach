@@ -42,6 +42,11 @@ func registerAcceptance(r *testRegistry) {
 		{name: "gossip/restart", fn: runGossipRestart},
 		{name: "gossip/restart-node-one", fn: runGossipRestartNodeOne},
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
+		{
+			name:       "multitenant",
+			minVersion: "v20.2.0", // multitenancy is introduced in this cycle
+			fn:         runAcceptanceMultitenant,
+		},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{
 			name: "many-splits", fn: runManySplits,
