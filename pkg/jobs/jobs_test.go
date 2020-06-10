@@ -2092,10 +2092,11 @@ func TestStartableJob(t *testing.T) {
 	}
 	t.Run("Start called more than once", func(t *testing.T) {
 		sj := createStartableJob(t)
-		_, err := sj.Start(ctx)
+		errCh, err := sj.Start(ctx)
 		require.NoError(t, err)
 		_, err = sj.Start(ctx)
 		require.Regexp(t, `StartableJob \d+ cannot be started more than once`, err)
+		require.NoError(t, <-errCh)
 	})
 	t.Run("Start called with active txn", func(t *testing.T) {
 		txn := db.NewTxn(ctx, "test")
