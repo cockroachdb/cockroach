@@ -12,6 +12,8 @@ RUN apt-get update && \
 
 RUN mkdir -p /cockroach
 COPY cockroach.sh cockroach /cockroach/
+COPY libgeos*.so* /usr/local/lib/
+
 # Set working directory so that relative paths
 # are resolved appropriately when passed as args.
 WORKDIR /cockroach/
@@ -20,7 +22,7 @@ WORKDIR /cockroach/
 # to make it easier to invoke commands
 # via Docker
 ENV PATH=/cockroach:$PATH
-
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 ENV COCKROACH_CHANNEL=official-docker
 
 EXPOSE 26257 8080
