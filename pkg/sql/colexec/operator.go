@@ -185,8 +185,8 @@ type zeroOperator struct {
 
 var _ colexecbase.Operator = &zeroOperator{}
 
-// NewZeroOp creates a new operator which just returns an empty batch.
-func NewZeroOp(input colexecbase.Operator) colexecbase.Operator {
+// newZeroOp creates a new operator which just returns an empty batch.
+func newZeroOp(input colexecbase.Operator) colexecbase.Operator {
 	return &zeroOperator{OneInputNode: NewOneInputNode(input)}
 }
 
@@ -195,6 +195,25 @@ func (s *zeroOperator) Init() {
 }
 
 func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
+	return coldata.ZeroBatch
+}
+
+type zeroOperatorNoInput struct {
+	colexecbase.ZeroInputNode
+	NonExplainable
+}
+
+var _ colexecbase.Operator = &zeroOperatorNoInput{}
+
+// NewZeroOpNoInput creates a new operator which just returns an empty batch
+// and doesn't an input.
+func NewZeroOpNoInput() colexecbase.Operator {
+	return &zeroOperatorNoInput{}
+}
+
+func (s *zeroOperatorNoInput) Init() {}
+
+func (s *zeroOperatorNoInput) Next(ctx context.Context) coldata.Batch {
 	return coldata.ZeroBatch
 }
 
