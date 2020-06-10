@@ -15,11 +15,13 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -246,8 +248,11 @@ func init() {
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
 	})
 
-	// Add a pre-run command for `start` and `start-single-node`.
-	for _, cmd := range StartCmds {
+	// Add a pre-run command for `start` and `start-single-node`, as well as the
+	// multi-tenancy related commands that start long-running servers.
+	allStartCmds := append([]*cobra.Command(nil), StartCmds...)
+	allStartCmds = append(allStartCmds, mtStartSQLCmd)
+	for _, cmd := range allStartCmds {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network and logging settings.
 			if err := extraServerFlagInit(cmd); err != nil {
@@ -704,6 +709,44 @@ func init() {
 		f := debugBallastCmd.Flags()
 		VarFlag(f, &debugCtx.ballastSize, cliflags.Size)
 	}
+
+	// Multi-tenancy commands.
+	{
+		f := mtStartSQLCmd.Flags()
+		VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
+		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
+		// (which is a PreRun for this command):
+		_ = extraServerFlagInit // guru assignment
+		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
+		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
+		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
+		VarFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
+
+		StringSlice(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs, serverCfg.SQLConfig.TenantKVAddrs)
+	}
+}
+
+type tenantIDWrapper struct {
+	tenID *roachpb.TenantID
+}
+
+func (w *tenantIDWrapper) String() string {
+	return w.tenID.String()
+}
+func (w *tenantIDWrapper) Set(s string) error {
+	tenID, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "invalid tenant ID")
+	}
+	if tenID == 0 {
+		return errors.New("invalid tenant ID")
+	}
+	*w.tenID = roachpb.MakeTenantID(tenID)
+	return nil
+}
+
+func (w *tenantIDWrapper) Type() string {
+	return "number"
 }
 
 // processEnvVarDefaults injects the current value of flag-related
@@ -786,14 +829,24 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 
 	fs := flagSetForCmd(cmd)
 
-	// Construct the socket name, if requested.
-	if !fs.Lookup(cliflags.Socket.Name).Changed && fs.Lookup(cliflags.SocketDir.Name).Changed {
-		// If --socket (DEPRECATED) was set, then serverCfg.SocketFile is
-		// already set and we don't want to change it.
-		// However, if --socket-dir is set, then we'll use that.
-		// There are two cases:
-		// --socket-dir is set and is empty; in this case the user is telling us "disable the socket".
-		// is set and non-empty. Then it should be used as specified.
+	// Helper for .Changed that is nil-aware as not all of the `cmd`s may have
+	// all of the flags.
+	changed := func(set *pflag.FlagSet, name string) bool {
+		f := set.Lookup(name)
+		return f != nil && f.Changed
+	}
+
+	// Construct the socket name, if requested. The flags may not be defined for
+	// `cmd` so be cognizant of that.
+	//
+	// If --socket (DEPRECATED) was set, then serverCfg.SocketFile is
+	// already set and we don't want to change it.
+	// However, if --socket-dir is set, then we'll use that.
+	// There are two cases:
+	// 1. --socket-dir is set and is empty; in this case the user is telling us
+	//    "disable the socket".
+	// 2. is set and non-empty. Then it should be used as specified.
+	if !changed(fs, cliflags.Socket.Name) && changed(fs, cliflags.SocketDir.Name) {
 		if serverSocketDir == "" {
 			serverCfg.SocketFile = ""
 		} else {
@@ -820,9 +873,9 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
 	serverCfg.SplitListenSQL = fs.Lookup(cliflags.ListenSQLAddr.Name).Changed
 
-	// Fill in the defaults for --advertise-sql-addr.
-	advSpecified := fs.Lookup(cliflags.AdvertiseAddr.Name).Changed ||
-		fs.Lookup(cliflags.AdvertiseHost.Name).Changed
+	// Fill in the defaults for --advertise-sql-addr, if the flag exists on `cmd`.
+	advSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+		changed(fs, cliflags.AdvertiseHost.Name)
 	if serverSQLAdvertiseAddr == "" {
 		if advSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
@@ -851,8 +904,8 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		// Before we do so, we'll check whether the user explicitly
 		// specified something contradictory, and tell them that's no
 		// good.
-		if (fs.Lookup(cliflags.ListenHTTPAddr.Name).Changed ||
-			fs.Lookup(cliflags.ListenHTTPAddrAlias.Name).Changed) &&
+		if (changed(fs, cliflags.ListenHTTPAddr.Name) ||
+			changed(fs, cliflags.ListenHTTPAddrAlias.Name)) &&
 			(serverHTTPAddr != "" && serverHTTPAddr != "localhost") {
 			return errors.WithHintf(
 				errors.Newf("--unencrypted-localhost-http is incompatible with --http-addr=%s:%s",
