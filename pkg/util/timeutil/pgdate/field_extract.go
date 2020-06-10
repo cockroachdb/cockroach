@@ -64,6 +64,8 @@ type fieldExtract struct {
 	tzSign int
 	// Tracks the fields that we want to extract.
 	wanted fieldSet
+	// Tracks whether the current timestamp is of db2 format.
+	isDB2 bool
 }
 
 // Extract is the top-level function.  It attempts to break the input
@@ -246,12 +248,17 @@ func (fe *fieldExtract) Get(field field) (int, bool) {
 // field the next chunk of input should be applied to.
 func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMonth bool) error {
 	chunk := numbers[idx]
+	var nextSep rune
+	if len(numbers) > idx+1 {
+		nextSep = numbers[idx+1].separator
+	}
 	switch {
 	case chunk.separator == '.':
 		// Example: 04:04:04.913231+00:00, a fractional second.
 		//                   ^^^^^^
 		// Example: 1999.123, a year + day-of-year.
 		//               ^^^
+		// Example: 04.04.04.913231+00:00, db2 timestamp
 		switch {
 		case chunk.magnitude == 3 &&
 			!fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay) &&
@@ -263,6 +270,14 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			// BUT NOT: 1999 1
 			return fe.SetDayOfYear(chunk)
 
+		case fe.Wants(fieldMinute) && chunk.v <= 60 && chunk.v >= 0:
+			// db2 timestamp allows for minutes to recorded with periods.
+			// Example 13.12.50 (hh.mm.ss)
+			fe.isDB2 = true
+			return fe.SetChunk(fieldMinute, chunk)
+		case fe.isDB2 && fe.Wants(fieldSecond) && chunk.v <= 60 && chunk.v >= 0:
+			// db2 timestamp allows for seconds to recorded with periods.
+			return fe.SetChunk(fieldSecond, chunk)
 		case !fe.Wants(fieldSecond) && fe.Wants(fieldNanos):
 			// The only other place a period is valid is in a fractional
 			// second.  We check to make sure that a second has been set.
@@ -315,10 +330,6 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 		return fe.SetDayOfYear(chunk)
 
 	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
-		var nextSep rune
-		if len(numbers) > idx+1 {
-			nextSep = numbers[idx+1].separator
-		}
 		// Example: All date formats, we're starting from scratch.
 		switch {
 		// We examine the next separator to decide if this is a
@@ -451,7 +462,11 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 			fe.tweakYear = true
 		}
 		return fe.SetChunk(fieldYear, chunk)
-
+	case !fe.Wants(fieldDay) && fe.Wants(fieldHour) && chunk.separator == '-' && nextSep == '.':
+		// Example: "YYYY-MM-DD-HH.MM.SS"
+		//                     ^^
+		fe.isDB2 = true
+		return fe.SetChunk(fieldHour, chunk)
 	case fe.Wants(fieldTZHour) && (chunk.separator == '-' || chunk.separator == '+'):
 		// Example: "<Time> +04[:05:06]"
 		//                  ^^^
@@ -585,7 +600,11 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 	case fe.Wants(fieldSecond):
 		// Example: "HH:MM:SS"
 		//                 ^^
-		return fe.SetChunk(fieldSecond, chunk)
+
+		// DB2 expects period separator
+		if !fe.isDB2 {
+			return fe.SetChunk(fieldSecond, chunk)
+		}
 	}
 	return inputErrorf("could not parse field: %v", chunk)
 }
@@ -723,13 +742,22 @@ func (fe *fieldExtract) SetChunk(field field, chunk numberChunk) error {
 		}
 	case fieldHour:
 		switch chunk.separator {
-		case ' ', 't':
+		case ' ', 't', '-':
 			// YYYY-MM-DD HH:MM:SS
 			// yyyymmddThhmmss
+			// YYYY-MM-DD-HH.MM.SS
 			return fe.Set(field, chunk.v)
 		}
-	case fieldMinute, fieldSecond, fieldTZMinute, fieldTZSecond:
-		if chunk.separator == ':' {
+	case fieldMinute, fieldSecond:
+		switch chunk.separator {
+		case ':', '.':
+			// HH:MM:SS
+			// HH.MM.SS
+			return fe.Set(field, chunk.v)
+		}
+	case fieldTZMinute, fieldTZSecond:
+		switch chunk.separator {
+		case ':':
 			// HH:MM:SS
 			return fe.Set(field, chunk.v)
 		}
@@ -782,7 +810,8 @@ func (fe *fieldExtract) validate() error {
 	if fe.has.HasAny(dateRequiredFields) && !fe.has.HasAll(dateRequiredFields) {
 		return inputErrorf("missing required date fields")
 	}
-	if fe.has.HasAny(timeRequiredFields) && !fe.has.HasAll(timeRequiredFields) {
+
+	if (fe.isDB2 && !fe.has.HasAll(db2TimeRequiredFields)) || (fe.has.HasAny(timeRequiredFields) && !fe.has.HasAll(timeRequiredFields)) {
 		return inputErrorf("missing required time fields")
 	}
 	if !fe.has.HasAll(fe.required) {
