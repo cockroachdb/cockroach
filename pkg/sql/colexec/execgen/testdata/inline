@@ -89,6 +89,10 @@ func b(a int, b int, c int) (int, int) {
 package main
 
 func a() {
+	var (
+		ret1 int
+		ret2 int
+	)
 	{
 		var (
 			__retval_0 int
@@ -105,11 +109,15 @@ func a() {
 				__retval_1 = c
 			}
 		}
-		ret1, ret2 := __retval_0, __retval_1
+		ret1, ret2 = __retval_0, __retval_1
 	}
 }
 
 func c() {
+	var (
+		ret3 int
+		ret4 int
+	)
 	{
 		var (
 			__retval_0 int
@@ -126,7 +134,7 @@ func c() {
 				__retval_1 = c
 			}
 		}
-		ret3, ret4 := __retval_0, __retval_1
+		ret3, ret4 = __retval_0, __retval_1
 	}
 }
 
@@ -137,6 +145,64 @@ func d() {
 			c int = y
 		)
 		foo = bar
+	}
+}
+
+// execgen:inline
+const _ = "inlined_b"
+----
+----
+
+# Test early returns.
+inline
+package main
+
+func a() {
+  b()
+  x = b()
+}
+
+// execgen:inline
+func b() int {
+  foo = bar
+  if foo {
+      return 2
+  }
+  foo = false
+  return 3
+}
+----
+----
+package main
+
+func a() {
+	{
+		foo = bar
+		if foo {
+			goto b_return_0
+		}
+		foo = false
+	b_return_0:
+		;
+	}
+	{
+		var __retval_0 int
+		{
+			foo = bar
+			if foo {
+				{
+					__retval_0 = 2
+				}
+				goto b_return_1
+			}
+			foo = false
+			{
+				__retval_0 = 3
+			}
+		b_return_1:
+			;
+		}
+		x = __retval_0
 	}
 }
 
