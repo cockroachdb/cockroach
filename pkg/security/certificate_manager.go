@@ -106,6 +106,9 @@ type CertificateManager struct {
 	uiCert         *CertInfo // optional: server certificate for the admin UI.
 	clientCerts    map[string]*CertInfo
 
+	// Certs only used with multi-tenancy.
+	tenantServerCACert, tenantServerCert, tenantClientCACert, tenantClientCert *CertInfo
+
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config.
 	serverConfig *tls.Config
@@ -195,16 +198,28 @@ func (cm *CertificateManager) CACertPath() string {
 // CACertFilename returns the expected file name for the CA certificate.
 func CACertFilename() string { return "ca" + certExtension }
 
-// TenantCACertPath returns the expected file path for the Tenant CA
-// certificate.
-func (cm *CertificateManager) TenantCACertPath() string {
-	return filepath.Join(cm.certsDir, TenantCACertFilename())
+// TenantServerCACertPath returns the expected file path for the Tenant server
+// CA certificate.
+func (cm *CertificateManager) TenantServerCACertPath() string {
+	return filepath.Join(cm.certsDir, TenantServerCACertFilename())
 }
 
-// TenantCACertFilename returns the expected file name for the Tenant CA
+// TenantServerCACertFilename returns the expected file name for the Tenant server CA
 // certificate.
-func TenantCACertFilename() string {
-	return "ca-tenant" + certExtension
+func TenantServerCACertFilename() string {
+	return "ca-server-tenant" + certExtension
+}
+
+// TenantClientCACertPath returns the expected file path for the Tenant client CA
+// certificate.
+func (cm *CertificateManager) TenantClientCACertPath() string {
+	return filepath.Join(cm.certsDir, TenantClientCACertFilename())
+}
+
+// TenantClientCACertFilename returns the expected file name for the Tenant CA
+// certificate.
+func TenantClientCACertFilename() string {
+	return "ca-client-tenant" + certExtension
 }
 
 // ClientCACertPath returns the expected file path for the CA certificate
@@ -239,6 +254,29 @@ func NodeKeyFilename() string {
 	return "node" + keyExtension
 }
 
+// TenantServerCertPath returns the expected file path for the tenant server
+// certificate.
+func (cm *CertificateManager) TenantServerCertPath() string {
+	return filepath.Join(cm.certsDir, TenantServerCertFilename())
+}
+
+// TenantServerCertFilename returns the expected file name for the tenant server
+// certificate.
+func TenantServerCertFilename() string {
+	return "server-tenant" + certExtension
+}
+
+// TenantServerKeyPath returns the expected file path for the tenant server key.
+func (cm *CertificateManager) TenantServerKeyPath() string {
+	return filepath.Join(cm.certsDir, TenantServerKeyFilename())
+}
+
+// TenantServerKeyFilename returns the expected file name for the tenant server
+// key.
+func TenantServerKeyFilename() string {
+	return "server-tenant" + keyExtension
+}
+
 // UICertPath returns the expected file path for the UI certificate.
 func (cm *CertificateManager) UICertPath() string {
 	return filepath.Join(cm.certsDir, "ui"+certExtension)
@@ -256,7 +294,7 @@ func (cm *CertificateManager) TenantClientCertPath(tenantIdentifier string) stri
 
 // TenantClientCertFilename returns the expected file name for the user's certificate.
 func TenantClientCertFilename(tenantIdentifier string) string {
-	return "tenant." + tenantIdentifier + certExtension
+	return "client-tenant." + tenantIdentifier + certExtension
 }
 
 // TenantClientKeyPath returns the expected file path for the tenant's key.
@@ -266,7 +304,7 @@ func (cm *CertificateManager) TenantClientKeyPath(tenantIdentifier string) strin
 
 // TenantClientKeyFilename returns the expected file name for the user's key.
 func TenantClientKeyFilename(tenantIdentifier string) string {
-	return "tenant." + tenantIdentifier + keyExtension
+	return "client-tenant." + tenantIdentifier + keyExtension
 }
 
 // ClientCertPath returns the expected file path for the user's certificate.
@@ -373,6 +411,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	}
 
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
+	var tenantServerCACert, tenantServerCert, tenantClientCACert, tenantClientCert *CertInfo
 	clientCerts := make(map[string]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
@@ -384,6 +423,14 @@ func (cm *CertificateManager) LoadCertificates() error {
 			uiCACert = ci
 		case NodePem:
 			nodeCert = ci
+		case TenantServerCAPem:
+			tenantServerCACert = ci
+		case TenantServerPem:
+			tenantServerCert = ci
+		case TenantClientPem:
+			tenantClientCert = ci
+		case TenantClientCAPem:
+			tenantClientCACert = ci
 		case UIPem:
 			uiCert = ci
 		case ClientPem:
@@ -391,6 +438,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 			if ci.Name == NodeUser {
 				nodeClientCert = ci
 			}
+		default:
+			return errors.Errorf("unsupported certificate %v", ci.Filename)
 		}
 	}
 
@@ -415,6 +464,19 @@ func (cm *CertificateManager) LoadCertificates() error {
 		}
 		if err := checkCertIsValid(uiCert); checkCertIsValid(cm.uiCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid UI certificate")
+		}
+
+		if err := checkCertIsValid(tenantServerCACert); checkCertIsValid(cm.tenantServerCACert) == nil && err != nil {
+			return makeError(err, "reload would lose valid tenant server CA certificate")
+		}
+		if err := checkCertIsValid(tenantServerCert); checkCertIsValid(cm.tenantServerCert) == nil && err != nil {
+			return makeError(err, "reload would lose valid tenant server certificate")
+		}
+		if err := checkCertIsValid(tenantClientCACert); checkCertIsValid(cm.tenantClientCACert) == nil && err != nil {
+			return makeError(err, "reload would lose valid tenant client CA certificate")
+		}
+		if err := checkCertIsValid(tenantClientCert); checkCertIsValid(cm.tenantClientCert) == nil && err != nil {
+			return makeError(err, "reload would lose valid tenant client certificate")
 		}
 	}
 
@@ -441,6 +503,11 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.serverConfig = nil
 	cm.uiServerConfig = nil
 	cm.clientConfig = nil
+
+	cm.tenantServerCACert = tenantServerCACert
+	cm.tenantServerCert = tenantServerCert
+	cm.tenantClientCACert = tenantClientCACert
+	cm.tenantClientCert = tenantClientCert
 
 	cm.updateMetricsLocked()
 	return nil
