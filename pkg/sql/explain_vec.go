@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -102,14 +101,11 @@ func (n *explainVecNode) startExec(params runParams) error {
 	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
 	root := tp.Child("")
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	thisNodeID := distSQLPlanner.nodeDesc.NodeID
+	thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		fuseOpt := flowinfra.FuseNormally
-		if flow.nodeID == thisNodeID && !willDistribute {
-			fuseOpt = flowinfra.FuseAggressively
-		}
-		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors, fuseOpt, nil /* output */)
+		scheduledOnRemoteNode := flow.nodeID != thisNodeID
+		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode)
 		if err != nil {
 			return err
 		}

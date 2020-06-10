@@ -11,10 +11,65 @@
 package colexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// ExprHelper is a utility interface that helps with expression handling in
+// the vectorized engine.
+type ExprHelper interface {
+	// ProcessExpr processes the given expression and returns a well-typed
+	// expression.
+	ProcessExpr(execinfrapb.Expression, *tree.EvalContext, []*types.T) (tree.TypedExpr, error)
+}
+
+// NewExprHelper returns a new ExprHelper. forceExprDeserialization determines
+// whether LocalExpr field is ignored by the helper.
+func NewExprHelper(forceExprDeserialization bool) ExprHelper {
+	if forceExprDeserialization {
+		return &forcedDeserializationExprHelper{}
+	}
+	return &defaultExprHelper{}
+}
+
+// defaultExprHelper is an ExprHelper that takes advantage of already present
+// well-typed expression in LocalExpr when set.
+type defaultExprHelper struct {
+	helper execinfra.ExprHelper
+}
+
+var _ ExprHelper = &defaultExprHelper{}
+
+func (h *defaultExprHelper) ProcessExpr(
+	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
+) (tree.TypedExpr, error) {
+	if expr.LocalExpr != nil {
+		return expr.LocalExpr, nil
+	}
+	h.helper.Types = typs
+	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
+	return execinfra.DeserializeExpr(expr.Expr, evalCtx, &tempVars)
+}
+
+// forcedDeserializationExprHelper is an ExprHelper that always deserializes
+// (namely, parses, type-checks, and evaluates the constants) the provided
+// expression, completely ignoring LocalExpr field if set.
+type forcedDeserializationExprHelper struct {
+	helper execinfra.ExprHelper
+}
+
+var _ ExprHelper = &forcedDeserializationExprHelper{}
+
+func (h *forcedDeserializationExprHelper) ProcessExpr(
+	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
+) (tree.TypedExpr, error) {
+	h.helper.Types = typs
+	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
+	return execinfra.DeserializeExpr(expr.Expr, evalCtx, &tempVars)
+}
 
 // Remove unused warning.
 var _ = findIVarsInRange
