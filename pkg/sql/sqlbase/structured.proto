@@ -536,6 +536,9 @@ message ComputedColumnSwap {
   option (gogoproto.equal) = true;
   optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
   optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  // inverse_expr is the expression used to compute values for the old column
+  // once it is swapped for the new column.
+  optional string inverse_expr = 3 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that
