@@ -981,69 +981,71 @@ func TestEvictCacheOnError(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		stopper := stop.NewStopper()
-		defer stopper.Stop(context.Background())
+		t.Run("", func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
 
-		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-		rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
-		g := makeGossip(t, stopper, rpcContext)
-		leaseHolder := roachpb.ReplicaDescriptor{
-			NodeID:  99,
-			StoreID: 999,
-		}
-		first := true
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		var testFn simpleSendFn = func(
-			ctx context.Context,
-			_ SendOptions,
-			_ ReplicaSlice,
-			args roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, error) {
-			if !first {
-				return args.CreateReply(), nil
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			leaseHolder := roachpb.ReplicaDescriptor{
+				NodeID:  99,
+				StoreID: 999,
 			}
-			first = false
-			if tc.canceledCtx {
-				cancel()
-				return nil, ctx.Err()
-			}
-			if tc.replicaError == nil {
-				return nil, errors.New(errString)
-			}
-			reply := &roachpb.BatchResponse{}
-			reply.Error = roachpb.NewError(tc.replicaError)
-			return reply, nil
-		}
+			first := true
 
-		cfg := DistSenderConfig{
-			AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-			Clock:      clock,
-			NodeDescs:  g,
-			RPCContext: rpcContext,
-			TestingKnobs: ClientTestingKnobs{
-				TransportFactory: adaptSimpleTransport(testFn),
-			},
-			RangeDescriptorDB: defaultMockRangeDescriptorDB,
-			NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
-			Settings:          cluster.MakeTestingClusterSettings(),
-		}
-		ds := NewDistSender(cfg)
-		ds.leaseHolderCache.Update(context.Background(), 1, leaseHolder.StoreID)
-		key := roachpb.Key("a")
-		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
+			ctx, cancel := context.WithCancel(context.Background())
 
-		if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
-			t.Errorf("put encountered unexpected error: %s", pErr)
-		}
-		if _, ok := ds.leaseHolderCache.Lookup(context.Background(), 1); ok != !tc.shouldClearLeaseHolder {
-			t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
-		}
-		cachedDesc := ds.rangeCache.GetCached(roachpb.RKey(key), false /* inverted */)
-		if cachedDesc == nil != tc.shouldClearReplica {
-			t.Errorf("%d: unexpected second replica lookup behavior: wanted=%t", i, tc.shouldClearReplica)
-		}
+			var testFn simpleSendFn = func(
+				ctx context.Context,
+				_ SendOptions,
+				_ ReplicaSlice,
+				args roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, error) {
+				if !first {
+					return args.CreateReply(), nil
+				}
+				first = false
+				if tc.canceledCtx {
+					cancel()
+					return nil, ctx.Err()
+				}
+				if tc.replicaError == nil {
+					return nil, errors.New(errString)
+				}
+				reply := &roachpb.BatchResponse{}
+				reply.Error = roachpb.NewError(tc.replicaError)
+				return reply, nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+				Clock:      clock,
+				NodeDescs:  g,
+				RPCContext: rpcContext,
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(testFn),
+				},
+				RangeDescriptorDB: defaultMockRangeDescriptorDB,
+				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+				Settings:          cluster.MakeTestingClusterSettings(),
+			}
+			ds := NewDistSender(cfg)
+			ds.leaseHolderCache.Update(context.Background(), 1, leaseHolder.StoreID)
+			key := roachpb.Key("a")
+			put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
+
+			if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
+				t.Errorf("put encountered unexpected error: %s", pErr)
+			}
+			if _, ok := ds.leaseHolderCache.Lookup(context.Background(), 1); ok != !tc.shouldClearLeaseHolder {
+				t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
+			}
+			cachedDesc := ds.rangeCache.GetCached(roachpb.RKey(key), false /* inverted */)
+			if cachedDesc == nil != tc.shouldClearReplica {
+				t.Errorf("%d: unexpected second replica lookup behavior: wanted=%t", i, tc.shouldClearReplica)
+			}
+		})
 	}
 }
 
