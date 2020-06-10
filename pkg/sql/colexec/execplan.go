@@ -196,6 +196,12 @@ func isSupported(
 	case core.Noop != nil:
 		return true, nil
 
+	case core.Values != nil:
+		if core.Values.NumRows != 0 {
+			return false, errors.Newf("values core only with zero rows supported")
+		}
+		return true, nil
+
 	case core.TableReader != nil:
 		if core.TableReader.IsCheck {
 			return false, errors.Newf("scrub table reader is unsupported in vectorized")
@@ -632,6 +638,20 @@ func NewColOperator(
 			result.Op, result.IsStreaming = NewNoop(inputs[0]), true
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
+
+		case core.Values != nil:
+			if err := checkNumIn(inputs, 0); err != nil {
+				return result, err
+			}
+			if core.Values.NumRows != 0 {
+				return result, errors.AssertionFailedf("values core only with zero rows supported, %d given", core.Values.NumRows)
+			}
+			result.Op, result.IsStreaming = NewZeroOpNoInput(), true
+			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
+			for i, col := range core.Values.Columns {
+				result.ColumnTypes[i] = col.Type
+			}
+
 		case core.TableReader != nil:
 			if err := checkNumIn(inputs, 0); err != nil {
 				return result, err
@@ -1379,7 +1399,7 @@ func (r *postProcessResult) planFilterExpr(
 	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
-		r.Op = NewZeroOp(r.Op)
+		r.Op = newZeroOp(r.Op)
 		return nil
 	}
 	var filterColumnTypes []*types.T
