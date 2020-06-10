@@ -195,6 +195,18 @@ func (cm *CertificateManager) CACertPath() string {
 // CACertFilename returns the expected file name for the CA certificate.
 func CACertFilename() string { return "ca" + certExtension }
 
+// TenantCACertPath returns the expected file path for the Tenant CA
+// certificate.
+func (cm *CertificateManager) TenantCACertPath() string {
+	return filepath.Join(cm.certsDir, TenantCACertFilename())
+}
+
+// TenantCACertFilename returns the expected file name for the Tenant CA
+// certificate.
+func TenantCACertFilename() string {
+	return "ca-tenant" + certExtension
+}
+
 // ClientCACertPath returns the expected file path for the CA certificate
 // used to verify client certificates.
 func (cm *CertificateManager) ClientCACertPath() string {
@@ -209,12 +221,22 @@ func (cm *CertificateManager) UICACertPath() string {
 
 // NodeCertPath returns the expected file path for the node certificate.
 func (cm *CertificateManager) NodeCertPath() string {
-	return filepath.Join(cm.certsDir, "node"+certExtension)
+	return filepath.Join(cm.certsDir, NodeCertFilename())
+}
+
+// NodeCertFilename returns the expected file name for the node certificate.
+func NodeCertFilename() string {
+	return "node" + certExtension
 }
 
 // NodeKeyPath returns the expected file path for the node key.
 func (cm *CertificateManager) NodeKeyPath() string {
-	return filepath.Join(cm.certsDir, "node"+keyExtension)
+	return filepath.Join(cm.certsDir, NodeKeyFilename())
+}
+
+// NodeKeyFilename returns the expected file name for the node key.
+func NodeKeyFilename() string {
+	return "node" + keyExtension
 }
 
 // UICertPath returns the expected file path for the UI certificate.
@@ -225,6 +247,26 @@ func (cm *CertificateManager) UICertPath() string {
 // UIKeyPath returns the expected file path for the UI key.
 func (cm *CertificateManager) UIKeyPath() string {
 	return filepath.Join(cm.certsDir, "ui"+keyExtension)
+}
+
+// TenantClientCertPath returns the expected file path for the user's certificate.
+func (cm *CertificateManager) TenantClientCertPath(tenantIdentifier string) string {
+	return filepath.Join(cm.certsDir, TenantClientCertFilename(tenantIdentifier))
+}
+
+// TenantClientCertFilename returns the expected file name for the user's certificate.
+func TenantClientCertFilename(tenantIdentifier string) string {
+	return "tenant." + tenantIdentifier + certExtension
+}
+
+// TenantClientKeyPath returns the expected file path for the tenant's key.
+func (cm *CertificateManager) TenantClientKeyPath(tenantIdentifier string) string {
+	return filepath.Join(cm.certsDir, TenantClientKeyFilename(tenantIdentifier))
+}
+
+// TenantClientKeyFilename returns the expected file name for the user's key.
+func TenantClientKeyFilename(tenantIdentifier string) string {
+	return "tenant." + tenantIdentifier + keyExtension
 }
 
 // ClientCertPath returns the expected file path for the user's certificate.
