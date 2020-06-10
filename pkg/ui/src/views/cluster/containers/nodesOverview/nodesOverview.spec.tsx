@@ -252,7 +252,7 @@ describe("Nodes Overview page", () => {
       assert.equal(columnCells.length, expectedColumns.length);
 
       expectedColumns.forEach(
-        (columnName, idx) => assert.equal(columnCells.at(idx).text(), columnName));
+        (columnName, idx) => assert.equal(columnCells.at(idx).text().toLowerCase(), columnName));
     });
 
     it("doesn't display 'node count' column when nodes are in single regions", () => {
@@ -280,7 +280,7 @@ describe("Nodes Overview page", () => {
       const columnCells = wrapper.find(".table-section__content table thead th");
       assert.equal(columnCells.length, expectedColumns.length);
       expectedColumns.forEach(
-        (columnName, idx) => assert.equal(columnCells.at(idx).text(), columnName));
+        (columnName, idx) => assert.equal(columnCells.at(idx).text().toLowerCase(), columnName));
     });
 
     it("displays table with fixed column width", () => {
