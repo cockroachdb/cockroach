@@ -1,0 +1,95 @@
+# Tests for filters that contain expressions that exactly match atom
+# predicates.
+
+# Booleans
+
+predtest vars=(bool)
+@1
+=>
+@1
+----
+true
+└── remaining filters: none
+
+predtest vars=(bool)
+NOT @1
+=>
+@1
+----
+false
+
+# Equalities
+
+predtest vars=(string)
+@1 = 'foo'
+=>
+@1 = 'foo'
+----
+true
+└── remaining filters: none
+
+predtest vars=(string)
+@1 = 'foo'
+=>
+@1 = 'bar'
+----
+false
+
+# Inequalities
+
+predtest vars=(int)
+@1 > 10
+=>
+@1 > 10
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 > 10
+=>
+@1 > 15
+----
+false
+
+# IN expressions
+
+predtest vars=(int)
+@1 IN (1, 2, 3)
+=>
+@1 IN (1, 2, 3)
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 IN (1, 2, 3)
+=>
+@1 IN (1, 2)
+----
+false
+
+# Conjunctions
+
+predtest vars=(bool, int)
+@1 AND @2 > 20
+=>
+@1
+----
+true
+└── remaining filters: @2 > 20
+
+predtest vars=(bool, int)
+@1 AND @2 > 20
+=>
+@2 > 20
+----
+true
+└── remaining filters: @1
+
+predtest vars=(bool, int)
+@1 AND @2 > 15
+=>
+@2 > 20
+----
+false
