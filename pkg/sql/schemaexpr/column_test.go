@@ -77,3 +77,32 @@ func TestDequalifyColumnRefs(t *testing.T) {
 		})
 	}
 }
+
+func TestRenameColumn(t *testing.T) {
+	from := tree.Name("foo")
+	to := tree.Name("bar")
+
+	testData := []struct {
+		expr     string
+		expected string
+	}{
+		{"foo", "bar"},
+		{"foo = 1", "bar = 1"},
+		{"foo = 1 AND baz = 3", "(bar = 1) AND (baz = 3)"},
+		{"baz = 3 OR foo = 1", "(baz = 3) OR (bar = 1)"},
+		{"timezone(baz, foo::TIMESTAMPTZ) > now()", "timezone(baz, bar::TIMESTAMPTZ) > now()"},
+	}
+
+	for _, d := range testData {
+		t.Run(d.expr, func(t *testing.T) {
+			res, err := RenameColumn(d.expr, from, to)
+			if err != nil {
+				t.Fatalf("%s: unexpected error: %s", d.expr, err)
+			}
+
+			if res != d.expected {
+				t.Errorf("%s: expected %q, got %q", d.expr, d.expected, res)
+			}
+		})
+	}
+}
