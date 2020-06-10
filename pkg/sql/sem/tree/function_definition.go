@@ -96,6 +96,13 @@ type FunctionProperties struct {
 	// the Postgres ones at test time.
 	// This should be used with caution.
 	IgnoreVolatilityCheck bool
+
+	// TrackSequenceDeps is true if the builtin function takes in a sequence
+	// name (string) and can be used in a scalar expression.
+	// TODO(richardjcai): When implicit casting is supported, these builtins
+	// should take RegClass as the arg type for the sequence name instead of
+	// string, we will add a dependency on all RegClass types used in a view.
+	TrackSequenceDeps bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in
