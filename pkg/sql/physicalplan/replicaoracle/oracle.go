@@ -133,7 +133,7 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *randomOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(desc, o.gossip)
+	replicas, err := replicaSliceOrErr(ctx, desc, o.gossip)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -163,7 +163,7 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *closestOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(desc, o.gossip)
+	replicas, err := replicaSliceOrErr(ctx, desc, o.gossip)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -229,7 +229,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 		}
 	}
 
-	replicas, err := replicaSliceOrErr(desc, o.gossip)
+	replicas, err := replicaSliceOrErr(ctx, desc, o.gossip)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -259,9 +259,9 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 // is available in gossip. If no nodes are available, a RangeUnavailableError is
 // returned.
 func replicaSliceOrErr(
-	desc *roachpb.RangeDescriptor, gsp gossip.DeprecatedOracleGossip,
+	ctx context.Context, desc *roachpb.RangeDescriptor, gsp gossip.DeprecatedOracleGossip,
 ) (kvcoord.ReplicaSlice, error) {
-	replicas, err := kvcoord.NewReplicaSlice(context.TODO(), gsp, desc)
+	replicas, err := kvcoord.NewReplicaSlice(ctx, gsp, desc)
 	if err != nil {
 		return kvcoord.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(desc.RangeID, err)
 	}
