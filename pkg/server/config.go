@@ -327,6 +327,11 @@ type SQLConfig struct {
 
 	// QueryCacheSize is the memory size (in bytes) of the query plan cache.
 	QueryCacheSize int64
+
+	// TenantKVAddrs are the entry points to the KV layer.
+	//
+	// Only applies when the SQL server is deployed individually.
+	TenantKVAddrs []string
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
