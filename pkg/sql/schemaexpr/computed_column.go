@@ -102,13 +102,6 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		}
 	}
 
-	// Replace the column variables with dummyColumns so that they can be
-	// type-checked.
-	replacedExpr, _, err := replaceVars(v.desc, d.Computed.Expr)
-	if err != nil {
-		return err
-	}
-
 	// Resolve the type of the computed column expression.
 	defType, err := tree.ResolveType(v.ctx, d.Type, v.semaCtx.GetTypeResolver())
 	if err != nil {
@@ -118,9 +111,10 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	// Check that the type of the expression is of type defType and that there
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+	typedExpr, _, err := ReplaceColumnVarsAndSanitizeExpr(
 		v.ctx,
-		replacedExpr,
+		v.desc,
+		d.Computed.Expr,
 		defType,
 		"computed column",
 		v.semaCtx,
