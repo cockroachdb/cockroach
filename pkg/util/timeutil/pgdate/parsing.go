@@ -55,6 +55,8 @@ var (
 		fieldTZHour, fieldTZMinute, fieldTZSecond)
 	timeRequiredFields = newFieldSet(fieldHour, fieldMinute)
 
+	db2TimeRequiredFields = newFieldSet(fieldHour, fieldMinute, fieldSecond)
+
 	dateTimeFields = dateFields.AddAll(timeFields)
 
 	tzFields = newFieldSet(fieldTZHour, fieldTZMinute, fieldTZSecond)
