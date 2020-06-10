@@ -722,7 +722,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			); err != nil {
 				return nil, err
 			}
-			return &DGeometry{d.AsGeometry()}, nil
+			g, err := d.AsGeometry()
+			if err != nil {
+				return nil, err
+			}
+			return &DGeometry{g}, nil
 		}
 
 	case types.DateFamily:

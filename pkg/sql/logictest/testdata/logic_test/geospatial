@@ -20,6 +20,15 @@ statement error type LineString does not match column type Point
 INSERT INTO geo_table (id, geom) VALUES
   (3, 'SRID=4004;LINESTRING(0.0 0.0, 1.0 2.0)')
 
+statement error unknown SRID for Geometry: 404
+SELECT 'SRID=404;POINT(1.0 2.0)'::geometry
+
+statement error unknown SRID for Geography: 404
+SELECT 'SRID=404;POINT(1.0 2.0)'::geography
+
+statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
+SELECT 'SRID=3857;POINT(1.0 2.0)'::geography
+
 query ITTT rowsort
 SELECT * FROM geo_table
 ----

@@ -171,12 +171,12 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.GeographyFamily:
 		// TODO(otan): generate fake data properly.
 		return tree.NewDGeography(
-			geo.MustParseGeographyFromEWKBRaw([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")),
+			geo.MustParseGeographyFromEWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")),
 		)
 	case types.GeometryFamily:
 		// TODO(otan): generate fake data properly.
 		return tree.NewDGeometry(
-			geo.MustParseGeometryFromEWKBRaw([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")),
+			geo.MustParseGeometryFromEWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")),
 		)
 	case types.DecimalFamily:
 		d := &tree.DDecimal{}

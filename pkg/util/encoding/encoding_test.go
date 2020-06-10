@@ -1158,7 +1158,7 @@ func TestEncodeDecodeGeo(t *testing.T) {
 				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
 					parsed, err := geo.ParseGeometry(tc)
 					require.NoError(t, err)
-					spatialObject := parsed.SpatialObject
+					spatialObject := parsed.SpatialObject()
 
 					var b []byte
 					var decoded geopb.SpatialObject
