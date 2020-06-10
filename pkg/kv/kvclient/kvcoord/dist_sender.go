@@ -1452,17 +1452,28 @@ func (ds *DistSender) sendPartialBatch(
 			// likely the result of a range split. If we have new range
 			// descriptors, insert them instead as long as they are different
 			// from the last descriptor to avoid endless loops.
-			var replacements []roachpb.RangeInfo
-			different := func(rd *roachpb.RangeDescriptor) bool {
-				return !desc.RSpan().Equal(rd.RSpan())
-			}
-			if different(&tErr.MismatchedRange) {
-				replacements = append(replacements, roachpb.RangeInfo{Desc: tErr.MismatchedRange})
-			}
-			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
-				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
-					replacements = append(replacements, roachpb.RangeInfo{Desc: *tErr.SuggestedRange})
+
+			// Sanity check that we got the different descriptors. Getting the same
+			// descriptor and putting it in the cache would be bad, as we'd go through
+			// an infinite loops of retries.
+			{
+				different := func(rd *roachpb.RangeDescriptor) bool {
+					return !desc.RSpan().Equal(rd.RSpan())
 				}
+				if !different(&tErr.MismatchedRange) {
+					log.Fatalf(ctx, "MismatchedRange not different from original desc. desc: %s. mismatched: %s",
+						desc, tErr.MismatchedRange)
+				}
+				if (tErr.SuggestedRange != nil) && !different(tErr.SuggestedRange) {
+					log.Fatalf(ctx, "SuggestedRange not different from original desc. desc: %s. suggested: %s",
+						desc, tErr.SuggestedRange)
+				}
+			}
+
+			replacements := make([]roachpb.RangeInfo, 0, 2)
+			replacements = append(replacements, roachpb.RangeInfo{Desc: tErr.MismatchedRange})
+			if tErr.SuggestedRange != nil {
+				replacements = append(replacements, roachpb.RangeInfo{Desc: *tErr.SuggestedRange})
 			}
 			// Same as Evict() if replacements is empty.
 			evictToken.EvictAndReplace(ctx, replacements...)
@@ -1505,13 +1516,6 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
 	default:
 	}
 	return nil
-}
-
-func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roachpb.RSpan) bool {
-	if isReverse {
-		return rd.ContainsKeyInverted(rs.EndKey)
-	}
-	return rd.ContainsKey(rs.Key)
 }
 
 // fillSkippedResponses fills in responses and ResumeSpans for requests
