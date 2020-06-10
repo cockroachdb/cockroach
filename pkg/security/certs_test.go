@@ -27,9 +27,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const testKeySize = 1024
+
+// tempDir is like testutils.TempDir but avoids a circular import.
+func tempDir(t *testing.T) (string, func()) {
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return certsDir, func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestGenerateCACert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -37,15 +51,8 @@ func TestGenerateCACert(t *testing.T) {
 	security.ResetAssetLoader()
 	defer ResetTest()
 
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir, cleanup := tempDir(t)
+	defer cleanup()
 
 	cm, err := security.NewCertificateManager(certsDir)
 	if err != nil {
@@ -106,6 +113,47 @@ func TestGenerateCACert(t *testing.T) {
 			t.Errorf("#%d: expected %d certificates, found %d", i, tc.numCerts, actual)
 		}
 	}
+}
+
+func TestGenerateTenantCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+
+	certsDir, cleanup := tempDir(t)
+	defer cleanup()
+
+	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
+	require.NoError(t, security.CreateTenantCAPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, // allowKeyReuse
+		false, // overwrite
+	))
+
+	cp, err := security.CreateTenantClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		time.Hour,
+		"tenant999",
+	)
+	require.NoError(t, err)
+	require.NoError(t, security.WriteTenantClientPair(certsDir, cp, false))
+
+	cl := security.NewCertificateLoader(certsDir)
+	require.NoError(t, cl.Load())
+	infos := cl.Certificates()
+	for _, info := range infos {
+		require.NoError(t, info.Error)
+	}
+	require.Len(t, infos, 2)
+	require.Equal(t, security.TenantCAPem, infos[0].FileUsage)
+	require.Equal(t, security.TenantClientPem, infos[1].FileUsage)
+	require.Equal(t, "tenant999", infos[1].Name)
 }
 
 func TestGenerateNodeCerts(t *testing.T) {
