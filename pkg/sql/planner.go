@@ -378,6 +378,11 @@ func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
 }
 
+// SemaCtx provides access to the planner's SemaCtx.
+func (p *planner) SemaCtx() *tree.SemaContext {
+	return &p.semaCtx
+}
+
 // Note: if the context will be modified, use ExtendedEvalContextCopy instead.
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 	return &p.extendedEvalCtx
