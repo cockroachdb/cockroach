@@ -99,6 +99,7 @@ type NewColOperatorArgs struct {
 	ProcessorConstructor execinfra.ProcessorConstructor
 	DiskQueueCfg         colcontainer.DiskQueueCfg
 	FDSemaphore          semaphore.Semaphore
+	ExprHelper           ExprHelper
 	TestingKnobs         struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
@@ -568,6 +569,9 @@ func NewColOperator(
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	processorConstructor := args.ProcessorConstructor
+	if args.ExprHelper == nil {
+		args.ExprHelper = &defaultExprHelper{}
+	}
 
 	log.VEventf(ctx, 2, "planning col operator for spec %q", spec)
 
@@ -876,8 +880,9 @@ func NewColOperator(
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.InnerJoin {
 				if err =
-					result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, core.HashJoiner.OnExpr,
-						streamingMemAccount, processorConstructor, factory); err != nil {
+					result.planAndMaybeWrapOnExprAsFilter(
+						ctx, flowCtx, core.HashJoiner.OnExpr, streamingMemAccount, processorConstructor, factory, args.ExprHelper,
+					); err != nil {
 					return result, err
 				}
 			}
@@ -938,8 +943,9 @@ func NewColOperator(
 			}
 
 			if onExpr != nil {
-				if err = result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, *onExpr,
-					streamingMemAccount, processorConstructor, factory); err != nil {
+				if err = result.planAndMaybeWrapOnExprAsFilter(
+					ctx, flowCtx, *onExpr, streamingMemAccount, processorConstructor, factory, args.ExprHelper,
+				); err != nil {
 					return result, err
 				}
 			}
@@ -1093,7 +1099,7 @@ func NewColOperator(
 		Op:          result.Op,
 		ColumnTypes: result.ColumnTypes,
 	}
-	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, factory)
+	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, factory, args.ExprHelper)
 	// TODO(yuzefovich): update unit tests to remove panic-catcher when fallback
 	// to rowexec is not allowed.
 	if err != nil && processorConstructor == nil {
@@ -1149,6 +1155,7 @@ func (r *NewColOperatorResult) planAndMaybeWrapOnExprAsFilter(
 	streamingMemAccount *mon.BoundAccount,
 	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
+	helper ExprHelper,
 ) error {
 	// We will plan other Operators on top of r.Op, so we need to account for the
 	// internal memory explicitly.
@@ -1160,7 +1167,7 @@ func (r *NewColOperatorResult) planAndMaybeWrapOnExprAsFilter(
 		ColumnTypes: r.ColumnTypes,
 	}
 	if err := ppr.planFilterExpr(
-		ctx, flowCtx.NewEvalCtx(), onExpr, streamingMemAccount, factory,
+		ctx, flowCtx.NewEvalCtx(), onExpr, streamingMemAccount, factory, helper,
 	); err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
@@ -1210,10 +1217,11 @@ func (r *postProcessResult) planPostProcessSpec(
 	post *execinfrapb.PostProcessSpec,
 	streamingMemAccount *mon.BoundAccount,
 	factory coldata.ColumnFactory,
+	helper ExprHelper,
 ) error {
 	if !post.Filter.Empty() {
 		if err := r.planFilterExpr(
-			ctx, flowCtx.NewEvalCtx(), post.Filter, streamingMemAccount, factory,
+			ctx, flowCtx.NewEvalCtx(), post.Filter, streamingMemAccount, factory, helper,
 		); err != nil {
 			return err
 		}
@@ -1224,18 +1232,15 @@ func (r *postProcessResult) planPostProcessSpec(
 	} else if post.RenderExprs != nil {
 		log.VEventf(ctx, 2, "planning render expressions %+v", post.RenderExprs)
 		var renderedCols []uint32
-		for _, expr := range post.RenderExprs {
-			var (
-				helper            execinfra.ExprHelper
-				renderInternalMem int
-			)
-			err := helper.Init(expr, r.ColumnTypes, flowCtx.EvalCtx)
+		for _, renderExpr := range post.RenderExprs {
+			var renderInternalMem int
+			expr, err := helper.ProcessExpr(renderExpr, flowCtx.EvalCtx, r.ColumnTypes)
 			if err != nil {
 				return err
 			}
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, renderInternalMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), helper.Expr, r.ColumnTypes, r.Op, streamingMemAccount, factory,
+				ctx, flowCtx.NewEvalCtx(), expr, r.ColumnTypes, r.Op, streamingMemAccount, factory,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
@@ -1364,16 +1369,14 @@ func (r *postProcessResult) planFilterExpr(
 	filter execinfrapb.Expression,
 	acc *mon.BoundAccount,
 	factory coldata.ColumnFactory,
+	helper ExprHelper,
 ) error {
-	var (
-		helper               execinfra.ExprHelper
-		selectionInternalMem int
-	)
-	err := helper.Init(filter, r.ColumnTypes, evalCtx)
+	var selectionInternalMem int
+	expr, err := helper.ProcessExpr(filter, evalCtx, r.ColumnTypes)
 	if err != nil {
 		return err
 	}
-	if helper.Expr == tree.DNull {
+	if expr == tree.DNull {
 		// The filter expression is tree.DNull meaning that it is always false, so
 		// we put a zero operator.
 		r.Op = NewZeroOp(r.Op)
@@ -1381,10 +1384,10 @@ func (r *postProcessResult) planFilterExpr(
 	}
 	var filterColumnTypes []*types.T
 	r.Op, _, filterColumnTypes, selectionInternalMem, err = planSelectionOperators(
-		ctx, evalCtx, helper.Expr, r.ColumnTypes, r.Op, acc, factory,
+		ctx, evalCtx, expr, r.ColumnTypes, r.Op, acc, factory,
 	)
 	if err != nil {
-		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter.Expr)
+		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
 	}
 	r.InternalMemUsage += selectionInternalMem
 	if len(filterColumnTypes) > len(r.ColumnTypes) {

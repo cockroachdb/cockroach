@@ -226,6 +226,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
+		false, /* forceExprDeserialization */
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
@@ -431,6 +432,7 @@ type vectorizedFlowCreator struct {
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
+	exprHelper                     colexec.ExprHelper
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -466,6 +468,7 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	forceExprDeserialization bool,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -479,6 +482,7 @@ func newVectorizedFlowCreator(
 		flowID:                         flowID,
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
+		exprHelper:                     colexec.NewExprHelper(forceExprDeserialization),
 	}
 }
 
@@ -952,6 +956,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			ProcessorConstructor: rowexec.NewProcessor,
 			DiskQueueCfg:         s.diskQueueCfg,
 			FDSemaphore:          s.fdSemaphore,
+			ExprHelper:           s.exprHelper,
 		}
 		result, err := colexec.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
@@ -1170,17 +1175,34 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // EXPLAIN output.
 // Note that passed-in output can be nil, but if it is non-nil, only Types()
 // method on it might be called (nothing will actually get Push()'ed into it).
+// - scheduledOnRemoteNode indicates whether the flow that processorSpecs
+// represent is scheduled to be run on a remote node (different from the one
+// performing this check).
 func SupportsVectorized(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorSpecs []execinfrapb.ProcessorSpec,
-	fuseOpt flowinfra.FuseOpt,
+	isPlanLocal bool,
 	output execinfra.RowReceiver,
+	scheduledOnRemoteNode bool,
 ) (leaves []execinfra.OpNode, err error) {
 	if output == nil {
 		output = &execinfra.RowChannel{}
 	}
-	creator := newVectorizedFlowCreator(newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, flowCtx.Cfg.VecFDSemaphore)
+	fuseOpt := flowinfra.FuseNormally
+	if isPlanLocal {
+		fuseOpt = flowinfra.FuseAggressively
+	}
+	// We want to force the expression deserialization if this flow is actually
+	// scheduled to be on the remote node in order to make sure that during
+	// actual execution the remote node will be able to deserialize the
+	// expressions without an error.
+	forceExprDeserialization := scheduledOnRemoteNode
+	creator := newVectorizedFlowCreator(
+		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
+		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		flowCtx.Cfg.VecFDSemaphore, forceExprDeserialization,
+	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying
 	// attention to the memory since it is node-dependent in the distributed

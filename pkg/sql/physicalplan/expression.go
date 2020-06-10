@@ -14,8 +14,6 @@
 package physicalplan
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -75,42 +73,36 @@ func MakeExpression(
 		ctx = &fakeExprContext{}
 	}
 
-	if ctx.IsLocal() {
-		if indexVarMap != nil {
-			// Remap our indexed vars.
-			expr = sqlbase.RemapIVarsInTypedExpr(expr, indexVarMap)
-		}
-		return execinfrapb.Expression{LocalExpr: expr}, nil
-	}
-
 	evalCtx := ctx.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
 	}
 
-	outExpr := expr.(tree.Expr)
 	if ctx.EvaluateSubqueries() {
-		outExpr, _ = tree.WalkExpr(subqueryVisitor, expr)
+		outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
 		if subqueryVisitor.err != nil {
 			return execinfrapb.Expression{}, subqueryVisitor.err
 		}
+		expr = outExpr.(tree.TypedExpr)
 	}
-	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
-	fmtCtx := execinfrapb.ExprFmtCtxBase(evalCtx)
+
 	if indexVarMap != nil {
-		fmtCtx.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
-			remappedIdx := indexVarMap[idx]
-			if remappedIdx < 0 {
-				panic(fmt.Sprintf("unmapped index %d", idx))
-			}
-			ctx.Printf("@%d", remappedIdx+1)
-		})
+		// Remap our indexed vars.
+		expr = sqlbase.RemapIVarsInTypedExpr(expr, indexVarMap)
 	}
-	fmtCtx.FormatNode(outExpr)
+	expression := execinfrapb.Expression{LocalExpr: expr}
+	if ctx.IsLocal() {
+		return expression, nil
+	}
+
+	// Since the plan is not fully local, serialize the expression.
+	fmtCtx := execinfrapb.ExprFmtCtxBase(evalCtx)
+	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(outExpr))
+		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
 	}
-	return execinfrapb.Expression{Expr: fmtCtx.CloseAndGetString()}, nil
+	expression.Expr = fmtCtx.CloseAndGetString()
+	return expression, nil
 }
 
 type evalAndReplaceSubqueryVisitor struct {
