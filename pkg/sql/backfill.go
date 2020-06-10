@@ -1182,6 +1182,13 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	// Compute the size of each index.
 	for _, idx := range indexes {
 		idx := idx
+
+		// Skip partial indexes for now.
+		// TODO(mgartner): Validate partial index entry counts.
+		if idx.IsPartial() {
+			continue
+		}
+
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			// Make the mutations public in a private copy of the descriptor
