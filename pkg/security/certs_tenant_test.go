@@ -45,7 +45,7 @@ func TestTenantCertificates(t *testing.T) {
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
 	tenantCAKey := filepath.Join(certsDir, "tenant-ca-name-irrelevant.key")
-	require.NoError(t, security.CreateTenantCAPair(
+	require.NoError(t, security.CreateTenantClientCAPair(
 		certsDir,
 		tenantCAKey,
 		2048,
@@ -64,33 +64,32 @@ func TestTenantCertificates(t *testing.T) {
 	// happen (it may be enough to just have them in-mem, we will see).
 	require.NoError(t, security.WriteTenantClientPair(certsDir, tenantCerts, false /* overwrite */))
 
-	// To make this example work we also need certs that the server can use. We
-	// need something here that the tenant will trust. We just make node certs
-	// out of convenience. In production, these would be auxiliary certs.
-	dummyCAKeyPath := filepath.Join(certsDir, "name-does-not-matter-too.key")
-	require.NoError(t, security.CreateCAPair(
-		certsDir, dummyCAKeyPath, testKeySize, 1000*time.Hour, false, false,
+	// The server also needs to show certs trusted by the client. These are the
+	// TenantServer certs.
+	serverCAKeyPath := filepath.Join(certsDir, "name-does-not-matter-too.key")
+	require.NoError(t, security.CreateTenantServerCAPair(
+		certsDir, serverCAKeyPath, testKeySize, 1000*time.Hour, false, false,
 	))
-	require.NoError(t, security.CreateNodePair(
-		certsDir, dummyCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
+	require.NoError(t, security.CreateTenantServerPair(
+		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
 
-	dummyCACertPath := filepath.Join(certsDir, security.CACertFilename())
+	serverCACertPath := filepath.Join(certsDir, security.TenantServerCACertFilename())
 
 	// Now set up the config a server would use. The client will trust it based on
-	// the dummy CA and dummy node certs, and it will validate incoming
+	// the server CA and server node certs, and it will validate incoming
 	// connections based on the tenant CA.
 	serverTLSConfig, err := security.LoadServerTLSConfig(
-		dummyCACertPath,
-		filepath.Join(certsDir, security.TenantCACertFilename()),
-		filepath.Join(certsDir, security.NodeCertFilename()),
-		filepath.Join(certsDir, security.NodeKeyFilename()),
+		serverCACertPath,
+		filepath.Join(certsDir, security.TenantClientCACertFilename()),
+		filepath.Join(certsDir, security.TenantServerCertFilename()),
+		filepath.Join(certsDir, security.TenantServerKeyFilename()),
 	)
 	require.NoError(t, err)
 
-	// The client in turn trusts the dummy CA and presents its tenant certs to the
+	// The client in turn trusts the server CA and presents its tenant certs to the
 	// server (which will validate them using the tenant CA).
 	clientTLSConfig, err := security.LoadClientTLSConfig(
-		dummyCACertPath,
+		serverCACertPath,
 		filepath.Join(certsDir, security.TenantClientCertFilename(tenant)),
 		filepath.Join(certsDir, security.TenantClientKeyFilename(tenant)),
 	)
