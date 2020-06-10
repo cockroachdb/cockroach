@@ -323,3 +323,23 @@ create-view t.public.v21
  ├── columns: sum:5
  └── dependencies
       └── abc [columns: a b c]
+
+# Sequence dependency should be added when a sequence is referred to as a string
+# argument to a sequence builtin function.
+build
+CREATE VIEW v22 AS SELECT nextval('s')
+----
+create-view t.public.v22
+ ├── SELECT nextval('s':::STRING)
+ ├── columns: nextval:1
+ └── dependencies
+      └── s
+
+build
+CREATE VIEW v23 AS SELECT t.x FROM (SELECT currval('s') AS x) AS t
+----
+create-view t.public.v23
+ ├── SELECT t.x FROM (SELECT currval('s':::STRING) AS x) AS t
+ ├── columns: x:1
+ └── dependencies
+      └── s

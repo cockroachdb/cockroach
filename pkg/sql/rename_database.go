@@ -251,7 +251,7 @@ func isAllowedDependentDescInRenameDatabase(
 		if err != nil {
 			return false, "", err
 		}
-		seqNames, err := getUsedSequenceNames(typedExpr)
+		seqNames, err := sqlbase.GetUsedSequenceNames(typedExpr)
 		if err != nil {
 			return false, "", err
 		}

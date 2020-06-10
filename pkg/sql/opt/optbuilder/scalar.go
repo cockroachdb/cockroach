@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -498,6 +499,21 @@ func (b *Builder) buildFunction(
 
 	if isGenerator(def) {
 		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
+	}
+
+	// Add a dependency on sequences that are used as a string argument.
+	if b.trackViewDeps {
+		seq, found, err := sqlbase.GetSequenceFromFunc(f)
+		if err != nil {
+			panic(err)
+		}
+		if found {
+			tn := tree.MakeUnqualifiedTableName(tree.Name(seq))
+			ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+			b.viewDeps = append(b.viewDeps, opt.ViewDep{
+				DataSource: ds,
+			})
+		}
 	}
 
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
