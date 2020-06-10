@@ -841,31 +841,6 @@ func (sc *SchemaChanger) distBackfill(
 			if err != nil {
 				return err
 			}
-			// otherTableDescs contains any other table descriptors required by the
-			// backfiller processor.
-			var otherTableDescs []sqlbase.TableDescriptor
-			if backfillType == columnBackfill {
-				fkTables, err := row.MakeFkMetadata(
-					ctx,
-					tableDesc,
-					row.CheckUpdates,
-					row.NoLookup,
-					row.NoCheckPrivilege,
-					nil, /* AnalyzeExprFunction */
-					nil, /* CheckHelper */
-				)
-				if err != nil {
-					return err
-				}
-
-				for k := range fkTables {
-					table, err := tc.GetTableVersionByID(ctx, txn, k, tree.ObjectLookupFlags{})
-					if err != nil {
-						return err
-					}
-					otherTableDescs = append(otherTableDescs, *table.TableDesc())
-				}
-			}
 			metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.BulkProcessorProgress != nil {
 					todoSpans = roachpb.SubtractSpans(todoSpans,
@@ -891,7 +866,7 @@ func (sc *SchemaChanger) distBackfill(
 
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, txn, true /* distribute */)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, otherTableDescs, readAsOf,
+				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, readAsOf,
 			)
 			if err != nil {
 				return err
@@ -1686,36 +1661,11 @@ func columnBackfillInTxn(
 	if err := backfiller.Init(ctx, evalCtx, tableDesc); err != nil {
 		return err
 	}
-	// otherTableDescs contains any other table descriptors required by the
-	// backfiller processor.
-	var otherTableDescs []*sqlbase.ImmutableTableDescriptor
-	fkTables, err := row.MakeFkMetadata(
-		ctx,
-		tableDesc,
-		row.CheckUpdates,
-		row.NoLookup,
-		row.NoCheckPrivilege,
-		nil, /* AnalyzeExprFunction */
-		nil, /* CheckHelper */
-	)
-	if err != nil {
-		return err
-	}
-	// All the FKs here are guaranteed to be created in the same transaction
-	// or else this table would be created in the ADD state.
-	for k := range fkTables {
-		t := tc.GetUncommittedTableByID(k)
-		if (descs.UncommittedTable{}) == t || !t.IsNewTable() {
-			return errors.AssertionFailedf(
-				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
-		}
-		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)
-	}
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize,
+			txn, tableDesc, sp, columnTruncateAndBackfillChunkSize,
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err

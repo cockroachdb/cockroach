@@ -38,6 +38,8 @@ import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 import TableSection from "./tableSection";
 import "./nodes.styl";
 
+import { getStatusDescription, getNodeStatusDescription, NodeCountTooltip, UptimeTooltip, ReplicasTooltip, CapacityUseTooltip, MemoryUseTooltip, CPUsTooltip, VersionTooltip, StatusTooltip } from "./tooltips";
+
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
 );
@@ -48,7 +50,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
 
 // AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
 // for correct sorting in the table.
-enum AggregatedNodeStatus {
+export enum AggregatedNodeStatus {
   LIVE = 6,
   WARNING = 7,
   DEAD = 8,
@@ -111,20 +113,6 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
   dataSource: DecommissionedNodeStatusRow[];
   isCollapsible: boolean;
 }
-
-const getStatusDescription = (status: LivenessStatus) => {
-  switch (status) {
-    case LivenessStatus.LIVE:
-      return "This node is currently healthy.";
-    case LivenessStatus.DECOMMISSIONING:
-      return `This node is in the process of being decommissioned.
-       It may take some time to transfer the data to other nodes.
-       When finished, it will appear below as a decommissioned node.`;
-    default:
-      return "This node has not recently reported as being live. " +
-        "It may not be functioning correctly, but no automatic action has yet been taken.";
-  }
-};
 
 const getBadgeTypeByNodeStatus = (status: LivenessStatus | AggregatedNodeStatus): BadgeProps["status"] => {
   switch (status) {
@@ -211,7 +199,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "nodesCount",
-      title: "node count",
+      title: (
+        <NodeCountTooltip>
+          Node Count
+        </NodeCountTooltip>
+      ),
       sorter: (a, b) => {
         if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
         if (a.nodesCount < b.nodesCount) { return -1; }
@@ -226,7 +218,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "uptime",
       dataIndex: "uptime",
-      title: "uptime",
+      title: (
+        <UptimeTooltip>
+          Uptime
+        </UptimeTooltip>
+      ),
       sorter: true,
       className: "column--align-right",
       width: "10%",
@@ -235,14 +231,22 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "replicas",
       dataIndex: "replicas",
-      title: "replicas",
+      title: (
+        <ReplicasTooltip>
+          Replicas
+        </ReplicasTooltip>
+      ),
       sorter: true,
       className: "column--align-right",
       width: "10%",
     },
     {
       key: "capacityUse",
-      title: "capacity use",
+      title: (
+        <CapacityUseTooltip>
+          Capacity Use
+        </CapacityUseTooltip>
+      ),
       render: (_text, record) => Percentage(record.usedCapacity, record.availableCapacity),
       sorter: (a, b) =>
         a.usedCapacity / a.availableCapacity - b.usedCapacity / b.availableCapacity,
@@ -251,7 +255,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "memoryUse",
-      title: "memory use",
+      title: (
+        <MemoryUseTooltip>
+          Memory Use
+        </MemoryUseTooltip>
+      ),
       render: (_text, record) => Percentage(record.usedMemory, record.availableMemory),
       sorter: (a, b) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
@@ -260,7 +268,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "numCpus",
-      title: "cpus",
+      title: (
+        <CPUsTooltip>
+          CPUs
+        </CPUsTooltip>
+      ),
       dataIndex: "numCpus",
       sorter: true,
       className: "column--align-right",
@@ -269,25 +281,37 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "version",
       dataIndex: "version",
-      title: "version",
+      title: (
+        <VersionTooltip>
+          Version
+        </VersionTooltip>
+      ),
       sorter: true,
       width: "8%",
       ellipsis: true,
     },
     {
       key: "status",
+      title: (
+        <StatusTooltip>
+          Status
+        </StatusTooltip>
+      ),
       render: (_text, record) => {
         let badgeText: string;
-        let tooltipText: string;
+        let tooltipText: any;
+        let nodeTooltip: any;
         const badgeType = getBadgeTypeByNodeStatus(record.status);
-
         switch (record.status) {
           case AggregatedNodeStatus.DEAD:
             badgeText = "warning";
+            tooltipText = getStatusDescription(LivenessStatus.DEAD);
+            nodeTooltip = getNodeStatusDescription(record.status);
             break;
           case AggregatedNodeStatus.LIVE:
           case AggregatedNodeStatus.WARNING:
             badgeText = AggregatedNodeStatus[record.status];
+            nodeTooltip = getNodeStatusDescription(record.status);
             break;
           case LivenessStatus.UNKNOWN:
           case LivenessStatus.UNAVAILABLE:
@@ -298,6 +322,17 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             badgeText = LivenessStatus[record.status];
             tooltipText = getStatusDescription(record.status);
             break;
+        }
+        if (!record.nodeId) {
+          return (
+            <Tooltip title={nodeTooltip}>
+              {""}
+              <Badge
+                status={badgeType}
+                text={badgeText}
+              />
+            </Tooltip>
+          );
         }
         return (
           <Badge
@@ -310,7 +345,6 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           />
         );
       },
-      title: "status",
       sorter: (a, b) => a.status - b.status,
       width: "13%",
     },

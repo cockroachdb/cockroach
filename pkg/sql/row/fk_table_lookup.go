@@ -116,13 +116,6 @@ const (
 // that will perform the actual lookup of table metadata.
 type TableLookupFunction func(context.Context, TableID) (catalog.TableEntry, error)
 
-// NoLookup is a stub that can be used to not actually fetch metadata.
-// This can be used when the FK work is initialized from a pre-populated
-// FkTableMetadata map.
-func NoLookup(_ context.Context, _ TableID) (catalog.TableEntry, error) {
-	return catalog.TableEntry{}, nil
-}
-
 // CheckPrivilegeFunction is the function type used by MakeFkMetadata that will
 // check the privileges of the current user to access specific tables.
 type CheckPrivilegeFunction func(context.Context, sqlbase.DescriptorInterface, privilege.Kind) error
