@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"sort"
@@ -79,6 +80,8 @@ var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
 	backupOptRevisionHistory: sql.KVStringOptRequireNoValue,
 	backupOptEncPassphrase:   sql.KVStringOptRequireValue,
 }
+
+var AWSKMSEncryptionEnabled = []byte("enable_aws_kms")
 
 type tableAndIndex struct {
 	tableID sqlbase.ID
@@ -261,6 +264,10 @@ func backupJobDescription(
 	return tree.AsStringWithFQNames(b, ann), nil
 }
 
+func IsAWSKMSEnabled(passphrase []byte) bool {
+	return bytes.Compare(passphrase, AWSKMSEncryptionEnabled) == 0
+}
+
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -421,8 +428,18 @@ func backupPlanHook(
 				if err != nil {
 					return err
 				}
+
+				var key []byte
+				if IsAWSKMSEnabled(encryptionPassphrase) {
+					key, err = storageccl.DecryptAWSKMSKey(opts.DataKey)
+					if err != nil {
+						return err
+					}
+				} else {
+					key = storageccl.GenerateKey(encryptionPassphrase, opts.Salt)
+				}
 				encryption = &roachpb.FileEncryptionOptions{
-					Key: storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
+					Key: key,
 				}
 			}
 			prevBackups = make([]BackupManifest, len(incrementalFrom))
@@ -460,8 +477,17 @@ func backupPlanHook(
 					if err != nil {
 						return err
 					}
+					var key []byte
+					if IsAWSKMSEnabled(encryptionPassphrase) {
+						key, err = storageccl.DecryptAWSKMSKey(encOpts.DataKey)
+						if err != nil {
+							return err
+						}
+					} else {
+						key = storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt)
+					}
 					encryption = &roachpb.FileEncryptionOptions{
-						Key: storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt),
+						Key: key,
 					}
 				}
 
@@ -641,19 +667,36 @@ func backupPlanHook(
 		// If we didn't load any prior backups from which get encryption info, we
 		// need to pick a new salt and record it.
 		if encryptionPassphrase != nil && encryption == nil {
-			salt, err := storageccl.GenerateSalt()
-			if err != nil {
-				return err
-			}
+			var key []byte
 			exportStore, err := makeCloudStorage(ctx, defaultURI)
 			if err != nil {
 				return err
 			}
 			defer exportStore.Close()
-			if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt}, exportStore); err != nil {
-				return err
+
+			if IsAWSKMSEnabled(encryptionPassphrase) {
+				// Generate a new AWS KMS data key
+				encDataKey, plainDataKey, err := storageccl.GenerateAWSKMSKey()
+				if err != nil {
+					return err
+				}
+				if err := writeEncryptionOptions(ctx, &EncryptionInfo{DataKey: encDataKey},
+					exportStore); err != nil {
+					return err
+				}
+				key = plainDataKey
+			} else {
+				salt, err := storageccl.GenerateSalt()
+				if err != nil {
+					return err
+				}
+				if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt},
+					exportStore); err != nil {
+					return err
+				}
+				key = storageccl.GenerateKey(encryptionPassphrase, salt)
 			}
-			encryption = &roachpb.FileEncryptionOptions{Key: storageccl.GenerateKey(encryptionPassphrase, salt)}
+			encryption = &roachpb.FileEncryptionOptions{Key: key}
 		}
 
 		// TODO (lucy): For partitioned backups, also add verification for other

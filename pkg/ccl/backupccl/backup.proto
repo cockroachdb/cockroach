@@ -133,4 +133,7 @@ message EncryptionInfo {
 
   Scheme scheme = 1;
   bytes salt = 2;
+
+  // An encrypted version of the AWS data key being used for encrypted backups.
+  bytes dataKey = 3;
 }

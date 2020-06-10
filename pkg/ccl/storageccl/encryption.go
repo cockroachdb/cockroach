@@ -14,7 +14,9 @@ import (
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
 	"crypto/sha256"
-
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -48,6 +50,67 @@ func GenerateSalt() ([]byte, error) {
 // GenerateKey generates a key for the supplied passphrase and salt.
 func GenerateKey(passphrase, salt []byte) []byte {
 	return pbkdf2.Key(passphrase, salt, 64000, 32, sha256.New)
+}
+
+// GenerateAWSKMSKey generates the encrypted and plaintext versions of a data
+// key.
+func GenerateAWSKMSKey() ([]byte, []byte, error) {
+	// Create a session.
+	// TODO(adityamaru): Support specified authentication.
+	opts := session.Options{}
+	opts.SharedConfigState = session.SharedConfigEnable
+
+	sess, err := session.NewSessionWithOptions(opts)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "new aws kms session")
+	}
+
+	// Create KMS service client
+	kmsClient := kms.New(sess)
+
+	// Create the Customer Master Key.
+	cmk, err := kmsClient.CreateKey(&kms.CreateKeyInput{
+		Description: aws.String("CMK for encrypted backup and restore"),
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "error when generating AWS CMK")
+	}
+
+	// Create a data key.
+	dataKeyOutput, err := kmsClient.GenerateDataKey(&kms.GenerateDataKeyInput{
+		KeyId:             cmk.KeyMetadata.KeyId,
+		KeySpec: aws.String("AES_256"),
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "error when generating AWS data key")
+	}
+
+	return dataKeyOutput.CiphertextBlob, dataKeyOutput.Plaintext, nil
+}
+
+func DecryptAWSKMSKey(encDataKey []byte) ([]byte, error) {
+	// Create a session.
+	// TODO(adityamaru): Support specified authentication.
+	opts := session.Options{}
+	opts.SharedConfigState = session.SharedConfigEnable
+
+	sess, err := session.NewSessionWithOptions(opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "new aws kms session")
+	}
+
+	// Create KMS service client
+	kmsClient := kms.New(sess)
+
+	// Decrypt data key
+	dataKey, err := kmsClient.Decrypt(&kms.DecryptInput{
+		CiphertextBlob:    encDataKey,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "decrypting aws kms data key")
+	}
+
+	return dataKey.Plaintext, nil
 }
 
 // AppearsEncrypted checks if passed bytes begin with an encryption preamble.

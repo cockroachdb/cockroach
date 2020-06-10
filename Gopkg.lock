@@ -243,7 +243,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:b271577800a10f3aac13244be81e51b5c324bc77dd9c883611fb65e68285c847"
+  digest = "1:144112cc6a4e99adc6e2155dc74a8f42360c4cdb164bbf6b08badcb514370152"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -273,11 +273,14 @@
     "private/protocol",
     "private/protocol/eventstream",
     "private/protocol/eventstream/eventstreamapi",
+    "private/protocol/json/jsonutil",
+    "private/protocol/jsonrpc",
     "private/protocol/query",
     "private/protocol/query/queryutil",
     "private/protocol/rest",
     "private/protocol/restxml",
     "private/protocol/xml/xmlutil",
+    "service/kms",
     "service/s3",
     "service/s3/s3iface",
     "service/s3/s3manager",
@@ -2147,8 +2150,10 @@
     "github.com/armon/circbuf",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/awserr",
+    "github.com/aws/aws-sdk-go/aws/client",
     "github.com/aws/aws-sdk-go/aws/credentials",
     "github.com/aws/aws-sdk-go/aws/session",
+    "github.com/aws/aws-sdk-go/service/kms",
     "github.com/aws/aws-sdk-go/service/s3",
     "github.com/aws/aws-sdk-go/service/s3/s3manager",
     "github.com/axiomhq/hyperloglog",

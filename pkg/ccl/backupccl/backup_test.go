@@ -13,6 +13,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -2771,6 +2772,97 @@ func TestBackupLevelDB(t *testing.T) {
 	}
 }
 
+func TestBackupAWSKMSEncrypted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, _, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, multiNode, 3, initNone)
+	defer cleanupFn()
+
+	// Create a table with a name and content that we never see in cleartext in a
+	// backup. And while the content and name are user data and metadata, by also
+	// partitioning the table at the sentinel value, we can ensure it also appears
+	// in the *backup* metadata as well (since partion = range boundary = backup
+	// file boundary that is recorded in metadata).
+	sqlDB.Exec(t, `CREATE DATABASE neverappears`)
+	sqlDB.Exec(t, `CREATE TABLE neverappears.neverappears (
+			neverappears STRING PRIMARY KEY, other string, INDEX neverappears (other)
+		)  PARTITION BY LIST (neverappears) (
+			PARTITION neverappears2 VALUES IN ('neverappears2'), PARTITION default VALUES IN (default)
+		)`)
+
+	// Move a partition to n2 to ensure we get multiple writers during BACKUP and
+	// by partitioning *at* the sentinel we also ensure it is in a range boundary.
+	sqlDB.Exec(t, `ALTER PARTITION neverappears2 OF TABLE neverappears.neverappears
+		CONFIGURE ZONE USING constraints='[+dc=dc2]'`)
+	testutils.SucceedsSoon(t, func() error {
+		_, err := sqlDB.DB.ExecContext(ctx, `ALTER TABLE neverappears.neverappears
+			EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 'neverappears2')`)
+		return err
+	})
+
+	// Add the actual content with our sentinel too.
+	sqlDB.Exec(t, `INSERT INTO neverappears.neverappears values
+		('neverappears1', 'neverappears1-v'),
+		('neverappears2', 'neverappears2-v'),
+		('neverappears3', 'neverappears3-v')`)
+
+	// Let's throw it in some other cluster metadata too for fun.
+	sqlDB.Exec(t, `CREATE USER neverappears`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.organization = 'neverappears'`)
+
+	// Full cluster-backup to capture all possible metadata.
+	backupLoc1 := localFoo + "/x?COCKROACH_LOCALITY=default"
+	backupLoc2 := localFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+	backupLoc1inc := localFoo + "/inc1/x?COCKROACH_LOCALITY=default"
+	backupLoc2inc := localFoo + "/inc1/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	plainBackupLoc1 := localFoo + "/cleartext?COCKROACH_LOCALITY=default"
+	plainBackupLoc2 := localFoo + "/cleartext?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+	sqlDB.Exec(t, `BACKUP TO ($1, $2)`, plainBackupLoc1, plainBackupLoc2)
+
+	sqlDB.Exec(t, `BACKUP TO ($1, $2) WITH encryption_passphrase='enable_aws_kms'`, backupLoc1,
+		backupLoc2)
+	// Add the actual content with our sentinel too.
+	sqlDB.Exec(t, `UPDATE neverappears.neverappears SET other = 'neverappears'`)
+	sqlDB.Exec(t, `BACKUP TO ($1, $2) INCREMENTAL FROM $3 WITH encryption_passphrase='enable_aws_kms'`,
+		backupLoc1inc, backupLoc2inc, backupLoc1)
+
+	before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
+	log.Infof(ctx, "This is the data %+v", before)
+
+	checkedFiles := 0
+	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() && !strings.Contains(path, "foo/cleartext") {
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Contains(data, []byte("neverappears")) {
+				t.Errorf("found cleartext occurrence of sentinel string in %s", path)
+			}
+			checkedFiles++
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if checkedFiles == 0 {
+		t.Fatal("test didn't didn't check any files")
+	}
+
+	sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
+
+	sqlDB.Exec(t, `SHOW BACKUP $1 WITH encryption_passphrase='enable_aws_kms'`, backupLoc1)
+	sqlDB.ExpectErr(t, `cipher: message authentication failed`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, backupLoc1)
+	sqlDB.ExpectErr(t, `file appears encrypted -- try specifying "encryption_passphrase"`, `SHOW BACKUP $1`, backupLoc1)
+	sqlDB.ExpectErr(t, `could not find or read encryption information`, `SHOW BACKUP $1 WITH encryption_passphrase='wronngpassword'`, plainBackupLoc1)
+
+	sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase='enable_aws_kms'`,
+		backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
+
+	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
+}
 func TestBackupEncrypted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2827,6 +2919,7 @@ func TestBackupEncrypted(t *testing.T) {
 		backupLoc1inc, backupLoc2inc, backupLoc1)
 
 	before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
+	log.Infof(ctx, "This is the data %+v", before)
 
 	checkedFiles := 0
 	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
@@ -2860,6 +2953,8 @@ func TestBackupEncrypted(t *testing.T) {
 
 	sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
 }
+
+
 
 func TestRestoredPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()

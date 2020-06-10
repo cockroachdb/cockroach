@@ -98,7 +98,15 @@ func showBackupPlanHook(
 			if err != nil {
 				return err
 			}
-			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
+			var encryptionKey []byte
+			if IsAWSKMSEnabled([]byte(passphrase)) {
+				encryptionKey, err = storageccl.DecryptAWSKMSKey(opts.DataKey)
+				if err != nil {
+					return err
+				}
+			} else {
+				encryptionKey = storageccl.GenerateKey([]byte(passphrase), opts.Salt)
+			}
 			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
 		}
 
