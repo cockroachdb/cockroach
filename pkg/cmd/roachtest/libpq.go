@@ -17,6 +17,7 @@ import (
 )
 
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedTag = "v1.5.2"
 
 func registerLibPQ(r *testRegistry) {
 	runLibPQ := func(ctx context.Context, t *test, c *cluster) {
@@ -73,7 +74,7 @@ func registerLibPQ(r *testRegistry) {
 			c,
 			fmt.Sprintf("https://%s.git", libPQRepo),
 			libPQPath,
-			latestTag,
+			supportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -98,7 +99,11 @@ func registerLibPQ(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
+<<<<<<< HEAD
 			blocklistName, expectedFailures, ignoredFailures, version, latestTag,
+=======
+			blacklistName, expectedFailures, ignoredFailures, version, supportedTag,
+>>>>>>> roachtest: Pin and update libtq test suite
 		)
 	}
 
