@@ -267,10 +267,6 @@ func NewDatumRowConverter(
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	// We do not currently support DEFAULT expressions on target or non-target
-	// columns. All non-target columns must be nullable and will be set to NULL
-	// during import. We do however support DEFAULT on hidden columns (which is
-	// only the default _rowid one). This allows those expressions to run.
 	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(ctx, targetColDescriptors, immutDesc, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
@@ -301,6 +297,7 @@ func NewDatumRowConverter(
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
+	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
 	c.hidden = -1
 	for i := range cols {
 		col := &cols[i]
@@ -310,6 +307,18 @@ func NewDatumRowConverter(
 			}
 			c.hidden = i
 			c.Datums = append(c.Datums, nil)
+		} else {
+			if _, ok := isTargetColID[col.ID]; !ok && col.DefaultExpr != nil {
+				// Check if the default expression is a constant expression as we do not
+				// support non-constant default expression for non-target columns in IMPORT INTO.
+				if !tree.IsConst(evalCtx, defaultExprs[i]) {
+					return nil, errors.Newf("non-literal default expression for non-targeted column %s is not supported by IMPORT INTO",
+						defaultExprs[i].String())
+				}
+				// Placeholder for columns with default values that will be evaluated when
+				// each import row is being created.
+				c.Datums = append(c.Datums, nil)
+			}
 		}
 	}
 	if len(c.Datums) != len(cols) {
@@ -362,6 +371,17 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		avoidCollisionsWithSQLsIDs := uint64(1 << 63)
 		rowID := (uint64(sourceID) << rowIDBits) ^ uint64(rowIndex)
 		c.Datums[c.hidden] = tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | rowID))
+	}
+
+	for i := range c.cols {
+		col := &c.cols[i]
+		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
+			datum, err := c.defaultExprs[i].Eval(c.EvalCtx)
+			if err != nil {
+				return errors.Wrapf(err, "error evaluating default expression for IMPORT INTO")
+			}
+			c.Datums[i] = datum
+		}
 	}
 
 	// TODO(justin): we currently disallow computed columns in import statements.

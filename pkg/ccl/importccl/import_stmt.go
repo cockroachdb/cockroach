@@ -587,16 +587,16 @@ func importPlanHook(
 				intoCols = append(intoCols, active[0].Name)
 			}
 
-			// IMPORT INTO does not support columns with DEFAULT expressions. Ensure
-			// that all non-target columns are nullable until we support DEFAULT
-			// expressions.
-			for _, col := range found.VisibleColumns() {
-				if col.HasDefault() {
-					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
-				}
-
-				if len(isTargetCol) != 0 && !isTargetCol[col.Name] && !col.IsNullable() {
-					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
+			// Ensure that non-target columns that don't have default
+			// expressions are nullable.
+			if len(isTargetCol) != 0 {
+				for _, col := range found.VisibleColumns() {
+					if !(isTargetCol[col.Name] || col.IsNullable() || col.HasDefault()) {
+						return errors.Newf(
+							"all non-target columns in IMPORT INTO must be nullable or have default expressions but violated by column %s",
+							col.Name,
+						)
+					}
 				}
 			}
 
@@ -1061,6 +1061,7 @@ func (r *importResumer) Resume(
 			}
 		}
 	}
+	p.ExtendedEvalContext().TxnTimestamp = p.ExecCfg().Clock.PhysicalTime()
 
 	tables := make(map[string]*execinfrapb.ReadImportDataSpec_ImportTable, len(details.Tables))
 	if details.Tables != nil {
