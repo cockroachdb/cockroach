@@ -16,8 +16,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPercentilesFromData(t *testing.T) {
@@ -108,6 +110,53 @@ func TestRangeDescriptorMissingReplica(t *testing.T) {
 	}
 	if (r != ReplicaDescriptor{}) {
 		t.Fatalf("unexpectedly got nontrivial return: %s", r)
+	}
+}
+
+func TestNodeDescriptorAddressForLocality(t *testing.T) {
+	addr := func(name string) util.UnresolvedAddr {
+		return util.UnresolvedAddr{NetworkField: name}
+	}
+	desc := NodeDescriptor{
+		Address: addr("1"),
+		LocalityAddress: []LocalityAddress{
+			{Address: addr("2"), LocalityTier: Tier{Key: "region", Value: "east"}},
+			{Address: addr("3"), LocalityTier: Tier{Key: "zone", Value: "a"}},
+		},
+	}
+	for _, tc := range []struct {
+		locality Locality
+		expected util.UnresolvedAddr
+	}{
+		{
+			locality: Locality{},
+			expected: addr("1"),
+		},
+		{
+			locality: Locality{Tiers: []Tier{
+				{Key: "region", Value: "west"},
+				{Key: "zone", Value: "b"},
+			}},
+			expected: addr("1"),
+		},
+		{
+			locality: Locality{Tiers: []Tier{
+				{Key: "region", Value: "east"},
+				{Key: "zone", Value: "b"},
+			}},
+			expected: addr("2"),
+		},
+		{
+			locality: Locality{Tiers: []Tier{
+				{Key: "region", Value: "west"},
+				{Key: "zone", Value: "a"},
+			}},
+			expected: addr("3"),
+		},
+	} {
+		t.Run(tc.locality.String(), func(t *testing.T) {
+			require.Equal(t, tc.expected, *desc.AddressForLocality(tc.locality))
+		})
 	}
 }
 
