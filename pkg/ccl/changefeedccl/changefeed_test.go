@@ -939,6 +939,38 @@ func TestChangefeedInterleaved(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+// TestChangefeedUserDefinedTypes is a smoke test to ensure that the changefeed
+// machinery operates correctly when user defined types are in the mix.
+func TestChangefeedUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		// Set up a type and table.
+		sqlDB.Exec(t, `SET experimental_enable_enums = true`)
+		sqlDB.Exec(t, `CREATE TYPE t AS ENUM ('hello', 'howdy', 'hi')`)
+		sqlDB.Exec(t, `CREATE TABLE tt (x INT PRIMARY KEY, y t)`)
+		sqlDB.Exec(t, `INSERT INTO tt VALUES (0, 'hello')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR tt`)
+		defer closeFeed(t, cf)
+
+		assertPayloads(t, cf, []string{
+			`tt: [0]->{"after": {"x": 0, "y": "hello"}}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO tt VALUES (1, 'howdy'), (2, 'hi')`)
+		assertPayloads(t, cf, []string{
+			`tt: [1]->{"after": {"x": 1, "y": "howdy"}}`,
+			`tt: [2]->{"after": {"x": 2, "y": "hi"}}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+}
+
 func TestChangefeedColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
