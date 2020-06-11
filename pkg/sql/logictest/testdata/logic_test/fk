@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(49582)
 # The tests in this file target the legacy FK paths.
 statement ok
 SET optimizer_foreign_keys = false

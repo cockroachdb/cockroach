@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(49854)
 # Grandparent table
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
