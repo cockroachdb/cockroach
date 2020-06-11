@@ -2252,6 +2252,30 @@ func TestStartableJob(t *testing.T) {
 	})
 }
 
+// TestBasicTypeChangeJob ensures that we can start a TypeChange job. It
+// can be removed once we have entrypoints within SQL to start these jobs.
+func TestBasicTypeChangeJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	// Create a job record for the TypeChangeJob.
+	rec := jobs.Record{
+		DescriptorIDs: []sqlbase.ID{1},
+		Details:       jobspb.TypeChangeDetails{},
+		Progress:      jobspb.TypeChangeProgress{},
+	}
+	jobs.RegisterConstructor(jobspb.TypeTypeChange, func(*jobs.Job, *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{}
+	})
+	_, err := registry.CreateJobWithTxn(ctx, rec, nil)
+	require.NoError(t, err)
+}
+
 // TestUnmigratedSchemaChangeJobs tests that schema change jobs created in 19.2
 // that have not undergone a migration cannot be adopted, canceled, or paused.
 func TestUnmigratedSchemaChangeJobs(t *testing.T) {
