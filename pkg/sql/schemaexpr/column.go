@@ -282,3 +282,39 @@ func replaceVars(
 
 	return newExpr, colIDs, err
 }
+
+// ReplaceColumnVarsAndSanitizeExpr takes an expr and replaces all column
+// variables with a dummyColumn of the column's type and then verifies that the
+// expression is valid, has the correct type and contains no variable
+// expressions. It returns the type-checked and constant-folded expression.
+func ReplaceColumnVarsAndSanitizeExpr(
+	ctx context.Context,
+	desc sqlbase.TableDescriptorInterface,
+	expr tree.Expr,
+	types *types.T,
+	op string,
+	semaCtx *tree.SemaContext,
+	allowImpure bool,
+) (tree.TypedExpr, sqlbase.TableColSet, error) {
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, colIDs, err := replaceVars(desc, expr)
+	if err != nil {
+		return nil, colIDs, err
+	}
+
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		ctx,
+		replacedExpr,
+		types,
+		op,
+		semaCtx,
+		allowImpure,
+	)
+
+	if err != nil {
+		return nil, colIDs, err
+	}
+
+	return typedExpr, colIDs, nil
+}
