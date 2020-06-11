@@ -1,0 +1,82 @@
+statement ok
+SET experimental_enable_enums=true;
+
+# Some tests for RENAME TYPE.
+statement ok
+CREATE TYPE greeting AS ENUM ('hi', 'hello');
+ALTER TYPE greeting RENAME TO newname
+
+# After renaming, we should be able to resolve the type with the new name.
+query T
+SELECT 'hi'::newname
+----
+hi
+
+# The array type should be renamed as well.
+query T
+SELECT ARRAY['hi']::_newname
+----
+{hi}
+
+# Test that we can use the new name within a transaction.
+statement ok
+BEGIN;
+ALTER TYPE newname RENAME TO renameagain
+
+query T
+SELECT 'hi'::renameagain
+----
+hi
+
+# newname is draining, so it should not be available for use.
+statement error pq: type \"newname\" already exists
+ALTER TYPE renameagain RENAME TO newname
+
+statement ok
+ROLLBACK
+
+# We should be able to rename a type multiple types in a transaction.
+statement ok
+BEGIN;
+ALTER TYPE newname RENAME TO new_name
+
+query T
+SELECT 'hi'::new_name
+----
+hi
+
+statement ok
+ALTER TYPE new_name RENAME TO new__name
+
+query T
+SELECT 'hi'::new__name
+----
+hi
+
+statement ok
+COMMIT
+
+# newname should be available for use after draining.
+statement ok
+ALTER TYPE new__name RENAME TO newname
+
+# We shouldn't be able to rename into a conflicting type.
+statement ok
+CREATE TABLE conflict (x INT)
+
+statement error pq: relation \"conflict\" already exists
+ALTER TYPE newname RENAME TO conflict
+
+# Renames should try and move around the array type to find a valid name.
+# This creates types _why and __why.
+statement ok
+CREATE TYPE _why AS ENUM ('pg', 'array', 'types', 'are', 'silly')
+
+# This should rename the array type to ___why.
+statement ok
+ALTER TYPE newname RENAME TO why
+
+query T
+SELECT ARRAY['hi']::___why
+----
+{hi}
