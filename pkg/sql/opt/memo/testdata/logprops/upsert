@@ -28,6 +28,7 @@ RETURNING *
 ----
 project
  ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── cardinality: [0 - 1]
  ├── volatile, side-effects, mutations
  ├── prune: (1-3)
  └── upsert abc
@@ -48,9 +49,11 @@ project
       │    ├── upsert_b:18 => b:2
       │    ├── upsert_c:19 => c:3
       │    └── upsert_rowid:20 => rowid:4
+      ├── cardinality: [0 - 1]
       ├── volatile, side-effects, mutations
       └── project
            ├── columns: upsert_a:17(int!null) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) a_new:14(int!null) b_new:15(int) column16:16(int)
+           ├── cardinality: [0 - 1]
            ├── volatile, side-effects
            ├── key: (13)
            ├── fd: ()-->(5,6,8,9,14), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16), (13)-->(17), (13,15)-->(18), (13,16)-->(19), (13)-->(20)
@@ -59,6 +62,7 @@ project
            ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            ├── project
            │    ├── columns: column16:16(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) a_new:14(int!null) b_new:15(int)
+           │    ├── cardinality: [0 - 1]
            │    ├── volatile, side-effects
            │    ├── key: (13)
            │    ├── fd: ()-->(5,6,8,9,14), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15), (15)-->(16)
@@ -67,6 +71,7 @@ project
            │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            │    ├── project
            │    │    ├── columns: a_new:14(int!null) b_new:15(int) x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
+           │    │    ├── cardinality: [0 - 1]
            │    │    ├── volatile, side-effects
            │    │    ├── key: (13)
            │    │    ├── fd: ()-->(5,6,8,9,14), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13), (12)-->(15)
@@ -75,6 +80,7 @@ project
            │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int)
+           │    │    │    ├── cardinality: [0 - 1]
            │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
            │    │    │    ├── volatile, side-effects
            │    │    │    ├── key: (13)
@@ -432,7 +438,7 @@ UPSERT INTO abc (a) VALUES (1), (2) RETURNING b+c
 ----
 project
  ├── columns: "?column?":17(int)
- ├── cardinality: [1 - ]
+ ├── cardinality: [1 - 2]
  ├── volatile, side-effects, mutations
  ├── prune: (17)
  ├── upsert abc
@@ -452,11 +458,11 @@ project
  │    │    ├── upsert_b:14 => b:2
  │    │    ├── upsert_c:15 => c:3
  │    │    └── upsert_rowid:16 => rowid:4
- │    ├── cardinality: [1 - ]
+ │    ├── cardinality: [1 - 2]
  │    ├── volatile, side-effects, mutations
  │    └── project
  │         ├── columns: upsert_b:14(int) upsert_c:15(int) upsert_rowid:16(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
- │         ├── cardinality: [1 - ]
+ │         ├── cardinality: [1 - 2]
  │         ├── volatile, side-effects
  │         ├── lax-key: (7,12)
  │         ├── fd: ()-->(6,8), (7)~~>(5), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10)-->(13), (10,12)-->(14), (12,13)-->(15), (7,12)-->(16)
@@ -465,7 +471,7 @@ project
  │         ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         ├── project
  │         │    ├── columns: column13:13(int) column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
- │         │    ├── cardinality: [1 - ]
+ │         │    ├── cardinality: [1 - 2]
  │         │    ├── volatile, side-effects
  │         │    ├── lax-key: (7,12)
  │         │    ├── fd: ()-->(6,8), (7)~~>(5), (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12), (10)-->(13)
@@ -474,7 +480,7 @@ project
  │         │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null) a:9(int) b:10(int) c:11(int) rowid:12(int)
- │         │    │    ├── cardinality: [1 - ]
+ │         │    │    ├── cardinality: [1 - 2]
  │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │         │    │    ├── volatile, side-effects
  │         │    │    ├── lax-key: (7,12)
