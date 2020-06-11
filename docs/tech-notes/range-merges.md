@@ -362,11 +362,6 @@ only reads one key and writes no keys, but it forces synchronization with all
 latches in the span latch manager, as no other commands can possibly execute in
 parallel with a command that claims to write all keys.
 
-**TODO(benesch,nvanbenschoten):** Actually, concurrent reads at lower timestamps
-are permitted. Is this a problem? Maybe. Answering this question is difficult
-and requires reasoning about the causal chain established by the sequence of
-requests sent by the merge transaction.
-
 It provides promise 2 by flipping [a bit][merge-bit] on the replica that
 indicates that a subsumption is in progress. When the bit is active, the
 replica blocks processing of all requests.
