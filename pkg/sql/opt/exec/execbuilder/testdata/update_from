@@ -7,7 +7,7 @@ CREATE TABLE abc (a int primary key, b int, c int)
 query TTT
 EXPLAIN UPDATE abc SET b = other.b + 1, c = other.c + 1 FROM abc AS other WHERE abc.a = other.a
 ----
-·                          distributed         false
+·                          distribution        local
 ·                          vectorized          false
 count                      ·                   ·
  └── update                ·                   ·
@@ -36,7 +36,7 @@ CREATE TABLE new_abc (a int, b int, c int)
 query TTT
 EXPLAIN UPDATE abc SET b = other.b, c = other.c FROM new_abc AS other WHERE abc.a = other.a
 ----
-·                              distributed        false
+·                              distribution       local
 ·                              vectorized         false
 count                          ·                  ·
  └── update                    ·                  ·
@@ -70,7 +70,7 @@ WHERE
 RETURNING
   abc.a, abc.b AS new_b, old.b as old_b, abc.c as new_c, old.c as old_c
 ----
-·                               distributed         false
+·                               distribution        local
 ·                               vectorized          false
 render                          ·                   ·
  └── run                        ·                   ·
@@ -97,7 +97,7 @@ render                          ·                   ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
 ----
-·                          distributed         false        ·                                 ·
+·                          distribution        local        ·                                 ·
 ·                          vectorized          false        ·                                 ·
 run                        ·                   ·            (a, b, c, a, b, c)                ·
  └── update                ·                   ·            (a, b, c, a, b, c)                ·
@@ -131,7 +131,7 @@ run                        ·                   ·            (a, b, c, a, b, c)
 query TTT
 EXPLAIN UPDATE abc SET b = other.b, c = other.c FROM (values (1, 2, 3), (2, 3, 4)) as other ("a", "b", "c") WHERE abc.a = other.a
 ----
-·                                distributed            false
+·                                distribution           local
 ·                                vectorized             false
 count                            ·                      ·
  └── update                      ·                      ·
@@ -161,7 +161,7 @@ CREATE TABLE ac (a INT, c INT)
 query TTT
 EXPLAIN UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.a
 ----
-·                                   distributed         false
+·                                   distribution        local
 ·                                   vectorized          false
 count                               ·                   ·
  └── update                         ·                   ·
@@ -202,7 +202,7 @@ WHERE
 RETURNING
   *
 ----
-·                                   distributed         false
+·                                   distribution        local
 ·                                   vectorized          false
 run                                 ·                   ·
  └── update                         ·                   ·

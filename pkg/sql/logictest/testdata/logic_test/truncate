@@ -175,9 +175,9 @@ CREATE TABLE tt AS SELECT 'foo'
 query TTT
 EXPLAIN TRUNCATE TABLE tt
 ----
-·         distributed  false
-·         vectorized   false
-truncate  ·            ·
+·         distribution  local
+·         vectorized    false
+truncate  ·             ·
 
 # Verify that EXPLAIN did not cause the truncate to be performed.
 query T

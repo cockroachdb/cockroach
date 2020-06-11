@@ -187,14 +187,15 @@ func populateExplain(
 ) error {
 	// Determine the "distributed" and "vectorized" values, which we will emit as
 	// special rows.
-	var willDistribute, willVectorize bool
+	var willVectorize bool
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute = willDistributePlanForExplainPurposes(
+	distribution := getPlanDistributionForExplainPurposes(
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
+	willDistribute := distribution.willDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, willDistribute)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
@@ -253,8 +254,8 @@ func populateExplain(
 		return err
 	}
 
-	// First, emit the "distributed" and "vectorized" information rows.
-	if err := emitRow("", 0, "", "distributed", fmt.Sprintf("%t", willDistribute), "", ""); err != nil {
+	// First, emit the "distribution" and "vectorized" information rows.
+	if err := emitRow("", 0, "", "distribution", distribution.String(), "", ""); err != nil {
 		return err
 	}
 	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", willVectorize), "", ""); err != nil {

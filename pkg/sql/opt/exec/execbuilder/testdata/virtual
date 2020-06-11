@@ -2,21 +2,21 @@
 query TTT
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
 ----
-·              distributed  false
-·              vectorized   false
-virtual table  ·            ·
-·              source       pg_class@pg_class_oid_idx
-·              constraint   /2: [/50 - /50]
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              source        pg_class@pg_class_oid_idx
+·              constraint    /2: [/50 - /50]
 
 query TTT
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
 ----
-·                   distributed  false
-·                   vectorized   false
-filter              ·            ·
- │                  filter       relname = 'blah'
- └── virtual table  ·            ·
-·                   source       pg_class@primary
+·                   distribution  local
+·                   vectorized    false
+filter              ·             ·
+ │                  filter        relname = 'blah'
+ └── virtual table  ·             ·
+·                   source        pg_class@primary
 
 
 # We can push the filter into information_schema.tables, which has an index
@@ -24,11 +24,11 @@ filter              ·            ·
 query TTT
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
 ----
-·              distributed  false
-·              vectorized   false
-virtual table  ·            ·
-·              source       tables@tables_table_name_idx
-·              constraint   /4: [/'blah' - /'blah']
+·              distribution  local
+·              vectorized    false
+virtual table  ·             ·
+·              source        tables@tables_table_name_idx
+·              constraint    /4: [/'blah' - /'blah']
 
 # Make sure that if we need an ordering on one of the virtual indexes we
 # provide it using a sortNode even though the optimizer expects the virtual
@@ -36,52 +36,52 @@ virtual table  ·            ·
 query TTT
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name > 'blah' ORDER BY table_name
 ----
-·                   distributed  false
-·                   vectorized   false
-sort                ·            ·
- │                  order        +table_name
- └── virtual table  ·            ·
-·                   source       tables@tables_table_name_idx
-·                   constraint   /4: [/e'blah\x00' - ]
+·                   distribution  local
+·                   vectorized    false
+sort                ·             ·
+ │                  order         +table_name
+ └── virtual table  ·             ·
+·                   source        tables@tables_table_name_idx
+·                   constraint    /4: [/e'blah\x00' - ]
 
 # Make sure that we properly push down just part of a filter on two columns
 # where only one of them is satisfied by the virtual index.
 query TTT
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah' AND table_type = 'foo'
 ----
-·                   distributed  false
-·                   vectorized   false
-filter              ·            ·
- │                  filter       table_type = 'foo'
- └── virtual table  ·            ·
-·                   source       tables@tables_table_name_idx
-·                   constraint   /4: [/'blah' - /'blah']
+·                   distribution  local
+·                   vectorized    false
+filter              ·             ·
+ │                  filter        table_type = 'foo'
+ └── virtual table  ·             ·
+·                   source        tables@tables_table_name_idx
+·                   constraint    /4: [/'blah' - /'blah']
 
 # Lookup joins into virtual indexes.
 
 query TTT
 EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
-·                          distributed  false
-·                          vectorized   false
-virtual-table-lookup-join  ·            ·
- │                         table        pg_class@pg_class_oid_idx
- │                         type         inner
- │                         equality     (conrelid) = (oid)
- └── virtual table         ·            ·
-·                          source       pg_constraint@primary
+·                          distribution  local
+·                          vectorized    false
+virtual-table-lookup-join  ·             ·
+ │                         table         pg_class@pg_class_oid_idx
+ │                         type          inner
+ │                         equality      (conrelid) = (oid)
+ └── virtual table         ·             ·
+·                          source        pg_constraint@primary
 
 query TTT
 EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
-·                          distributed  false
-·                          vectorized   false
-virtual-table-lookup-join  ·            ·
- │                         table        pg_class@pg_class_oid_idx
- │                         type         left outer
- │                         equality     (conrelid) = (oid)
- └── virtual table         ·            ·
-·                          source       pg_constraint@primary
+·                          distribution  local
+·                          vectorized    false
+virtual-table-lookup-join  ·             ·
+ │                         table         pg_class@pg_class_oid_idx
+ │                         type          left outer
+ │                         equality      (conrelid) = (oid)
+ └── virtual table         ·             ·
+·                          source        pg_constraint@primary
 
 # Can't lookup into a vtable with no index.
 query error could not produce
@@ -113,43 +113,43 @@ WHERE
 ORDER BY
         c.conname
 ----
-·                                                                          distributed  false
-·                                                                          vectorized   false
-render                                                                     ·            ·
- └── sort                                                                  ·            ·
-      │                                                                    order        +conname
-      └── render                                                           ·            ·
-           └── hash-join                                                   ·            ·
-                │                                                          type         inner
-                │                                                          equality     (oid) = (connamespace)
-                ├── filter                                                 ·            ·
-                │    │                                                     filter       nspname = ANY ARRAY['public']
-                │    └── render                                            ·            ·
-                │         └── virtual table                                ·            ·
-                │                                                          source       pg_namespace@primary
-                └── virtual-table-lookup-join                              ·            ·
-                     │                                                     table        pg_attribute@pg_attribute_attrelid_idx
-                     │                                                     type         inner
-                     │                                                     equality     (oid) = (attrelid)
-                     │                                                     pred         column131 = attnum
-                     └── render                                            ·            ·
-                          └── virtual-table-lookup-join                    ·            ·
-                               │                                           table        pg_attribute@pg_attribute_attrelid_idx
-                               │                                           type         inner
-                               │                                           equality     (oid) = (attrelid)
-                               │                                           pred         (column108 = attnum) AND (attrelid = 'b'::REGCLASS)
-                               └── render                                  ·            ·
-                                    └── virtual-table-lookup-join          ·            ·
-                                         │                                 table        pg_class@pg_class_oid_idx
-                                         │                                 type         inner
-                                         │                                 equality     (conrelid) = (oid)
-                                         │                                 pred         oid = 'b'::REGCLASS
-                                         └── virtual-table-lookup-join     ·            ·
-                                              │                            table        pg_class@pg_class_oid_idx
-                                              │                            type         inner
-                                              │                            equality     (confrelid) = (oid)
-                                              └── filter                   ·            ·
-                                                   │                       filter       (conrelid = 'b'::REGCLASS) AND (contype = 'f')
-                                                   └── render              ·            ·
-                                                        └── virtual table  ·            ·
-·                                                                          source       pg_constraint@primary
+·                                                                          distribution  local
+·                                                                          vectorized    false
+render                                                                     ·             ·
+ └── sort                                                                  ·             ·
+      │                                                                    order         +conname
+      └── render                                                           ·             ·
+           └── hash-join                                                   ·             ·
+                │                                                          type          inner
+                │                                                          equality      (oid) = (connamespace)
+                ├── filter                                                 ·             ·
+                │    │                                                     filter        nspname = ANY ARRAY['public']
+                │    └── render                                            ·             ·
+                │         └── virtual table                                ·             ·
+                │                                                          source        pg_namespace@primary
+                └── virtual-table-lookup-join                              ·             ·
+                     │                                                     table         pg_attribute@pg_attribute_attrelid_idx
+                     │                                                     type          inner
+                     │                                                     equality      (oid) = (attrelid)
+                     │                                                     pred          column131 = attnum
+                     └── render                                            ·             ·
+                          └── virtual-table-lookup-join                    ·             ·
+                               │                                           table         pg_attribute@pg_attribute_attrelid_idx
+                               │                                           type          inner
+                               │                                           equality      (oid) = (attrelid)
+                               │                                           pred          (column108 = attnum) AND (attrelid = 'b'::REGCLASS)
+                               └── render                                  ·             ·
+                                    └── virtual-table-lookup-join          ·             ·
+                                         │                                 table         pg_class@pg_class_oid_idx
+                                         │                                 type          inner
+                                         │                                 equality      (conrelid) = (oid)
+                                         │                                 pred          oid = 'b'::REGCLASS
+                                         └── virtual-table-lookup-join     ·             ·
+                                              │                            table         pg_class@pg_class_oid_idx
+                                              │                            type          inner
+                                              │                            equality      (confrelid) = (oid)
+                                              └── filter                   ·             ·
+                                                   │                       filter        (conrelid = 'b'::REGCLASS) AND (contype = 'f')
+                                                   └── render              ·             ·
+                                                        └── virtual table  ·             ·
+·                                                                          source        pg_constraint@primary

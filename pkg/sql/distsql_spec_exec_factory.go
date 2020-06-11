@@ -28,17 +28,54 @@ import (
 type distSQLSpecExecFactory struct {
 	planner *planner
 	dsp     *DistSQLPlanner
+	// planContexts is a utility struct that stores already instantiated
+	// planning contexts. It should not be accessed directly, use getPlanCtx()
+	// instead. The struct allows for lazy instantiation of the planning
+	// contexts which are then reused between different calls to Construct*
+	// methods. We need to keep both because every stage of processors can
+	// either be distributed or local regardless of the distribution of the
+	// previous stages.
+	planContexts struct {
+		distPlanCtx *PlanningCtx
+		// localPlanCtx stores the local planning context of the gateway.
+		localPlanCtx *PlanningCtx
+	}
+	singleTenant bool
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
 func newDistSQLSpecExecFactory(p *planner) exec.Factory {
-	return &distSQLSpecExecFactory{planner: p, dsp: p.extendedEvalCtx.DistSQLPlanner}
+	return &distSQLSpecExecFactory{
+		planner:      p,
+		dsp:          p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant: p.execCfg.Codec.ForSystemTenant(),
+	}
+}
+
+func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
+	distribute := false
+	if e.singleTenant {
+		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
+	}
+	if distribute {
+		if e.planContexts.distPlanCtx == nil {
+			evalCtx := e.planner.ExtendedEvalContext()
+			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+		}
+		return e.planContexts.distPlanCtx
+	}
+	if e.planContexts.localPlanCtx == nil {
+		evalCtx := e.planner.ExtendedEvalContext()
+		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+	}
+	return e.planContexts.localPlanCtx
 }
 
 func (e *distSQLSpecExecFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
+	// TODO(yuzefovich): make sure to not distribute when rows == 0.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
@@ -92,7 +129,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		physPlan, err := e.dsp.createValuesPlan(
 			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
 		)
-		return planMaybePhysical{physPlan: physPlan, recommendation: canDistribute}, err
+		return planMaybePhysical{physPlan: physPlan, distribution: localPlan}, err
 	}
 
 	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
@@ -153,13 +190,11 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.LimitHint = softLimit
 	}
 
-	distribute := shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
-	if _, singleTenant := e.planner.execCfg.NodeID.OptionalNodeID(); !singleTenant {
-		distribute = false
+	planCtx := e.getPlanCtx(recommendation)
+	distribution := fullyDistributedPlan
+	if planCtx.isLocal {
+		distribution = localPlan
 	}
-
-	evalCtx := e.planner.ExtendedEvalContext()
-	planCtx := e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
 	err = e.dsp.planTableReaders(
 		planCtx,
 		&p,
@@ -178,16 +213,48 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &p, recommendation: recommendation}, err
+	return planMaybePhysical{physPlan: &p, distribution: distribution}, err
 }
 
 func (e *distSQLSpecExecFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// TODO(yuzefovich): figure out how to push the filter into the table
-	// reader when it already doesn't have a filter and it doesn't have a hard
-	// limit.
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	// We recommend for filter's distribution to be the same as the last stage
+	// of processors.
+	recommendation := shouldNotDistribute
+	if physPlan.IsLastStageDistributed() {
+		recommendation = shouldDistribute
+	}
+	if err := checkExpr(filter); err != nil {
+		recommendation = cannotDistribute
+		if physPlan.IsLastStageDistributed() {
+			// The last stage has been distributed, but filter expression
+			// cannot be distributed, so we need to merge the streams on a
+			// single node. We could do so on one of the nodes that streams
+			// originate from, but for now we choose the gateway.
+			gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
+			physPlan.AddSingleGroupStage(
+				gatewayNodeID,
+				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+				execinfrapb.PostProcessSpec{},
+				physPlan.ResultTypes,
+			)
+		}
+	}
+	// AddFilter will attempt to push the filter into the last stage of
+	// processors.
+	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
+		return nil, err
+	}
+	distribution := localPlan
+	if physPlan.IsLastStageDistributed() {
+		distribution = fullyDistributedPlan
+	}
+	plan.distribution = plan.distribution.compose(distribution)
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
@@ -361,7 +428,18 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) RenameColumns(
 	input exec.Node, colNames []string,
 ) (exec.Node, error) {
-	inputCols := input.(planMaybePhysical).physPlan.ResultColumns
+	var inputCols sqlbase.ResultColumns
+	// distSQLSpecExecFactory still constructs some of the planNodes (for
+	// example, some variants of EXPLAIN), and we need to be able to rename
+	// the columns on them.
+	switch plan := input.(type) {
+	case planMaybePhysical:
+		inputCols = plan.physPlan.ResultColumns
+	case planNode:
+		inputCols = planMutableColumns(plan)
+	default:
+		panic("unexpected node")
+	}
 	for i := range inputCols {
 		inputCols[i].Name = colNames[i]
 	}
@@ -387,7 +465,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create
 	// distributed jobs are shown as "distributed". See distSQLExplainable.
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return constructExplainPlanNode(options, stmtType, plan.(*planTop), e.planner)
 }
 
 func (e *distSQLSpecExecFactory) ConstructShowTrace(

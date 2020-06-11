@@ -141,9 +141,9 @@ SELECT * FROM users@pk
 query TTT
 EXPLAIN ALTER INDEX users@bar RENAME TO woo
 ----
-·             distributed  false
-·             vectorized   false
-rename index  ·            ·
+·             distribution  local
+·             vectorized    false
+rename index  ·             ·
 
 # Verify that EXPLAIN did not actually rename the index (#30543)
 query T rowsort
