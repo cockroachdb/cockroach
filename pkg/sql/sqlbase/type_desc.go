@@ -154,6 +154,11 @@ func (desc *TypeDescriptor) DescriptorProto() *Descriptor {
 	}
 }
 
+// SetDrainingNames implements the BaseDescriptorInterface.
+func (desc *TypeDescriptor) SetDrainingNames(names []NameInfo) {
+	desc.DrainingNames = names
+}
+
 // GetAuditMode implements the DescriptorProto interface.
 func (desc *TypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 	return TableDescriptor_DISABLED
