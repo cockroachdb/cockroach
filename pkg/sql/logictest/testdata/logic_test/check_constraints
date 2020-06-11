@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 #### column CHECK constraints
 
 statement ok

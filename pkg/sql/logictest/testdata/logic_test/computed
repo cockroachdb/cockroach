@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 statement ok
 CREATE TABLE with_no_column_refs (
   a INT,
