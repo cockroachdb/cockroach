@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 statement ok
 CREATE TABLE aliases (
     a OID,

@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 # pg arrays must preserve control characters when converted to string,
 # but their direct representation as string does not escape the
 # control characters. In order for the test file to remain valid
