@@ -27,13 +27,13 @@ inner-join (hash)
  │    ├── cost: 1070.02
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
- │    └── unfiltered-cols: (1-3)
+ │    └── unfiltered-cols: (1-4)
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
  │    ├── cost: 1070.02
  │    ├── prune: (5-7)
- │    └── unfiltered-cols: (5-7)
+ │    └── unfiltered-cols: (5-8)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: t.public.abc.a:1 [type=int]

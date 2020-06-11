@@ -37,7 +37,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1,2)
+ │    │    └── unfiltered-cols: (1-3)
  │    └── filters (true)
  └── filters (true)
 
@@ -87,7 +87,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1,2)
+ │    │    └── unfiltered-cols: (1-3)
  │    └── filters
  │         └── gt [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
  │              ├── variable: b:5 [type=int]
@@ -111,7 +111,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1,2)
+ │    │    └── unfiltered-cols: (1-3)
  │    └── filters (true)
  └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
@@ -134,7 +134,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1,2)
+ │    │    └── unfiltered-cols: (1-3)
  │    └── filters (true)
  └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]

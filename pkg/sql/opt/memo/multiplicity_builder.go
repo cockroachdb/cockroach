@@ -98,14 +98,35 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 	// Derive UnfilteredCols now.
 	switch t := in.(type) {
 	case *ScanExpr:
-		// All un-limited, unconstrained output columns are unfiltered columns.
-		if t.HardLimit == 0 && t.Constraint == nil {
-			unfilteredCols.UnionWith(relational.OutputCols)
+		// If no rows are being removed from the table, add all its columns. No rows
+		// are removed from a table if this is an un-limited, unconstrained scan
+		// over a non-partial index.
+		//
+		// We add all columns (not just output columns) because while non-output
+		// columns cannot be used by operators, they can be used to make a statement
+		// about the cardinality of their owner table. As an example, take this
+		// query:
+		//
+		//   CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+		//   CREATE TABLE kr (k INT PRIMARY KEY, r INT NOT NULL REFERENCES xy(x));
+		//   SELECT k FROM kr INNER JOIN xy ON True;
+		//
+		// Rows from the left side of this query will be preserved because of the
+		// non-null foreign key relation - rows in kr imply rows in xy. However,
+		// the columns from xy are not output columns, so in order to see that this
+		// is the case we must bubble up non-output columns.
+		baseTable := t.Memo().Metadata().Table(t.Table)
+		_, isPartialIndex := baseTable.Index(t.Index).Predicate()
+		if t.HardLimit == 0 && t.Constraint == nil && !isPartialIndex {
+			for i, cnt := 0, baseTable.ColumnCount(); i < cnt; i++ {
+				unfilteredCols.Add(t.Table.ColumnID(i))
+			}
 		}
 
 	case *ProjectExpr:
 		// Project never filters rows, so it passes through unfiltered columns.
-		unfilteredCols.UnionWith(deriveUnfilteredCols(t.Input).Intersection(relational.OutputCols))
+		// Include non-output columns for the same reasons as for the Scan operator.
+		unfilteredCols.UnionWith(deriveUnfilteredCols(t.Input))
 
 	case *InnerJoinExpr, *LeftJoinExpr, *FullJoinExpr:
 		left := t.Child(0).(RelExpr)
@@ -212,62 +233,91 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 //   b. There is a not-null foreign key column in the left input that references
 //      an unfiltered column from the right input.
 //
-// 2. If this is not a cross join, every filter falls under one of these two
-//    cases:
-//   a. The self-join case: an equality between ColumnIDs that come from the
-//      same column on the same base table.
-//   b. The foreign-key case: an equality between a foreign key column on the
-//      left and the column it references from the right.
+// 2. If this is not a cross join, every filter is an equality that falls under
+//    one of these two cases:
+//   a. The self-join case: all equalities are between ColumnIDs that come from
+//      the same column on the same base table.
+//   b. The foreign-key case: all equalities are between a foreign key column on
+//      the left and the column it references from the right. All left columns
+//      must come from the same foreign key.
 //
 // In both the self-join and the foreign key cases, the left columns must be
 // not-null, and the right columns must be unfiltered.
 //
-//  Why do the left columns have to be not-null and the right columns
-//  unfiltered?
-//  * In both the self-join and the foreign-key cases, a non-null value in
-//    the left column guarantees a corresponding value in the right column. As
-//    long as no nulls have been added to the left column and no values have
-//    been removed from the right, this property will be valid.
+// Why do the left columns have to be not-null and the right columns
+// unfiltered? In both the self-join and the foreign-key cases, a non-null
+// value in the left column guarantees a corresponding value in the right
+// column. As long as no nulls have been added to the left column and no values
+// have been removed from the right, this property will be valid.
+//
+// Why do all foreign key columns in the foreign key case have to come from the
+// same foreign key? Equalities on different foreign keys may each be
+// guaranteed to match with *some* right row, but they are not guaranteed to
+// match on the same row. Therefore, filters on more than one foreign key are
+// not guaranteed to preserve all left rows.
 //
 // Note: in the foreign key case, if the key's match method is match simple, all
 // columns in the foreign key must be not-null in order to guarantee that all
 // rows will have a match in the referenced table.
 func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
-	md := left.Memo().Metadata()
-
-	// Cross join case.
-	if len(filters) == 0 {
+	if filters.IsTrue() {
+		// Cross join case.
 		if !right.Relational().Cardinality.CanBeZero() {
-			// Case 1a: this is a cross join and there's at least one row in the right
-			// input, so every left row is guaranteed to match at least once.
+			// Case 1a.
 			return true
 		}
-		// Case 1b: if there is at least one not-null foreign key referencing the
-		// unfiltered right columns, return true. Otherwise, false.
-		return makeForeignKeyMap(
-			md, left.Relational().NotNullCols, deriveUnfilteredCols(right)) != nil
+		// Case 1b. We don't have to check verifyFiltersAreValidEqualities because
+		// there are no filters.
+		return checkForeignKeyCase(
+			left.Memo().Metadata(),
+			left.Relational().NotNullCols,
+			deriveUnfilteredCols(right),
+			filters,
+		)
 	}
-
-	leftColIDs := left.Relational().NotNullCols
-	rightColIDs := deriveUnfilteredCols(right)
-	if rightColIDs.Empty() {
-		// Right input has no unfiltered columns.
+	if !verifyFiltersAreValidEqualities(left, right, filters) {
 		return false
 	}
+	if checkSelfJoinCase(left.Memo().Metadata(), filters) {
+		// Case 2a.
+		return true
+	}
+	// Case 2b.
+	return checkForeignKeyCase(
+		left.Memo().Metadata(), left.Relational().NotNullCols, deriveUnfilteredCols(right), filters)
+}
 
-	var fkColMap map[opt.ColumnID]opt.ColumnID
+// verifyFiltersAreValidEqualities returns true when all of the following
+// conditions are satisfied:
+// 1. All filters are equalities.
+// 2. All equalities directly compare two columns.
+// 3. All equalities contain one column from the left not-null columns, and one
+//    column from the right unfiltered columns.
+// 4. All equality columns come from a base table.
+// 5. All left columns come from a single table, and all right columns come from
+//    a single table.
+func verifyFiltersAreValidEqualities(left, right RelExpr, filters FiltersExpr) bool {
+	md := left.Memo().Metadata()
+
+	var leftTab, rightTab opt.TableID
+	leftNotNullCols := left.Relational().NotNullCols
+	rightUnfilteredCols := deriveUnfilteredCols(right)
+	if rightUnfilteredCols.Empty() {
+		// There are no unfiltered columns from the right input.
+		return false
+	}
 
 	for i := range filters {
 		eq, _ := filters[i].Condition.(*EqExpr)
 		if eq == nil {
-			// Conjunct is not an equality comparison.
+			// Condition #1: Conjunct is not an equality comparison.
 			return false
 		}
 
 		leftVar, _ := eq.Left.(*VariableExpr)
 		rightVar, _ := eq.Right.(*VariableExpr)
 		if leftVar == nil || rightVar == nil {
-			// Conjunct does not directly compare two columns.
+			// Condition #2: Conjunct does not directly compare two columns.
 			return false
 		}
 
@@ -275,168 +325,200 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 		rightColID := rightVar.Col
 
 		// Normalize leftColID to come from leftColIDs.
-		if !leftColIDs.Contains(leftColID) {
+		if !leftNotNullCols.Contains(leftColID) {
 			leftColID, rightColID = rightColID, leftColID
 		}
-		if !leftColIDs.Contains(leftColID) || !rightColIDs.Contains(rightColID) {
-			// Columns don't come from both sides of join, left column is nullable or
-			// right column is filtered.
+		if !leftNotNullCols.Contains(leftColID) || !rightUnfilteredCols.Contains(rightColID) {
+			// Condition #3: Columns don't come from both the left and right ColSets.
 			return false
 		}
 
-		leftTab := md.ColumnMeta(leftColID).Table
-		rightTab := md.ColumnMeta(rightColID).Table
 		if leftTab == 0 || rightTab == 0 {
-			// Columns don't come from base tables.
-			return false
+			// Initialize the left and right tables.
+			leftTab = md.ColumnMeta(leftColID).Table
+			rightTab = md.ColumnMeta(rightColID).Table
+			if leftTab == 0 || rightTab == 0 {
+				// Condition #4: Columns don't come from base tables.
+				return false
+			}
 		}
-
-		if md.TableMeta(leftTab).Table == md.TableMeta(rightTab).Table {
-			// Case 2a: check self-join case.
-			leftColOrd := leftTab.ColumnOrdinal(leftColID)
-			rightColOrd := rightTab.ColumnOrdinal(rightColID)
-			if leftColOrd != rightColOrd {
-				// Left and right column ordinals do not match.
-				return false
-			}
-		} else {
-			// Case 2b: check foreign-key case.
-			if fkColMap == nil {
-				// Lazily construct a map from all not-null foreign key columns on the
-				// left to all unfiltered referenced columns on the right.
-				fkColMap = makeForeignKeyMap(md, leftColIDs, rightColIDs)
-				if fkColMap == nil {
-					// No valid foreign key relations were found.
-					return false
-				}
-			}
-			if refCol, ok := fkColMap[leftColID]; !ok || refCol != rightColID {
-				// There is no valid foreign key relation from leftColID to
-				// rightColID.
-				return false
-			}
+		if leftTab != md.ColumnMeta(leftColID).Table || rightTab != md.ColumnMeta(rightColID).Table {
+			// Condition #5: The filter conditions reference more than one table from
+			// each side.
+			return false
 		}
 	}
-
 	return true
 }
 
-// makeForeignKeyMap returns a map from left foreign key columns to right
-// referenced columns. The given left columns should not be nullable and the
-// right columns should be guaranteed to be unfiltered, or the foreign key
-// relation may not hold. If the key's match method isn't match full, all
-// foreign key columns must be not-null, or the key relation is not guaranteed
-// to have a match for each row. If no valid foreign key relations are found,
-// fkColMap is nil.
-func makeForeignKeyMap(
-	md *opt.Metadata, leftNotNullCols, rightUnfilteredCols opt.ColSet,
-) map[opt.ColumnID]opt.ColumnID {
-	var tableIDMap map[cat.StableID]opt.TableID
-	var fkColMap map[opt.ColumnID]opt.ColumnID
-	var lastSeen opt.TableID
+// checkSelfJoinCase returns true if all equalities in the given FiltersExpr
+// are between columns from the same position in the same base table. Panics
+// if verifyFilters is not checked first.
+func checkSelfJoinCase(md *opt.Metadata, filters FiltersExpr) bool {
+	for i := range filters {
+		eq, _ := filters[i].Condition.(*EqExpr)
+		leftColID := eq.Left.(*VariableExpr).Col
+		rightColID := eq.Right.(*VariableExpr).Col
+		leftTab := md.ColumnMeta(leftColID).Table
+		rightTab := md.ColumnMeta(rightColID).Table
+		if md.Table(leftTab) != md.Table(rightTab) {
+			// The columns are not from the same table.
+			return false
+		}
+		if leftTab.ColumnOrdinal(leftColID) != rightTab.ColumnOrdinal(rightColID) {
+			// The columns are not from the same position in the base table.
+			return false
+		}
+	}
+	return true
+}
 
-	// Walk through the left columns and add foreign key and referenced columns to
-	// the output mapping if they come from the leftNotNullCols and
-	// rightUnfilteredCols ColSets respectively.
+// checkForeignKeyCase returns true if all equalities in the given FiltersExpr
+// are between not-null foreign key columns on the left and unfiltered
+// referenced columns on the right. Panics if verifyFiltersAreValidEqualities is
+// not checked first.
+func checkForeignKeyCase(
+	md *opt.Metadata, leftNotNullCols, rightUnfilteredCols opt.ColSet, filters FiltersExpr,
+) bool {
+	if rightUnfilteredCols.Empty() {
+		// There are no unfiltered columns from the right; a valid foreign key
+		// relation is not possible.
+		return false
+	}
+
+	var rightTableIDs []opt.TableID
+
+	seen := opt.TableID(0)
 	for col, ok := leftNotNullCols.Next(0); ok; col, ok = leftNotNullCols.Next(col + 1) {
-		fkTableID := md.ColumnMeta(col).Table
-		if fkTableID < 1 {
-			// The column does not come from a base table.
+		leftTableID := md.ColumnMeta(col).Table
+		if leftTableID == 0 || leftTableID == seen {
+			// Either this column doesn't come from a base table or we have already
+			// encountered this table. This check works because ColumnIDs from the
+			// same table are sequential.
 			continue
 		}
-		if fkTableID == lastSeen {
-			// We have already encountered this TableID. (This works because ColumnIDs
-			// with the same TableID are clustered together).
+		tableMeta := md.TableMeta(leftTableID)
+		if tableMeta.IgnoreForeignKeys {
+			// We can't use foreign keys from this table.
 			continue
 		}
-		lastSeen = fkTableID
-		fkTableMeta := md.TableMeta(fkTableID)
-		if fkTableMeta.IgnoreForeignKeys {
-			// We are not allowed to use any of this table's foreign keys.
-			continue
-		}
-		fkTable := fkTableMeta.Table
-		for i, cnt := 0, fkTable.OutboundForeignKeyCount(); i < cnt; i++ {
-			fk := fkTable.OutboundForeignKey(i)
+		leftBaseTable := md.Table(leftTableID)
+		for i, cnt := 0, leftBaseTable.OutboundForeignKeyCount(); i < cnt; i++ {
+			fk := leftBaseTable.OutboundForeignKey(i)
 			if !fk.Validated() {
 				// The data is not guaranteed to follow the foreign key constraint.
 				continue
 			}
-			if tableIDMap == nil {
-				// Lazily initialize tableIDMap.
-				tableIDMap = makeStableTableIDMap(md, rightUnfilteredCols)
-				if len(tableIDMap) == 0 {
-					// No valid tables were found from the right side.
-					break
-				}
+			if rightTableIDs == nil {
+				// Lazily construct rightTableIDs.
+				rightTableIDs = getTableIDsFromCols(md, rightUnfilteredCols)
 			}
-			refTableID, ok := tableIDMap[fk.ReferencedTableID()]
+			rightTableID, ok := getTableIDFromStableID(md, fk.ReferencedTableID(), rightTableIDs)
 			if !ok {
-				// There is no valid right table corresponding to the referenced table.
+				// The referenced table isn't from the right input.
 				continue
 			}
-			var leftCols, rightCols []opt.ColumnID
 			fkValid := true
+			numMatches := 0
 			for j, numCols := 0, fk.ColumnCount(); j < numCols; j++ {
-				leftOrd := fk.OriginColumnOrdinal(fkTable, j)
-				rightOrd := fk.ReferencedColumnOrdinal(md.Table(refTableID), j)
-				leftCol := fkTableID.ColumnID(leftOrd)
-				rightCol := refTableID.ColumnID(rightOrd)
-				if !leftNotNullCols.Contains(leftCol) {
-					// Not all FK columns are part of the equality conditions. There are
-					// two cases:
-					// 1. MATCH SIMPLE/PARTIAL: if this column is nullable, rows from this
-					//    foreign key are not guaranteed to match.
-					// 2. MATCH FULL: FK rows are still guaranteed to match because the
-					//    non-present columns can only be NULL if all FK columns are NULL.
-					if fk.MatchMethod() != tree.MatchFull {
-						fkValid = false
-						break
+				leftColOrd := fk.OriginColumnOrdinal(leftBaseTable, j)
+				rightColOrd := fk.ReferencedColumnOrdinal(md.Table(rightTableID), j)
+				leftColID := leftTableID.ColumnID(leftColOrd)
+				rightColID := rightTableID.ColumnID(rightColOrd)
+				if !leftNotNullCols.Contains(leftColID) {
+					// The left column isn't a left not-null output column. It can't be
+					// used in a filter (since it isn't an output column) but the foreign key may still be valid.but it may still
+					// be provably not null.
+					//
+					// A column that isn't in leftNotNullCols is guaranteed not-null if it
+					// was not nullable in the base table. Since this left table was
+					// retrieved from a not-null column, we know that columns from this
+					// table have not been null-extended. Therefore, if the column was
+					// originally not-null, it is still not-null.
+					if leftBaseTable.Column(leftColOrd).IsNullable() {
+						// This FK column is not guaranteed not-null. There are two cases:
+						// 1. MATCH SIMPLE/PARTIAL: if this column is nullable, rows from
+						//    this foreign key are not guaranteed to match.
+						// 2. MATCH FULL: FK rows are still guaranteed to match because the
+						//    non-present columns can only be NULL if all FK columns are
+						//    NULL.
+						if fk.MatchMethod() != tree.MatchFull {
+							fkValid = false
+							break
+						}
 					}
+					// The left column isn't a left not-null output column, so it can't
+					// be used in a filter.
 					continue
 				}
-				if !rightUnfilteredCols.Contains(rightCol) {
+				if !rightUnfilteredCols.Contains(rightColID) {
+					// The right column isn't guaranteed to be unfiltered. It can't be
+					// used in a filter.
 					continue
 				}
-				leftCols = append(leftCols, leftCol)
-				rightCols = append(rightCols, rightCol)
-			}
-			if !fkValid {
-				// The foreign key relations should only be added to the mapping if the
-				// foreign key is guaranteed a match for every row.
-				continue
-			}
-			for i := range leftCols {
-				// Add any valid foreign key relations to the mapping.
-				if fkColMap == nil {
-					// Lazily initialize fkColMap
-					fkColMap = map[opt.ColumnID]opt.ColumnID{}
+				if filtersHaveEquality(filters, leftColID, rightColID) {
+					numMatches++
 				}
-				fkColMap[leftCols[i]] = rightCols[i]
+			}
+			if fkValid && numMatches == len(filters) {
+				// The foreign key is valid and all the filters conditions follow it.
+				// Checking that numMatches is equal to the length of the filters works
+				// because no two foreign key columns are the same, so any given foreign
+				// key relation can only match a single equality.
+				return true
 			}
 		}
 	}
-	return fkColMap
+	return false
 }
 
-// makeStableTableIDMap creates a mapping from the StableIDs of the base tables
-// to the meta TableIDs for the given columns.
-func makeStableTableIDMap(md *opt.Metadata, cols opt.ColSet) map[cat.StableID]opt.TableID {
-	idMap := map[cat.StableID]opt.TableID{}
+// filtersHaveEquality returns true if one of the equalities in the given
+// FiltersExpr is between the two given columns. Panics if verifyFilters is not
+// checked first.
+func filtersHaveEquality(filters FiltersExpr, leftCol, rightCol opt.ColumnID) bool {
+	for i := range filters {
+		eq, _ := filters[i].Condition.(*EqExpr)
+		leftColID := eq.Left.(*VariableExpr).Col
+		rightColID := eq.Right.(*VariableExpr).Col
+
+		if (leftColID == leftCol && rightColID == rightCol) ||
+			(rightColID == leftCol && leftColID == rightCol) {
+			// This filter is between the two given columns.
+			return true
+		}
+	}
+	return false
+}
+
+// getTableIDFromStableID iterates through the given slice of TableIDs and
+// returns the first TableID that comes from the table with the given StableID.
+// If no such TableID is found, returns 0 and false.
+func getTableIDFromStableID(
+	md *opt.Metadata, stableID cat.StableID, tableIDs []opt.TableID,
+) (opt.TableID, bool) {
+	for _, tableID := range tableIDs {
+		if md.Table(tableID).ID() == stableID {
+			return tableID, true
+		}
+	}
+	return opt.TableID(0), false
+}
+
+// getTableIDsFromCols returns all unique TableIDs from the given ColSet.
+// Columns that don't come from a base table are ignored.
+func getTableIDsFromCols(md *opt.Metadata, cols opt.ColSet) (tables []opt.TableID) {
+	seen := opt.TableID(0)
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
-		metaTableID := md.ColumnMeta(col).Table
-		if metaTableID == 0 {
+		tableID := md.ColumnMeta(col).Table
+		if tableID == 0 || tableID == seen {
+			// Either this column doesn't come from a base table or we have already
+			// encountered this table. This check works because ColumnIDs from the
+			// same table are sequential.
 			continue
 		}
-		stableTableID := md.Table(metaTableID).ID()
-		if prevID, ok := idMap[stableTableID]; ok && prevID != metaTableID {
-			// Avoid dealing with cases where multiple meta tables reference the same
-			// base table so that only one TableID has to be stored.
-			return map[cat.StableID]opt.TableID{}
-		}
-		idMap[stableTableID] = metaTableID
+		tables = append(tables, tableID)
 	}
-	return idMap
+	return tables
 }
 
 // getFiltersFDs returns a FuncDepSet with the FDs from the FiltersItems in
