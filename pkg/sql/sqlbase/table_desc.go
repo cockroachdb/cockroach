@@ -36,3 +36,8 @@ func (desc *MutableTableDescriptor) Immutable() DescriptorInterface {
 	// copy, so we don't have to do it here?
 	return NewImmutableTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*TableDescriptor))
 }
+
+// SetDrainingNames implements the BaseDescriptorInterface.
+func (desc *TableDescriptor) SetDrainingNames(names []NameInfo) {
+	desc.DrainingNames = names
+}

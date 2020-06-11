@@ -80,6 +80,11 @@ func NewMutableCreatedSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDesc
 	}
 }
 
+// SetDrainingNames implements the BaseDescriptorInterface.
+func (desc *SchemaDescriptor) SetDrainingNames(names []NameInfo) {
+	desc.DrainingNames = names
+}
+
 // GetParentSchemaID implements the BaseDescriptorInterface interface.
 func (desc *ImmutableSchemaDescriptor) GetParentSchemaID() ID {
 	return keys.RootNamespaceID

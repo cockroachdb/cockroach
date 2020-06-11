@@ -56,6 +56,7 @@ type BaseDescriptorInterface interface {
 	GetVersion() DescriptorVersion
 	GetModificationTime() hlc.Timestamp
 	GetDrainingNames() []NameInfo
+	SetDrainingNames([]NameInfo)
 
 	GetPrivileges() *PrivilegeDescriptor
 	TypeName() string
