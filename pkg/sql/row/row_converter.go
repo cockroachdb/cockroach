@@ -301,6 +301,10 @@ func NewDatumRowConverter(
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
+	colNameSet := make(map[string]struct{}, len(targetColDescriptors))
+	for _, colDesc := range targetColDescriptors {
+		colNameSet[colDesc.Name] = struct{}{}
+	}
 	c.hidden = -1
 	for i := range cols {
 		col := &cols[i]
@@ -310,6 +314,14 @@ func NewDatumRowConverter(
 			}
 			c.hidden = i
 			c.Datums = append(c.Datums, nil)
+		} else {
+			if _, ok := colNameSet[col.Name]; !ok && col.DefaultExpr != nil {
+				expr, err := sqlbase.ParseDatumStringAs(defaultExprs[i].ResolvedType(), defaultExprs[i].String(), evalCtx)
+				if err != nil {
+					return nil, errors.New("Error parsing default expression")
+				}
+				c.Datums = append(c.Datums, expr)
+			}
 		}
 	}
 	if len(c.Datums) != len(cols) {

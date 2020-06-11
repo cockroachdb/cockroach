@@ -2472,23 +2472,49 @@ func TestImportIntoCSV(t *testing.T) {
 		}
 	})
 
-	// IMPORT INTO does not support DEFAULT expressions for either target or
-	// non-target columns.
-	t.Run("import-into-check-no-default-cols", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE TABLE t (a INT DEFAULT 1, b STRING)`)
+	t.Run("import-into-default", func(t *testing.T) {
+		const data = "35,test string\n72,another test string"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+
+		sqlDB.Exec(t, `CREATE TABLE t (b STRING, a INT DEFAULT 53, c INT DEFAULT 42)`)
 		defer sqlDB.Exec(t, `DROP TABLE t`)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"test string", "35", "42"}, {"another test string", "72", "42"}})
+	})
 
-		// Insert the test data
-		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
+	// Supporting import into with non-targetted default or nullable columns are not implemented yet at this point.
+	t.Run("import-into-default2", func(t *testing.T) {
+		t.Skipf("Not implemented yet")
+		const data = "35,test string\n72,another test string"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING, c INT DEFAULT 42) CSV DATA ("%s")`, srv.URL))
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"35", "test string", "42"}, {"72", "another test string", "42"}})
+	})
 
-		for i, v := range insert {
-			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
-		}
-
-		sqlDB.ExpectErr(
-			t, fmt.Sprintf("pq: cannot IMPORT INTO a table with a DEFAULT expression for any of its columns"),
-			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
-		)
+	// Supporting import into with NULL value for a targetted column is not implemented yet.
+	t.Run("import-into-default3", func(t *testing.T) {
+		t.Skipf("Not implemented yet")
+		const data = "1,2\n2,"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		sqlDB.Exec(t, `CREATE TABLE t2 (a INT, b INT NULL)`)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t2 (a, b) CSV DATA ("%s")`, srv.URL))
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "2"}, {"2", "42"}})
 	})
 
 	// IMPORT INTO does not currently support import into interleaved tables.
