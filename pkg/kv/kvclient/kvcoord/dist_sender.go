@@ -175,14 +175,17 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	}
 }
 
-// A firstRangeMissingError indicates that the first range has not yet
-// been gossiped. This will be the case for a node which hasn't yet
-// joined the gossip network.
-type firstRangeMissingError struct{}
+// FirstRangeProvider is capable of providing DistSender with the descriptor of
+// the first range in the cluster and notifying the DistSender when the first
+// range in the cluster has changed.
+type FirstRangeProvider interface {
+	// GetFirstRangeDescriptor returns the RangeDescriptor for the first range
+	// in the cluster.
+	GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error)
 
-// Error is part of the error interface.
-func (f firstRangeMissingError) Error() string {
-	return "the descriptor for the first range is not available via gossip"
+	// OnFirstRangeChanged calls the provided callback when the RangeDescriptor
+	// for the first range has changed.
+	OnFirstRangeChanged(func(*roachpb.RangeDescriptor))
 }
 
 // A DistSender provides methods to access Cockroach's monolithic,
@@ -202,13 +205,16 @@ type DistSender struct {
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
-	// gossip provides up-to-date information about the start of the
-	// key range, used to find the replica metadata for arbitrary key
-	// ranges.
-	gossip  *gossip.Gossip
+	// nodeDescs provides information on the KV nodes that DistSender may
+	// consider routing requests to.
+	nodeDescs NodeDescStore
+	// metrics stored DistSender-related metrics.
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache *RangeDescriptorCache
+	// firstRangeProvider provides the range descriptor for range one.
+	// This is not required if a RangeDescriptorDB is supplied.
+	firstRangeProvider FirstRangeProvider
 	// leaseHolderCache caches range lease holders by range ID.
 	leaseHolderCache *LeaseHolderCache
 	transportFactory TransportFactory
@@ -238,17 +244,33 @@ var _ kv.Sender = &DistSender{}
 type DistSenderConfig struct {
 	AmbientCtx log.AmbientContext
 
-	Settings        *cluster.Settings
-	Clock           *hlc.Clock
-	RPCRetryOptions *retry.Options
-	// nodeDescriptor, if provided, is used to describe which node the DistSender
-	// lives on, for instance when deciding where to send RPCs.
+	Settings  *cluster.Settings
+	Clock     *hlc.Clock
+	NodeDescs NodeDescStore
+	// nodeDescriptor, if provided, is used to describe which node the
+	// DistSender lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
-	nodeDescriptor    *roachpb.NodeDescriptor
-	RPCContext        *rpc.Context
-	RangeDescriptorDB RangeDescriptorDB
+	nodeDescriptor  *roachpb.NodeDescriptor
+	RPCRetryOptions *retry.Options
+	RPCContext      *rpc.Context
+	NodeDialer      *nodedialer.Dialer
 
-	NodeDialer *nodedialer.Dialer
+	// One of the following two must be provided, but not both.
+	//
+	// If only FirstRangeProvider is supplied, DistSender will use itself as a
+	// RangeDescriptorDB and scan the meta ranges directly to satisfy range
+	// lookups, using the FirstRangeProvider to bootstrap the location of the
+	// meta1 range. Additionally, it will proactively update its range
+	// descriptor cache with any meta1 updates from the provider.
+	//
+	// If only RangeDescriptorDB is provided, all range lookups will be
+	// delegated to it.
+	//
+	// If both are provided (not required, but allowed for tests) range lookups
+	// will be delegated to the RangeDescriptorDB but FirstRangeProvider will
+	// still be used to listen for updates to the first range's descriptor.
+	FirstRangeProvider FirstRangeProvider
+	RangeDescriptorDB  RangeDescriptorDB
 
 	TestingKnobs ClientTestingKnobs
 }
@@ -257,12 +279,12 @@ type DistSenderConfig struct {
 // Cockroach cluster via the supplied gossip instance. Supplying a
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
-func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
+func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds := &DistSender{
-		st:      cfg.Settings,
-		clock:   cfg.Clock,
-		gossip:  g,
-		metrics: makeDistSenderMetrics(),
+		st:        cfg.Settings,
+		clock:     cfg.Clock,
+		nodeDescs: cfg.NodeDescs,
+		metrics:   makeDistSenderMetrics(),
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -276,9 +298,16 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
 	}
-	rdb := cfg.RangeDescriptorDB
-	if rdb == nil {
+	var rdb RangeDescriptorDB
+	if cfg.FirstRangeProvider != nil {
+		ds.firstRangeProvider = cfg.FirstRangeProvider
 		rdb = ds
+	}
+	if cfg.RangeDescriptorDB != nil {
+		rdb = cfg.RangeDescriptorDB
+	}
+	if rdb == nil {
+		panic("DistSenderConfig must contain either FirstRangeProvider or RangeDescriptorDB")
 	}
 	getRangeDescCacheSize := func() int64 {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
@@ -310,23 +339,15 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
 
-	if g != nil {
+	if ds.firstRangeProvider != nil {
 		ctx := ds.AnnotateCtx(context.Background())
-		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
-			func(_ string, value roachpb.Value) {
-				if atomic.LoadInt32(&ds.disableFirstRangeUpdates) == 1 {
-					return
-				}
-				if log.V(1) {
-					var desc roachpb.RangeDescriptor
-					if err := value.GetProto(&desc); err != nil {
-						log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
-					} else {
-						log.Infof(ctx, "gossiped first range descriptor: %+v", desc.Replicas())
-					}
-				}
-				ds.rangeCache.EvictByKey(ctx, roachpb.RKeyMin)
-			})
+		ds.firstRangeProvider.OnFirstRangeChanged(func(desc *roachpb.RangeDescriptor) {
+			if atomic.LoadInt32(&ds.disableFirstRangeUpdates) == 1 {
+				return
+			}
+			log.VEventf(ctx, 1, "gossiped first range descriptor: %+v", desc.Replicas())
+			ds.rangeCache.EvictByKey(ctx, roachpb.RKeyMin)
+		})
 	}
 	return ds
 }
@@ -360,11 +381,12 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 	return ds.leaseHolderCache
 }
 
-// RangeLookup implements the RangeDescriptorDB interface. It uses LookupRange
-// to perform a lookup scan for the provided key, using DistSender itself as the
-// client.Sender. This means that the scan will recurse into DistSender, which
-// will in turn use the RangeDescriptorCache again to lookup the RangeDescriptor
-// necessary to perform the scan.
+// RangeLookup implements the RangeDescriptorDB interface.
+//
+// It uses LookupRange to perform a lookup scan for the provided key, using
+// DistSender itself as the client.Sender. This means that the scan will recurse
+// into DistSender, which will in turn use the RangeDescriptorCache again to
+// lookup the RangeDescriptor necessary to perform the scan.
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
@@ -386,17 +408,26 @@ func (ds *DistSender) RangeLookup(
 }
 
 // FirstRange implements the RangeDescriptorDB interface.
-// FirstRange returns the RangeDescriptor for the first range on the cluster,
-// which is retrieved from the gossip protocol instead of the datastore.
+//
+// It returns the RangeDescriptor for the first range in the cluster using the
+// FirstRangeProvider, which is typically implemented using the gossip protocol
+// instead of the datastore.
 func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
-	if ds.gossip == nil {
-		panic("with `nil` Gossip, DistSender must not use itself as rangeDescriptorDB")
+	if ds.firstRangeProvider == nil {
+		panic("with `nil` firstRangeProvider, DistSender must not use itself as RangeDescriptorDB")
 	}
-	rangeDesc := &roachpb.RangeDescriptor{}
-	if err := ds.gossip.GetInfoProto(gossip.KeyFirstRangeDescriptor, rangeDesc); err != nil {
-		return nil, firstRangeMissingError{}
+	return ds.firstRangeProvider.GetFirstRangeDescriptor()
+}
+
+// getNodeID attempts to return the local node ID. It returns 0 if the DistSender
+// does not have access to the Gossip network.
+func (ds *DistSender) getNodeID() roachpb.NodeID {
+	// TODO(nvanbenschoten): open an issue about the effect of this.
+	g, ok := ds.nodeDescs.(*gossip.Gossip)
+	if !ok {
+		return 0
 	}
-	return rangeDesc, nil
+	return g.NodeID.Get()
 }
 
 // getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
@@ -408,17 +439,19 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 	if desc := atomic.LoadPointer(&ds.nodeDescriptor); desc != nil {
 		return (*roachpb.NodeDescriptor)(desc)
 	}
-	if ds.gossip == nil {
+	// TODO(nvanbenschoten): open an issue about the effect of this.
+	g, ok := ds.nodeDescs.(*gossip.Gossip)
+	if !ok {
 		return nil
 	}
 
-	ownNodeID := ds.gossip.NodeID.Get()
+	ownNodeID := g.NodeID.Get()
 	if ownNodeID > 0 {
 		// TODO(tschottdorf): Consider instead adding the NodeID of the
 		// coordinator to the header, so we can get this from incoming
 		// requests. Just in case we want to mostly eliminate gossip here.
 		nodeDesc := &roachpb.NodeDescriptor{}
-		if err := ds.gossip.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
+		if err := g.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), nodeDesc); err == nil {
 			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(nodeDesc))
 			return nodeDesc
 		}
@@ -494,8 +527,8 @@ func (ds *DistSender) initAndVerifyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	// Attach the local node ID to each request.
-	if ba.Header.GatewayNodeID == 0 && ds.gossip != nil {
-		ba.Header.GatewayNodeID = ds.gossip.NodeID.Get()
+	if ba.Header.GatewayNodeID == 0 {
+		ba.Header.GatewayNodeID = ds.getNodeID()
 	}
 
 	// In the event that timestamp isn't set and read consistency isn't
@@ -1611,7 +1644,7 @@ func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
 	ba.RangeID = desc.RangeID
-	replicas, err := NewReplicaSlice(ctx, ds.gossip, desc)
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc)
 	if err != nil {
 		return nil, err
 	}

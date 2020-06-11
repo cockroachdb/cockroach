@@ -42,8 +42,9 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDesc         roachpb.NodeDescriptor
-	Settings         *cluster.Settings
+	NodeDesc roachpb.NodeDescriptor
+	Settings *cluster.Settings
+	// TODO(nvanbenschoten): replace with NodeDescStore once #49997 merges.
 	Gossip           gossip.DeprecatedOracleGossip
 	RPCContext       *rpc.Context
 	LeaseHolderCache *kvcoord.LeaseHolderCache
@@ -117,13 +118,13 @@ func MakeQueryState() QueryState {
 // randomOracle is a Oracle that chooses the lease holder randomly
 // among the replicas in a range descriptor.
 type randomOracle struct {
-	gossip gossip.DeprecatedOracleGossip
+	nodeDescs kvcoord.NodeDescStore
 }
 
 var _ OracleFactory = &randomOracle{}
 
 func newRandomOracleFactory(cfg Config) OracleFactory {
-	return &randomOracle{gossip: cfg.Gossip}
+	return &randomOracle{nodeDescs: cfg.Gossip}
 }
 
 func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
@@ -133,7 +134,7 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *randomOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(ctx, desc, o.gossip)
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -141,8 +142,8 @@ func (o *randomOracle) ChoosePreferredReplica(
 }
 
 type closestOracle struct {
-	gossip      gossip.DeprecatedOracleGossip
 	latencyFunc kvcoord.LatencyFunc
+	nodeDescs   kvcoord.NodeDescStore
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
 	nodeDesc roachpb.NodeDescriptor
@@ -151,7 +152,7 @@ type closestOracle struct {
 func newClosestOracleFactory(cfg Config) OracleFactory {
 	return &closestOracle{
 		latencyFunc: latencyFunc(cfg.RPCContext),
-		gossip:      cfg.Gossip,
+		nodeDescs:   cfg.Gossip,
 		nodeDesc:    cfg.NodeDesc,
 	}
 }
@@ -163,7 +164,7 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *closestOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(ctx, desc, o.gossip)
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -189,8 +190,9 @@ const maxPreferredRangesPerLeaseHolder = 10
 type binPackingOracle struct {
 	leaseHolderCache                 *kvcoord.LeaseHolderCache
 	maxPreferredRangesPerLeaseHolder int
-	gossip                           gossip.DeprecatedOracleGossip
-	latencyFunc                      kvcoord.LatencyFunc
+	// TODO(nvanbenschoten): replace with NodeDescStore once #49997 merges.
+	gossip      gossip.DeprecatedOracleGossip
+	latencyFunc kvcoord.LatencyFunc
 	// nodeDesc is the descriptor of the current node. It will be used to give
 	// preference to the current node and others "close" to it.
 	nodeDesc roachpb.NodeDescriptor
@@ -229,7 +231,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 		}
 	}
 
-	replicas, err := replicaSliceOrErr(ctx, desc, o.gossip)
+	replicas, err := replicaSliceOrErr(ctx, o.gossip, desc)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -256,12 +258,12 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 
 // replicaSliceOrErr returns a ReplicaSlice for the given range descriptor.
 // ReplicaSlices are restricted to replicas on nodes for which a NodeDescriptor
-// is available in gossip. If no nodes are available, a RangeUnavailableError is
-// returned.
+// is available in the provided NodeDescStore. If no nodes are available, a
+// RangeUnavailableError is returned.
 func replicaSliceOrErr(
-	ctx context.Context, desc *roachpb.RangeDescriptor, gsp gossip.DeprecatedOracleGossip,
+	ctx context.Context, nodeDescs kvcoord.NodeDescStore, desc *roachpb.RangeDescriptor,
 ) (kvcoord.ReplicaSlice, error) {
-	replicas, err := kvcoord.NewReplicaSlice(ctx, gsp, desc)
+	replicas, err := kvcoord.NewReplicaSlice(ctx, nodeDescs, desc)
 	if err != nil {
 		return kvcoord.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(desc.RangeID, err)
 	}
