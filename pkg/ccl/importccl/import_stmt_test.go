@@ -2472,23 +2472,51 @@ func TestImportIntoCSV(t *testing.T) {
 		}
 	})
 
-	// IMPORT INTO does not support DEFAULT expressions for either target or
-	// non-target columns.
-	t.Run("import-into-check-no-default-cols", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE TABLE t (a INT DEFAULT 1, b STRING)`)
-		defer sqlDB.Exec(t, `DROP TABLE t`)
-
-		// Insert the test data
-		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
-
-		for i, v := range insert {
-			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
-		}
-
-		sqlDB.ExpectErr(
-			t, fmt.Sprintf("pq: cannot IMPORT INTO a table with a DEFAULT expression for any of its columns"),
-			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
-		)
+	t.Run("import-into-default", func(t *testing.T) {
+		var data string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		t.Run("is-not-target", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "42"}, {"2", "42"}})
+		})
+		t.Run("is-target", func(t *testing.T) {
+			data = "1,36\n2,42"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "36"}, {"2", "42"}})
+		})
+		t.Run("mixed", func(t *testing.T) {
+			data = "35,test string\n72,another test string"
+			sqlDB.Exec(t, `CREATE TABLE t (b STRING, a INT DEFAULT 53, c INT DEFAULT 42)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"test string", "35", "42"}, {"another test string", "72", "42"}})
+		})
+		t.Run("with-import-table", func(t *testing.T) {
+			data = "35,string1,65\n72,string2,17"
+			sqlDB.Exec(t, fmt.Sprintf(
+				`IMPORT TABLE t (a INT, b STRING, c INT DEFAULT 33)
+			CSV DATA ("%s")`,
+				srv.URL,
+			))
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			data = "11,string3\n29,string4"
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+				{"35", "string1", "65"},
+				{"72", "string2", "17"},
+				{"11", "string3", "33"},
+				{"29", "string4", "33"}})
+		})
 	})
 
 	// IMPORT INTO does not currently support import into interleaved tables.
