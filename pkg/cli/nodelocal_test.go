@@ -126,11 +126,15 @@ func TestNodeLocalFileUpload(t *testing.T) {
 }
 
 func createTestFile(name, content string) (string, func()) {
-	err := ioutil.WriteFile(name, []byte(content), 0666)
+	tmpDir, err := ioutil.TempDir("", "")
+	tmpFile := filepath.Join(tmpDir, testTempFilePrefix+name)
+	if err == nil {
+		err = ioutil.WriteFile(tmpFile, []byte(content), 0666)
+	}
 	if err != nil {
 		return "", func() {}
 	}
-	return name, func() {
-		_ = os.Remove(name)
+	return tmpFile, func() {
+		_ = os.RemoveAll(tmpDir)
 	}
 }
