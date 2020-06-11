@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 subtest regression_42858
 
 statement ok

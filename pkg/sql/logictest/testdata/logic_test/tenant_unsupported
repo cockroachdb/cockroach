@@ -68,8 +68,10 @@ SELECT * FROM crdb_internal.kv_node_status
 
 # Cannot manipulate zone configurations
 
-statement error operation is unsupported
+# Selecting from crdb_internal.zones is allowed but no data is returned.
+query IITTTTTTTTTTT
 SELECT * FROM crdb_internal.zones
+----
 
 statement error operation is unsupported
 SHOW ZONE CONFIGURATION FOR TABLE kv

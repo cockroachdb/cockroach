@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 # This test exercises the presence of an explanatory hint when a transaction
 # ends up partially committed and partially aborted.
 

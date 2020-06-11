@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 statement error pgcode 42P01 relation "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
 
