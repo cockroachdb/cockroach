@@ -2472,22 +2472,146 @@ func TestImportIntoCSV(t *testing.T) {
 		}
 	})
 
-	// IMPORT INTO does not support DEFAULT expressions for either target or
-	// non-target columns.
-	t.Run("import-into-check-no-default-cols", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE TABLE t (a INT DEFAULT 1, b STRING)`)
+	// Test that IMPORT INTO works when columns with default expressions are present.
+	// The default expressions supported by IMPORT INTO are literals and pure functions
+	// (functions that always return the same value given the same arguments).
+	// The default expression is used when this column is not targeted; otherwise,
+	// data from source file (like CSV) is used. It also checks IMPORT TABLE works
+	// when there are default columns.
+	t.Run("import-into-default", func(t *testing.T) {
+		var data string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		t.Run("is-not-target", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE TABLE t (b INT DEFAULT 42, a INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"42", "1"}, {"42", "2"}})
+		})
+		t.Run("is-not-target-not-null", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42 NOT NULL)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "42"}, {"2", "42"}})
+		})
+		t.Run("is-target", func(t *testing.T) {
+			data = "1,36\n2,37"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "36"}, {"2", "37"}})
+		})
+		t.Run("is-target-with-null-data", func(t *testing.T) {
+			data = ",36\n2,"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s") WITH nullif = ''`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"NULL", "36"}, {"2", "NULL"}})
+		})
+		t.Run("mixed-target-and-non-target", func(t *testing.T) {
+			data = "35,test string\n72,another test string"
+			sqlDB.Exec(t, `CREATE TABLE t (b STRING, a INT DEFAULT 53, c INT DEFAULT 42)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"test string", "35", "42"}, {"another test string", "72", "42"}})
+		})
+		t.Run("with-import-table", func(t *testing.T) {
+			data = "35,string1,65\n72,string2,17"
+			sqlDB.Exec(t, fmt.Sprintf(
+				`IMPORT TABLE t (a INT, b STRING, c INT DEFAULT 33)
+			CSV DATA ("%s")`,
+				srv.URL,
+			))
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			data = "11,string3\n29,string4"
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+				{"35", "string1", "65"},
+				{"72", "string2", "17"},
+				{"11", "string3", "33"},
+				{"29", "string4", "33"}})
+		})
+		t.Run("null-as-default", func(t *testing.T) {
+			data = "1\n2\n3"
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (a INT DEFAULT NULL, b INT)`))
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"NULL", "1"}, {"NULL", "2"}, {"NULL", "3"}})
+		})
+		t.Run("default-value-change", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 7)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			data = "3\n4"
+			sqlDB.Exec(t, `ALTER TABLE t ALTER COLUMN b SET DEFAULT 8`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "7"}, {"2", "7"}, {"3", "8"}, {"4", "8"}})
+		})
+		t.Run("math-constant", func(t *testing.T) {
+			data = "35\n67"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b FLOAT DEFAULT round(pi()))`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+				{"35", "3"},
+				{"67", "3"}})
+		})
+		t.Run("string-function", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING DEFAULT repeat('dog', 2))`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+				{"1", "dogdog"},
+				{"2", "dogdog"}})
+		})
+		t.Run("arithmetic", func(t *testing.T) {
+			data = "35\n67"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 34 * 3)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+			sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+				{"35", "102"},
+				{"67", "102"}})
+		})
+		t.Run("sequence-impure", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE SEQUENCE testseq`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, `CREATE TABLE t(a INT, b INT DEFAULT nextval('testseq'))`)
+			sqlDB.ExpectErr(t,
+				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
+				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+		})
+		t.Run("now-impure", func(t *testing.T) {
+			data = "1\n2"
+			sqlDB.Exec(t, `CREATE TABLE t(a INT, b TIMESTAMP DEFAULT now())`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.ExpectErr(t,
+				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
+				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+		})
+	})
+
+	t.Run("import-not-targeted-not-null", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT NOT NULL)`)
+		const data = "1\n2\n3"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
 		defer sqlDB.Exec(t, `DROP TABLE t`)
-
-		// Insert the test data
-		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
-
-		for i, v := range insert {
-			sqlDB.Exec(t, "INSERT INTO t (a, b) VALUES ($1, $2)", i, v)
-		}
-
-		sqlDB.ExpectErr(
-			t, fmt.Sprintf("pq: cannot IMPORT INTO a table with a DEFAULT expression for any of its columns"),
-			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
+		sqlDB.ExpectErr(t, `violated by column "b"`,
+			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL),
 		)
 	})
 
