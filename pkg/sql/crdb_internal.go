@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2400,7 +2399,9 @@ CREATE TABLE crdb_internal.zones (
 `,
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if !p.ExecCfg().Codec.ForSystemTenant() {
-			return errorutil.UnsupportedWithMultiTenancy()
+			// Don't try to populate crdb_internal.zones if running in a multitenant
+			// configuration.
+			return nil
 		}
 
 		namespace, err := p.getAllNames(ctx)
