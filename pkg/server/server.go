@@ -316,15 +316,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSenderCfg := kvcoord.DistSenderConfig{
-		AmbientCtx:      cfg.AmbientCtx,
-		Settings:        st,
-		Clock:           clock,
-		RPCContext:      rpcContext,
-		RPCRetryOptions: &retryOpts,
-		TestingKnobs:    clientTestingKnobs,
-		NodeDialer:      nodeDialer,
+		AmbientCtx:         cfg.AmbientCtx,
+		Settings:           st,
+		Clock:              clock,
+		NodeDescs:          g,
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retryOpts,
+		NodeDialer:         nodeDialer,
+		FirstRangeProvider: g,
+		TestingKnobs:       clientTestingKnobs,
 	}
-	distSender := kvcoord.NewDistSender(distSenderCfg, g)
+	distSender := kvcoord.NewDistSender(distSenderCfg)
 	registry.AddMetricStruct(distSender.Metrics())
 
 	txnMetrics := kvcoord.MakeTxnMetrics(cfg.HistogramWindowInterval())

@@ -83,13 +83,15 @@ func NewDistSenderForLocalTestCluster(
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	return NewDistSender(DistSenderConfig{
-		AmbientCtx:      log.AmbientContext{Tracer: st.Tracer},
-		Settings:        st,
-		Clock:           clock,
-		RPCContext:      rpcContext,
-		RPCRetryOptions: &retryOpts,
-		nodeDescriptor:  nodeDesc,
-		NodeDialer:      nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		AmbientCtx:         log.AmbientContext{Tracer: st.Tracer},
+		Settings:           st,
+		Clock:              clock,
+		NodeDescs:          g,
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retryOpts,
+		nodeDescriptor:     nodeDesc,
+		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		FirstRangeProvider: g,
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: func(
 				opts SendOptions,
@@ -103,5 +105,5 @@ func NewDistSenderForLocalTestCluster(
 				return &localTestClusterTransport{transport, latency}, nil
 			},
 		},
-	}, g)
+	})
 }
