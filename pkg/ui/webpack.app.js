@@ -15,6 +15,7 @@ const rimraf = require("rimraf");
 const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const VisualizerPlugin = require("webpack-visualizer-plugin");
+const StringReplacePlugin = require("string-replace-webpack-plugin");
 
 // Remove a broken dependency that Yarn insists upon installing before every
 // Webpack compile. We also do this when installing dependencies via Make, but
@@ -54,7 +55,7 @@ module.exports = (env, argv) => {
     localRoots.unshift(path.resolve(__dirname, "ccl"));
   }
 
-  return {
+  const config = {
     entry: ["./src/index.tsx"],
     output: {
       filename: "bundle.js",
@@ -196,4 +197,31 @@ module.exports = (env, argv) => {
       maxAssetSize: 4000000,
     },
   };
+
+  // The purpose of this is to have zero impact on production code and at the
+  // same time to be able inject testing code with SIMULATE_METRICS_LOAD env variable.
+  // It injects Redux middleware which generates metrics datapoints for performance
+  // testing.
+  if (process.env.SIMULATE_METRICS_LOAD === "true" && argv.mode !== "production") {
+    config.module.rules.push({
+      test: /src\/redux\/state.ts$/,
+      loader: StringReplacePlugin.replace({
+        replacements: [
+          {
+            pattern: /import rootSaga from ".\/sagas";/ig, // match last 'import' expression in module.
+            replacement: function(match, p) {
+              return `${match}\nimport { fakeMetricsDataGenerationMiddleware } from "src/test-utils/fakeMetricsDataGenerationMiddleware";`;
+            },
+          },
+          {
+            pattern: /(?<=applyMiddleware\((.*))\),$/mg,
+            replacement: function(match) {
+              return `, fakeMetricsDataGenerationMiddleware${match}`;
+            },
+          },
+        ]}),
+    });
+    config.plugins.push(new StringReplacePlugin());
+  }
+  return config;
 };
