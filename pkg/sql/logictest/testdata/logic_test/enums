@@ -989,3 +989,37 @@ INSERT INTO enum_referenced VALUES ('howdy')
 
 statement error pq: foreign key violation: "enum_origin" row x='hello' has no match in "enum_referenced"
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+# Tests for ALTER COLUMN SET DATA TYPE.
+statement ok
+SET enable_experimental_alter_column_type_general = true;
+CREATE TABLE enum_data_type (x STRING);
+INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
+INSERT INTO enum_data_type VALUES ('hi')
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+hello
+howdy
+hi
+
+statement ok
+DROP TABLE enum_data_type;
+CREATE TABLE enum_data_type (x greeting);
+INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE STRING
+
+# Now the column isn't an enum type, we should be able to insert other
+# strings into it. We use retry so that it will eventually succeed after
+# the old column is dropped.
+statement ok retry
+INSERT INTO enum_data_type VALUES ('notagreeting')
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+hello
+howdy
+notagreeting
