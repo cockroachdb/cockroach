@@ -2911,6 +2911,109 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 	b.ReportAllocs()
 }
 
+// goos: darwin
+// goarch: amd64
+// pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
+// BenchmarkPgCopyConvertRecord-16    	  317534	      3752 ns/op	  31.98 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  317433	      3767 ns/op	  31.86 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  308832	      3867 ns/op	  31.03 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  255715	      3913 ns/op	  30.67 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  303086	      3942 ns/op	  30.44 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  304741	      3520 ns/op	  34.09 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  338954	      3506 ns/op	  34.22 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  339795	      3531 ns/op	  33.99 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  339940	      3610 ns/op	  33.24 MB/s
+// BenchmarkPgCopyConvertRecord-16    	  307701	      3833 ns/op	  31.30 MB/s
+func BenchmarkPgCopyConvertRecord(b *testing.B) {
+	ctx := context.Background()
+
+	tpchLineItemDataRows := [][]string{
+		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
+		{"1", "67310", "7311", "2", "36", "45983.16", "0.09", "0.06", "N", "O", "1996-04-12", "1996-02-28", "1996-04-20", "TAKE BACK RETURN", "MAIL", "ly final dependencies: slyly bold "},
+		{"1", "63700", "3701", "3", "8", "13309.60", "0.10", "0.02", "N", "O", "1996-01-29", "1996-03-05", "1996-01-31", "TAKE BACK RETURN", "REG AIR", "riously. regular, express dep"},
+		{"1", "2132", "4633", "4", "28", "28955.64", "0.09", "0.06", "N", "O", "1996-04-21", "1996-03-30", "1996-05-16", "NONE", "AIR", "lites. fluffily even de"},
+		{"1", "24027", "1534", "5", "24", "22824.48", "0.10", "0.04", "N", "O", "1996-03-30", "1996-03-14", "1996-04-01", "NONE", "FOB", " pending foxes. slyly re"},
+		{"1", "15635", "638", "6", "32", "49620.16", "0.07", "0.02", "N", "O", "1996-01-30", "1996-02-07", "1996-02-03", "DELIVER IN PERSON", "MAIL", "arefully slyly ex"},
+		{"2", "106170", "1191", "1", "38", "44694.46", "0.00", "0.05", "N", "O", "1997-01-28", "1997-01-14", "1997-02-02", "TAKE BACK RETURN", "RAIL", "ven requests. deposits breach a"},
+		{"3", "4297", "1798", "1", "45", "54058.05", "0.06", "0.00", "R", "F", "1994-02-02", "1994-01-04", "1994-02-23", "NONE", "AIR", "ongside of the furiously brave acco"},
+		{"3", "19036", "6540", "2", "49", "46796.47", "0.10", "0.00", "R", "F", "1993-11-09", "1993-12-20", "1993-11-24", "TAKE BACK RETURN", "RAIL", " unusual accounts. eve"},
+		{"3", "128449", "3474", "3", "27", "39890.88", "0.06", "0.07", "A", "F", "1994-01-16", "1993-11-22", "1994-01-23", "DELIVER IN PERSON", "SHIP", "nal foxes wake."},
+	}
+	b.SetBytes(120) // Raw input size. With 8 indexes, expect more on output side.
+
+	stmt, err := parser.ParseOne(`CREATE TABLE lineitem (
+		l_orderkey      INT8 NOT NULL,
+		l_partkey       INT8 NOT NULL,
+		l_suppkey       INT8 NOT NULL,
+		l_linenumber    INT8 NOT NULL,
+		l_quantity      DECIMAL(15,2) NOT NULL,
+		l_extendedprice DECIMAL(15,2) NOT NULL,
+		l_discount      DECIMAL(15,2) NOT NULL,
+		l_tax           DECIMAL(15,2) NOT NULL,
+		l_returnflag    CHAR(1) NOT NULL,
+		l_linestatus    CHAR(1) NOT NULL,
+		l_shipdate      DATE NOT NULL,
+		l_commitdate    DATE NOT NULL,
+		l_receiptdate   DATE NOT NULL,
+		l_shipinstruct  CHAR(25) NOT NULL,
+		l_shipmode      CHAR(10) NOT NULL,
+		l_comment       VARCHAR(44) NOT NULL,
+		PRIMARY KEY     (l_orderkey, l_linenumber),
+		INDEX l_ok      (l_orderkey ASC),
+		INDEX l_pk      (l_partkey ASC),
+		INDEX l_sk      (l_suppkey ASC),
+		INDEX l_sd      (l_shipdate ASC),
+		INDEX l_cd      (l_commitdate ASC),
+		INDEX l_rd      (l_receiptdate ASC),
+		INDEX l_pk_sk   (l_partkey ASC, l_suppkey ASC),
+		INDEX l_sk_pk   (l_suppkey ASC, l_partkey ASC)
+	)`)
+	if err != nil {
+		b.Fatal(err)
+	}
+	create := stmt.AST.(*tree.CreateTable)
+	semaCtx := tree.MakeSemaContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, sqlbase.ID(100),
+		sqlbase.ID(100), NoFKs, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	kvCh := make(chan row.KVBatch)
+	// no-op drain kvs channel.
+	go func() {
+		for range kvCh {
+		}
+	}()
+
+	descr := tableDesc.TableDesc()
+	cols := make(tree.NameList, len(descr.Columns))
+	for i, col := range descr.Columns {
+		cols[i] = tree.Name(col.Name)
+	}
+	r, err := newPgCopyReader(roachpb.PgCopyOptions{
+		Delimiter:  '\t',
+		Null:       `\N`,
+		MaxRowSize: 4096,
+	}, kvCh, 0, 0, descr, &evalCtx)
+	require.NoError(b, err)
+
+	producer := &csvBenchmarkStream{
+		n:    b.N,
+		pos:  0,
+		data: tpchLineItemDataRows,
+	}
+
+	pgCopyInput := &fileReader{Reader: producer}
+	b.ResetTimer()
+	require.NoError(b, r.readFile(ctx, pgCopyInput, 0, 0, nil))
+	close(kvCh)
+	b.ReportAllocs()
+}
+
 // TestImportControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
 // work as intended on import jobs.
 func TestImportControlJob(t *testing.T) {
