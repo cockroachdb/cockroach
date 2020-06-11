@@ -5569,13 +5569,13 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
 	// randomly added occasionally.
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: st.Tracer},
-		&base.Config{Insecure: true},
-		clock,
-		stopper,
-		st,
-	)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		Config:     &base.Config{Insecure: true},
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   st,
+	})
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
@@ -5711,13 +5711,13 @@ func Example_rebalancing() {
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: st.Tracer},
-		&base.Config{Insecure: true},
-		clock,
-		stopper,
-		st,
-	)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		Config:     &base.Config{Insecure: true},
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   st,
+	})
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 

@@ -176,8 +176,8 @@ func NewServerWithInterceptor(
 		// A stats handler to measure server network stats.
 		grpc.StatsHandler(&ctx.stats),
 	}
-	if !ctx.Insecure {
-		tlsConfig, err := ctx.GetServerTLSConfig()
+	if !ctx.Config.Insecure {
+		tlsConfig, err := ctx.Config.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -243,7 +243,7 @@ func NewServerWithInterceptor(
 		}
 	}
 
-	if !ctx.Insecure {
+	if !ctx.Config.Insecure {
 		prevUnaryInterceptor := unaryInterceptor
 		unaryInterceptor = func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
@@ -279,13 +279,13 @@ func NewServerWithInterceptor(
 
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:                                 ctx.LocalClock,
+		clock:                                 ctx.Clock,
 		remoteClockMonitor:                    ctx.RemoteClocks,
-		clusterName:                           ctx.clusterName,
-		disableClusterNameVerification:        ctx.disableClusterNameVerification,
+		clusterName:                           ctx.ClusterName(),
+		disableClusterNameVerification:        ctx.Config.DisableClusterNameVerification,
 		clusterID:                             &ctx.ClusterID,
 		nodeID:                                &ctx.NodeID,
-		settings:                              ctx.settings,
+		settings:                              ctx.Settings,
 		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	})
 	return s
@@ -370,18 +370,14 @@ func (c *Connection) Health() error {
 
 // Context contains the fields required by the rpc framework.
 type Context struct {
-	*base.Config
+	ContextOptions
 
-	AmbientCtx   log.AmbientContext
-	LocalClock   *hlc.Clock
 	breakerClock breakerClock
-	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
 	masterCtx    context.Context
 
-	heartbeatInterval time.Duration
-	heartbeatTimeout  time.Duration
-	HeartbeatCB       func()
+	heartbeatTimeout time.Duration
+	HeartbeatCB      func()
 
 	rpcCompression bool
 
@@ -393,17 +389,12 @@ type Context struct {
 
 	ClusterID base.ClusterIDContainer
 	NodeID    base.NodeIDContainer
-	settings  *cluster.Settings
-
-	clusterName                    string
-	disableClusterNameVerification bool
 
 	metrics Metrics
 
 	// For unittesting.
 	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
-	testingKnobs    ContextTestingKnobs
 
 	// For testing. See the comment on the same field in HeartbeatService.
 	TestingAllowNamedRPCToAnonymousServer bool
@@ -426,54 +417,43 @@ type connKey struct {
 	class      ConnectionClass
 }
 
-// NewContext creates an rpc Context with the supplied values.
-func NewContext(
-	ambient log.AmbientContext,
-	baseCtx *base.Config,
-	hlcClock *hlc.Clock,
-	stopper *stop.Stopper,
-	st *cluster.Settings,
-) *Context {
-	return NewContextWithTestingKnobs(ambient, baseCtx, hlcClock, stopper, st,
-		ContextTestingKnobs{})
+// ContextOptions are passed to NewContext to set up a new *Context.
+// All pointer fields are required.
+type ContextOptions struct {
+	AmbientCtx log.AmbientContext
+	Config     *base.Config
+	Clock      *hlc.Clock
+	Stopper    *stop.Stopper
+	Settings   *cluster.Settings
+	Knobs      ContextTestingKnobs
 }
 
-// NewContextWithTestingKnobs creates an rpc Context with the supplied values.
-func NewContextWithTestingKnobs(
-	ambient log.AmbientContext,
-	baseCtx *base.Config,
-	hlcClock *hlc.Clock,
-	stopper *stop.Stopper,
-	st *cluster.Settings,
-	knobs ContextTestingKnobs,
-) *Context {
-	if hlcClock == nil {
+// NewContext creates an rpc.Context with the supplied values.
+func NewContext(opts ContextOptions) *Context {
+	if opts.Clock == nil {
 		panic("nil clock is forbidden")
 	}
-	ctx := &Context{
-		AmbientCtx: ambient,
-		Config:     baseCtx,
-		LocalClock: hlcClock,
-		breakerClock: breakerClock{
-			clock: hlcClock,
-		},
-		rpcCompression:                 enableRPCCompression,
-		settings:                       st,
-		clusterName:                    baseCtx.ClusterName,
-		disableClusterNameVerification: baseCtx.DisableClusterNameVerification,
-		testingKnobs:                   knobs,
-	}
-	var cancel context.CancelFunc
-	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
-	ctx.Stopper = stopper
-	ctx.heartbeatInterval = baseCtx.RPCHeartbeatInterval
-	ctx.RemoteClocks = newRemoteClockMonitor(
-		ctx.LocalClock, 10*ctx.heartbeatInterval, baseCtx.HistogramWindowInterval())
-	ctx.heartbeatTimeout = 2 * ctx.heartbeatInterval
-	ctx.metrics = makeMetrics()
 
-	stopper.RunWorker(ctx.masterCtx, func(context.Context) {
-		<-stopper.ShouldQuiesce()
+	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
+
+	ctx := &Context{
+		ContextOptions: opts,
+		breakerClock: breakerClock{
+			clock: opts.Clock,
+		},
+		RemoteClocks: newRemoteClockMonitor(
+			opts.Clock, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
+		rpcCompression:   enableRPCCompression,
+		masterCtx:        masterCtx,
+		metrics:          makeMetrics(),
+		heartbeatTimeout: 2 * opts.Config.RPCHeartbeatInterval,
+	}
+	if id := opts.Knobs.ClusterID; id != nil {
+		ctx.ClusterID.Set(masterCtx, *id)
+	}
+
+	ctx.Stopper.RunWorker(ctx.masterCtx, func(context.Context) {
+		<-ctx.Stopper.ShouldQuiesce()
 
 		cancel()
 		ctx.conns.Range(func(k, v interface{}) bool {
@@ -490,9 +470,6 @@ func NewContextWithTestingKnobs(
 			return true
 		})
 	})
-	if knobs.ClusterID != nil {
-		ctx.ClusterID.Set(ctx.masterCtx, *knobs.ClusterID)
-	}
 	return ctx
 }
 
@@ -502,7 +479,7 @@ func (ctx *Context) ClusterName() string {
 		// This is used in tests.
 		return "<MISSING RPC CONTEXT>"
 	}
-	return ctx.clusterName
+	return ctx.Config.ClusterName
 }
 
 // GetStatsMap returns a map of network statistics maintained by the
@@ -522,7 +499,7 @@ func (ctx *Context) Metrics() *Metrics {
 func (ctx *Context) GetLocalInternalClientForAddr(
 	target string, nodeID roachpb.NodeID,
 ) roachpb.InternalClient {
-	if target == ctx.AdvertiseAddr && nodeID == ctx.NodeID.Get() {
+	if target == ctx.Config.AdvertiseAddr && nodeID == ctx.NodeID.Get() {
 		return ctx.localInternalClient
 	}
 	return nil
@@ -662,10 +639,10 @@ func (ctx *Context) grpcDialOptions(
 	target string, class ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	var dialOpts []grpc.DialOption
-	if ctx.Insecure {
+	if ctx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 	} else {
-		tlsConfig, err := ctx.GetClientTLSConfig()
+		tlsConfig, err := ctx.Config.GetClientTLSConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -709,15 +686,15 @@ func (ctx *Context) grpcDialOptions(
 					span.SetTag("node", ctx.NodeID.String())
 				})))
 	}
-	if ctx.testingKnobs.UnaryClientInterceptor != nil {
-		testingUnaryInterceptor := ctx.testingKnobs.UnaryClientInterceptor(target, class)
+	if ctx.Knobs.UnaryClientInterceptor != nil {
+		testingUnaryInterceptor := ctx.Knobs.UnaryClientInterceptor(target, class)
 		if testingUnaryInterceptor != nil {
 			unaryInterceptors = append(unaryInterceptors, testingUnaryInterceptor)
 		}
 	}
 	dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
-	if ctx.testingKnobs.StreamClientInterceptor != nil {
-		testingStreamInterceptor := ctx.testingKnobs.StreamClientInterceptor(target, class)
+	if ctx.Knobs.StreamClientInterceptor != nil {
+		testingStreamInterceptor := ctx.Knobs.StreamClientInterceptor(target, class)
 		if testingStreamInterceptor != nil {
 			dialOpts = append(dialOpts, grpc.WithStreamInterceptor(testingStreamInterceptor))
 		}
@@ -913,8 +890,8 @@ func (ctx *Context) grpcDialRaw(
 		redialChan: make(chan struct{}),
 	}
 	dialerFunc := dialer.dial
-	if ctx.testingKnobs.ArtificialLatencyMap != nil {
-		latency := ctx.testingKnobs.ArtificialLatencyMap[target]
+	if ctx.Knobs.ArtificialLatencyMap != nil {
+		latency := ctx.Knobs.ArtificialLatencyMap[target]
 		log.VEventf(ctx.masterCtx, 1, "Connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
 			latency)
 		dialer := artificialLatencyDialer{
@@ -1055,7 +1032,7 @@ func (ctx *Context) runHeartbeat(
 		updateHeartbeatState(&ctx.metrics, state, heartbeatNotRunning)
 		setInitialHeartbeatDone()
 	}()
-	maxOffset := ctx.LocalClock.MaxOffset()
+	maxOffset := ctx.Clock.MaxOffset()
 	maxOffsetNanos := maxOffset.Nanoseconds()
 
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
@@ -1080,15 +1057,15 @@ func (ctx *Context) runHeartbeat(
 			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
 			clusterID := ctx.ClusterID.Get()
 			request := &PingRequest{
-				Addr:           ctx.Addr,
+				Addr:           ctx.Config.Addr,
 				MaxOffsetNanos: maxOffsetNanos,
 				ClusterID:      &clusterID,
 				NodeID:         conn.remoteNodeID,
-				ServerVersion:  ctx.settings.Version.BinaryVersion(),
+				ServerVersion:  ctx.Settings.Version.BinaryVersion(),
 			}
 
 			var response *PingResponse
-			sendTime := ctx.LocalClock.PhysicalTime()
+			sendTime := ctx.Clock.PhysicalTime()
 			ping := func(goCtx context.Context) (err error) {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
@@ -1109,27 +1086,27 @@ func (ctx *Context) runHeartbeat(
 				// new node in a cluster and mistakenly joins the wrong
 				// cluster gets a chance to see the error message on their
 				// management console.
-				if !ctx.disableClusterNameVerification && !response.DisableClusterNameVerification {
+				if !ctx.Config.DisableClusterNameVerification && !response.DisableClusterNameVerification {
 					err = errors.Wrap(
-						checkClusterName(ctx.clusterName, response.ClusterName),
+						checkClusterName(ctx.Config.ClusterName, response.ClusterName),
 						"cluster name check failed on ping response")
 				}
 			}
 
 			if err == nil {
 				err = errors.Wrap(
-					checkVersion(goCtx, ctx.settings, response.ServerVersion),
+					checkVersion(goCtx, ctx.Settings, response.ServerVersion),
 					"version compatibility check failed on ping response")
 			}
 
 			if err == nil {
 				everSucceeded = true
-				receiveTime := ctx.LocalClock.PhysicalTime()
+				receiveTime := ctx.Clock.PhysicalTime()
 
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
-				maxOffset := ctx.LocalClock.MaxOffset()
+				maxOffset := ctx.Clock.MaxOffset()
 				if pingDuration > maximumPingDurationMult*maxOffset {
 					request.Offset.Reset()
 				} else {
@@ -1162,6 +1139,6 @@ func (ctx *Context) runHeartbeat(
 			return err
 		}
 
-		heartbeatTimer.Reset(ctx.heartbeatInterval)
+		heartbeatTimer.Reset(ctx.Config.RPCHeartbeatInterval)
 	}
 }

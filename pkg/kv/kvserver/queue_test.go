@@ -510,9 +510,13 @@ func TestNeedsSystemConfig(t *testing.T) {
 
 	// Use a gossip instance that won't have the system config available in it.
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
-	rpcContext := rpc.NewContext(
-		tc.store.cfg.AmbientCtx, &base.Config{Insecure: true}, tc.store.cfg.Clock, stopper,
-		cluster.MakeTestingClusterSettings())
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: tc.store.cfg.AmbientCtx,
+		Config:     &base.Config{Insecure: true},
+		Clock:      tc.store.cfg.Clock,
+		Stopper:    stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	emptyGossip := gossip.NewTest(
 		tc.gossip.NodeID.Get(), rpcContext, rpc.NewServer(rpcContext), stopper, tc.store.Registry(), zonepb.DefaultZoneConfigRef())
 	bqNeedsSysCfg := makeTestBaseQueue("test", testQueue, tc.store, emptyGossip, queueConfig{

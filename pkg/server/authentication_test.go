@@ -777,7 +777,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		})
 	}
 
-	certManager, err := s.RPCContext().GetCertificateManager()
+	certManager, err := s.RPCContext().Config.GetCertificateManager()
 	if err != nil {
 		t.Fatal(err)
 	}

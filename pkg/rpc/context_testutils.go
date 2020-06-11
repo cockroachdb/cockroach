@@ -70,12 +70,12 @@ func NewInsecureTestingContextWithClusterID(
 func NewInsecureTestingContextWithKnobs(
 	clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
-	return NewContextWithTestingKnobs(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.Config{Insecure: true},
-		clock,
-		stopper,
-		cluster.MakeTestingClusterSettings(),
-		knobs,
-	)
+	return NewContext(ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     &base.Config{Insecure: true},
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+		Knobs:      knobs,
+	})
 }
