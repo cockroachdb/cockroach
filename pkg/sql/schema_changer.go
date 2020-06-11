@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -314,7 +315,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 
 		fks := table.AllActiveAndInactiveForeignKeys()
 		for _, fk := range fks {
-			if err := sc.waitToUpdateLeases(ctx, fk.ReferencedTableID); err != nil {
+			if err := waitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
 				return err
 			}
 		}
@@ -339,25 +340,28 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	return nil
 }
 
-// Drain old names from the cluster.
-func (sc *SchemaChanger) drainNames(ctx context.Context) error {
-	log.Info(ctx, "draining previous table names")
-
+func drainNamesForDescriptor(
+	ctx context.Context,
+	descID sqlbase.ID,
+	leaseMgr *lease.Manager,
+	codec keys.SQLCodec,
+	beforeDrainNames func(),
+) error {
+	log.Info(ctx, "draining previous names")
 	// Publish a new version with all the names drained after everyone
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
 	var namesToReclaim []sqlbase.NameInfo
-	_, err := sc.leaseMgr.Publish(
+	_, err := leaseMgr.Publish(
 		ctx,
-		sc.tableID,
+		descID,
 		func(desc catalog.MutableDescriptor) error {
-			tbl := desc.(*MutableTableDescriptor)
-			if sc.testingKnobs.OldNamesDrainedNotification != nil {
-				sc.testingKnobs.OldNamesDrainedNotification()
+			if beforeDrainNames != nil {
+				beforeDrainNames()
 			}
 			// Free up the old name(s) for reuse.
-			namesToReclaim = tbl.DrainingNames
-			tbl.DrainingNames = nil
+			namesToReclaim = desc.GetDrainingNames()
+			desc.SetDrainingNames(nil)
 			return nil
 		},
 		// Reclaim all the old names.
@@ -365,7 +369,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
 				err := sqlbase.RemoveObjectNamespaceEntry(
-					ctx, txn, sc.execCfg.Codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
+					ctx, txn, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
 				)
 				if err != nil {
 					return err
@@ -447,7 +451,13 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	)
 
 	if tableDesc.HasDrainingNames() {
-		if err := sc.drainNames(ctx); err != nil {
+		if err := drainNamesForDescriptor(
+			ctx,
+			sc.tableID,
+			sc.leaseMgr,
+			sc.execCfg.Codec,
+			sc.testingKnobs.OldNamesDrainedNotification,
+		); err != nil {
 			return err
 		}
 	}
@@ -485,7 +495,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+		if err := waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return err
 			}
@@ -563,7 +573,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+		if err := waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return err
 			}
@@ -721,12 +731,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	log.Info(ctx, "finished stepping through state machine")
 
 	// wait for the state change to propagate to all leases.
-	return sc.waitToUpdateLeases(ctx, sc.tableID)
+	return waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID)
 }
 
 // Wait until the entire cluster has been updated to the latest version
-// of the table descriptor.
-func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase.ID) error {
+// of the descriptor.
+func waitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID sqlbase.ID) error {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -735,7 +745,7 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 		Multiplier:     2,
 	}
 	log.Infof(ctx, "waiting for a single version...")
-	version, err := sc.leaseMgr.WaitForOneVersion(ctx, tableID, retryOpts)
+	version, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
 	log.Infof(ctx, "waiting for a single version... done (at v %d)", version)
 	return err
 }
@@ -1283,11 +1293,11 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		return err
 	}
 
-	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+	if err := waitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 		return err
 	}
 	for id := range fksByBackrefTable {
-		if err := sc.waitToUpdateLeases(ctx, id); err != nil {
+		if err := waitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
 			return err
 		}
 	}

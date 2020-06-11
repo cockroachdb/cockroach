@@ -651,13 +651,14 @@ type ExecutorConfig struct {
 	InternalExecutor *InternalExecutor
 	QueryCache       *querycache.C
 
-	TestingKnobs              ExecutorTestingKnobs
-	PGWireTestingKnobs        *PGWireTestingKnobs
-	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
-	GCJobTestingKnobs         *GCJobTestingKnobs
-	DistSQLRunTestingKnobs    *execinfra.TestingKnobs
-	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
-	TenantTestingKnobs        *TenantTestingKnobs
+	TestingKnobs                  ExecutorTestingKnobs
+	PGWireTestingKnobs            *PGWireTestingKnobs
+	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
+	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
+	GCJobTestingKnobs             *GCJobTestingKnobs
+	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
+	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
+	TenantTestingKnobs            *TenantTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
