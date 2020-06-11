@@ -1,4 +1,6 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(48778)
+# When run with a tenant, system.namespace has an extra entry for
+# descriptor_id_seq.
 query IITI rowsort
 SELECT * FROM system.namespace
 ----

@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(49582)
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,

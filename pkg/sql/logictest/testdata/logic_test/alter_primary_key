@@ -1,6 +1,4 @@
-# 3node-tenant fails due to
-# https://github.com/cockroachdb/cockroach/issues/47900.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(50048)
 
 statement ok
 SET experimental_enable_hash_sharded_indexes = true
