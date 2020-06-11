@@ -70,6 +70,11 @@ type cliTestParams struct {
 	noNodelocal bool
 }
 
+// testTempFilePrefix is a sentinel marker to be used as the prefix of a
+// test file name. It is used to extract the file name from a uniquely
+// generated (temp directory) file path.
+const testTempFilePrefix = "test-temp-prefix-"
+
 func (c *cliTest) fail(err interface{}) {
 	if c.t != nil {
 		defer c.logScope.Close(c.t)
@@ -332,6 +337,16 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 			}
 		}
 		args = append(args, origArgs[1:]...)
+
+		// `nodelocal upload` CLI tests create test files in unique temp
+		// directories. Given that the expected output for such tests is defined as
+		// a static comment, it is not possible to match against the full file path.
+		// So, we trim the file path upto the sentinel prefix marker, and use only
+		// the file name for comparing against the expected output.
+		if len(origArgs) >= 3 && strings.Contains(origArgs[2], testTempFilePrefix) {
+			splitFilePath := strings.Split(origArgs[2], testTempFilePrefix)
+			origArgs[2] = splitFilePath[1]
+		}
 
 		if !c.omitArgs {
 			fmt.Fprintf(os.Stderr, "%s\n", args)
