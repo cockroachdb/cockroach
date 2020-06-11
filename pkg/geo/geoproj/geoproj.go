@@ -20,8 +20,10 @@ package geoproj
 // #include "proj.h"
 import "C"
 import (
+	"math"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +37,29 @@ func cStatusToUnsafeGoBytes(s C.CR_PROJ_Status) []byte {
 	}
 	// Interpret the C pointer as a pointer to a Go array, then slice.
 	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
+// GetProjMetadata returns metadata about the given projection.
+// The return arguments are a bool representing whether it is a latlng, a spheroid
+// object and an error if anything was erroneous was found.
+func GetProjMetadata(b geoprojbase.Proj4Text) (bool, *geographiclib.Spheroid, error) {
+	var majorAxis, eccentricitySquared C.double
+	var isLatLng C.int
+	if err := cStatusToUnsafeGoBytes(
+		C.CR_PROJ_GetProjMetadata(
+			(*C.char)(unsafe.Pointer(&b.Bytes()[0])),
+			(*C.int)(unsafe.Pointer(&isLatLng)),
+			(*C.double)(unsafe.Pointer(&majorAxis)),
+			(*C.double)(unsafe.Pointer(&eccentricitySquared)),
+		),
+	); err != nil {
+		return false, nil, errors.Newf("error from PROJ: %s", string(err))
+	}
+	// flattening = e^2 / 1 + sqrt(1+e^2).
+	// See: https://en.wikipedia.org/wiki/Eccentricity_(mathematics), derived from
+	// e = sqrt(f(2-f))
+	flattening := float64(eccentricitySquared) / (1 + math.Sqrt(float64(eccentricitySquared)))
+	return isLatLng != 0, geographiclib.NewSpheroid(float64(majorAxis), flattening), nil
 }
 
 // Project projects the given xCoords, yCoords and zCoords from one
