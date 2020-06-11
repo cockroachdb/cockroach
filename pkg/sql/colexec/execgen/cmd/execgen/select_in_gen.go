@@ -31,8 +31,8 @@ func genSelectIn(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	assignEq := makeFunctionRegex("_ASSIGN_EQ", 6)
-	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
+	assignEq := makeFunctionRegex("_COMPARE", 5)
+	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 5))
 
 	s = replaceManipulationFuncs(s)
 
