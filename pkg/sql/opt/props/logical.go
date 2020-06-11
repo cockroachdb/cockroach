@@ -334,11 +334,13 @@ type Relational struct {
 		// been set.
 		InterestingOrderings opt.OrderingSet
 
-		// UnfilteredCols is the set of output columns that have values for every
-		// row in their owner table. Rows may be duplicated, but no rows can be
-		// missing. For example, an unconstrained, unlimited Scan operator can
-		// add all of its output columns to this property, but a Select operator
-		// cannot add any columns, as it may have filtered rows.
+		// UnfilteredCols is the set of all columns for which rows from their base
+		// table are guaranteed not to have been filtered. Rows may be duplicated,
+		// but no rows can be missing. Even columns which are not output columns are
+		// included as long as table rows are guaranteed not filtered. For example,
+		// an unconstrained, unlimited Scan operator can add all columns from its
+		// table to this property, but a Select operator cannot add any columns, as
+		// it may have filtered rows.
 		//
 		// UnfilteredCols is lazily populated by GetJoinMultiplicityFromInputs. It
 		// is only valid once the Rule.Available.UnfilteredCols bit has been set.

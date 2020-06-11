@@ -162,13 +162,13 @@ project
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: v:6(int!null)
       │    │    │    │    ├── prune: (6)
-      │    │    │    │    └── unfiltered-cols: (6)
+      │    │    │    │    └── unfiltered-cols: (5-7)
       │    │    │    ├── scan mn
       │    │    │    │    ├── columns: n:9(int)
       │    │    │    │    ├── lax-key: (9)
       │    │    │    │    ├── prune: (9)
       │    │    │    │    ├── interesting orderings: (+9)
-      │    │    │    │    └── unfiltered-cols: (9)
+      │    │    │    │    └── unfiltered-cols: (8,9)
       │    │    │    └── filters
       │    │    │         └── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
       │    │    │              ├── variable: n:9 [type=int]
@@ -226,13 +226,13 @@ project
       │    │    │    ├── scan uv
       │    │    │    │    ├── columns: v:6(int!null)
       │    │    │    │    ├── prune: (6)
-      │    │    │    │    └── unfiltered-cols: (6)
+      │    │    │    │    └── unfiltered-cols: (5-7)
       │    │    │    ├── scan mn
       │    │    │    │    ├── columns: m:8(int!null)
       │    │    │    │    ├── key: (8)
       │    │    │    │    ├── prune: (8)
       │    │    │    │    ├── interesting orderings: (+8)
-      │    │    │    │    └── unfiltered-cols: (8)
+      │    │    │    │    └── unfiltered-cols: (8,9)
       │    │    │    └── filters (true)
       │    │    ├── scan xysd
       │    │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
@@ -331,7 +331,7 @@ project
       │    │    ├── scan uv
       │    │    │    ├── columns: u:5(int)
       │    │    │    ├── prune: (5)
-      │    │    │    └── unfiltered-cols: (5)
+      │    │    │    └── unfiltered-cols: (5-7)
       │    │    └── filters
       │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    │              ├── variable: u:5 [type=int]
@@ -431,7 +431,7 @@ project
       │    └── scan uv
       │         ├── columns: u:5(int)
       │         ├── prune: (5)
-      │         └── unfiltered-cols: (5)
+      │         └── unfiltered-cols: (5-7)
       └── filters (true)
 
 # Semi-join-apply.
@@ -491,13 +491,13 @@ semi-join-apply
  │    ├── scan uv
  │    │    ├── columns: v:6(int!null)
  │    │    ├── prune: (6)
- │    │    └── unfiltered-cols: (6)
+ │    │    └── unfiltered-cols: (5-7)
  │    ├── scan mn
  │    │    ├── columns: m:8(int!null)
  │    │    ├── key: (8)
  │    │    ├── prune: (8)
  │    │    ├── interesting orderings: (+8)
- │    │    └── unfiltered-cols: (8)
+ │    │    └── unfiltered-cols: (8,9)
  │    └── filters
  │         ├── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
  │         │    ├── variable: x:1 [type=int]
@@ -527,7 +527,7 @@ anti-join (hash)
  ├── scan uv
  │    ├── columns: u:5(int)
  │    ├── prune: (5)
- │    └── unfiltered-cols: (5)
+ │    └── unfiltered-cols: (5-7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
            ├── variable: x:1 [type=int]
@@ -769,7 +769,7 @@ anti-join (hash)
  ├── scan uv
  │    ├── columns: u:2(int)
  │    ├── prune: (2)
- │    └── unfiltered-cols: (2)
+ │    └── unfiltered-cols: (2-4)
  └── filters
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
            ├── variable: u:2 [type=int]
@@ -1661,7 +1661,7 @@ inner-join (hash)
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
  │    ├── prune: (5,6)
- │    └── unfiltered-cols: (5,6)
+ │    └── unfiltered-cols: (5-7)
  └── filters
       └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── variable: x:1 [type=int]
@@ -1944,7 +1944,7 @@ INNER JOIN (SELECT * FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x) f(x) ON r1 
 ----
 inner-join (hash)
  ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null) x:9(int!null) y:10(int) s:11(string) d:12(decimal!null)
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (9)-->(10-12), (11,12)~~>(9,10), (5)==(3,9), (9)==(3,5), (3)==(5,9)
  ├── prune: (1,2,4,6-8,10-12)
@@ -1986,6 +1986,52 @@ inner-join (hash)
       └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
            ├── variable: r1:3 [type=int]
            └── variable: xysd.x:5 [type=int]
+
+norm
+SELECT * FROM fk
+INNER JOIN (SELECT xysd.x, a.x AS t FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x) ON r1 = t
+----
+inner-join (hash)
+ ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:5(int!null) t:9(int!null)
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (5)==(3,9), (9)==(3,5), (3)==(5,9)
+ ├── prune: (1,2,4)
+ ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (+9)
+ ├── scan fk
+ │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── prune: (1-4)
+ │    ├── interesting orderings: (+1) (+3,+1) (+4,+1)
+ │    └── unfiltered-cols: (1-4)
+ ├── inner-join (hash)
+ │    ├── columns: xysd.x:5(int!null) a.x:9(int!null)
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    ├── key: (9)
+ │    ├── fd: (5)==(9), (9)==(5)
+ │    ├── interesting orderings: (+5) (+9)
+ │    ├── unfiltered-cols: (5-12)
+ │    ├── scan xysd
+ │    │    ├── columns: xysd.x:5(int!null)
+ │    │    ├── key: (5)
+ │    │    ├── prune: (5)
+ │    │    ├── interesting orderings: (+5)
+ │    │    └── unfiltered-cols: (5-8)
+ │    ├── scan a
+ │    │    ├── columns: a.x:9(int!null)
+ │    │    ├── key: (9)
+ │    │    ├── prune: (9)
+ │    │    ├── interesting orderings: (+9)
+ │    │    └── unfiltered-cols: (9-12)
+ │    └── filters
+ │         └── eq [type=bool, outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+ │              ├── variable: xysd.x:5 [type=int]
+ │              └── variable: a.x:9 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+           ├── variable: r1:3 [type=int]
+           └── variable: a.x:9 [type=int]
 
 # Case with an equality with a synthesized column.
 norm
@@ -2180,7 +2226,7 @@ inner-join (hash)
  │    ├── columns: r1:1(int!null) r2:2(int) r3:3(int!null)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2,+3)
- │    └── unfiltered-cols: (1-3)
+ │    └── unfiltered-cols: (1-4)
  ├── scan abc
  │    ├── columns: a:5(int!null) b:6(int!null) c:7(int!null)
  │    ├── key: (5-7)
@@ -2238,6 +2284,40 @@ inner-join (hash)
       └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
            ├── variable: r3:3 [type=int]
            └── variable: c:7 [type=int]
+
+# Case with a not-null multi-column foreign key and an equality on only one of
+# the foreign key columns.
+norm
+SELECT *
+FROM (SELECT r2 FROM ref WHERE r2 IS NOT NULL)
+INNER JOIN abc
+ON r2 = b
+----
+inner-join (hash)
+ ├── columns: r2:2(int!null) a:5(int!null) b:6(int!null) c:7(int!null)
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── fd: (2)==(6), (6)==(2)
+ ├── prune: (5,7)
+ ├── interesting orderings: (+5,+6,+7)
+ ├── select
+ │    ├── columns: r2:2(int!null)
+ │    ├── scan ref
+ │    │    ├── columns: r2:2(int)
+ │    │    └── prune: (2)
+ │    └── filters
+ │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │              ├── variable: r2:2 [type=int]
+ │              └── null [type=unknown]
+ ├── scan abc
+ │    ├── columns: a:5(int!null) b:6(int!null) c:7(int!null)
+ │    ├── key: (5-7)
+ │    ├── prune: (5-7)
+ │    ├── interesting orderings: (+5,+6,+7)
+ │    └── unfiltered-cols: (5-7)
+ └── filters
+      └── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+           ├── variable: r2:2 [type=int]
+           └── variable: b:6 [type=int]
 
 exec-ddl
 CREATE TABLE trade_type (tt_id INT PRIMARY KEY)
@@ -2354,7 +2434,7 @@ limit
  │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null)
  │    │    ├── prune: (1-3)
  │    │    ├── interesting orderings: (+1) (+2) (+3)
- │    │    └── unfiltered-cols: (1-3)
+ │    │    └── unfiltered-cols: (1-4)
  │    └── filters
  │         ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  │         │    ├── variable: st_id:5 [type=int]
@@ -2366,3 +2446,45 @@ limit
  │              ├── variable: s_symb:7 [type=int]
  │              └── variable: t_s_symb:3 [type=int]
  └── const: 50 [type=int]
+
+# Regression test for #50059.
+exec-ddl
+CREATE TABLE parent (a INT NOT NULL UNIQUE, b INT NOT NULL UNIQUE)
+----
+
+exec-ddl
+CREATE TABLE child (
+  r_a INT NOT NULL REFERENCES parent(a),
+  r_b INT NOT NULL REFERENCES parent(b)
+)
+----
+
+# LeftJoin shouldn't be simplified.
+norm
+SELECT * FROM child LEFT JOIN parent ON r_a = a AND r_b = b
+----
+left-join (hash)
+ ├── columns: r_a:1(int!null) r_b:2(int!null) a:4(int) b:5(int)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ ├── fd: (4)-->(5), (5)-->(4)
+ ├── reject-nulls: (4,5)
+ ├── interesting orderings: (+1) (+2) (+4) (+5)
+ ├── scan child
+ │    ├── columns: r_a:1(int!null) r_b:2(int!null)
+ │    ├── prune: (1,2)
+ │    ├── interesting orderings: (+1) (+2)
+ │    └── unfiltered-cols: (1-3)
+ ├── scan parent
+ │    ├── columns: a:4(int!null) b:5(int!null)
+ │    ├── key: (5)
+ │    ├── fd: (4)-->(5), (5)-->(4)
+ │    ├── prune: (4,5)
+ │    ├── interesting orderings: (+4) (+5)
+ │    └── unfiltered-cols: (4-6)
+ └── filters
+      ├── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      │    ├── variable: r_a:1 [type=int]
+      │    └── variable: a:4 [type=int]
+      └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+           ├── variable: r_b:2 [type=int]
+           └── variable: b:5 [type=int]
