@@ -53,18 +53,14 @@ func genSelectIn(inputFileContents string, wr io.Writer) error {
 		func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
 			if b, ok := customizer.(cmpOpTypeCustomizer); ok {
 				lawo.AssignFunc = func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-					cmp := b.getCmpOpCompareFunc()("cmpResult", leftElem, rightElem, leftCol, rightCol)
+					cmp := b.getCmpOpCompareFunc()(targetElem, leftElem, rightElem, leftCol, rightCol)
 					if cmp == "" {
 						return ""
 					}
-					args := map[string]string{"Target": targetElem, "Cmp": cmp}
+					args := map[string]string{"Cmp": cmp}
 					buf := strings.Builder{}
 					t := template.Must(template.New("").Parse(`
-										{
-											var cmpResult int
 											{{.Cmp}}
-											{{.Target}} = cmpResult
-										}
 									`))
 					if err := t.Execute(&buf, args); err != nil {
 						colexecerror.InternalError(err)
