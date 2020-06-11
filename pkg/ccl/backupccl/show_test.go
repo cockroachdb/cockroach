@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl_test
+package backupccl
 
 import (
 	"fmt"
@@ -26,13 +26,13 @@ func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 11
-	_, tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, tc, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	kvDB := tc.Server(0).DB()
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, initNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
-	const full, inc, inc2 = localFoo + "/full", localFoo + "/inc", localFoo + "/inc2"
+	const full, inc, inc2 = LocalFoo + "/full", LocalFoo + "/inc", LocalFoo + "/inc2"
 
 	beforeTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
@@ -95,7 +95,7 @@ func TestShowBackup(t *testing.T) {
 		{"users", incTS, inc2TS, "3"},
 	}, res)
 
-	const details = localFoo + "/details"
+	const details = LocalFoo + "/details"
 	sqlDB.Exec(t, `CREATE TABLE data.details1 (c INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO data.details1 (SELECT generate_series(1, 100))`)
 	sqlDB.Exec(t, `ALTER TABLE data.details1 SPLIT AT VALUES (1), (42)`)
@@ -136,7 +136,7 @@ func TestShowBackup(t *testing.T) {
 
 	// Test that tables, views and sequences are all supported.
 	{
-		viewTableSeq := localFoo + "/tableviewseq"
+		viewTableSeq := LocalFoo + "/tableviewseq"
 		sqlDB.Exec(t, `CREATE TABLE data.tableA (a int primary key, b int, INDEX tableA_b_idx (b ASC))`)
 		sqlDB.Exec(t, `CREATE VIEW data.viewA AS SELECT a from data.tableA`)
 		sqlDB.Exec(t, `CREATE SEQUENCE data.seqA START 1 INCREMENT 2 MAXVALUE 20`)
@@ -178,7 +178,7 @@ func TestShowBackup(t *testing.T) {
 	// Test that foreign keys that reference tables that are in the backup
 	// are included.
 	{
-		includedFK := localFoo + "/includedFK"
+		includedFK := LocalFoo + "/includedFK"
 		sqlDB.Exec(t, `CREATE TABLE data.FKSrc (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE data.FKRefTable (a INT PRIMARY KEY, B INT REFERENCES data.FKSrc(a))`)
 		sqlDB.Exec(t, `CREATE DATABASE data2`)
@@ -217,7 +217,7 @@ func TestShowBackup(t *testing.T) {
 	// Foreign keys that were not included in the backup are not mentioned in
 	// the create statement.
 	{
-		missingFK := localFoo + "/missingFK"
+		missingFK := LocalFoo + "/missingFK"
 		sqlDB.Exec(t, `BACKUP data2.FKRefTable TO $1;`, missingFK)
 
 		want := `CREATE TABLE fkreftable (
@@ -236,28 +236,28 @@ func TestShowBackup(t *testing.T) {
 	}
 
 	{
-		full_cluster := localFoo + "/full_cluster"
-		sqlDB.Exec(t, `BACKUP TO $1;`, full_cluster)
+		fullCluster := LocalFoo + "/full_cluster"
+		sqlDB.Exec(t, `BACKUP TO $1;`, fullCluster)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
-		is_full_cluster := showBackupRows[0][6]
-		if !eqWhitespace(is_full_cluster, "true") {
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, fullCluster))
+		isFullCluster := showBackupRows[0][6]
+		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
 
-		full_cluster_inc := localFoo + "/full_cluster_inc"
-		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, full_cluster_inc, full_cluster)
+		fullClusterInc := LocalFoo + "/full_cluster_inc"
+		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, fullClusterInc, fullCluster)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
-		is_full_cluster = showBackupRows[0][6]
-		if !eqWhitespace(is_full_cluster, "true") {
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, fullCluster))
+		isFullCluster = showBackupRows[0][6]
+		if !eqWhitespace(isFullCluster, "true") {
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
 	}
 
 	// Show privileges of descriptors that are backed up.
 	{
-		showPrivs := localFoo + "/show_privs"
+		showPrivs := LocalFoo + "/show_privs"
 		sqlDB.Exec(t, `CREATE TABLE data.top_secret (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t, `CREATE USER agent_bond`)
 		sqlDB.Exec(t, `CREATE USER agent_thomas`)

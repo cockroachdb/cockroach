@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl_test
+package backupccl
 
 import (
 	"context"
@@ -131,15 +131,15 @@ func restoreMidSchemaChange(backupDir, schemaChangeName string) func(t *testing.
 		jobs.DefaultAdoptInterval = 100 * time.Millisecond
 		const numAccounts = 1000
 		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-			initNone, base.TestClusterArgs{ServerArgs: params})
+			InitNone, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		symlink := filepath.Join(dir, "foo")
 		err := os.Symlink(backupDir, symlink)
 		require.NoError(t, err)
 		sqlDB.Exec(t, "USE defaultdb")
 		restoreQuery := fmt.Sprintf("RESTORE defaultdb.* from $1")
-		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", localFoo))
-		sqlDB.Exec(t, restoreQuery, localFoo)
+		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", LocalFoo))
+		sqlDB.Exec(t, restoreQuery, LocalFoo)
 		verify(t, schemaChangeName, sqlDB)
 	}
 }
