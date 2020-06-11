@@ -430,3 +430,15 @@ SELECT '294276-12-31 23:59:59.999999'::TIMESTAMP(0)
 
 statement ok
 DROP TABLE regression_46973
+
+subtest regression_extract_epoch_timestamptz
+
+query R
+set time zone 'Europe/Berlin'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00')
+----
+1.28910594e+09
+
+query R
+set time zone 'UTC'; select extract(epoch from TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00')
+----
+1.28910594e+09
