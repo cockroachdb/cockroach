@@ -177,7 +177,7 @@ func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) bool {
 // See distance_test.go for examples of the "truer" distance values.
 // Since we aim to be compatible with PostGIS, we adopt the same approach.
 func distanceGeographyRegions(
-	spheroid geographiclib.Spheroid,
+	spheroid *geographiclib.Spheroid,
 	useSphereOrSpheroid UseSphereOrSpheroid,
 	aRegions []s2.Region,
 	bRegions []s2.Region,
@@ -215,7 +215,7 @@ func distanceGeographyRegions(
 // geographyMinDistanceUpdater finds the minimum distance using a sphere.
 // Methods will return early if it finds a minimum distance <= stopAfterLE.
 type geographyMinDistanceUpdater struct {
-	spheroid            geographiclib.Spheroid
+	spheroid            *geographiclib.Spheroid
 	useSphereOrSpheroid UseSphereOrSpheroid
 	minEdge             s2.Edge
 	minD                s1.ChordAngle
@@ -227,7 +227,7 @@ var _ geodist.DistanceUpdater = (*geographyMinDistanceUpdater)(nil)
 // newGeographyMinDistanceUpdater returns a new geographyMinDistanceUpdater with the
 // correct arguments set up.
 func newGeographyMinDistanceUpdater(
-	spheroid geographiclib.Spheroid, useSphereOrSpheroid UseSphereOrSpheroid, stopAfterLE float64,
+	spheroid *geographiclib.Spheroid, useSphereOrSpheroid UseSphereOrSpheroid, stopAfterLE float64,
 ) *geographyMinDistanceUpdater {
 	multiplier := 1.0
 	if useSphereOrSpheroid == UseSpheroid {

@@ -10,12 +10,13 @@
 
 // Package geoprojbase is a minimal dependency package that contains
 // basic metadata and data structures for SRIDs and their CRS
-// transofmrations.
+// transformations.
 package geoprojbase
 
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 )
 
@@ -62,6 +63,8 @@ type ProjInfo struct {
 
 	// IsLatLng stores whether the projection is a LatLng based projection (denormalized from above)
 	IsLatLng bool
+	// The spheroid represented by the SRID.
+	Spheroid *geographiclib.Spheroid
 }
 
 // Projection returns the ProjInfo identifier for the given SRID, as well as an bool

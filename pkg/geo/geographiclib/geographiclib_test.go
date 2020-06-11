@@ -22,7 +22,7 @@ import (
 func TestInverse(t *testing.T) {
 	testCases := []struct {
 		desc     string
-		spheroid Spheroid
+		spheroid *Spheroid
 		a, b     s2.LatLng
 
 		s12, az1, az2 float64
@@ -50,7 +50,7 @@ func TestInverse(t *testing.T) {
 func TestInverseBatch(t *testing.T) {
 	testCases := []struct {
 		desc     string
-		spheroid Spheroid
+		spheroid *Spheroid
 		points   []s2.Point
 		sum      float64
 	}{
@@ -77,7 +77,7 @@ func TestInverseBatch(t *testing.T) {
 func TestAreaAndPerimeter(t *testing.T) {
 	testCases := []struct {
 		desc      string
-		spheroid  Spheroid
+		spheroid  *Spheroid
 		points    []s2.Point
 		area      float64
 		perimeter float64
@@ -107,7 +107,7 @@ func TestAreaAndPerimeter(t *testing.T) {
 func TestProject(t *testing.T) {
 	testCases := []struct {
 		desc     string
-		spheroid Spheroid
+		spheroid *Spheroid
 		point    s2.LatLng
 		distance float64
 		azimuth  float64
