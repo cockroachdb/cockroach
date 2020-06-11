@@ -1609,6 +1609,32 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 	return nil
 }
 
+// A firstRangeMissingError indicates that the first range has not yet
+// been gossiped. This will be the case for a node which hasn't yet
+// joined the gossip network.
+type firstRangeMissingError struct{}
+
+// Error is part of the error interface.
+func (f firstRangeMissingError) Error() string {
+	return "the descriptor for the first range is not available via gossip"
+}
+
+// GetFirstRangeDescriptor implements kvcoord.FirstRangeProvider.
+func (g *Gossip) GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error) {
+	desc := &roachpb.RangeDescriptor{}
+	if err := g.GetInfoProto(KeyFirstRangeDescriptor, desc); err != nil {
+		return nil, firstRangeMissingError{}
+	}
+	return desc, nil
+}
+
+// OnFirstRangeChanged implements kvcoord.FirstRangeProvider.
+func (g *Gossip) OnFirstRangeChanged(cb func(roachpb.Value)) {
+	g.RegisterCallback(KeyFirstRangeDescriptor, func(_ string, value roachpb.Value) {
+		cb(value)
+	})
+}
+
 // MakeExposedGossip initializes a DeprecatedGossip instance which exposes a
 // wrapped Gossip instance via Optional(). This is used on SQL servers running
 // inside of a KV server (i.e. single-tenant deployments).

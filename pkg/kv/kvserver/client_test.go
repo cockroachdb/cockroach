@@ -151,15 +151,17 @@ func createTestStoreWithOpts(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx: ac,
-		Clock:      storeCfg.Clock,
-		Settings:   storeCfg.Settings,
-		RPCContext: rpcContext,
+		AmbientCtx:         ac,
+		Settings:           storeCfg.Settings,
+		Clock:              storeCfg.Clock,
+		NodeDescs:          storeCfg.Gossip,
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retryOpts,
+		FirstRangeProvider: storeCfg.Gossip,
 		TestingKnobs: kvcoord.ClientTestingKnobs{
 			TransportFactory: kvcoord.SenderTransportFactory(tracer, stores),
 		},
-		RPCRetryOptions: &retryOpts,
-	}, storeCfg.Gossip)
+	})
 
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -782,6 +784,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 	m.distSenders[idx] = kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      m.clocks[idx],
+		NodeDescs:  m.gossips[idx],
 		RPCContext: m.rpcContext,
 		RangeDescriptorDB: mtcRangeDescriptorDB{
 			multiTestContext: m,
@@ -792,7 +795,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 			TransportFactory: m.kvTransportFactory,
 		},
 		RPCRetryOptions: &retryOpts,
-	}, m.gossips[idx])
+	})
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,

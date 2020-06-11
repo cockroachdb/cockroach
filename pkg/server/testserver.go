@@ -498,16 +498,18 @@ func makeSQLServerArgs(
 		gossip.AddressResolver(g), // TODO(nvb): break gossip dep
 	)
 	dsCfg := kvcoord.DistSenderConfig{
-		AmbientCtx:        baseCfg.AmbientCtx,
-		Settings:          st,
-		Clock:             clock,
-		RPCRetryOptions:   &rpcRetryOptions,
-		RPCContext:        rpcContext,
-		RangeDescriptorDB: nil, // use DistSender itself
-		NodeDialer:        nodeDialer,
-		TestingKnobs:      dsKnobs,
+		AmbientCtx:         baseCfg.AmbientCtx,
+		Settings:           st,
+		Clock:              clock,
+		NodeDescs:          g,
+		RPCRetryOptions:    &rpcRetryOptions,
+		RPCContext:         rpcContext,
+		NodeDialer:         nodeDialer,
+		RangeDescriptorDB:  nil, // use DistSender itself
+		FirstRangeProvider: g,
+		TestingKnobs:       dsKnobs,
 	}
-	ds := kvcoord.NewDistSender(dsCfg, g)
+	ds := kvcoord.NewDistSender(dsCfg)
 
 	var clientKnobs kvcoord.ClientTestingKnobs
 	if p, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
