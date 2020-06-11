@@ -123,6 +123,25 @@ func ResolveMutableExistingTableObject(
 	return desc.(*sqlbase.MutableTableDescriptor), nil
 }
 
+// ResolveMutableType resolves a type descriptor for mutable access. It
+// returns the resolved descriptor, as well as the fully qualified resolved
+// object name.
+func ResolveMutableType(
+	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
+) (*tree.TypeName, *sqlbase.MutableTypeDescriptor, error) {
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
+		RequireMutable:    true,
+		DesiredObjectKind: tree.TypeObject,
+	}
+	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)
+	if err != nil || desc == nil {
+		return nil, nil, err
+	}
+	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(un.Object()))
+	return &tn, desc.(*sqlbase.MutableTypeDescriptor), nil
+}
+
 // ResolveExistingObject resolves an object with the given flags.
 func ResolveExistingObject(
 	ctx context.Context,

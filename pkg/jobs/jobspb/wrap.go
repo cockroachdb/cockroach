@@ -64,6 +64,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeCreateStats
 	case *Payload_SchemaChangeGC:
 		return TypeSchemaChangeGC
+	case *Payload_TypeSchemaChange:
+		return TypeTypeSchemaChange
 	default:
 		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -92,6 +94,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_CreateStats{CreateStats: &d}
 	case SchemaChangeGCProgress:
 		return &Progress_SchemaChangeGC{SchemaChangeGC: &d}
+	case TypeSchemaChangeProgress:
+		return &Progress_TypeSchemaChange{TypeSchemaChange: &d}
 	default:
 		panic(fmt.Sprintf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -115,6 +119,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.CreateStats
 	case *Payload_SchemaChangeGC:
 		return *d.SchemaChangeGC
+	case *Payload_TypeSchemaChange:
+		return *d.TypeSchemaChange
 	default:
 		return nil
 	}
@@ -138,6 +144,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.CreateStats
 	case *Progress_SchemaChangeGC:
 		return *d.SchemaChangeGC
+	case *Progress_TypeSchemaChange:
+		return *d.TypeSchemaChange
 	default:
 		return nil
 	}
@@ -174,6 +182,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_CreateStats{CreateStats: &d}
 	case SchemaChangeGCDetails:
 		return &Payload_SchemaChangeGC{SchemaChangeGC: &d}
+	case TypeSchemaChangeDetails:
+		return &Payload_TypeSchemaChange{TypeSchemaChange: &d}
 	default:
 		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
