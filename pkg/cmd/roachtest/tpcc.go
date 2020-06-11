@@ -34,12 +34,21 @@ import (
 	"github.com/lib/pq"
 )
 
+type tpccSetupType int
+
+const (
+	usingFixture tpccSetupType = iota
+	usingInit
+)
+
 type tpccOptions struct {
-	Warehouses int
-	Extra      string
-	Chaos      func() Chaos                // for late binding of stopper
-	During     func(context.Context) error // for running a function during the test
-	Duration   time.Duration
+	Warehouses     int
+	ExtraRunArgs   string
+	ExtraSetupArgs string
+	Chaos          func() Chaos                // for late binding of stopper
+	During         func(context.Context) error // for running a function during the test
+	Duration       time.Duration
+	SetupType      tpccSetupType
 
 	// The CockroachDB versions to deploy. The first one indicates the first node,
 	// etc. To use the main binary, specify "". When Versions is nil, it defaults
@@ -87,23 +96,23 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) st
 }
 
 func setupTPCC(
-	ctx context.Context, t *test, c *cluster, warehouses int, versions []string,
+	ctx context.Context, t *test, c *cluster, opts tpccOptions,
 ) (crdbNodes, workloadNode nodeListOption) {
 	crdbNodes = c.Range(1, c.spec.NodeCount-1)
 	workloadNode = c.Node(c.spec.NodeCount)
 	if c.isLocal() {
-		warehouses = 1
+		opts.Warehouses = 1
 	}
 
-	if n := len(versions); n == 0 {
-		versions = make([]string, c.spec.NodeCount-1)
+	if n := len(opts.Versions); n == 0 {
+		opts.Versions = make([]string, c.spec.NodeCount-1)
 	} else if n != c.spec.NodeCount-1 {
-		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, versions)
+		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, opts.Versions)
 	}
 
 	{
 		var regularNodes []option
-		for i, v := range versions {
+		for i, v := range opts.Versions {
 			if v == "" {
 				regularNodes = append(regularNodes, c.Node(i+1))
 			} else {
@@ -132,8 +141,16 @@ func setupTPCC(
 		defer db.Close()
 		c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
-		t.Status("loading fixture")
-		c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, warehouses, ""))
+		switch opts.SetupType {
+		case usingFixture:
+			t.Status("loading fixture")
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, opts.ExtraSetupArgs))
+		case usingInit:
+			t.Status("initializing tables")
+			cmd := fmt.Sprintf("./workload init tpcc --warehouses=%d %s {pgurl:1}",
+				opts.Warehouses, opts.ExtraSetupArgs)
+			c.Run(ctx, workloadNode, cmd)
+		}
 		t.Status("")
 	}()
 	return crdbNodes, workloadNode
@@ -146,14 +163,14 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		opts.Duration = time.Minute
 		rampDuration = 30 * time.Second
 	}
-	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts.Warehouses, opts.Versions)
+	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
-				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
+				opts.ExtraRunArgs+" --ramp=%s --duration=%s {pgurl:1-%d}",
 			opts.Warehouses, rampDuration, opts.Duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
@@ -234,6 +251,7 @@ func registerTPCC(r *testRegistry) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
+				SetupType:  usingFixture,
 			})
 		},
 	})
@@ -267,6 +285,7 @@ func registerTPCC(r *testRegistry) {
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
 				Versions:   []string{oldV, "", oldV, ""},
+				SetupType:  usingFixture,
 			})
 			// TODO(tbg): run another TPCC with the final binaries here and
 			// teach TPCC to re-use the dataset (seems easy enough) to at least
@@ -280,9 +299,10 @@ func registerTPCC(r *testRegistry) {
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: 1,
-				Duration:   10 * time.Minute,
-				Extra:      "--wait=false",
+				Warehouses:   1,
+				Duration:     10 * time.Minute,
+				ExtraRunArgs: "--wait=false",
+				SetupType:    usingFixture,
 			})
 		},
 	})
@@ -298,6 +318,7 @@ func registerTPCC(r *testRegistry) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   6 * 24 * time.Hour,
+				SetupType:  usingFixture,
 			})
 		},
 	})
@@ -310,9 +331,9 @@ func registerTPCC(r *testRegistry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: 100,
-				Duration:   duration,
-				Extra:      "--wait=false --tolerate-errors",
+				Warehouses:   100,
+				Duration:     duration,
+				ExtraRunArgs: "--wait=false --tolerate-errors",
 				Chaos: func() Chaos {
 					return Chaos{
 						Timer: Periodic{
@@ -324,6 +345,7 @@ func registerTPCC(r *testRegistry) {
 						DrainAndQuit: false,
 					}
 				},
+				SetupType: usingFixture,
 			})
 		},
 	})

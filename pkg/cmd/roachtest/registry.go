@@ -96,6 +96,7 @@ func registerTests(r *testRegistry) {
 	registerYCSB(r)
 	registerTPCHBench(r)
 	registerOverload(r)
+	registerTPCCInterleaved(r)
 }
 
 func registerBenchmarks(r *testRegistry) {
