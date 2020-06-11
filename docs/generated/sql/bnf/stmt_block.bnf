@@ -1021,7 +1021,7 @@ alter_type_stmt ::=
 	'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'SCONST' opt_add_val_placement
 	| 'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'IF' 'NOT' 'EXISTS' 'SCONST' opt_add_val_placement
 	| 'ALTER' 'TYPE' type_name 'RENAME' 'VALUE' 'SCONST' 'TO' 'SCONST'
-	| 'ALTER' 'TYPE' type_name 'RENAME' 'TO' type_name
+	| 'ALTER' 'TYPE' type_name 'RENAME' 'TO' name
 	| 'ALTER' 'TYPE' type_name 'SET' 'SCHEMA' schema_name
 
 role_or_group_or_user ::=

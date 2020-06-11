@@ -1934,12 +1934,12 @@ alter_type_stmt:
       },
     }
   }
-| ALTER TYPE type_name RENAME TO type_name
+| ALTER TYPE type_name RENAME TO name
   {
     $$.val = &tree.AlterType{
       Type: $3.unresolvedObjectName(),
       Cmd: &tree.AlterTypeRename{
-        NewName: $6.unresolvedObjectName(),
+        NewName: $6,
       },
     }
   }

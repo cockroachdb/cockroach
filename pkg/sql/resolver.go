@@ -653,6 +653,18 @@ func getTableAsTableName(
 	return tableName, nil
 }
 
+// ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
+func (p *planner) ResolveMutableTypeDescriptor(
+	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
+) (*sqlbase.MutableTypeDescriptor, error) {
+	tn, desc, err := resolver.ResolveMutableType(ctx, p, name, required)
+	if err != nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, tn)
+	return desc, nil
+}
+
 // The versions below are part of the work for #34240.
 // TODO(radu): clean these up when everything is switched over.
 
