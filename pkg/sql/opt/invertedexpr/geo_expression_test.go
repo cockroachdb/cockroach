@@ -28,14 +28,14 @@ func TestUnionKeySpansToProto(t *testing.T) {
 	}
 	cases := []testCase{
 		{
-			uks: []geoindex.KeySpan{{Start: 5, End: 6}, {Start: 10, End: 11}, {Start: 1, End: 3}},
+			uks: []geoindex.KeySpan{{Start: 5, End: 5}, {Start: 10, End: 10}, {Start: 1, End: 3}},
 			expected: "spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
 				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
-				"spans_to_read:<start:\"\\211\" end:\"\\213\" > " +
+				"spans_to_read:<start:\"\\211\" end:\"\\214\" > " +
 				"node:<" +
 				"factored_union_spans:<start:\"\\215\" end:\"\\216\" > " +
 				"factored_union_spans:<start:\"\\222\" end:\"\\223\" > " +
-				"factored_union_spans:<start:\"\\211\" end:\"\\213\" > > ",
+				"factored_union_spans:<start:\"\\211\" end:\"\\214\" > > ",
 		},
 		{
 			uks:      nil,

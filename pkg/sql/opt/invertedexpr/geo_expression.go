@@ -12,6 +12,7 @@ package invertedexpr
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -26,19 +27,23 @@ import (
 //
 // TODO(sumeer): change geoindex to produce SpanExpressionProtos directly.
 
-func geoKeyToEncInvertedVal(k geoindex.Key) EncInvertedVal {
+func geoKeyToEncInvertedVal(k geoindex.Key, end bool) EncInvertedVal {
 	dint := tree.DInt(k)
 	encoded, err := sqlbase.EncodeTableKey(nil, &dint, encoding.Ascending)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected encoding error: %d", k))
+	}
+	if end {
+		// geoindex.KeySpan.End is inclusive, while InvertedSpan.end is exclusive.
+		encoded = roachpb.Key(encoded).PrefixEnd()
 	}
 	return encoded
 }
 
 func geoToSpan(span geoindex.KeySpan) SpanExpressionProto_Span {
 	return SpanExpressionProto_Span{
-		Start: geoKeyToEncInvertedVal(span.Start),
-		End:   geoKeyToEncInvertedVal(span.End),
+		Start: geoKeyToEncInvertedVal(span.Start, false),
+		End:   geoKeyToEncInvertedVal(span.End, true),
 	}
 }
 
@@ -69,7 +74,7 @@ func GeoRPKeyExprToProto(rpExpr geoindex.RPKeyExpr) (*SpanExpressionProto, error
 	for _, elem := range rpExpr {
 		// The keys in the RPKeyExpr are unique.
 		if key, ok := elem.(geoindex.Key); ok {
-			spansToRead = append(spansToRead, geoToSpan(geoindex.KeySpan{Start: key, End: key + 1}))
+			spansToRead = append(spansToRead, geoToSpan(geoindex.KeySpan{Start: key, End: key}))
 		}
 	}
 	var stack []*SpanExpressionProto_Node
@@ -78,7 +83,7 @@ func GeoRPKeyExprToProto(rpExpr geoindex.RPKeyExpr) (*SpanExpressionProto, error
 		case geoindex.Key:
 			stack = append(stack, &SpanExpressionProto_Node{
 				FactoredUnionSpans: []SpanExpressionProto_Span{
-					geoToSpan(geoindex.KeySpan{Start: e, End: e + 1})},
+					geoToSpan(geoindex.KeySpan{Start: e, End: e})},
 			})
 		case geoindex.RPSetOperator:
 			if len(stack) < 2 {
