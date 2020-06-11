@@ -303,7 +303,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
 				// of connections which can lead to OOM issues (see #40566).
-				Extra: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
+				ExtraRunArgs: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
 				During: func(ctx context.Context) error {
 					return runAndLogStmts(ctx, t, c, "addindex", []string{
 						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
@@ -311,7 +311,8 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
 					})
 				},
-				Duration: length,
+				Duration:  length,
+				SetupType: usingFixture,
 			})
 		},
 		MinVersion: "v19.1.0",
@@ -417,7 +418,7 @@ func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Du
 				Warehouses: warehouses,
 				// We limit the number of workers because the default results in a lot
 				// of connections which can lead to OOM issues (see #40566).
-				Extra: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
+				ExtraRunArgs: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
 				During: func(ctx context.Context) error {
 					if t.IsBuildVersion(`v19.2.0`) {
 						if err := runAndLogStmts(ctx, t, c, "during-schema-changes-19.2", []string{
@@ -455,7 +456,8 @@ func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Du
 						`DROP TABLE tpcc.readytodrop CASCADE;`,
 					})
 				},
-				Duration: length,
+				Duration:  length,
+				SetupType: usingFixture,
 			})
 		},
 		MinVersion: "v19.1.0",
