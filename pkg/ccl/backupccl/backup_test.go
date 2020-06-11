@@ -2809,7 +2809,7 @@ func TestBackupEncrypted(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER neverappears`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING cluster.organization = 'neverappears'`)
 
-	// Full cluster-backup to capture all possible metadata.
+	// Cluster backup to capture all possible metadata.
 	backupLoc1 := localFoo + "/x?COCKROACH_LOCALITY=default"
 	backupLoc2 := localFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
 	backupLoc1inc := localFoo + "/inc1/x?COCKROACH_LOCALITY=default"

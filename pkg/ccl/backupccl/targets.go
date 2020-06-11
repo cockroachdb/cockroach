@@ -532,7 +532,7 @@ func ResolveTargetsToDescriptors(
 	}
 
 	if descriptorCoverage == tree.AllDescriptors {
-		return fullClusterTargetsBackup(allDescs)
+		return clusterTargetsBackup(allDescs)
 	}
 
 	var matched descriptorsMatched
@@ -547,62 +547,62 @@ func ResolveTargetsToDescriptors(
 	return matched.descs, matched.expandedDB, nil
 }
 
-// fullClusterTargetsBackup returns the same descriptors referenced in
-// fullClusterTargets, but rather than returning the entire database
+// clusterTargetsBackup returns the same descriptors referenced in
+// clusterTargets, but rather than returning the entire database
 // descriptor as the second argument, it only returns their IDs.
-func fullClusterTargetsBackup(
+func clusterTargetsBackup(
 	allDescs []sqlbase.Descriptor,
 ) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
-	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	entireClusterDescs, entireClusterDBs, err := clusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	fullClusterDBIDs := make([]sqlbase.ID, 0)
-	for _, desc := range fullClusterDBs {
-		fullClusterDBIDs = append(fullClusterDBIDs, desc.GetID())
+	entireClusterDBIDs := make([]sqlbase.ID, 0)
+	for _, desc := range entireClusterDBs {
+		entireClusterDBIDs = append(entireClusterDBIDs, desc.GetID())
 	}
-	return fullClusterDescs, fullClusterDBIDs, nil
+	return entireClusterDescs, entireClusterDBIDs, nil
 }
 
-// fullClusterTargets returns all of the tableDescriptors to be included in a
-// full cluster backup, and all the user databases.
-func fullClusterTargets(
+// clusterTargets returns all of the tableDescriptors to be included in a
+// cluster backup, and all the user databases.
+func clusterTargets(
 	allDescs []sqlbase.Descriptor,
 ) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
-	fullClusterDescs := make([]sqlbase.Descriptor, 0, len(allDescs))
-	fullClusterDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0)
+	entireClusterDescs := make([]sqlbase.Descriptor, 0, len(allDescs))
+	entireClusterDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0)
 
-	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
-	for _, tableName := range fullClusterSystemTables {
+	systemTablesToBackup := make(map[string]struct{}, len(clusterSystemTables))
+	for _, tableName := range clusterSystemTables {
 		systemTablesToBackup[tableName] = struct{}{}
 	}
 
 	for _, desc := range allDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			dbDesc := sqlbase.NewImmutableDatabaseDescriptor(*dbDesc)
-			fullClusterDescs = append(fullClusterDescs, desc)
+			entireClusterDescs = append(entireClusterDescs, desc)
 			if dbDesc.GetID() != sqlbase.SystemDB.GetID() {
 				// The only database that isn't being fully backed up is the system DB.
-				fullClusterDBs = append(fullClusterDBs, dbDesc)
+				entireClusterDBs = append(entireClusterDBs, dbDesc)
 			}
 		}
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
 			if tableDesc.ParentID == keys.SystemDatabaseID {
-				// Add only the system tables that we plan to include in a full cluster
+				// Add only the system tables that we plan to include in a cluster
 				// backup.
 				if _, ok := systemTablesToBackup[tableDesc.Name]; ok {
-					fullClusterDescs = append(fullClusterDescs, desc)
+					entireClusterDescs = append(entireClusterDescs, desc)
 				}
 			} else {
 				// Add all user tables that are not in a DROP state.
 				if tableDesc.State != sqlbase.TableDescriptor_DROP {
-					fullClusterDescs = append(fullClusterDescs, desc)
+					entireClusterDescs = append(entireClusterDescs, desc)
 				}
 			}
 		}
 	}
-	return fullClusterDescs, fullClusterDBs, nil
+	return entireClusterDescs, entireClusterDBs, nil
 }
 
 func lookupDatabaseID(
@@ -633,21 +633,21 @@ func CheckTableExists(
 	return nil
 }
 
-func fullClusterTargetsRestore(
+func clusterTargetsRestore(
 	allDescs []sqlbase.Descriptor,
 ) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
-	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	entireClusterDescs, entireClusterDBs, err := clusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, err
 	}
-	filteredDescs := make([]sqlbase.Descriptor, 0, len(fullClusterDescs))
-	for _, desc := range fullClusterDescs {
+	filteredDescs := make([]sqlbase.Descriptor, 0, len(entireClusterDescs))
+	for _, desc := range entireClusterDescs {
 		if _, isDefaultDB := sqlbase.DefaultUserDBs[desc.GetName()]; !isDefaultDB && desc.GetID() != keys.SystemDatabaseID {
 			filteredDescs = append(filteredDescs, desc)
 		}
 	}
-	filteredDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0, len(fullClusterDBs))
-	for _, db := range fullClusterDBs {
+	filteredDBs := make([]*sqlbase.ImmutableDatabaseDescriptor, 0, len(entireClusterDBs))
+	for _, db := range entireClusterDBs {
 		if _, isDefaultDB := sqlbase.DefaultUserDBs[db.GetName()]; !isDefaultDB && db.GetID() != keys.SystemDatabaseID {
 			filteredDBs = append(filteredDBs, db)
 		}
@@ -667,7 +667,7 @@ func selectTargets(
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
-		return fullClusterTargetsRestore(allDescs)
+		return clusterTargetsRestore(allDescs)
 	}
 
 	matched, err := descriptorsMatchingTargets(ctx,

@@ -68,7 +68,7 @@ func createEmptyCluster(
 
 // Large test to ensure that all of the system table data is being restored in
 // the new cluster. Ensures that all the moving pieces are working together.
-func TestFullClusterBackup(t *testing.T) {
+func TestClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -210,9 +210,8 @@ func TestFullClusterBackup(t *testing.T) {
 
 	t.Run("ensure that jobs are restored", func(t *testing.T) {
 		// Ensure that the jobs in the RESTORE cluster is a superset of the jobs
-		// that were in the BACKUP cluster (before the full cluster BACKUP job was
-		// run). There may be more jobs now because the restore can run jobs of
-		// its own.
+		// that were in the BACKUP cluster (before the cluster BACKUP job was run).
+		// There may be more jobs now because the restore can run jobs of its own.
 		newJobs := sqlDBRestore.QueryStr(t, "SELECT * FROM system.jobs")
 		for _, oldJob := range preBackupJobs {
 			present := false
@@ -251,7 +250,7 @@ func TestFullClusterBackup(t *testing.T) {
 	})
 }
 
-func TestFullClusterBackupDroppedTables(t *testing.T) {
+func TestClusterBackupDroppedTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -271,7 +270,7 @@ func TestFullClusterBackupDroppedTables(t *testing.T) {
 	}
 }
 
-func TestIncrementalFullClusterBackup(t *testing.T) {
+func TestIncrementalClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -291,9 +290,9 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
 }
 
-// TestEmptyFullClusterResotre ensures that we can backup and restore a full
+// TestEmptyClusterRestore ensures that we can backup and restore a full
 // cluster backup with only metadata (no user data). Regression test for #49573.
-func TestEmptyFullClusterRestore(t *testing.T) {
+func TestEmptyClusterRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
@@ -310,7 +309,7 @@ func TestEmptyFullClusterRestore(t *testing.T) {
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
 }
 
-func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
+func TestDisallowClusterRestoreOnNonFreshCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -322,12 +321,12 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 	sqlDBRestore.Exec(t, `CREATE DATABASE foo`)
 	sqlDBRestore.ExpectErr(
-		t, "pq: full cluster restore can only be run on a cluster with no tables or databases but found 1 descriptors",
+		t, "pq: cluster restore can only be run on a cluster with no tables or databases but found 1 descriptors",
 		`RESTORE FROM $1`, localFoo,
 	)
 }
 
-func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
+func TestDisallowClusterRestoreOfNonFullBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -338,12 +337,12 @@ func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP data.bank TO $1`, localFoo)
 	sqlDBRestore.ExpectErr(
-		t, "pq: full cluster RESTORE can only be used on full cluster BACKUP files",
+		t, "pq: cluster RESTORE can only be used on cluster BACKUP files",
 		`RESTORE FROM $1`, localFoo,
 	)
 }
 
-func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
+func TestAllowNonClusterRestoreOfFullBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -358,7 +357,7 @@ func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, checkResults, sqlDB.QueryStr(t, checkResults))
 }
 
-func TestResotreDatabaseFromFullClusterBackup(t *testing.T) {
+func TestResotreDatabaseFromClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -372,7 +371,7 @@ func TestResotreDatabaseFromFullClusterBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
 }
 
-func TestRestoreSystemTableFromFullClusterBackup(t *testing.T) {
+func TestRestoreSystemTableFromClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -387,7 +386,7 @@ func TestRestoreSystemTableFromFullClusterBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
 }
 
-func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
+func TestCreateDBAndTableIncrementalClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)

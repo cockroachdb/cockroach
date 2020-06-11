@@ -25,7 +25,7 @@ const (
 	RequestedDescriptors DescriptorCoverage = iota
 	// AllDescriptors table coverage means that backup is guaranteed to have all the
 	// relevant data in the cluster. These can only be created by running a
-	// full cluster backup with `BACKUP TO`.
+	// cluster backup with `BACKUP TO`.
 	AllDescriptors
 )
 

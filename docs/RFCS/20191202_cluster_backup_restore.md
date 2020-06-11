@@ -1,4 +1,4 @@
-- Feature Name: Full Cluster Backup/Restore
+- Feature Name: Cluster Backup/Restore*
 - Status: completed
 - Start Date: 2019-12-02
 - Authors: Paul Bardea
@@ -357,7 +357,7 @@ can assume that all system tables included in those backups are safe to restore
   interface for the user to provide these mappings.
 
 - Include `system.eventlog` in a full cluster backup. One reason for not doing
-  this initially is that some event logs may be non-sensical if the table is
+  this initially is that some event logs may be nonsensical if the table is
   restored in a cluster with a different number of nodes.
 
 - Additionally, one further improvement would be allow the restoration of a set
@@ -378,7 +378,7 @@ can assume that all system tables included in those backups are safe to restore
   failure in the middle of the backup. It will clean up the data following the
   normal backup procedures. In the case that there is a failure while updating
   the system tables, the cluster should be started up again. Since we enforce
-  that the cluster we are restoring to has no user data, this is acceptible.
+  that the cluster we are restoring to has no user data, this is acceptable.
 
 # Drawbacks
 
@@ -389,4 +389,7 @@ a full cluster restore when this assumption is violated.
 
 
 [1] Offline tables can however be references when setting zone configs. See
-#40285.
+\#40285.
+
+* This feature was previously named "Full Cluster Backup/Restore", but due to
+* avoid confusion with full backups, was renamed.

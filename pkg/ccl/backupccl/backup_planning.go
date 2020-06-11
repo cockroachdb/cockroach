@@ -54,8 +54,8 @@ const (
 )
 
 // TODO(pbardea): We should move to a model of having the system tables opt-
-// {in,out} of being included in a full cluster backup. See #43781.
-var fullClusterSystemTables = []string{
+// {in,out} of being included in a cluster backup. See #43781.
+var clusterSystemTables = []string{
 	// System config tables.
 	sqlbase.UsersTable.Name,
 	sqlbase.ZonesTable.Name,
@@ -486,7 +486,7 @@ func backupPlanHook(
 
 				if m.DescriptorCoverage == tree.AllDescriptors &&
 					backupStmt.DescriptorCoverage != tree.AllDescriptors {
-					return errors.Errorf("cannot append a backup of specific tables or databases to a full-cluster backup")
+					return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
 				}
 
 				for i := range prev {
@@ -738,6 +738,7 @@ func backupPlanHook(
 				telemetry.Count("backup.encrypted")
 			}
 			if backupStmt.DescriptorCoverage == tree.AllDescriptors {
+				// Note: cluster backup used to be called "full cluster backup".
 				telemetry.Count("backup.targets.full_cluster")
 			}
 		}

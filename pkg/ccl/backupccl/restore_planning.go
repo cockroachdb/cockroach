@@ -249,7 +249,7 @@ func allocateTableRewrites(
 				}
 
 				if table.ParentID == sqlbase.SystemDB.GetID() {
-					// For full cluster backups, put the system tables in the temporary
+					// For cluster backups, put the system tables in the temporary
 					// system table.
 					targetDB = restoreTempSystemDB
 					tableRewrites[table.ID] = &jobspb.RestoreDetails_TableRewrite{ParentID: tempSysDBID}
@@ -348,9 +348,9 @@ func allocateTableRewrites(
 	}
 
 	// tablesToRemap usually contains all tables that are being restored. In a
-	// full cluster restore this should only include the system tables that need
-	// to be remapped to the temporary table. All other tables in a full cluster
-	// backup should have the same ID as they do in the backup.
+	// cluster restore this should only include the system tables that need to be
+	// remapped to the temporary table. All other tables in a cluster backup
+	// should have the same ID as they do in the backup.
 	tablesToRemap := make([]*sqlbase.TableDescriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors {
@@ -706,13 +706,13 @@ func doRestorePlan(
 	}
 
 	// Validate that the table coverage of the backup matches that of the restore.
-	// This prevents FULL CLUSTER backups to be restored as anything but full
-	// cluster restores and vice-versa.
+	// This prevents cluster backups to be restored as anything but cluster
+	// restores and vice-versa.
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
-		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
+		return errors.Errorf("cluster RESTORE can only be used on cluster BACKUP files")
 	}
 
-	// Ensure that no user table descriptors exist for a full cluster restore.
+	// Ensure that no user table descriptors exist for a cluster restore.
 	txn := p.ExecCfg().DB.NewTxn(ctx, "count-user-descs")
 	descCount, err := catalogkv.CountUserDescriptors(ctx, txn, p.ExecCfg().Codec)
 	if err != nil {
@@ -720,7 +720,7 @@ func doRestorePlan(
 	}
 	if descCount != 0 && restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		return errors.Errorf(
-			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors",
+			"cluster restore can only be run on a cluster with no tables or databases but found %d descriptors",
 			descCount,
 		)
 	}

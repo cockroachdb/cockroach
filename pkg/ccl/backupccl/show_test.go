@@ -37,7 +37,7 @@ func TestShowBackup(t *testing.T) {
 	beforeTS := sqlDB.QueryStr(t, `SELECT now()::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 
-	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
+	res := sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_cluster_backup FROM [SHOW BACKUP $1]`, full)
 	require.Equal(t, [][]string{{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"}}, res)
 
 	// Mess with half the rows.
@@ -54,7 +54,7 @@ func TestShowBackup(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2`, incTS), inc, full)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
+	res = sqlDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows, is_cluster_backup FROM [SHOW BACKUP $1]`, full)
 	require.Equal(t, [][]string{
 		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
 		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
@@ -236,22 +236,22 @@ func TestShowBackup(t *testing.T) {
 	}
 
 	{
-		full_cluster := localFoo + "/full_cluster"
-		sqlDB.Exec(t, `BACKUP TO $1;`, full_cluster)
+		cluster_full := localFoo + "/cluster_full"
+		sqlDB.Exec(t, `BACKUP TO $1;`, cluster_full)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
-		is_full_cluster := showBackupRows[0][6]
-		if !eqWhitespace(is_full_cluster, "true") {
-			t.Fatal("expected show backup to indicate that backup was full cluster")
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, cluster_full))
+		is_cluster_backup := showBackupRows[0][6]
+		if !eqWhitespace(is_cluster_backup, "true") {
+			t.Fatal("expected show backup to indicate that backup was a cluster backup")
 		}
 
-		full_cluster_inc := localFoo + "/full_cluster_inc"
-		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, full_cluster_inc, full_cluster)
+		cluster_inc := localFoo + "/cluster_inc"
+		sqlDB.Exec(t, `BACKUP TO $1 INCREMENTAL FROM $2;`, cluster_inc, cluster_full)
 
-		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, full_cluster))
-		is_full_cluster = showBackupRows[0][6]
-		if !eqWhitespace(is_full_cluster, "true") {
-			t.Fatal("expected show backup to indicate that backup was full cluster")
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SHOW BACKUP '%s'`, cluster_full))
+		is_cluster_backup = showBackupRows[0][6]
+		if !eqWhitespace(is_cluster_backup, "true") {
+			t.Fatal("expected show backup to indicate that backup was a cluster backup")
 		}
 	}
 

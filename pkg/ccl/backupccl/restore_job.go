@@ -442,9 +442,9 @@ func WriteTableDescs(
 		b := txn.NewBatch()
 		wroteDBs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
 		for _, desc := range databases {
-			// If the restore is not a full cluster restore we cannot know that
-			// the users on the restoring cluster match the ones that were on the
-			// cluster that was backed up. So we wipe the priviledges on the database.
+			// If the restore is not a cluster restore we cannot know that the users
+			// on the restoring cluster match the ones that were on the cluster that
+			// was backed up. So we wipe the priviledges on the database.
 			if descCoverage != tree.AllDescriptors {
 				desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
 			}
@@ -460,7 +460,7 @@ func WriteTableDescs(
 		}
 		for i := range tables {
 			table := tables[i].TableDesc()
-			// For full cluster restore, keep privileges as they were.
+			// For cluster restore, keep privileges as they were.
 			if wrote, ok := wroteDBs[table.ParentID]; ok {
 				// Leave the privileges of the temp system tables as
 				// the default.
@@ -475,7 +475,7 @@ func WriteTableDescs(
 				}
 				// We don't check priv's here since we checked them during job planning.
 
-				// On full cluster restore, keep the privs as they are in the backup.
+				// On cluster restore, keep the privs as they are in the backup.
 				if descCoverage != tree.AllDescriptors {
 					// Default is to copy privs from restoring parent db, like CREATE TABLE.
 					// TODO(dt): Make this more configurable.
@@ -1255,7 +1255,7 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 func (r *restoreResumer) restoreSystemTables(ctx context.Context) error {
 	executor := r.execCfg.InternalExecutor
 	var err error
-	for _, systemTable := range fullClusterSystemTables {
+	for _, systemTable := range clusterSystemTables {
 		systemTxn := r.execCfg.DB.NewTxn(ctx, "system-restore-txn")
 		txnDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
 		// Don't clear the jobs table as to not delete the jobs that are performing

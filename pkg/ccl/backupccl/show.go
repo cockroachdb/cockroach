@@ -170,7 +170,7 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) sqlbase.Resul
 		{Name: "end_time", Typ: types.Timestamp},
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
-		{Name: "is_full_cluster", Typ: types.Bool},
+		{Name: "is_cluster_backup", Typ: types.Bool},
 	}
 	if showSchemas {
 		baseHeaders = append(baseHeaders, sqlbase.ResultColumn{Name: "create_statement", Typ: types.String})
