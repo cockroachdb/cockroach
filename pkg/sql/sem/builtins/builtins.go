@@ -5267,12 +5267,17 @@ func extractTimeSpanFromTimestampTZ(
 		return ret, nil
 	}
 
-	// time.Time's Year(), Month(), Day(), ISOWeek(), etc. all deal in terms
-	// of UTC, rather than as the timezone.
-	// Remedy this by assuming that the timezone is UTC (to prevent confusion)
-	// and offsetting time when using extractTimeSpanFromTimestamp.
-	pretendTime := fromTime.In(time.UTC).Add(time.Duration(offsetSecs) * time.Second)
-	return extractTimeSpanFromTimestamp(ctx, pretendTime, timeSpan)
+	switch timeSpan {
+	case "epoch":
+		return extractTimeSpanFromTimestamp(ctx, fromTime, timeSpan)
+	default:
+		// time.Time's Year(), Month(), Day(), ISOWeek(), etc. all deal in terms
+		// of UTC, rather than as the timezone.
+		// Remedy this by assuming that the timezone is UTC (to prevent confusion)
+		// and offsetting time when using extractTimeSpanFromTimestamp.
+		pretendTime := fromTime.In(time.UTC).Add(time.Duration(offsetSecs) * time.Second)
+		return extractTimeSpanFromTimestamp(ctx, pretendTime, timeSpan)
+	}
 }
 
 func extractTimeSpanFromInterval(
