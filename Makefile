@@ -928,7 +928,7 @@ BUILD_TAGGED_RELEASE =
 BUILDINFO_TAG :=
 
 $(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ)
-$(go-targets): $(SQLPARSER_TARGETS) $(EXECGEN_TARGETS) $(OPTGEN_TARGETS)
+$(go-targets): $(SQLPARSER_TARGETS) bin/.execgen_targets $(EXECGEN_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
@@ -1110,7 +1110,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(EXECGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) bin/.execgen_targets $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
@@ -1583,8 +1583,8 @@ endif
 # them to rebuild too.
 $(EXECGEN_TARGETS): bin/execgen
 	@echo EXECGEN $@
-	@execgen $@ > $@.tmp || { rm -f $@.tmp; exit 1; }
-	@cmp $@.tmp $@ 2>/dev/null && rm -f $@.tmp || mv -f $@.tmp $@
+	@execgen -fmt=false $@ > $@.tmp || { rm -f $@.tmp; exit 1; }
+	@mv -f $@.tmp $@
 	@set -e; \
 	  depfile=$$(execgen -M $@ | cut -d: -f2); \
 	  target_timestamp_file=$${depfile:-bin/execgen}; \
@@ -1592,6 +1592,10 @@ $(EXECGEN_TARGETS): bin/execgen
 	    target_timestamp_file=bin/execgen; \
 	  fi; \
 	  touch -r $$target_timestamp_file $@
+
+bin/.execgen_targets: $(EXECGEN_TARGETS)
+	goimports -w $(EXECGEN_TARGETS)
+	touch $@
 
 # Add a catch-all rule for any non-existent execgen generated
 # files. This prevents build errors when switching between branches
@@ -1731,7 +1735,7 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # TODO(benesch): Derive this automatically. This is getting out of hand.
 bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
 bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
-bin/workload bin/roachtest $(logictest-bins): $(EXECGEN_TARGETS)
+bin/workload bin/roachtest $(logictest-bins): ./bin/.execgen_targets
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized

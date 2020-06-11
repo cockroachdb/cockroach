@@ -182,6 +182,8 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/50091")
+
 	ctx := context.Background()
 	tc, _, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
