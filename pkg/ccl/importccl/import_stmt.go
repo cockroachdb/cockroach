@@ -587,15 +587,11 @@ func importPlanHook(
 				intoCols = append(intoCols, active[0].Name)
 			}
 
-			// IMPORT INTO does not support columns with DEFAULT expressions. Ensure
-			// that all non-target columns are nullable until we support DEFAULT
-			// expressions.
+			// Ensure that non-target columns that doesn't have default
+			// expressions are nullable.
 			for _, col := range found.VisibleColumns() {
-				if col.HasDefault() {
-					return errors.Errorf("cannot IMPORT INTO a table with a DEFAULT expression for any of its columns")
-				}
-
-				if len(isTargetCol) != 0 && !isTargetCol[col.Name] && !col.IsNullable() {
+				if len(isTargetCol) != 0 && !isTargetCol[col.Name] &&
+					!col.IsNullable() && !col.HasDefault() {
 					return errors.Errorf("all non-target columns in IMPORT INTO must be nullable")
 				}
 			}

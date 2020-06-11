@@ -267,10 +267,6 @@ func NewDatumRowConverter(
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	// We do not currently support DEFAULT expressions on target or non-target
-	// columns. All non-target columns must be nullable and will be set to NULL
-	// during import. We do however support DEFAULT on hidden columns (which is
-	// only the default _rowid one). This allows those expressions to run.
 	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(ctx, targetColDescriptors, immutDesc, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
@@ -301,6 +297,11 @@ func NewDatumRowConverter(
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
+	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
+	colNameSet := make(map[string]struct{}, len(targetColDescriptors))
+	for _, colDesc := range targetColDescriptors {
+		colNameSet[colDesc.Name] = struct{}{}
+	}
 	c.hidden = -1
 	for i := range cols {
 		col := &cols[i]
@@ -310,6 +311,14 @@ func NewDatumRowConverter(
 			}
 			c.hidden = i
 			c.Datums = append(c.Datums, nil)
+		} else {
+			if _, ok := colNameSet[col.Name]; !ok && col.DefaultExpr != nil {
+				datum, err := defaultExprs[i].Eval(evalCtx)
+				if err != nil {
+					return nil, errors.New("Error parsing default expression")
+				}
+				c.Datums = append(c.Datums, datum)
+			}
 		}
 	}
 	if len(c.Datums) != len(cols) {
