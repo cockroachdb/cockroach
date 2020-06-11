@@ -65,35 +65,50 @@ type distSQLExplainable interface {
 	newPlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (*PhysicalPlan, error)
 }
 
-// willDistributePlanForExplainPurposes determines whether we will distribute
-// the given logical plan, based on the gateway's SQL ID and session settings.
-// It is similar to willDistributePlan but also pays attention to whether the
-// logical plan will be handled as a distributed job. It should *only* be used
-// in EXPLAIN variants.
-func willDistributePlanForExplainPurposes(
+// getPlanDistributionForExplainPurposes returns the planDistribution that plan
+// will have. It is similar to getPlanDistribution but also pays attention to
+// whether the logical plan will be handled as a distributed job. It should
+// *only* be used in EXPLAIN variants.
+func getPlanDistributionForExplainPurposes(
 	ctx context.Context,
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
-) bool {
-	if !plan.isPhysicalPlan() {
-		if _, ok := plan.planNode.(distSQLExplainable); ok {
-			// This is a special case for plans that will be actually distributed
-			// but are represented using local plan nodes (for example, "create
-			// statistics" is handled by the jobs framework which is responsible
-			// for setting up the correct DistSQL infrastructure).
-			return true
+) planDistribution {
+	if plan.isPhysicalPlan() {
+		return plan.distribution
+	}
+	switch p := plan.planNode.(type) {
+	case *explainDistSQLNode:
+		if p.plan.main.isPhysicalPlan() {
+			return p.plan.main.distribution
+		}
+	case *explainVecNode:
+		if p.plan.isPhysicalPlan() {
+			return p.plan.distribution
+		}
+	case *explainPlanNode:
+		if p.plan.main.isPhysicalPlan() {
+			return p.plan.main.distribution
 		}
 	}
-	return willDistributePlan(ctx, nodeID, distSQLMode, plan)
+	if _, ok := plan.planNode.(distSQLExplainable); ok {
+		// This is a special case for plans that will be actually distributed
+		// but are represented using local plan nodes (for example, "create
+		// statistics" is handled by the jobs framework which is responsible
+		// for setting up the correct DistSQL infrastructure).
+		return fullyDistributedPlan
+	}
+	return getPlanDistribution(ctx, nodeID, distSQLMode, plan)
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute := willDistributePlanForExplainPurposes(
+	distribution := getPlanDistributionForExplainPurposes(
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
+	willDistribute := distribution.willDistribute()
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, willDistribute)
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p

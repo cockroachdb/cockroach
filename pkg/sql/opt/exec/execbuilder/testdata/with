@@ -10,7 +10,7 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
-·                           distributed   false            ·       ·
+·                           distribution  local            ·       ·
 ·                           vectorized    false            ·       ·
 root                        ·             ·                (a, a)  ·
  ├── cross-join             ·             ·                (a, a)  ·
@@ -33,19 +33,19 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (a)  ·
- │         render 0     a          ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        y@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distribution  local      ·    ·
+·          vectorized    true       ·    ·
+render     ·             ·          (a)  ·
+ │         render 0      a          ·    ·
+ └── scan  ·             ·          (a)  ·
+·          table         y@primary  ·    ·
+·          spans         FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
-·                                          distributed    false                                 ·                   ·
+·                                          distribution   local                                 ·                   ·
 ·                                          vectorized     false                                 ·                   ·
 root                                       ·              ·                                     (a)                 ·
  ├── scan buffer node                      ·              ·                                     (a)                 ·
@@ -82,16 +82,16 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-·           distributed  false               ·      ·
-·           vectorized   true                ·      ·
-cross-join  ·            ·                   (col)  ·
- │          type         cross               ·      ·
- ├── scan   ·            ·                   ()     ·
- │          table        table39010@primary  ·      ·
- │          spans        FULL SCAN           ·      ·
- └── scan   ·            ·                   (col)  ·
-·           table        table39010@primary  ·      ·
-·           spans        FULL SCAN           ·      ·
+·           distribution  local               ·      ·
+·           vectorized    true                ·      ·
+cross-join  ·             ·                   (col)  ·
+ │          type          cross               ·      ·
+ ├── scan   ·             ·                   ()     ·
+ │          table         table39010@primary  ·      ·
+ │          spans         FULL SCAN           ·      ·
+ └── scan   ·             ·                   (col)  ·
+·           table         table39010@primary  ·      ·
+·           spans         FULL SCAN           ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -102,7 +102,7 @@ EXPLAIN (VERBOSE)
   )
   SELECT sum(n) FROM t
 ----
-·                             distributed    false               ·          ·
+·                             distribution   local               ·          ·
 ·                             vectorized     false               ·          ·
 group                         ·              ·                   (sum)      ·
  │                            aggregate 0    sum(n)              ·          ·

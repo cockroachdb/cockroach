@@ -318,9 +318,9 @@ type planMaybePhysical struct {
 	// physPlan (when non-nil) contains the physical plan that has not yet
 	// been finalized.
 	physPlan *PhysicalPlan
-	// recommendation (when physPlan is non-nil) is the recommendation about
-	// the distribution of the physical plan.
-	recommendation distRecommendation
+	// distribution (when physPlan is non-nil) is the indicator of the
+	// distribution of the physical plan.
+	distribution planDistribution
 }
 
 func (p planMaybePhysical) isPhysicalPlan() bool {

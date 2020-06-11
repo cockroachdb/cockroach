@@ -5,38 +5,38 @@ subtest generate_series
 query TTT
 EXPLAIN SELECT * FROM generate_series(1, 3)
 ----
-·              distributed  false
-·              vectorized   true
-project set    ·            ·
- └── emptyrow  ·            ·
+·              distribution  local
+·              vectorized    true
+project set    ·             ·
+ └── emptyrow  ·             ·
 
 query TTT
 EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
-·                   distributed  false
-·                   vectorized   true
-cross-join          ·            ·
- │                  type         cross
- ├── project set    ·            ·
- │    └── emptyrow  ·            ·
- └── project set    ·            ·
-      └── emptyrow  ·            ·
+·                   distribution  local
+·                   vectorized    true
+cross-join          ·             ·
+ │                  type          cross
+ ├── project set    ·             ·
+ │    └── emptyrow  ·             ·
+ └── project set    ·             ·
+      └── emptyrow  ·             ·
 
 query TTT
 EXPLAIN SELECT * FROM ROWS FROM (cos(1))
 ----
-·              distributed  false
-·              vectorized   true
-project set    ·            ·
- └── emptyrow  ·            ·
+·              distribution  local
+·              vectorized    true
+project set    ·             ·
+ └── emptyrow  ·             ·
 
 query TTT
 EXPLAIN SELECT generate_series(1, 3)
 ----
-·              distributed  false
-·              vectorized   true
-project set    ·            ·
- └── emptyrow  ·            ·
+·              distribution  local
+·              vectorized    true
+project set    ·             ·
+ └── emptyrow  ·             ·
 
 subtest multiple_SRFs
 # See #20511
@@ -44,10 +44,10 @@ subtest multiple_SRFs
 query TTT
 EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
 ----
-·              distributed  false
-·              vectorized   true
-project set    ·            ·
- └── emptyrow  ·            ·
+·              distribution  local
+·              vectorized    true
+project set    ·             ·
+ └── emptyrow  ·             ·
 
 statement ok
 CREATE TABLE t (a string)
@@ -58,27 +58,27 @@ CREATE TABLE u (b string)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
-·                             distributed  false                  ·                                         ·
-·                             vectorized   true                   ·                                         ·
-render                        ·            ·                      (a, b, generate_series, generate_series)  ·
- │                            render 0     a                      ·                                         ·
- │                            render 1     b                      ·                                         ·
- │                            render 2     generate_series        ·                                         ·
- │                            render 3     generate_series        ·                                         ·
- └── cross-join               ·            ·                      (b, generate_series, generate_series, a)  ·
-      │                       type         cross                  ·                                         ·
-      ├── cross-join          ·            ·                      (b, generate_series, generate_series)     ·
-      │    │                  type         cross                  ·                                         ·
-      │    ├── scan           ·            ·                      (b)                                       ·
-      │    │                  table        u@primary              ·                                         ·
-      │    │                  spans        FULL SCAN              ·                                         ·
-      │    └── project set    ·            ·                      (generate_series, generate_series)        ·
-      │         │             render 0     generate_series(1, 2)  ·                                         ·
-      │         │             render 1     generate_series(3, 4)  ·                                         ·
-      │         └── emptyrow  ·            ·                      ()                                        ·
-      └── scan                ·            ·                      (a)                                       ·
-·                             table        t@primary              ·                                         ·
-·                             spans        FULL SCAN              ·                                         ·
+·                             distribution  local                  ·                                         ·
+·                             vectorized    true                   ·                                         ·
+render                        ·             ·                      (a, b, generate_series, generate_series)  ·
+ │                            render 0      a                      ·                                         ·
+ │                            render 1      b                      ·                                         ·
+ │                            render 2      generate_series        ·                                         ·
+ │                            render 3      generate_series        ·                                         ·
+ └── cross-join               ·             ·                      (b, generate_series, generate_series, a)  ·
+      │                       type          cross                  ·                                         ·
+      ├── cross-join          ·             ·                      (b, generate_series, generate_series)     ·
+      │    │                  type          cross                  ·                                         ·
+      │    ├── scan           ·             ·                      (b)                                       ·
+      │    │                  table         u@primary              ·                                         ·
+      │    │                  spans         FULL SCAN              ·                                         ·
+      │    └── project set    ·             ·                      (generate_series, generate_series)        ·
+      │         │             render 0      generate_series(1, 2)  ·                                         ·
+      │         │             render 1      generate_series(3, 4)  ·                                         ·
+      │         └── emptyrow  ·             ·                      ()                                        ·
+      └── scan                ·             ·                      (a)                                       ·
+·                             table         t@primary              ·                                         ·
+·                             spans         FULL SCAN              ·                                         ·
 
 subtest correlated_SRFs
 
@@ -88,15 +88,15 @@ CREATE TABLE data (a INT PRIMARY KEY)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
 ----
-·                 distributed  false                        ·                     ·
-·                 vectorized   true                         ·                     ·
-sort              ·            ·                            (a, generate_series)  +a,+generate_series
- │                order        +a,+generate_series          ·                     ·
- └── project set  ·            ·                            (a, generate_series)  ·
-      │           render 0     generate_series(@1, @1 + 1)  ·                     ·
-      └── scan    ·            ·                            (a)                   ·
-·                 table        data@primary                 ·                     ·
-·                 spans        FULL SCAN                    ·                     ·
+·                 distribution  local                        ·                     ·
+·                 vectorized    true                         ·                     ·
+sort              ·             ·                            (a, generate_series)  +a,+generate_series
+ │                order         +a,+generate_series          ·                     ·
+ └── project set  ·             ·                            (a, generate_series)  ·
+      │           render 0      generate_series(@1, @1 + 1)  ·                     ·
+      └── scan    ·             ·                            (a)                   ·
+·                 table         data@primary                 ·                     ·
+·                 spans         FULL SCAN                    ·                     ·
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
@@ -108,7 +108,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y, z])
   FROM xy NATURAL JOIN xz WHERE y < z ORDER BY 1, 2, 3
 ----
-·                               distributed         false                                                  ·                                                ·
+·                               distribution        local                                                  ·                                                ·
 ·                               vectorized          true                                                   ·                                                ·
 render                          ·                   ·                                                      (x, y, z, "information_schema._pg_expandarray")  ·
  │                              render 0            x                                                      ·                                                ·
@@ -141,29 +141,29 @@ render                          ·                   ·                         
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
-·                           distributed  false                    ·                        ·
-·                           vectorized   true                     ·                        ·
-render                      ·            ·                        (generate_series)        ·
- │                          render 0     generate_series          ·                        ·
- └── project set            ·            ·                        (x, z, generate_series)  ·
-      │                     render 0     generate_series(@1, @2)  ·                        ·
-      └── cross-join        ·            ·                        (x, z)                   ·
-           │                type         semi                     ·                        ·
-           │                pred         z < generate_series      ·                        ·
-           ├── scan         ·            ·                        (x, z)                   ·
-           │                table        xz@primary               ·                        ·
-           │                spans        FULL SCAN                ·                        ·
-           └── project set  ·            ·                        (x, y, generate_series)  ·
-                │           render 0     generate_series(@1, @2)  ·                        ·
-                └── scan    ·            ·                        (x, y)                   ·
-·                           table        xy@primary               ·                        ·
-·                           spans        FULL SCAN                ·                        ·
+·                           distribution  local                    ·                        ·
+·                           vectorized    true                     ·                        ·
+render                      ·             ·                        (generate_series)        ·
+ │                          render 0      generate_series          ·                        ·
+ └── project set            ·             ·                        (x, z, generate_series)  ·
+      │                     render 0      generate_series(@1, @2)  ·                        ·
+      └── cross-join        ·             ·                        (x, z)                   ·
+           │                type          semi                     ·                        ·
+           │                pred          z < generate_series      ·                        ·
+           ├── scan         ·             ·                        (x, z)                   ·
+           │                table         xz@primary               ·                        ·
+           │                spans         FULL SCAN                ·                        ·
+           └── project set  ·             ·                        (x, y, generate_series)  ·
+                │           render 0      generate_series(@1, @2)  ·                        ·
+                └── scan    ·             ·                        (x, y)                   ·
+·                           table         xy@primary               ·                        ·
+·                           spans         FULL SCAN                ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
-·                     distributed         false                                    ·                                                           ·
+·                     distribution        local                                    ·                                                           ·
 ·                     vectorized          true                                     ·                                                           ·
 render                ·                   ·                                        (generate_subscripts, generate_series, unnest, y, z)        ·
  │                    render 0            generate_subscripts                      ·                                                           ·
@@ -191,7 +191,7 @@ render                ·                   ·                                   
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
-·                               distributed   false                                 ·                     ·
+·                               distribution  local                                 ·                     ·
 ·                               vectorized    true                                  ·                     ·
 root                            ·             ·                                     (generate_series)     ·
  ├── render                     ·             ·                                     (generate_series)     ·
@@ -229,7 +229,7 @@ EXPLAIN (VERBOSE) SELECT
 FROM
   groups g
 ----
-·                                   distributed         false                     ·                                             ·
+·                                   distribution        local                     ·                                             ·
 ·                                   vectorized          true                      ·                                             ·
 render                              ·                   ·                         (group_name, jsonb_array_elements)            ·
  │                                  render 0            data->>'name'             ·                                             ·
@@ -264,11 +264,11 @@ render                              ·                   ·                     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM ROWS FROM (IF(length('abc') = length('def'), 1, 0))
 ----
-·              distributed  false  ·       ·
-·              vectorized   true   ·       ·
-project set    ·            ·      ("if")  ·
- │             render 0     1      ·       ·
- └── emptyrow  ·            ·      ()      ·
+·              distribution  local  ·       ·
+·              vectorized    true   ·       ·
+project set    ·             ·      ("if")  ·
+ │             render 0      1      ·       ·
+ └── emptyrow  ·             ·      ()      ·
 
 statement ok
 CREATE TABLE articles (
@@ -292,40 +292,40 @@ ORDER BY a0.created_at
    LIMIT 10
   OFFSET 0;
 ----
-·                                     distributed  false                      ·                                                                                        ·
-·                                     vectorized   true                       ·                                                                                        ·
-limit                                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
- │                                    count        10                         ·                                                                                        ·
- └── sort                             ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
-      │                               order        +created_at                ·                                                                                        ·
-      └── group                       ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
-           │                          aggregate 0  id                         ·                                                                                        ·
-           │                          aggregate 1  any_not_null(body)         ·                                                                                        ·
-           │                          aggregate 2  any_not_null(description)  ·                                                                                        ·
-           │                          aggregate 3  any_not_null(title)        ·                                                                                        ·
-           │                          aggregate 4  any_not_null(slug)         ·                                                                                        ·
-           │                          aggregate 5  any_not_null(tag_list)     ·                                                                                        ·
-           │                          aggregate 6  any_not_null(user_id)      ·                                                                                        ·
-           │                          aggregate 7  any_not_null(created_at)   ·                                                                                        ·
-           │                          aggregate 8  any_not_null(updated_at)   ·                                                                                        ·
-           │                          group by     id                         ·                                                                                        ·
-           └── render                 ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
-                │                     render 0     id                         ·                                                                                        ·
-                │                     render 1     body                       ·                                                                                        ·
-                │                     render 2     description                ·                                                                                        ·
-                │                     render 3     title                      ·                                                                                        ·
-                │                     render 4     slug                       ·                                                                                        ·
-                │                     render 5     tag_list                   ·                                                                                        ·
-                │                     render 6     user_id                    ·                                                                                        ·
-                │                     render 7     created_at                 ·                                                                                        ·
-                │                     render 8     updated_at                 ·                                                                                        ·
-                └── filter            ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
-                     │                filter       unnest = 'dragons'         ·                                                                                        ·
-                     └── project set  ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
-                          │           render 0     unnest(@6)                 ·                                                                                        ·
-                          └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
-·                                     table        articles@primary           ·                                                                                        ·
-·                                     spans        FULL SCAN                  ·                                                                                        ·
+·                                     distribution  local                      ·                                                                                        ·
+·                                     vectorized    true                       ·                                                                                        ·
+limit                                 ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
+ │                                    count         10                         ·                                                                                        ·
+ └── sort                             ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
+      │                               order         +created_at                ·                                                                                        ·
+      └── group                       ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+           │                          aggregate 0   id                         ·                                                                                        ·
+           │                          aggregate 1   any_not_null(body)         ·                                                                                        ·
+           │                          aggregate 2   any_not_null(description)  ·                                                                                        ·
+           │                          aggregate 3   any_not_null(title)        ·                                                                                        ·
+           │                          aggregate 4   any_not_null(slug)         ·                                                                                        ·
+           │                          aggregate 5   any_not_null(tag_list)     ·                                                                                        ·
+           │                          aggregate 6   any_not_null(user_id)      ·                                                                                        ·
+           │                          aggregate 7   any_not_null(created_at)   ·                                                                                        ·
+           │                          aggregate 8   any_not_null(updated_at)   ·                                                                                        ·
+           │                          group by      id                         ·                                                                                        ·
+           └── render                 ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+                │                     render 0      id                         ·                                                                                        ·
+                │                     render 1      body                       ·                                                                                        ·
+                │                     render 2      description                ·                                                                                        ·
+                │                     render 3      title                      ·                                                                                        ·
+                │                     render 4      slug                       ·                                                                                        ·
+                │                     render 5      tag_list                   ·                                                                                        ·
+                │                     render 6      user_id                    ·                                                                                        ·
+                │                     render 7      created_at                 ·                                                                                        ·
+                │                     render 8      updated_at                 ·                                                                                        ·
+                └── filter            ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
+                     │                filter        unnest = 'dragons'         ·                                                                                        ·
+                     └── project set  ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
+                          │           render 0      unnest(@6)                 ·                                                                                        ·
+                          └── scan    ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
+·                                     table         articles@primary           ·                                                                                        ·
+·                                     spans         FULL SCAN                  ·                                                                                        ·
 
 # Regression test for #32723.
 query TTTTT
@@ -335,7 +335,7 @@ EXPLAIN (VERBOSE)
     FROM
         (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
 ----
-·                           distributed    false                            ·                         ·
+·                           distribution   local                            ·                         ·
 ·                           vectorized     false                            ·                         ·
 render                      ·              ·                                (generate_series)         ·
  │                          render 0       generate_series                  ·                         ·

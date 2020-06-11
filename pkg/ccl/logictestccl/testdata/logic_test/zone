@@ -27,11 +27,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@secondary
+·     spans         /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -70,11 +70,11 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@tertiary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@tertiary
+·     spans         /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -113,11 +113,11 @@ ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@secondary
+·     spans         /10-/11
 
 # ------------------------------------------------------------------------------
 # Swap location of primary and secondary indexes and ensure that primary index
@@ -133,11 +133,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        /10-/10/#
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         /10-/10/#
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -173,11 +173,11 @@ PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WH
 query TTT retry
 EXECUTE p
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        /10-/10/#
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         /10-/10/#
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
@@ -188,11 +188,11 @@ ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]
 query TTT retry
 EXECUTE p
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@secondary
+·     spans         /10-/11
 
 statement ok
 DEALLOCATE p
@@ -213,11 +213,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@secondary
+·     spans         /10-/11
 
 # ------------------------------------------------------------------------------
 # Move secondary lease preference to dc3 and put tertiary lease preference in
@@ -235,11 +235,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@tertiary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@tertiary
+·     spans         /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -288,11 +288,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@secondary
+·     spans         /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -331,11 +331,11 @@ PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WH
 query TTT retry
 EXECUTE p
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@secondary
+·     spans         /10-/11
 
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE
@@ -344,11 +344,11 @@ USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
 query TTT retry
 EXECUTE p
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t@primary
-·     spans        /10-/10/#
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t@primary
+·     spans         /10-/10/#
 
 statement ok
 DEALLOCATE p
@@ -374,11 +374,11 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING constraints='[+region=test]', 
 query TTT retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t36642@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t36642@secondary
+·     spans         /10-/11
 
 statement ok
 ALTER INDEX t36642@tertiary CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
@@ -389,11 +389,11 @@ ALTER INDEX t36642@secondary CONFIGURE ZONE USING constraints='[+region=test]', 
 query TTT retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t36642@tertiary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t36642@tertiary
+·     spans         /10-/11
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -443,11 +443,11 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query TTT retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t36644@secondary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t36644@secondary
+·     spans         /10-/11
 
 statement ok
 ALTER INDEX t36644@secondary CONFIGURE ZONE USING lease_preferences='[[+dc=dc3]]'
@@ -459,11 +459,11 @@ CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]
 query TTT retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        t36644@tertiary
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t36644@tertiary
+·     spans         /10-/11
 
 subtest regression_35756
 

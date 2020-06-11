@@ -195,7 +195,7 @@ output row: [2]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-·                     distributed     false                ·                         ·
+·                     distribution    local                ·                         ·
 ·                     vectorized      true                 ·                         ·
 render                ·               ·                    (b, a, c, d, a, c, d)     ·
  │                    render 0        b                    ·                         ·
@@ -265,9 +265,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 query TTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-·       distributed  false
-·       vectorized   true
-norows  ·            ·
+·       distribution  local
+·       vectorized    true
+norows  ·             ·
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b; SET tracing = off
@@ -433,23 +433,23 @@ output row: [3 4]
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-·       distributed  false
-·       vectorized   true
-norows  ·            ·
+·       distribution  local
+·       vectorized    true
+norows  ·             ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
-·       distributed  false
-·       vectorized   true
-norows  ·            ·
+·       distribution  local
+·       vectorized    true
+norows  ·             ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
-·       distributed  false
-·       vectorized   true
-norows  ·            ·
+·       distribution  local
+·       vectorized    true
+norows  ·             ·
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.
@@ -469,120 +469,120 @@ CREATE TABLE t (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (a)     ·
- │         render 0     a          ·       ·
- └── scan  ·            ·          (a, c)  ·
-·          table        t@primary  ·       ·
-·          spans        FULL SCAN  ·       ·
-·          filter       c > 1      ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+render     ·             ·          (a)     ·
+ │         render 0      a          ·       ·
+ └── scan  ·             ·          (a, c)  ·
+·          table         t@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
+·          filter        c > 1      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-·          distributed  false        ·          ·
-·          vectorized   true         ·          ·
-render     ·            ·            (a)        ·
- │         render 0     a            ·          ·
- └── scan  ·            ·            (a, b, c)  ·
-·          table        t@bc         ·          ·
-·          spans        /!NULL-/4/1  ·          ·
-·          filter       c < 1        ·          ·
+·          distribution  local        ·          ·
+·          vectorized    true         ·          ·
+render     ·             ·            (a)        ·
+ │         render 0      a            ·          ·
+ └── scan  ·             ·            (a, b, c)  ·
+·          table         t@bc         ·          ·
+·          spans         /!NULL-/4/1  ·          ·
+·          filter        c < 1        ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (a)     ·
- │         render 0     a          ·       ·
- └── scan  ·            ·          (a, c)  ·
-·          table        t@primary  ·       ·
-·          spans        FULL SCAN  ·       ·
-·          filter       c > 1      ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+render     ·             ·          (a)     ·
+ │         render 0      a          ·       ·
+ └── scan  ·             ·          (a, c)  ·
+·          table         t@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
+·          filter        c > 1      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1.0
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (a)     ·
- │         render 0     a          ·       ·
- └── scan  ·            ·          (a, c)  ·
-·          table        t@primary  ·       ·
-·          spans        FULL SCAN  ·       ·
-·          filter       c < 1      ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+render     ·             ·          (a)     ·
+ │         render 0      a          ·       ·
+ └── scan  ·             ·          (a, c)  ·
+·          table         t@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
+·          filter        c < 1      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-·          distributed  false      ·          ·
-·          vectorized   true       ·          ·
-render     ·            ·          (a)        ·
- │         render 0     a          ·          ·
- └── scan  ·            ·          (a, b, c)  ·
-·          table        t@bc       ·          ·
-·          spans        /!NULL-/5  ·          ·
-·          filter       c > 1      ·          ·
+·          distribution  local      ·          ·
+·          vectorized    true       ·          ·
+render     ·             ·          (a)        ·
+ │         render 0      a          ·          ·
+ └── scan  ·             ·          (a, b, c)  ·
+·          table         t@bc       ·          ·
+·          spans         /!NULL-/5  ·          ·
+·          filter        c > 1      ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-·          distributed  false        ·          ·
-·          vectorized   true         ·          ·
-render     ·            ·            (a)        ·
- │         render 0     a            ·          ·
- └── scan  ·            ·            (a, b, c)  ·
-·          table        t@bc         ·          ·
-·          spans        /!NULL-/4/1  ·          ·
-·          filter       c < 1        ·          ·
+·          distribution  local        ·          ·
+·          vectorized    true         ·          ·
+render     ·             ·            (a)        ·
+ │         render 0      a            ·          ·
+ └── scan  ·             ·            (a, b, c)  ·
+·          table         t@bc         ·          ·
+·          spans         /!NULL-/4/1  ·          ·
+·          filter        c < 1        ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-·          distributed  false      ·          ·
-·          vectorized   true       ·          ·
-render     ·            ·          (a)        ·
- │         render 0     a          ·          ·
- └── scan  ·            ·          (a, b, c)  ·
-·          table        t@bc       ·          ·
-·          spans        /5/1-/5/2  ·          ·
+·          distribution  local      ·          ·
+·          vectorized    true       ·          ·
+render     ·             ·          (a)        ·
+ │         render 0      a          ·          ·
+ └── scan  ·             ·          (a, b, c)  ·
+·          table         t@bc       ·          ·
+·          spans         /5/1-/5/2  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-·          distributed  false      ·          ·
-·          vectorized   true       ·          ·
-render     ·            ·          (a)        ·
- │         render 0     a          ·          ·
- └── scan  ·            ·          (a, b, c)  ·
-·          table        t@bc       ·          ·
-·          spans        /5/1-/5/2  ·          ·
+·          distribution  local      ·          ·
+·          vectorized    true       ·          ·
+render     ·             ·          (a)        ·
+ │         render 0      a          ·          ·
+ └── scan  ·             ·          (a, b, c)  ·
+·          table         t@bc       ·          ·
+·          spans         /5/1-/5/2  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
-·          distributed  false                  ·          ·
-·          vectorized   true                   ·          ·
-render     ·            ·                      (a)        ·
- │         render 0     a                      ·          ·
- └── scan  ·            ·                      (a, b, c)  ·
-·          table        t@bc                   ·          ·
-·          spans        /!NULL-                ·          ·
-·          filter       (b = 5.1) AND (c = 1)  ·          ·
+·          distribution  local                  ·          ·
+·          vectorized    true                   ·          ·
+render     ·             ·                      (a)        ·
+ │         render 0      a                      ·          ·
+ └── scan  ·             ·                      (a, b, c)  ·
+·          table         t@bc                   ·          ·
+·          spans         /!NULL-                ·          ·
+·          filter        (b = 5.1) AND (c = 1)  ·          ·
 
 # Note the span is reversed because of #20203.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-·          distributed  false        ·       ·
-·          vectorized   true         ·       ·
-render     ·            ·            (a)     ·
- │         render 0     a            ·       ·
- └── scan  ·            ·            (a, b)  ·
-·          table        t@b_desc     ·       ·
-·          spans        /5-/4 /1-/0  ·       ·
+·          distribution  local        ·       ·
+·          vectorized    true         ·       ·
+render     ·             ·            (a)     ·
+ │         render 0      a            ·       ·
+ └── scan  ·             ·            (a, b)  ·
+·          table         t@b_desc     ·       ·
+·          spans         /5-/4 /1-/0  ·       ·
 
 statement ok
 CREATE TABLE abcd (
@@ -599,24 +599,24 @@ CREATE TABLE abcd (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (b)     ·
- │         render 0     b          ·       ·
- └── scan  ·            ·          (a, b)  ·
-·          table        abcd@abcd  ·       ·
-·          spans        /1/4-/1/5  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+render     ·             ·          (b)     ·
+ │         render 0      b          ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         abcd@abcd  ·       ·
+·          spans         /1/4-/1/5  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-·          distributed  false                 ·       ·
-·          vectorized   true                  ·       ·
-render     ·            ·                     (b)     ·
- │         render 0     b                     ·       ·
- └── scan  ·            ·                     (a, b)  ·
-·          table        abcd@abcd             ·       ·
-·          spans        /1/4-/1/5 /2/9-/2/10  ·       ·
+·          distribution  local                 ·       ·
+·          vectorized    true                  ·       ·
+render     ·             ·                     (b)     ·
+ │         render 0      b                     ·       ·
+ └── scan  ·             ·                     (a, b)  ·
+·          table         abcd@abcd             ·       ·
+·          spans         /1/4-/1/5 /2/9-/2/10  ·       ·
 
 statement ok
 CREATE TABLE ab (
@@ -627,15 +627,15 @@ CREATE TABLE ab (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
-·          distributed  false              ·       ·
-·          vectorized   true               ·       ·
-render     ·            ·                  (i, s)  ·
- │         render 0     i                  ·       ·
- │         render 1     s                  ·       ·
- └── scan  ·            ·                  (s, i)  ·
-·          table        ab@primary         ·       ·
-·          spans        FULL SCAN          ·       ·
-·          filter       (i, s) < (1, 'c')  ·       ·
+·          distribution  local              ·       ·
+·          vectorized    true               ·       ·
+render     ·             ·                  (i, s)  ·
+ │         render 0      i                  ·       ·
+ │         render 1      s                  ·       ·
+ └── scan  ·             ·                  (s, i)  ·
+·          table         ab@primary         ·       ·
+·          spans         FULL SCAN          ·       ·
+·          filter        (i, s) < (1, 'c')  ·       ·
 
 statement ok
 CREATE INDEX baz ON ab (i, s)
@@ -643,15 +643,15 @@ CREATE INDEX baz ON ab (i, s)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-·          distributed  false              ·       ·
-·          vectorized   true               ·       ·
-render     ·            ·                  (i, s)  ·
- │         render 0     i                  ·       ·
- │         render 1     s                  ·       ·
- └── scan  ·            ·                  (s, i)  ·
-·          table        ab@baz             ·       ·
-·          spans        /!NULL-/1/"c"      ·       ·
-·          filter       (i, s) < (1, 'c')  ·       ·
+·          distribution  local              ·       ·
+·          vectorized    true               ·       ·
+render     ·             ·                  (i, s)  ·
+ │         render 0      i                  ·       ·
+ │         render 1      s                  ·       ·
+ └── scan  ·             ·                  (s, i)  ·
+·          table         ab@baz             ·       ·
+·          spans         /!NULL-/1/"c"      ·       ·
+·          filter        (i, s) < (1, 'c')  ·       ·
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -668,22 +668,22 @@ abz  abz_c_b_key  false  3  a  ASC   false  true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-·     distributed  false         ·    ·
-·     vectorized   true          ·    ·
-scan  ·            ·             (a)  ·
-·     table        abz@primary   ·    ·
-·     spans        LIMITED SCAN  ·    ·
-·     limit        1             ·    ·
+·     distribution  local         ·    ·
+·     vectorized    true          ·    ·
+scan  ·             ·             (a)  ·
+·     table         abz@primary   ·    ·
+·     spans         LIMITED SCAN  ·    ·
+·     limit         1             ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
-·     distributed  false            ·    ·
-·     vectorized   true             ·    ·
-scan  ·            ·                (c)  ·
-·     table        abz@abz_c_b_key  ·    ·
-·     spans        LIMITED SCAN     ·    ·
-·     limit        1                ·    ·
+·     distribution  local            ·    ·
+·     vectorized    true             ·    ·
+scan  ·             ·                (c)  ·
+·     table         abz@abz_c_b_key  ·    ·
+·     spans         LIMITED SCAN     ·    ·
+·     limit         1                ·    ·
 
 # Issue #14426: verify we don't have an internal filter that contains "a IN ()"
 # (which causes an error in DistSQL due to expression serialization).
@@ -697,14 +697,14 @@ CREATE TABLE tab0(
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-·          distributed  false                                  ·          ·
-·          vectorized   true                                   ·          ·
-render     ·            ·                                      (k)        ·
- │         render 0     k                                      ·          ·
- └── scan  ·            ·                                      (k, a, b)  ·
-·          table        tab0@primary                           ·          ·
-·          spans        FULL SCAN                              ·          ·
-·          filter       ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
+·          distribution  local                                  ·          ·
+·          vectorized    true                                   ·          ·
+render     ·             ·                                      (k)        ·
+ │         render 0      k                                      ·          ·
+ └── scan  ·             ·                                      (k, a, b)  ·
+·          table         tab0@primary                           ·          ·
+·          spans         FULL SCAN                              ·          ·
+·          filter        ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check
@@ -724,15 +724,15 @@ INSERT INTO test2(k)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
-·             distributed  false                    ·           ·
-·             vectorized   true                     ·           ·
-index-join    ·            ·                        (id, k, v)  -k
- │            table        test2@primary            ·           ·
- │            key columns  id                       ·           ·
- └── revscan  ·            ·                        (id, k)     -k
-·             table        test2@test2_k_key        ·           ·
-·             spans        /!NULL-/"100"/PrefixEnd  ·           ·
-·             limit        20                       ·           ·
+·             distribution  local                    ·           ·
+·             vectorized    true                     ·           ·
+index-join    ·             ·                        (id, k, v)  -k
+ │            table         test2@primary            ·           ·
+ │            key columns   id                       ·           ·
+ └── revscan  ·             ·                        (id, k)     -k
+·             table         test2@test2_k_key        ·           ·
+·             spans         /!NULL-/"100"/PrefixEnd  ·           ·
+·             limit         20                       ·           ·
 
 # The result output of this test requires that vectorized execution
 # is not used, so it has been moved to select_index_vectorize_off.
@@ -781,18 +781,18 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-·                    distributed  false
-·                    vectorized   true
-sort                 ·            ·
- │                   order        -total
- └── group           ·            ·
-      │              aggregate 0  resource_key
-      │              aggregate 1  count_rows()
-      │              group by     resource_key
-      └── render     ·            ·
-           └── scan  ·            ·
-·                    table        favorites@favorites_glob_fav_idx
-·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+·                    distribution  local
+·                    vectorized    true
+sort                 ·             ·
+ │                   order         -total
+ └── group           ·             ·
+      │              aggregate 0   resource_key
+      │              aggregate 1   count_rows()
+      │              group by      resource_key
+      └── render     ·             ·
+           └── scan  ·             ·
+·                    table         favorites@favorites_glob_fav_idx
+·                    spans         /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT
@@ -816,38 +816,38 @@ ts3 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
-·     distributed  false           ·             ·
-·     vectorized   true            ·             ·
-scan  ·            ·               (a, b, c, d)  ·
-·     table        abcd@abcd       ·             ·
-·     spans        /NULL/6-/!NULL  ·             ·
+·     distribution  local           ·             ·
+·     vectorized    true            ·             ·
+scan  ·             ·               (a, b, c, d)  ·
+·     table         abcd@abcd       ·             ·
+·     spans         /NULL/6-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
-·     distributed  false                ·             ·
-·     vectorized   true                 ·             ·
-scan  ·            ·                    (a, b, c, d)  ·
-·     table        abcd@abcd            ·             ·
-·     spans        /NULL/!NULL-/NULL/5  ·             ·
+·     distribution  local                ·             ·
+·     vectorized    true                 ·             ·
+scan  ·             ·                    (a, b, c, d)  ·
+·     table         abcd@abcd            ·             ·
+·     spans         /NULL/!NULL-/NULL/5  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
-·     distributed  false         ·             ·
-·     vectorized   true          ·             ·
-scan  ·            ·             (a, b, c, d)  +b
-·     table        abcd@abcd     ·             ·
-·     spans        /NULL-/!NULL  ·             ·
+·     distribution  local         ·             ·
+·     vectorized    true          ·             ·
+scan  ·             ·             (a, b, c, d)  +b
+·     table         abcd@abcd     ·             ·
+·     spans         /NULL-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
-·     distributed  false                 ·             ·
-·     vectorized   true                  ·             ·
-scan  ·            ·                     (a, b, c, d)  +c
-·     table        abcd@abcd             ·             ·
-·     spans        /1/NULL/1-/1/NULL/10  ·             ·
+·     distribution  local                 ·             ·
+·     vectorized    true                  ·             ·
+scan  ·             ·                     (a, b, c, d)  +c
+·     table         abcd@abcd             ·             ·
+·     spans         /1/NULL/1-/1/NULL/10  ·             ·
 
 # Regression test for #3548: verify we create constraints on implicit columns
 # when they are part of the key (non-unique index).
@@ -857,13 +857,13 @@ CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY(a,b), INDEX(c))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE c = 1 and a = 3
 ----
-·          distributed  false          ·       ·
-·          vectorized   true           ·       ·
-render     ·            ·              (c)     ·
- │         render 0     c              ·       ·
- └── scan  ·            ·              (a, c)  ·
-·          table        abc@abc_c_idx  ·       ·
-·          spans        /1/3-/1/4      ·       ·
+·          distribution  local          ·       ·
+·          vectorized    true           ·       ·
+render     ·             ·              (c)     ·
+ │         render 0      c              ·       ·
+ └── scan  ·             ·              (a, c)  ·
+·          table         abc@abc_c_idx  ·       ·
+·          spans         /1/3-/1/4      ·       ·
 
 # Verify we don't create constraints on implicit columns when they may be part
 # of the key (unique index on nullable column).
@@ -873,14 +873,14 @@ CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY(d,e), UNIQUE INDEX(f))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-·          distributed  false          ·       ·
-·          vectorized   true           ·       ·
-render     ·            ·              (f)     ·
- │         render 0     f              ·       ·
- └── scan  ·            ·              (d, f)  ·
-·          table        def@def_f_key  ·       ·
-·          spans        /1-/2          ·       ·
-·          filter       d = 3          ·       ·
+·          distribution  local          ·       ·
+·          vectorized    true           ·       ·
+render     ·             ·              (f)     ·
+ │         render 0      f              ·       ·
+ └── scan  ·             ·              (d, f)  ·
+·          table         def@def_f_key  ·       ·
+·          spans         /1-/2          ·       ·
+·          filter        d = 3          ·       ·
 
 statement ok
 DROP TABLE def
@@ -893,24 +893,24 @@ CREATE TABLE def (d INT, e INT, f INT NOT NULL, PRIMARY KEY(d,e), UNIQUE INDEX(f
 query TTTTT
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-·          distributed  false          ·       ·
-·          vectorized   true           ·       ·
-render     ·            ·              (f)     ·
- │         render 0     f              ·       ·
- └── scan  ·            ·              (d, f)  ·
-·          table        def@def_f_key  ·       ·
-·          spans        /1-/2          ·       ·
-·          filter       d = 3          ·       ·
+·          distribution  local          ·       ·
+·          vectorized    true           ·       ·
+render     ·             ·              (f)     ·
+ │         render 0      f              ·       ·
+ └── scan  ·             ·              (d, f)  ·
+·          table         def@def_f_key  ·       ·
+·          spans         /1-/2          ·       ·
+·          filter        d = 3          ·       ·
 
 # Regression test for #20504.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc WHERE (a, b) BETWEEN (1, 2) AND (3, 4)
 ----
-·     distributed  false        ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (a, b)  ·
-·     table        abc@primary  ·       ·
-·     spans        /1/2-/3/4/#  ·       ·
+·     distribution  local        ·       ·
+·     vectorized    true         ·       ·
+scan  ·             ·            (a, b)  ·
+·     table         abc@primary  ·       ·
+·     spans         /1/2-/3/4/#  ·       ·
 
 # Regression test for #21831.
 statement ok
@@ -919,31 +919,31 @@ CREATE TABLE str (k INT PRIMARY KEY, v STRING, INDEX(v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%'
 ----
-·     distributed  false          ·       ·
-·     vectorized   true           ·       ·
-scan  ·            ·              (k, v)  ·
-·     table        str@str_v_idx  ·       ·
-·     spans        /"ABC"-/"ABD"  ·       ·
+·     distribution  local          ·       ·
+·     vectorized    true           ·       ·
+scan  ·             ·              (k, v)  ·
+·     table         str@str_v_idx  ·       ·
+·     spans         /"ABC"-/"ABD"  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
 ----
-·     distributed  false           ·       ·
-·     vectorized   true            ·       ·
-scan  ·            ·               (k, v)  ·
-·     table        str@str_v_idx   ·       ·
-·     spans        /"ABC"-/"ABD"   ·       ·
-·     filter       v LIKE 'ABC%Z'  ·       ·
+·     distribution  local           ·       ·
+·     vectorized    true            ·       ·
+scan  ·             ·               (k, v)  ·
+·     table         str@str_v_idx   ·       ·
+·     spans         /"ABC"-/"ABD"   ·       ·
+·     filter        v LIKE 'ABC%Z'  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 ----
-·     distributed  false                 ·       ·
-·     vectorized   true                  ·       ·
-scan  ·            ·                     (k, v)  ·
-·     table        str@str_v_idx         ·       ·
-·     spans        /"ABC"-/"ABD"         ·       ·
-·     filter       v SIMILAR TO 'ABC_*'  ·       ·
+·     distribution  local                 ·       ·
+·     vectorized    true                  ·       ·
+scan  ·             ·                     (k, v)  ·
+·     table         str@str_v_idx         ·       ·
+·     spans         /"ABC"-/"ABD"         ·       ·
+·     filter        v SIMILAR TO 'ABC_*'  ·       ·
 
 # Test that we generate spans for IS (NOT) DISTINCT FROM.
 statement ok
@@ -952,60 +952,60 @@ CREATE TABLE xy (x INT, y INT, INDEX (y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ----
-·           distributed  false         ·                   ·
-·           vectorized   true          ·                   ·
-index-join  ·            ·             (x, y)              ·
- │          table        xy@primary    ·                   ·
- │          key columns  rowid         ·                   ·
- └── scan   ·            ·             (y, rowid[hidden])  ·
-·           table        xy@xy_y_idx   ·                   ·
-·           spans        /NULL-/!NULL  ·                   ·
+·           distribution  local         ·                   ·
+·           vectorized    true          ·                   ·
+index-join  ·             ·             (x, y)              ·
+ │          table         xy@primary    ·                   ·
+ │          key columns   rowid         ·                   ·
+ └── scan   ·             ·             (y, rowid[hidden])  ·
+·           table         xy@xy_y_idx   ·                   ·
+·           spans         /NULL-/!NULL  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ----
-·           distributed  false        ·                   ·
-·           vectorized   true         ·                   ·
-index-join  ·            ·            (x, y)              ·
- │          table        xy@primary   ·                   ·
- │          key columns  rowid        ·                   ·
- └── scan   ·            ·            (y, rowid[hidden])  ·
-·           table        xy@xy_y_idx  ·                   ·
-·           spans        /4-/5        ·                   ·
+·           distribution  local        ·                   ·
+·           vectorized    true         ·                   ·
+index-join  ·             ·            (x, y)              ·
+ │          table         xy@primary   ·                   ·
+ │          key columns   rowid        ·                   ·
+ └── scan   ·             ·            (y, rowid[hidden])  ·
+·           table         xy@xy_y_idx  ·                   ·
+·           spans         /4-/5        ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
-·                distributed  false        ·                   ·
-·                vectorized   true         ·                   ·
-render           ·            ·            (x)                 ·
- │               render 0     x            ·                   ·
- └── index-join  ·            ·            (x, y)              ·
-      │          table        xy@primary   ·                   ·
-      │          key columns  rowid        ·                   ·
-      └── scan   ·            ·            (y, rowid[hidden])  ·
-·                table        xy@xy_y_idx  ·                   ·
-·                spans        /1-/2        ·                   ·
+·                distribution  local        ·                   ·
+·                vectorized    true         ·                   ·
+render           ·             ·            (x)                 ·
+ │               render 0      x            ·                   ·
+ └── index-join  ·             ·            (x, y)              ·
+      │          table         xy@primary   ·                   ·
+      │          key columns   rowid        ·                   ·
+      └── scan   ·             ·            (y, rowid[hidden])  ·
+·                table         xy@xy_y_idx  ·                   ·
+·                spans         /1-/2        ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
-·     distributed  false          ·       ·
-·     vectorized   true           ·       ·
-scan  ·            ·              (x, y)  ·
-·     table        xy@primary     ·       ·
-·     spans        FULL SCAN      ·       ·
-·     filter       y IS NOT NULL  ·       ·
+·     distribution  local          ·       ·
+·     vectorized    true           ·       ·
+scan  ·             ·              (x, y)  ·
+·     table         xy@primary     ·       ·
+·     spans         FULL SCAN      ·       ·
+·     filter        y IS NOT NULL  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ----
-·     distributed  false                 ·       ·
-·     vectorized   true                  ·       ·
-scan  ·            ·                     (x, y)  ·
-·     table        xy@primary            ·       ·
-·     spans        FULL SCAN             ·       ·
-·     filter       y IS DISTINCT FROM 4  ·       ·
+·     distribution  local                 ·       ·
+·     vectorized    true                  ·       ·
+scan  ·             ·                     (x, y)  ·
+·     table         xy@primary            ·       ·
+·     spans         FULL SCAN             ·       ·
+·     filter        y IS DISTINCT FROM 4  ·       ·
 
 # Regression tests for #22670.
 statement ok
@@ -1017,20 +1017,20 @@ INSERT INTO xy VALUES (NULL, NULL), (1, NULL), (NULL, 1), (1, 1)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (x, y)  ·
-·     table        xy@xy_idx  ·       ·
-·     spans        /1-/3      ·       ·
+·     distribution  local      ·       ·
+·     vectorized    true       ·       ·
+scan  ·             ·          (x, y)  ·
+·     table         xy@xy_idx  ·       ·
+·     spans         /1-/3      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (x, y)  ·
-·     table        xy@xy_idx  ·       ·
-·     spans        /1/1-/1/3  ·       ·
+·     distribution  local      ·       ·
+·     vectorized    true       ·       ·
+scan  ·             ·          (x, y)  ·
+·     table         xy@xy_idx  ·       ·
+·     spans         /1/1-/1/3  ·       ·
 
 # ------------------------------------------------------------------------------
 # Non-covering index
@@ -1055,14 +1055,14 @@ INSERT INTO noncover VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE b = 2
 ----
-·           distributed  false
-·           vectorized   true
-index-join  ·            ·
- │          table        noncover@primary
- │          key columns  a
- └── scan   ·            ·
-·           table        noncover@b
-·           spans        /2-/3
+·           distribution  local
+·           vectorized    true
+index-join  ·             ·
+ │          table         noncover@primary
+ │          key columns   a
+ └── scan   ·             ·
+·           table         noncover@b
+·           spans         /2-/3
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
@@ -1082,14 +1082,14 @@ output row: [1 2 3 4]
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
-·           distributed  false
-·           vectorized   true
-index-join  ·            ·
- │          table        noncover@primary
- │          key columns  a
- └── scan   ·            ·
-·           table        noncover@c
-·           spans        /6-/7
+·           distribution  local
+·           vectorized    true
+index-join  ·             ·
+ │          table         noncover@primary
+ │          key columns   a
+ └── scan   ·             ·
+·           table         noncover@c
+·           spans         /6-/7
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
@@ -1109,36 +1109,36 @@ output row: [5 6 7 8]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
-·          distributed  false             ·             ·
-·          vectorized   true              ·             ·
-sort       ·            ·                 (a, b, c, d)  -c
- │         order        -c                ·             ·
- └── scan  ·            ·                 (a, b, c, d)  ·
-·          table        noncover@primary  ·             ·
-·          spans        FULL SCAN         ·             ·
-·          filter       c > 0             ·             ·
+·          distribution  local             ·             ·
+·          vectorized    true              ·             ·
+sort       ·             ·                 (a, b, c, d)  -c
+ │         order         -c                ·             ·
+ └── scan  ·             ·                 (a, b, c, d)  ·
+·          table         noncover@primary  ·             ·
+·          spans         FULL SCAN         ·             ·
+·          filter        c > 0             ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
-·          distributed  false             ·             ·
-·          vectorized   true              ·             ·
-sort       ·            ·                 (a, b, c, d)  +c
- │         order        +c                ·             ·
- └── scan  ·            ·                 (a, b, c, d)  ·
-·          table        noncover@primary  ·             ·
-·          spans        FULL SCAN         ·             ·
-·          filter       c > 0             ·             ·
+·          distribution  local             ·             ·
+·          vectorized    true              ·             ·
+sort       ·             ·                 (a, b, c, d)  +c
+ │         order         +c                ·             ·
+ └── scan  ·             ·                 (a, b, c, d)  ·
+·          table         noncover@primary  ·             ·
+·          spans         FULL SCAN         ·             ·
+·          filter        c > 0             ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
-·     distributed  false                ·             ·
-·     vectorized   true                 ·             ·
-scan  ·            ·                    (a, b, c, d)  ·
-·     table        noncover@primary     ·             ·
-·     spans        FULL SCAN            ·             ·
-·     filter       (c > 0) AND (d = 8)  ·             ·
+·     distribution  local                ·             ·
+·     vectorized    true                 ·             ·
+scan  ·             ·                    (a, b, c, d)  ·
+·     table         noncover@primary     ·             ·
+·     spans         FULL SCAN            ·             ·
+·     filter        (c > 0) AND (d = 8)  ·             ·
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
@@ -1146,41 +1146,41 @@ scan  ·            ·                    (a, b, c, d)  ·
 query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c
 ----
-·          distributed  false
-·          vectorized   true
-sort       ·            ·
- │         order        +c
- └── scan  ·            ·
-·          table        noncover@primary
-·          spans        FULL SCAN
+·          distribution  local
+·          vectorized    true
+sort       ·             ·
+ │         order         +c
+ └── scan  ·             ·
+·          table         noncover@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
-·           distributed  false
-·           vectorized   true
-index-join  ·            ·
- │          table        noncover@primary
- │          key columns  a
- └── scan   ·            ·
-·           table        noncover@c
-·           spans        LIMITED SCAN
-·           limit        5
+·           distribution  local
+·           vectorized    true
+index-join  ·             ·
+ │          table         noncover@primary
+ │          key columns   a
+ └── scan   ·             ·
+·           table         noncover@c
+·           spans         LIMITED SCAN
+·           limit         5
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ]
 ----
-·               distributed  false
-·               vectorized   true
-limit           ·            ·
- │              offset       5
- └── sort       ·            ·
-      │         order        +c
-      └── scan  ·            ·
-·               table        noncover@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+limit           ·             ·
+ │              offset        5
+ └── sort       ·             ·
+      │         order         +c
+      └── scan  ·             ·
+·               table         noncover@primary
+·               spans         FULL SCAN
 
 # TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query TTT
@@ -1188,32 +1188,32 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ]
 ----
-·                distributed  false
-·                vectorized   true
-limit            ·            ·
- │               offset       5
- └── index-join  ·            ·
-      │          table        noncover@primary
-      │          key columns  a
-      └── scan   ·            ·
-·                table        noncover@c
-·                spans        LIMITED SCAN
-·                limit        10
+·                distribution  local
+·                vectorized    true
+limit            ·             ·
+ │               offset        5
+ └── index-join  ·             ·
+      │          table         noncover@primary
+      │          key columns   a
+      └── scan   ·             ·
+·                table         noncover@c
+·                spans         LIMITED SCAN
+·                limit         10
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ]
 ----
-·               distributed  false
-·               vectorized   true
-limit           ·            ·
- │              count        1000000
- └── sort       ·            ·
-      │         order        +c
-      └── scan  ·            ·
-·               table        noncover@primary
-·               spans        FULL SCAN
+·               distribution  local
+·               vectorized    true
+limit           ·             ·
+ │              count         1000000
+ └── sort       ·             ·
+      │         order         +c
+      └── scan  ·             ·
+·               table         noncover@primary
+·               spans         FULL SCAN
 
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we
@@ -1261,15 +1261,15 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
-·           distributed  false
-·           vectorized   true
-index-join  ·            ·
- │          table        t2@primary
- │          key columns  a
- └── scan   ·            ·
-·           table        t2@bc
-·           spans        /2-/3
-·           filter       (c % 2) = 0
+·           distribution  local
+·           vectorized    true
+index-join  ·             ·
+ │          table         t2@primary
+ │          key columns   a
+ └── scan   ·             ·
+·           table         t2@bc
+·           spans         /2-/3
+·           filter        (c % 2) = 0
 
 # We do NOT look up the table row for '21' and '23'.
 statement ok
@@ -1294,14 +1294,14 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ]
 ----
-·           distributed  false
-·           vectorized   true
-index-join  ·            ·
- │          table        t2@primary
- │          key columns  a
- └── scan   ·            ·
-·           table        t2@bc
-·           spans        /2/!NULL-/2/2 /2/3-/3
+·           distribution  local
+·           vectorized    true
+index-join  ·             ·
+ │          table         t2@primary
+ │          key columns   a
+ └── scan   ·             ·
+·           table         t2@bc
+·           spans         /2/!NULL-/2/2 /2/3-/3
 
 # We do NOT look up the table row for '22'.
 statement ok
@@ -1401,16 +1401,16 @@ output row: [9 3 3 '33']
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-·                distributed  false       ·          ·
-·                vectorized   true        ·          ·
-render           ·            ·           (a)        ·
- │               render 0     a           ·          ·
- └── index-join  ·            ·           (a, b, s)  ·
-      │          table        t2@primary  ·          ·
-      │          key columns  a           ·          ·
-      └── scan   ·            ·           (a, b)     ·
-·                table        t2@bc       ·          ·
-·                spans        /2-/3       ·          ·
+·                distribution  local       ·          ·
+·                vectorized    true        ·          ·
+render           ·             ·           (a)        ·
+ │               render 0      a           ·          ·
+ └── index-join  ·             ·           (a, b, s)  ·
+      │          table         t2@primary  ·          ·
+      │          key columns   a           ·          ·
+      └── scan   ·             ·           (a, b)     ·
+·                table         t2@bc       ·          ·
+·                spans         /2-/3       ·          ·
 
 statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
@@ -1418,16 +1418,16 @@ CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
-·                distributed  false       ·       ·
-·                vectorized   true        ·       ·
-render           ·            ·           (w)     ·
- │               render 0     w           ·       ·
- └── index-join  ·            ·           (v, w)  +v
-      │          table        t3@primary  ·       ·
-      │          key columns  k           ·       ·
-      └── scan   ·            ·           (k, v)  +v
-·                table        t3@v        ·       ·
-·                spans        /1-/10      ·       ·
+·                distribution  local       ·       ·
+·                vectorized    true        ·       ·
+render           ·             ·           (w)     ·
+ │               render 0      w           ·       ·
+ └── index-join  ·             ·           (v, w)  +v
+      │          table         t3@primary  ·       ·
+      │          key columns   k           ·       ·
+      └── scan   ·             ·           (k, v)  +v
+·                table         t3@v        ·       ·
+·                spans         /1-/10      ·       ·
 
 # ------------------------------------------------------------------------------
 # These tests are for the point lookup optimization: for single row lookups on
@@ -1456,12 +1456,12 @@ INSERT INTO t4 VALUES (10, 20, 30, 40, 50)
 query TTT
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t4@primary
-·          spans        /10/20/0-/10/20/1/2
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t4@primary
+·          spans         /10/20/0-/10/20/1/2
 
 statement ok
 SET tracing = on,kv,results; SELECT c FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1479,13 +1479,13 @@ output row: [30]
 query TTT
 EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t4@primary
-·          spans        /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
-·          parallel     ·
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t4@primary
+·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+·          parallel      ·
 
 statement ok
 SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1504,19 +1504,19 @@ output row: [40]
 query TTT
 EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t4@primary
-·          spans        /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
-·          parallel     ·
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t4@primary
+·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+·          parallel      ·
 
 # Optimization should also be applied for updates.
 query TTT
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
-·                    distributed       false
+·                    distribution      local
 ·                    vectorized        false
 count                ·                 ·
  └── update          ·                 ·
@@ -1534,45 +1534,45 @@ count                ·                 ·
 query TTT
 EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ----
-·             distributed  false
-·             vectorized   false
-delete range  ·            ·
-·             from         t4
-·             auto commit  ·
-·             spans        /10/20-/10/20/#
+·             distribution  local
+·             vectorized    false
+delete range  ·             ·
+·             from          t4
+·             auto commit   ·
+·             spans         /10/20-/10/20/#
 
 # Optimization should not be applied for non point lookups.
 query TTT
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t4@primary
-·          spans        /10/20-/10/21/#
-·          parallel     ·
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t4@primary
+·          spans         /10/20-/10/21/#
+·          parallel      ·
 
 # Optimization should not be applied for partial primary key filter.
 query TTT
 EXPLAIN SELECT c FROM t4 WHERE a = 10
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t4@primary
-·          spans        /10-/11
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t4@primary
+·          spans         /10-/11
 
 # Regression test for #40890: a point lookup on a single column family of a
 # table should still work properly in the face of a constraint disjunction.
 query TTT
 EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        t4@primary
-·          spans        /1/1/0-/1/1/1 /1/5/0-/1/5/1 /5/1/0-/5/1/1 /5/5/0-/5/5/1
-·          parallel     ·
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         t4@primary
+·          spans         /1/1/0-/1/1/1 /1/5/0-/1/5/1 /5/1/0-/5/1/1 /5/5/0-/5/5/1
+·          parallel      ·

@@ -18,7 +18,7 @@ CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), FAMI
 query TTT
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
-·                                          distributed            false
+·                                          distribution           local
 ·                                          vectorized             false
 root                                       ·                      ·
  ├── count                                 ·                      ·
@@ -48,7 +48,7 @@ CREATE TABLE xy (x INT, y INT)
 query TTT
 EXPLAIN INSERT INTO child SELECT x,y FROM xy
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -81,7 +81,7 @@ CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
 query TTT
 EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
 ----
-·                                               distributed            false
+·                                               distribution           local
 ·                                               vectorized             false
 root                                            ·                      ·
  ├── count                                      ·                      ·
@@ -121,7 +121,7 @@ CREATE TABLE multi_col_child  (
 query TTT
 EXPLAIN INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
 ----
-·                                               distributed            false
+·                                               distribution           local
 ·                                               vectorized             false
 root                                            ·                      ·
  ├── count                                      ·                      ·
@@ -165,7 +165,7 @@ CREATE TABLE multi_ref_child (
 query TTT
 EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL), (2, 3, 4, 5)
 ----
-·                                               distributed            false
+·                                               distribution           local
 ·                                               vectorized             false
 root                                            ·                      ·
  ├── count                                      ·                      ·
@@ -207,51 +207,51 @@ root                                            ·                      ·
 query TTT
 EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
 ----
-·                 distributed  false
-·                 vectorized   false
-count             ·            ·
- └── insert       ·            ·
-      │           into         multi_ref_child(k, a, b, c)
-      │           strategy     inserter
-      │           auto commit  ·
-      └── values  ·            ·
-·                 size         4 columns, 1 row
+·                 distribution  local
+·                 vectorized    false
+count             ·             ·
+ └── insert       ·             ·
+      │           into          multi_ref_child(k, a, b, c)
+      │           strategy      inserter
+      │           auto commit   ·
+      └── values  ·             ·
+·                 size          4 columns, 1 row
 
 # -- Tests with DELETE --
 
 query TTT
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-·                                          distributed  false
-·                                          vectorized   false
-root                                       ·            ·
- ├── count                                 ·            ·
- │    └── delete                           ·            ·
- │         │                               from         parent
- │         │                               strategy     deleter
- │         └── buffer node                 ·            ·
- │              │                          label        buffer 1
- │              └── scan                   ·            ·
- │                                         table        parent@primary
- │                                         spans        /3-/3/#
- ├── fk-check                              ·            ·
- │    └── error if rows                    ·            ·
- │         └── lookup-join                 ·            ·
- │              │                          table        child@child_auto_index_fk_p_ref_parent
- │              │                          type         semi
- │              │                          equality     (p) = (p)
- │              └── render                 ·            ·
- │                   └── scan buffer node  ·            ·
- │                                         label        buffer 1
- └── fk-check                              ·            ·
-      └── error if rows                    ·            ·
-           └── lookup-join                 ·            ·
-                │                          table        child_nullable@child_nullable_auto_index_fk_p_ref_parent
-                │                          type         semi
-                │                          equality     (p) = (p)
-                └── render                 ·            ·
-                     └── scan buffer node  ·            ·
-·                                          label        buffer 1
+·                                          distribution  local
+·                                          vectorized    false
+root                                       ·             ·
+ ├── count                                 ·             ·
+ │    └── delete                           ·             ·
+ │         │                               from          parent
+ │         │                               strategy      deleter
+ │         └── buffer node                 ·             ·
+ │              │                          label         buffer 1
+ │              └── scan                   ·             ·
+ │                                         table         parent@primary
+ │                                         spans         /3-/3/#
+ ├── fk-check                              ·             ·
+ │    └── error if rows                    ·             ·
+ │         └── lookup-join                 ·             ·
+ │              │                          table         child@child_auto_index_fk_p_ref_parent
+ │              │                          type          semi
+ │              │                          equality      (p) = (p)
+ │              └── render                 ·             ·
+ │                   └── scan buffer node  ·             ·
+ │                                         label         buffer 1
+ └── fk-check                              ·             ·
+      └── error if rows                    ·             ·
+           └── lookup-join                 ·             ·
+                │                          table         child_nullable@child_nullable_auto_index_fk_p_ref_parent
+                │                          type          semi
+                │                          equality      (p) = (p)
+                └── render                 ·             ·
+                     └── scan buffer node  ·             ·
+·                                          label         buffer 1
 
 statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
@@ -259,45 +259,45 @@ CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
 query TTT
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-·                                          distributed  false
-·                                          vectorized   false
-root                                       ·            ·
- ├── count                                 ·            ·
- │    └── delete                           ·            ·
- │         │                               from         parent
- │         │                               strategy     deleter
- │         └── buffer node                 ·            ·
- │              │                          label        buffer 1
- │              └── scan                   ·            ·
- │                                         table        parent@primary
- │                                         spans        /3-/3/#
- ├── fk-check                              ·            ·
- │    └── error if rows                    ·            ·
- │         └── lookup-join                 ·            ·
- │              │                          table        child@child_auto_index_fk_p_ref_parent
- │              │                          type         semi
- │              │                          equality     (p) = (p)
- │              └── render                 ·            ·
- │                   └── scan buffer node  ·            ·
- │                                         label        buffer 1
- ├── fk-check                              ·            ·
- │    └── error if rows                    ·            ·
- │         └── lookup-join                 ·            ·
- │              │                          table        child_nullable@child_nullable_auto_index_fk_p_ref_parent
- │              │                          type         semi
- │              │                          equality     (p) = (p)
- │              └── render                 ·            ·
- │                   └── scan buffer node  ·            ·
- │                                         label        buffer 1
- └── fk-check                              ·            ·
-      └── error if rows                    ·            ·
-           └── lookup-join                 ·            ·
-                │                          table        child2@child2_auto_index_fk_p_ref_parent
-                │                          type         semi
-                │                          equality     (other) = (p)
-                └── render                 ·            ·
-                     └── scan buffer node  ·            ·
-·                                          label        buffer 1
+·                                          distribution  local
+·                                          vectorized    false
+root                                       ·             ·
+ ├── count                                 ·             ·
+ │    └── delete                           ·             ·
+ │         │                               from          parent
+ │         │                               strategy      deleter
+ │         └── buffer node                 ·             ·
+ │              │                          label         buffer 1
+ │              └── scan                   ·             ·
+ │                                         table         parent@primary
+ │                                         spans         /3-/3/#
+ ├── fk-check                              ·             ·
+ │    └── error if rows                    ·             ·
+ │         └── lookup-join                 ·             ·
+ │              │                          table         child@child_auto_index_fk_p_ref_parent
+ │              │                          type          semi
+ │              │                          equality      (p) = (p)
+ │              └── render                 ·             ·
+ │                   └── scan buffer node  ·             ·
+ │                                         label         buffer 1
+ ├── fk-check                              ·             ·
+ │    └── error if rows                    ·             ·
+ │         └── lookup-join                 ·             ·
+ │              │                          table         child_nullable@child_nullable_auto_index_fk_p_ref_parent
+ │              │                          type          semi
+ │              │                          equality      (p) = (p)
+ │              └── render                 ·             ·
+ │                   └── scan buffer node  ·             ·
+ │                                         label         buffer 1
+ └── fk-check                              ·             ·
+      └── error if rows                    ·             ·
+           └── lookup-join                 ·             ·
+                │                          table         child2@child2_auto_index_fk_p_ref_parent
+                │                          type          semi
+                │                          equality      (other) = (p)
+                └── render                 ·             ·
+                     └── scan buffer node  ·             ·
+·                                          label         buffer 1
 
 statement ok
 CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
@@ -313,33 +313,33 @@ CREATE TABLE doublechild (
 query TTT
 EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
 ----
-·                                     distributed  false
-·                                     vectorized   false
-root                                  ·            ·
- ├── count                            ·            ·
- │    └── delete                      ·            ·
- │         │                          from         doubleparent
- │         │                          strategy     deleter
- │         └── buffer node            ·            ·
- │              │                     label        buffer 1
- │              └── scan              ·            ·
- │                                    table        doubleparent@primary
- │                                    spans        /10-/11
- └── fk-check                         ·            ·
-      └── error if rows               ·            ·
-           └── lookup-join            ·            ·
-                │                     table        doublechild@doublechild_auto_index_fk_p1_ref_doubleparent
-                │                     type         semi
-                │                     equality     (p1, p2) = (p1, p2)
-                └── scan buffer node  ·            ·
-·                                     label        buffer 1
+·                                     distribution  local
+·                                     vectorized    false
+root                                  ·             ·
+ ├── count                            ·             ·
+ │    └── delete                      ·             ·
+ │         │                          from          doubleparent
+ │         │                          strategy      deleter
+ │         └── buffer node            ·             ·
+ │              │                     label         buffer 1
+ │              └── scan              ·             ·
+ │                                    table         doubleparent@primary
+ │                                    spans         /10-/11
+ └── fk-check                         ·             ·
+      └── error if rows               ·             ·
+           └── lookup-join            ·             ·
+                │                     table         doublechild@doublechild_auto_index_fk_p1_ref_doubleparent
+                │                     type          semi
+                │                     equality      (p1, p2) = (p1, p2)
+                └── scan buffer node  ·             ·
+·                                     label         buffer 1
 
 # -- Tests with UPDATE --
 
 query TTT
 EXPLAIN UPDATE child SET p = 4
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -370,7 +370,7 @@ root                                       ·                   ·
 query TTT
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
 ----
-·                                          distributed            false
+·                                          distribution           local
 ·                                          vectorized             false
 root                                       ·                      ·
  ├── count                                 ·                      ·
@@ -400,7 +400,7 @@ root                                       ·                      ·
 query TTT
 EXPLAIN UPDATE parent SET p = p+1
 ----
-·                                                    distributed         false
+·                                                    distribution        local
 ·                                                    vectorized          false
 root                                                 ·                   ·
  ├── count                                           ·                   ·
@@ -461,7 +461,7 @@ root                                                 ·                   ·
 query TTT
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
 ----
-·                                               distributed       false
+·                                               distribution      local
 ·                                               vectorized        false
 root                                            ·                 ·
  ├── count                                      ·                 ·
@@ -509,7 +509,7 @@ CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
 query TTT
 EXPLAIN UPDATE child SET c = 4
 ----
-·                                                    distributed         false
+·                                                    distribution        local
 ·                                                    vectorized          false
 root                                                 ·                   ·
  ├── count                                           ·                   ·
@@ -550,7 +550,7 @@ root                                                 ·                   ·
 query TTT
 EXPLAIN UPDATE child SET p = 4
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -581,7 +581,7 @@ root                                       ·                   ·
 query TTT
 EXPLAIN UPDATE child SET p = p
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -612,7 +612,7 @@ root                                       ·                   ·
 query TTT
 EXPLAIN UPDATE child SET p = p+1, c = c+1
 ----
-·                                                    distributed         false
+·                                                    distribution        local
 ·                                                    vectorized          false
 root                                                 ·                   ·
  ├── count                                           ·                   ·
@@ -668,7 +668,7 @@ CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
 query TTT
 EXPLAIN UPDATE child SET p = 4
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -702,7 +702,7 @@ CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
 query TTT
 EXPLAIN UPDATE self SET y = 3
 ----
-·                                          distributed         false
+·                                          distribution        local
 ·                                          vectorized          false
 root                                       ·                   ·
  ├── count                                 ·                   ·
@@ -733,7 +733,7 @@ root                                       ·                   ·
 query TTT
 EXPLAIN UPDATE self SET x = 3
 ----
-·                                                    distributed         false
+·                                                    distribution        local
 ·                                                    vectorized          false
 root                                                 ·                   ·
  ├── count                                           ·                   ·
@@ -778,7 +778,7 @@ SET enable_insert_fast_path = true
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
-·                      distributed    false              ·   ·
+·                      distribution   local              ·   ·
 ·                      vectorized     false              ·   ·
 count                  ·              ·                  ()  ·
  └── insert-fast-path  ·              ·                  ()  ·
@@ -858,15 +858,15 @@ CREATE TABLE nonunique_idx_child (
 query TTT
 EXPLAIN INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
 ----
-·                      distributed  false
-·                      vectorized   false
-count                  ·            ·
- └── insert-fast-path  ·            ·
-·                      into         nonunique_idx_child(k, ref1, ref2)
-·                      strategy     inserter
-·                      auto commit  ·
-·                      FK check     nonunique_idx_parent@nonunique_idx_parent_k2_idx
-·                      size         3 columns, 1 row
+·                      distribution  local
+·                      vectorized    false
+count                  ·             ·
+ └── insert-fast-path  ·             ·
+·                      into          nonunique_idx_child(k, ref1, ref2)
+·                      strategy      inserter
+·                      auto commit   ·
+·                      FK check      nonunique_idx_parent@nonunique_idx_parent_k2_idx
+·                      size          3 columns, 1 row
 
 # Regression test for #46397: upserter was looking at the incorrect ordinal for
 # the check because of an extra input column used by the FK check.
@@ -907,18 +907,18 @@ CREATE TABLE cascadechild (
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
 ----
-·                           distributed  false                   ·    ·
-·                           vectorized   false                   ·    ·
-root                        ·            ·                       ()   ·
- ├── count                  ·            ·                       ()   ·
- │    └── delete            ·            ·                       ()   ·
- │         │                from         cascadeparent           ·    ·
- │         │                strategy     deleter                 ·    ·
- │         └── buffer node  ·            ·                       (p)  ·
- │              │           label        buffer 1                ·    ·
- │              └── scan    ·            ·                       (p)  ·
- │                          table        cascadeparent@primary   ·    ·
- │                          spans        /2-                     ·    ·
- └── fk-cascade             ·            ·                       ·    ·
-·                           fk           fk_p_ref_cascadeparent  ·    ·
-·                           input        buffer 1                ·    ·
+·                           distribution  local                   ·    ·
+·                           vectorized    false                   ·    ·
+root                        ·             ·                       ()   ·
+ ├── count                  ·             ·                       ()   ·
+ │    └── delete            ·             ·                       ()   ·
+ │         │                from          cascadeparent           ·    ·
+ │         │                strategy      deleter                 ·    ·
+ │         └── buffer node  ·             ·                       (p)  ·
+ │              │           label         buffer 1                ·    ·
+ │              └── scan    ·             ·                       (p)  ·
+ │                          table         cascadeparent@primary   ·    ·
+ │                          spans         /2-                     ·    ·
+ └── fk-cascade             ·             ·                       ·    ·
+·                           fk            fk_p_ref_cascadeparent  ·    ·
+·                           input         buffer 1                ·    ·

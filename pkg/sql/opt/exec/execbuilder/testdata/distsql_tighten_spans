@@ -135,93 +135,93 @@ NULL       /0         {1}       1
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE b <= 3
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@b
-·     spans        -/4
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@b
+·     spans         -/4
 
 # Partial predicate on primary key should not be tightened.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        -/4
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         -/4
 
 # Tighten end key if span contains full primary key.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b <= 3
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        -/3/3/#
-·     filter       b <= 3
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         -/3/3/#
+·     filter        b <= 3
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        -/3/3/#
-·     filter       b < 4
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         -/3/3/#
+·     filter        b < 4
 
 # Mixed bounds.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        /2-
-·     filter       b <= 3
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         /2-
+·     filter        b <= 3
 
 # Edge cases.
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 0 AND b <= 0
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        -/0/0/#
-·     filter       b <= 0
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         -/0/0/#
+·     filter        b <= 0
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        -/-1/-1/#
-·     filter       b <= -1
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         -/-1/-1/#
+·     filter        b <= -1
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        /1-/1/-9223372036854775808/#
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         /1-/1/-9223372036854775808/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p1@primary
-·     spans        /1-/1/9223372036854775807/#
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p1@primary
+·     spans         /1-/1/9223372036854775807/#
 
 # Table c1 (interleaved table)
 
@@ -230,22 +230,22 @@ scan  ·            ·
 query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        c1@primary
-·     spans        -/4
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         c1@primary
+·     spans         -/4
 
 # Tighten span on fully primary key.
 query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        c1@primary
-·     spans        -/3/3/#/54/1/#
-·     filter       b <= 3
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         c1@primary
+·     spans         -/3/3/#/54/1/#
+·     filter        b <= 3
 
 # Table p2 with interleaved index.
 
@@ -255,22 +255,22 @@ scan  ·            ·
 query TTT
 EXPLAIN SELECT * FROM p2 WHERE i >= 2
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p2@primary
-·     spans        /2-
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p2@primary
+·     spans         /2-
 
 # Upper bound (i <= 5)
 
 query TTT
 EXPLAIN SELECT * FROM p2 WHERE i <= 5
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p2@primary
-·     spans        -/5/#
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p2@primary
+·     spans         -/5/#
 
 # From the interleaved index: no tightening at all.
 
@@ -280,91 +280,91 @@ scan  ·            ·
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p2@p2_id
-·     spans        /1/#/55/2/2-
-·     filter       d >= 2
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p2@p2_id
+·     spans         /1/#/55/2/2-
+·     filter        d >= 2
 
 # Upper bound (i <= 6 AND d <= 5)
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p2@p2_id
-·     spans        -/6/#/55/2/6
-·     filter       d <= 5
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p2@p2_id
+·     spans         -/6/#/55/2/6
+·     filter        d <= 5
 
 # IS NULL
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p2@p2_id
-·     spans        /1/#/55/2/NULL-
-·     filter       d IS NULL
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p2@p2_id
+·     spans         /1/#/55/2/NULL-
+·     filter        d IS NULL
 
 # IS NOT NULL
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        p2@p2_id
-·     spans        /1/#/55/2/!NULL-
-·     filter       d IS NOT NULL
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         p2@p2_id
+·     spans         /1/#/55/2/!NULL-
+·     filter        d IS NOT NULL
 
 # String table
 
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a = 'a'
 ----
-tree  field        description
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        bytes_t@primary
-·     spans        /"a"-/"a"/#
+tree  field         description
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         bytes_t@primary
+·     spans         /"a"-/"a"/#
 
 # No tightening.
 
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
 ----
-tree  field        description
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        bytes_t@primary
-·     spans        -/"aa"
+tree  field         description
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         bytes_t@primary
+·     spans         -/"aa"
 
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
-tree  field        description
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        decimal_t@primary
-·     spans        /1-/1/#
+tree  field         description
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         decimal_t@primary
+·     spans         /1-/1/#
 
 # No tightening.
 
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 ----
-tree  field        description
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        decimal_t@primary
-·     spans        -/2
+tree  field         description
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         decimal_t@primary
+·     spans         -/2

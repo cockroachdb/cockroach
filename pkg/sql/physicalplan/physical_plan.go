@@ -1183,3 +1183,9 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
 		p.ResultRouters[i] = mergedProcIdx
 	}
 }
+
+// IsLastStageDistributed returns whether the last stage of processors is
+// distributed.
+func (p *PhysicalPlan) IsLastStageDistributed() bool {
+	return len(p.ResultRouters) > 1
+}

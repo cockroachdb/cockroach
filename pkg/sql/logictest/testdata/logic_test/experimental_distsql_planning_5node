@@ -1,0 +1,111 @@
+# LogicTest: 5node
+
+# This test file makes sure that experimental DistSQL planning actually plans
+# processors and other components correctly. In order to make the output
+# deterministic we place the data manually.
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
+INSERT INTO kv SELECT i, i FROM generate_series(1,5) AS g(i);
+CREATE TABLE kw (k INT PRIMARY KEY, w INT, FAMILY (k, w));
+INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
+
+# Split into 5 parts, each row from each table goes to one node.
+statement ok
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
+ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kw]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {5}       5
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
+
+statement ok
+SET experimental_distsql_planning = always
+
+query TTT
+EXPLAIN SELECT * FROM kv
+----
+·  distribution  full
+·  vectorized    true
+
+
+query BT
+EXPLAIN (DISTSQL) SELECT * FROM kv
+----
+true  https://cockroachdb.github.io/distsqlplan/decode.html#eJyk0s9O4zAQBvD7PkX0nXZXjvJ_DzktgiJFKm1pekBCOYR4VEWkcbAdBKry7qjOobQqYOjR9nz-zUizhXpqkGJyt5heZDPn91WWr_Lb6R8nn0wnlyvnr3O9nN84j89gaAWnWbkhhfQeARhCMERgiMGQoGDopKhIKSF3JVsTyPgLUp-hbrte764LhkpIQrqFrnVDSLEqHxpaUslJej4YOOmybgzTyXpTytf_poG8K1uVOq4XohgYRK_3fypdrglpMLAP3D3Xt0JyksQPqGI40dlMuKLzkqPC03R4QAf2Iwdfj-yFrhdZDh3ay6GFHLlebClH9nJkIceul1jKsb0cW8iJ-4MFO-EuSXWiVWS1P_5uAYmvadxWJXpZ0UKKyjDjcW5y5oKT0uNrMB6y1jyZBt-Hg0_D_w7C_nE4PEeOzgnH54STb4WL4ddbAAAA__9oS6Od
+
+
+# Note that we want to test DistSQL physical planning and the obvious choice
+# would be to use EXPLAIN (DISTSQL). However, this explain variant doesn't have
+# a textual mode which is easier to verify, so we use EXPLAIN (VEC) instead.
+# TODO(yuzefovich): consider adding textual mode to EXPLAIN (DISTSQL) and
+# using it here.
+# TODO(yuzefovich): figure out how we would display plans that have distributed
+# stages followed by local ones followed by distributed stages.
+
+# An example of partially distributed plan (due to DOid type that is not
+# supported by DistSQL).
+
+query T
+EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
+----
+│
+├ Node 1
+│ └ *colexec.isNullSelOp
+│   └ *colexec.castOp
+│     └ *colexec.ParallelUnorderedSynchronizer
+│       ├ *colexec.colBatchScan
+│       ├ *colrpc.Inbox
+│       ├ *colrpc.Inbox
+│       ├ *colrpc.Inbox
+│       └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *colexec.colBatchScan
+├ Node 3
+│ └ *colrpc.Outbox
+│   └ *colexec.colBatchScan
+├ Node 4
+│ └ *colrpc.Outbox
+│   └ *colexec.colBatchScan
+└ Node 5
+  └ *colrpc.Outbox
+    └ *colexec.colBatchScan
+
+# Check that the plan is local when experimental DistSQL planning is disabled.
+statement ok
+SET experimental_distsql_planning = off
+
+query T
+EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
+----
+│
+└ Node 1
+  └ *colexec.isNullSelOp
+    └ *colexec.castOp
+      └ *colexec.colBatchScan
+
+statement ok
+SET experimental_distsql_planning = always
