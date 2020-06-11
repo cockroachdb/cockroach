@@ -17,6 +17,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -671,11 +672,18 @@ func DecodeOidDatum(
 
 	// Types with identical text/binary handling.
 	switch id {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar:
+	case oid.T_text, oid.T_varchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
 		return tree.NewDString(string(b)), nil
+	case oid.T_bpchar:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		// Trim the trailing spaces
+		sv := strings.TrimRight(string(b), " ")
+		return tree.NewDString(sv), nil
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
