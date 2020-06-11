@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -101,6 +102,37 @@ func getCreateTypeParams(
 	return typeKey, id, nil
 }
 
+// Postgres starts off trying to create the type as _<typename>. It then
+// continues adding "_" to the front of the name until it doesn't find
+// a collision. findFreeArrayTypeName performs this logic to find a free name
+// for the array type based off of a type with the input name.
+func findFreeArrayTypeName(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID, schemaID sqlbase.ID, name string,
+) (string, error) {
+	arrayName := "_" + name
+	for {
+		// See if there is a collision with the current name.
+		exists, _, err := sqlbase.LookupObjectID(
+			ctx,
+			txn,
+			codec,
+			parentID,
+			schemaID,
+			arrayName,
+		)
+		if err != nil {
+			return "", err
+		}
+		// If we found an empty spot, then break out.
+		if !exists {
+			break
+		}
+		// Otherwise, append another "_" to the front of the name.
+		arrayName = "_" + arrayName
+	}
+	return arrayName, nil
+}
+
 // createArrayType performs the implicit array type creation logic of Postgres.
 // When a type is created in Postgres, Postgres will implicitly create an array
 // type of that user defined type. This array type tracks changes to the
@@ -114,38 +146,19 @@ func (p *planner) createArrayType(
 	typDesc *sqlbase.MutableTypeDescriptor,
 	db *sqlbase.ImmutableDatabaseDescriptor,
 ) (sqlbase.ID, error) {
-	// Postgres starts off trying to create the type as _<typename>. It then
-	// continues adding "_" to the front of the name until it doesn't find
-	// a collision.
 	schemaID := sqlbase.ID(keys.PublicSchemaID)
-	arrayTypeName := "_" + typ.Type()
-	var arrayTypeKey sqlbase.DescriptorKey
-	for {
-		// See if there is a collision with the current name.
-		exists, _, err := sqlbase.LookupObjectID(
-			params.ctx,
-			params.p.txn,
-			params.ExecCfg().Codec,
-			db.GetID(),
-			schemaID,
-			arrayTypeName,
-		)
-		if err != nil {
-			return 0, err
-		}
-		// If we found an empty spot, then create the namespace key for this entry.
-		if !exists {
-			arrayTypeKey = sqlbase.MakePublicTableNameKey(
-				params.ctx,
-				params.ExecCfg().Settings,
-				db.GetID(),
-				arrayTypeName,
-			)
-			break
-		}
-		// Otherwise, append another "_" to the front of the name.
-		arrayTypeName = "_" + arrayTypeName
+	arrayTypeName, err := findFreeArrayTypeName(
+		params.ctx,
+		params.p.txn,
+		params.ExecCfg().Codec,
+		db.ID,
+		schemaID,
+		typ.Type(),
+	)
+	if err != nil {
+		return 0, err
 	}
+	arrayTypeKey := sqlbase.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.ID, schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)

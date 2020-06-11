@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,19 +57,10 @@ func TestingGetMutableExistingTableDescriptor(
 	return NewMutableExistingTableDescriptor(*TestingGetTableDescriptor(kvDB, codec, database, table))
 }
 
-// TestingGetTableDescriptor retrieves a table descriptor directly from the KV
-// layer.
-//
-// TODO(ajwerner): Move this to catalogkv and/or question the very existence of
-// this function. Consider renaming to TestingGetTableDescriptorByName or
-// removing it altogether.
-func TestingGetTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *TableDescriptor {
-	// log.VEventf(context.TODO(), 2, "TestingGetTableDescriptor %q %q", database, table)
-	// testutil, so we pass settings as nil for both database and table name keys.
+func testingGetDescriptor(
+	ctx context.Context, kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
+) (hlc.Timestamp, *Descriptor) {
 	dKey := NewDatabaseKey(database)
-	ctx := context.TODO()
 	gr, err := kvDB.Get(ctx, dKey.Key(codec))
 	if err != nil {
 		panic(err)
@@ -78,13 +70,13 @@ func TestingGetTableDescriptor(
 	}
 	dbDescID := ID(gr.ValueInt())
 
-	tKey := NewPublicTableKey(dbDescID, table)
+	tKey := NewPublicTableKey(dbDescID, object)
 	gr, err = kvDB.Get(ctx, tKey.Key(codec))
 	if err != nil {
 		panic(err)
 	}
 	if !gr.Exists() {
-		panic("table missing")
+		panic("object missing")
 	}
 
 	descKey := MakeDescMetadataKey(codec, ID(gr.ValueInt()))
@@ -93,11 +85,35 @@ func TestingGetTableDescriptor(
 	if err != nil || desc.Equal(Descriptor{}) {
 		log.Fatalf(ctx, "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
+	return ts, desc
+}
+
+// TestingGetTypeDescriptor retrieves a type descriptor directly from the kv layer.
+//
+// This function should be moved wherever TestingGetTableDescriptor is moved.
+func TestingGetTypeDescriptor(
+	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
+) *TypeDescriptor {
+	_, desc := testingGetDescriptor(context.TODO(), kvDB, codec, database, object)
+	return desc.GetType()
+}
+
+// TestingGetTableDescriptor retrieves a table descriptor directly from the KV
+// layer.
+//
+// TODO(ajwerner): Move this to catalogkv and/or question the very existence of
+// this function. Consider renaming to TestingGetTableDescriptorByName or
+// removing it altogether.
+func TestingGetTableDescriptor(
+	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
+) *TableDescriptor {
+	ctx := context.TODO()
+	ts, desc := testingGetDescriptor(ctx, kvDB, codec, database, table)
 	tableDesc := desc.Table(ts)
 	if tableDesc == nil {
 		return nil
 	}
-	err = tableDesc.MaybeFillInDescriptor(ctx, kvDB, codec)
+	err := tableDesc.MaybeFillInDescriptor(ctx, kvDB, codec)
 	if err != nil {
 		log.Fatalf(ctx, "failure to fill in descriptor. err: %v", err)
 	}

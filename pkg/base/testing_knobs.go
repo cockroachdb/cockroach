@@ -19,17 +19,18 @@ type ModuleTestingKnobs interface {
 // TestingKnobs contains facilities for controlling various parts of the
 // system for testing.
 type TestingKnobs struct {
-	Store               ModuleTestingKnobs
-	KVClient            ModuleTestingKnobs
-	SQLExecutor         ModuleTestingKnobs
-	SQLLeaseManager     ModuleTestingKnobs
-	SQLSchemaChanger    ModuleTestingKnobs
-	GCJob               ModuleTestingKnobs
-	PGWireTestingKnobs  ModuleTestingKnobs
-	SQLMigrationManager ModuleTestingKnobs
-	DistSQL             ModuleTestingKnobs
-	SQLEvalContext      ModuleTestingKnobs
-	RegistryLiveness    ModuleTestingKnobs
-	Server              ModuleTestingKnobs
-	TenantTestingKnobs  ModuleTestingKnobs
+	Store                ModuleTestingKnobs
+	KVClient             ModuleTestingKnobs
+	SQLExecutor          ModuleTestingKnobs
+	SQLLeaseManager      ModuleTestingKnobs
+	SQLSchemaChanger     ModuleTestingKnobs
+	SQLTypeSchemaChanger ModuleTestingKnobs
+	GCJob                ModuleTestingKnobs
+	PGWireTestingKnobs   ModuleTestingKnobs
+	SQLMigrationManager  ModuleTestingKnobs
+	DistSQL              ModuleTestingKnobs
+	SQLEvalContext       ModuleTestingKnobs
+	RegistryLiveness     ModuleTestingKnobs
+	Server               ModuleTestingKnobs
+	TenantTestingKnobs   ModuleTestingKnobs
 }
