@@ -50,7 +50,7 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
 
-func _ASSIGN_EQ(_, _, _, _, _, _ interface{}) int {
+func _COMPARE(_, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
@@ -175,13 +175,23 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, er
 func cmpIn_TYPE(
 	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
-		_ASSIGN_EQ(cmp, targetElem, filterRow[i], _, targetCol, _)
-		if cmp {
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+		_COMPARE(cmpResult, targetElem, filterRow[i], targetCol, _)
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
