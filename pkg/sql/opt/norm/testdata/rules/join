@@ -3086,3 +3086,260 @@ full-join (cross)
  │    └── fd: (3)-->(4)
  └── filters
       └── (substring('', ')') = '') = (u:3 > 0) [outer=(3), immutable]
+
+# --------------------------------------------------
+# LeftAssociateJoinsLeft,  LeftAssociateJoinsRight,
+# RightAssociateJoinsLeft,  RightAssociateJoinsRight
+# --------------------------------------------------
+
+# Common use case.
+norm expect=RightAssociateJoinsLeft
+SELECT * FROM xy, a, uv WHERE x=u AND y=k
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null k:3!null i:4 f:5!null s:6 j:7 u:8!null v:9
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (8)
+ ├── fd: (1)-->(2), (3)-->(4-7), (2)==(3), (3)==(2), (8)-->(9), (1)==(8), (8)==(1)
+ ├── inner-join (hash)
+ │    ├── columns: x:1!null y:2!null k:3!null i:4 f:5!null s:6 j:7
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2), (3)-->(4-7), (2)==(3), (3)==(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan a
+ │    │    ├── columns: k:3!null i:4 f:5!null s:6 j:7
+ │    │    ├── key: (3)
+ │    │    └── fd: (3)-->(4-7)
+ │    └── filters
+ │         └── y:2 = k:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+ ├── scan uv
+ │    ├── columns: u:8!null v:9
+ │    ├── key: (8)
+ │    └── fd: (8)-->(9)
+ └── filters
+      └── x:1 = u:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# LeftAssociateJoinsLeft case with one association operation.
+norm expect=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER JOIN a
+ON k=x
+----
+inner-join (cross)
+ ├── scan uv
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── scan a
+ │    └── filters
+ │         └── k = x
+ └── filters (true)
+
+# LeftAssociateJoinsRight case with one association operation.
+norm expect=LeftAssociateJoinsRight format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER JOIN a
+ON i=u
+----
+inner-join (cross)
+ ├── scan xy
+ ├── inner-join (hash)
+ │    ├── scan uv
+ │    ├── scan a
+ │    └── filters
+ │         └── i = u
+ └── filters (true)
+
+# RightAssociateJoinsLeft case with one association operation.
+norm expect=RightAssociateJoinsLeft format=hide-all
+SELECT * FROM a
+INNER JOIN (SELECT * FROM xy INNER JOIN uv ON True)
+ON k=x
+----
+inner-join (cross)
+ ├── inner-join (hash)
+ │    ├── scan a
+ │    ├── scan xy
+ │    └── filters
+ │         └── k = x
+ ├── scan uv
+ └── filters (true)
+
+# RightAssociateJoinsRight case with one association operation.
+norm expect=RightAssociateJoinsRight format=hide-all
+SELECT * FROM a
+INNER JOIN (SELECT * FROM xy INNER JOIN uv ON True)
+ON i=u
+----
+inner-join (cross)
+ ├── inner-join (hash)
+ │    ├── scan a
+ │    ├── scan uv
+ │    └── filters
+ │         └── i = u
+ ├── scan xy
+ └── filters (true)
+
+# LeftAssociateJoinsLeft case with multiple filters referencing the left input.
+norm expect=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER JOIN a
+ON k=x AND i=y
+----
+inner-join (cross)
+ ├── scan uv
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── scan a
+ │    └── filters
+ │         ├── k = x
+ │         └── i = y
+ └── filters (true)
+
+# LeftAssociateJoinsLeft case with multiple filters referencing both inputs.
+norm expect=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER JOIN a
+ON k=x AND i=u
+----
+inner-join (hash)
+ ├── scan uv
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── scan a
+ │    └── filters
+ │         └── k = x
+ └── filters
+      └── i = u
+
+# Case with multiple associations. Also worst-case scenario, since 9 operations
+# have to be performed with 6 joins in the tree.
+norm expect=(LeftAssociateJoinsLeft,LeftAssociateJoinsRight) format=hide-all
+SELECT *
+FROM xy
+INNER JOIN xy AS xy1 ON True
+INNER JOIN xy AS xy2 ON True
+INNER JOIN xy AS xy3 ON True
+INNER JOIN uv AS uv1 ON xy.x=uv1.u
+INNER JOIN uv AS uv2 ON xy.x=uv2.u
+INNER JOIN uv AS uv3 ON xy.x=uv3.u
+----
+inner-join (cross)
+ ├── scan xy3
+ ├── inner-join (cross)
+ │    ├── scan xy2
+ │    ├── inner-join (cross)
+ │    │    ├── scan xy1
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    ├── scan uv1
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── xy.x = uv1.u
+ │    │    │    │    ├── scan uv2
+ │    │    │    │    └── filters
+ │    │    │    │         └── xy.x = uv2.u
+ │    │    │    ├── scan uv3
+ │    │    │    └── filters
+ │    │    │         └── xy.x = uv3.u
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
+# No-op case because the lower join isn't a cross join.
+norm expect-not=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON u=x)
+INNER JOIN a
+ON k=x
+----
+inner-join (hash)
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── scan uv
+ │    └── filters
+ │         └── u = x
+ ├── scan a
+ └── filters
+      └── k = x
+
+# No-op case because the upper join is a cross join.
+norm expect-not=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER JOIN a
+ON True
+----
+inner-join (cross)
+ ├── inner-join (cross)
+ │    ├── scan xy
+ │    ├── scan uv
+ │    └── filters (true)
+ ├── scan a
+ └── filters (true)
+
+# No-op case because the lower join has join hints.
+norm expect-not=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER MERGE JOIN uv ON True)
+INNER JOIN a
+ON k=x
+----
+inner-join (hash)
+ ├── inner-join (cross)
+ │    ├── flags: force merge join
+ │    ├── scan xy
+ │    ├── scan uv
+ │    └── filters (true)
+ ├── scan a
+ └── filters
+      └── k = x
+
+# No-op case because the upper join has join hints.
+norm expect-not=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER MERGE JOIN a
+ON k=x
+----
+inner-join (hash)
+ ├── flags: force merge join
+ ├── inner-join (cross)
+ │    ├── scan xy
+ │    ├── scan uv
+ │    └── filters (true)
+ ├── scan a
+ └── filters
+      └── k = x
+
+# No-op case for LeftAssociateJoinsLeft because the upper filter is bound by the
+# lower join's right input (instead of left).
+norm expect-not=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM (SELECT * FROM xy INNER JOIN uv ON True)
+INNER JOIN a
+ON i=u
+----
+inner-join (cross)
+ ├── scan xy
+ ├── inner-join (hash)
+ │    ├── scan uv
+ │    ├── scan a
+ │    └── filters
+ │         └── i = u
+ └── filters (true)
+
+# No-op case for LeftAssociateJoinsLeft because the lower join is the right
+# input of the upper join.
+norm expect-not=LeftAssociateJoinsLeft format=hide-all
+SELECT * FROM a
+INNER JOIN (SELECT * FROM xy INNER JOIN uv ON True)
+ON k=x
+----
+inner-join (cross)
+ ├── inner-join (hash)
+ │    ├── scan a
+ │    ├── scan xy
+ │    └── filters
+ │         └── k = x
+ ├── scan uv
+ └── filters (true)
