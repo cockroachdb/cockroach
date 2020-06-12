@@ -381,6 +381,17 @@ func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error)
 	cfg.certificateManager.once.Do(func() {
 		cfg.certificateManager.cm, cfg.certificateManager.err =
 			security.NewCertificateManager(cfg.SSLCertsDir)
+		if cfg.certificateManager.err == nil && !cfg.Insecure {
+			infos, err := cfg.certificateManager.cm.ListCertificates()
+			if err != nil {
+				cfg.certificateManager.err = err
+			} else if len(infos) == 0 {
+				// If we know there should be certificates (we're in secure mode)
+				// but there aren't any, this likely indicates that the certs dir
+				// was misconfigured.
+				cfg.certificateManager.err = errors.New("no certificates found; does certs dir exist?")
+			}
+		}
 	})
 	return cfg.certificateManager.cm, cfg.certificateManager.err
 }
