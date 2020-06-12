@@ -15,6 +15,15 @@ import "github.com/spf13/cobra"
 func init() {
 	cockroachCmd.AddCommand(mtCmd)
 	mtCmd.AddCommand(mtStartSQLCmd)
+
+	mtCertsCmd.AddCommand(
+		mtCreateTenantServerCACertCmd,
+		mtCreateTenantServerCertCmd,
+		mtCreateTenantClientCACertCmd,
+		mtCreateTenantClientCertCmd,
+	)
+
+	mtCmd.AddCommand(mtCertsCmd)
 }
 
 // mtCmd is the base command for functionality related to multi-tenancy.
@@ -28,4 +37,18 @@ This functionality is **experimental** and for internal use only.
 `,
 	RunE:   usageAndErr,
 	Hidden: true,
+}
+
+var mtCertsCmd = &cobra.Command{
+	Use:   "cert [command]",
+	Short: "certificate creation for multi-tenancy",
+	Long: `
+Commands that create certificates for multi-tenancy.
+These are useful mostly for testing. In production deployments the certificates
+will not be collected in one place and not all of them will be issued using this
+command.
+
+This functionality is **experimental** and for internal use only.
+`,
+	RunE: usageAndErr,
 }
