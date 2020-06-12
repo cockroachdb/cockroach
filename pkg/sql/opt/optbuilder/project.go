@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -222,6 +223,22 @@ func (b *Builder) finishBuildScalar(
 ) (out opt.ScalarExpr) {
 	if outScope == nil {
 		return scalar
+	}
+
+	// Add a view dependency on a RegClass object.
+	if b.trackViewDeps {
+		if texpr.ResolvedType() == types.RegClass {
+			regclass, err := texpr.Eval(b.evalCtx)
+			if err != nil {
+				panic(err)
+			}
+			tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
+			ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+
+			b.viewDeps = append(b.viewDeps, opt.ViewDep{
+				DataSource: ds,
+			})
+		}
 	}
 
 	// Avoid synthesizing a new column if possible.

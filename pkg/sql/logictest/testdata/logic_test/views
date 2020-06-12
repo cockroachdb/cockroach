@@ -717,3 +717,27 @@ ALTER TABLE abc DROP COLUMN b
 
 statement error pq: cannot drop column "c" because view "vabc" depends on it
 ALTER TABLE abc DROP COLUMN c
+
+# RegClass objects used in expressions should be added to view dependencies.
+statement ok
+CREATE TABLE toreg();
+CREATE VIEW vregclass AS SELECT 'toreg'::regclass
+
+statement error pq: cannot drop relation "toreg" because view "vregclass" depends on it
+DROP TABLE toreg;
+
+statement ok
+DROP VIEW vregclass;
+CREATE VIEW vregclass AS SELECT x FROM (SELECT CAST('toreg' AS regclass) AS x)
+
+statement error pq: cannot drop relation "toreg" because view "vregclass" depends on it
+DROP TABLE toreg;
+
+statement ok
+DROP VIEW vregclass;
+CREATE SEQUENCE s_reg;
+CREATE VIEW vregclass AS SELECT x FROM [SELECT 's_reg'::REGCLASS AS x]
+
+statement error pq: cannot drop sequence s_reg because other objects depend on it
+DROP SEQUENCE s_reg
+
