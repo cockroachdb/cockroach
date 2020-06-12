@@ -127,7 +127,7 @@ func Project(point *geom.Point, distance float64, azimuth s1.Angle) (*geom.Point
 			float64(projected.Lng.Normalized()) * 180.0 / math.Pi,
 			normalizeLatitude(float64(projected.Lat)) * 180.0 / math.Pi,
 		},
-	), nil
+	).SetSRID(point.SRID()), nil
 }
 
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.
