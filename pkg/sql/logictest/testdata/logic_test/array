@@ -169,6 +169,11 @@ SELECT '{hello}'::VARCHAR(2)[]
 ----
 {he}
 
+query T
+SELECT '{hello, a🐛b🏠c}'::VARCHAR(2)[]
+----
+{he,a🐛}
+
 # array casting
 
 query T

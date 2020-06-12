@@ -61,3 +61,29 @@ func TestToLowerSingleByte(t *testing.T) {
 		})
 	}
 }
+
+func TestTruncateString(t *testing.T) {
+	testCases := []struct {
+		s string
+		// res stores the expected results for maxRunes=0,1,2,3,etc.
+		res []string
+	}{
+		{"", []string{"", ""}},
+		{"abcd", []string{"", "a", "ab", "abc", "abcd", "abcd", "abcd"}},
+		{"🐛🏠", []string{"", "🐛", "🐛🏠", "🐛🏠", "🐛🏠"}},
+		{"a🐛b🏠c", []string{"", "a", "a🐛", "a🐛b", "a🐛b🏠", "a🐛b🏠c", "a🐛b🏠c"}},
+		{
+			// Test with an invalid UTF-8 sequence.
+			"\xf0\x90\x28\xbc",
+			[]string{"", "\xf0", "\xf0\x90", "\xf0\x90\x28", "\xf0\x90\x28\xbc", "\xf0\x90\x28\xbc"},
+		},
+	}
+
+	for _, tc := range testCases {
+		for i := range tc.res {
+			if r := TruncateString(tc.s, i); r != tc.res[i] {
+				t.Errorf("TruncateString(\"%q\", %d) = \"%q\"; expected \"%q\"", tc.s, i, r, tc.res[i])
+			}
+		}
+	}
+}
