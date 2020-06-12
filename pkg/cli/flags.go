@@ -453,7 +453,12 @@ func init() {
 			cliflags.CertPrincipalMap, cliCtx.certPrincipalMap)
 	}
 
-	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd} {
+	for _, cmd := range []*cobra.Command{
+		createCACertCmd,
+		createClientCACertCmd,
+		mtCreateTenantServerCACertCmd,
+		mtCreateTenantClientCACertCmd,
+	} {
 		f := cmd.Flags()
 		// CA certificates have a longer expiration time.
 		DurationFlag(f, &caCertificateLifetime, cliflags.CertificateLifetime, defaultCALifetime)
@@ -461,13 +466,27 @@ func init() {
 		BoolFlag(f, &allowCAKeyReuse, cliflags.AllowCAKeyReuse, false)
 	}
 
-	for _, cmd := range []*cobra.Command{createNodeCertCmd, createClientCertCmd} {
+	for _, cmd := range []*cobra.Command{
+		createNodeCertCmd,
+		createClientCertCmd,
+		mtCreateTenantServerCertCmd,
+		mtCreateTenantClientCertCmd,
+	} {
 		f := cmd.Flags()
 		DurationFlag(f, &certificateLifetime, cliflags.CertificateLifetime, defaultCertLifetime)
 	}
 
 	// The remaining flags are shared between all cert-generating functions.
-	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd, createNodeCertCmd, createClientCertCmd} {
+	for _, cmd := range []*cobra.Command{
+		createCACertCmd,
+		createClientCACertCmd,
+		createNodeCertCmd,
+		createClientCertCmd,
+		mtCreateTenantServerCACertCmd,
+		mtCreateTenantServerCertCmd,
+		mtCreateTenantClientCACertCmd,
+		mtCreateTenantClientCertCmd,
+	} {
 		f := cmd.Flags()
 		StringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey, baseCfg.SSLCAKey)
 		IntFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
@@ -475,6 +494,18 @@ func init() {
 	}
 	// PKCS8 key format is only available for the client cert command.
 	BoolFlag(createClientCertCmd.Flags(), &generatePKCS8Key, cliflags.GeneratePKCS8Key, false)
+
+	// The certs dir is given to all clientCmds below, but the following are not clientCmds.
+	for _, cmd := range []*cobra.Command{
+		mtCreateTenantServerCACertCmd,
+		mtCreateTenantServerCertCmd,
+		mtCreateTenantClientCACertCmd,
+		mtCreateTenantClientCertCmd,
+	} {
+		f := cmd.Flags()
+		// Certificate flags.
+		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
+	}
 
 	clientCmds := []*cobra.Command{
 		debugGossipValuesCmd,

@@ -85,8 +85,8 @@ var (
 // - client.node.crt    client certificate for the 'node' user. If it does not exist,
 //                      fall back on 'node.crt'.
 type CertificateManager struct {
-	// Certificate directory is not modified after initialization.
-	certsDir string
+	cmOptions
+
 	// The metrics struct is initialized at init time and metrics do their
 	// own locking.
 	certMetrics CertificateMetrics
@@ -112,11 +112,15 @@ type CertificateManager struct {
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config.
 	serverConfig *tls.Config
+	// Ditto tenant server.
+	tenantServerConfig *tls.Config
 	// Server-side config for the Admin UI.
 	uiServerConfig *tls.Config
 	// Client-side config for the cockroach node.
 	// All other client tls.Config objects are built as requested and not cached.
 	clientConfig *tls.Config
+	// Client config for the tenant (if running in a SQL tenant server).
+	tenantClientConfig *tls.Config
 }
 
 // CertificateMetrics holds metrics about the various certificates.
@@ -131,23 +135,46 @@ type CertificateMetrics struct {
 	UIExpiration         *metric.Gauge
 }
 
-func makeCertificateManager(certsDir string) *CertificateManager {
-	cm := &CertificateManager{certsDir: os.ExpandEnv(certsDir)}
-	// Initialize metrics:
-	cm.certMetrics = CertificateMetrics{
-		CAExpiration:         metric.NewGauge(metaCAExpiration),
-		ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
-		UICAExpiration:       metric.NewGauge(metaUICAExpiration),
-		NodeExpiration:       metric.NewGauge(metaNodeExpiration),
-		NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
-		UIExpiration:         metric.NewGauge(metaUIExpiration),
+func makeCertificateManager(certsDir string, opts ...func(*cmOptions)) *CertificateManager {
+	var o cmOptions
+	for _, fn := range opts {
+		fn(&o)
 	}
-	return cm
+	o.certsDir = os.ExpandEnv(certsDir)
+
+	return &CertificateManager{
+		cmOptions: o,
+		certMetrics: CertificateMetrics{
+			CAExpiration:         metric.NewGauge(metaCAExpiration),
+			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
+			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
+			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
+			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
+			UIExpiration:         metric.NewGauge(metaUIExpiration),
+		},
+	}
+}
+
+type cmOptions struct {
+	// Certificate directory is not modified after initialization.
+	certsDir string
+	// tenantIdentifier, if set, specifies the tenant to use for loading tenant
+	// client certs.
+	tenantIdentifier string
+}
+
+// ForTenant is an option to NewCertificateManager which ties the manager to
+// the provided tenant. Without this option, tenant client certs are not
+// available.
+func ForTenant(tenantIdentifier string) func(*cmOptions) {
+	return func(opts *cmOptions) {
+		opts.tenantIdentifier = tenantIdentifier
+	}
 }
 
 // NewCertificateManager creates a new certificate manager.
-func NewCertificateManager(certsDir string) (*CertificateManager, error) {
-	cm := makeCertificateManager(certsDir)
+func NewCertificateManager(certsDir string, opts ...func(*cmOptions)) (*CertificateManager, error) {
+	cm := makeCertificateManager(certsDir, opts...)
 	return cm, cm.LoadCertificates()
 }
 
@@ -155,8 +182,10 @@ func NewCertificateManager(certsDir string) (*CertificateManager, error) {
 // The certsDir is created if it does not exist.
 // This should only be called when generating certificates, the server has
 // no business creating the certs directory.
-func NewCertificateManagerFirstRun(certsDir string) (*CertificateManager, error) {
-	cm := makeCertificateManager(certsDir)
+func NewCertificateManagerFirstRun(
+	certsDir string, opts ...func(*cmOptions),
+) (*CertificateManager, error) {
+	cm := makeCertificateManager(certsDir, opts...)
 	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
 		return nil, err
 	}
@@ -428,7 +457,12 @@ func (cm *CertificateManager) LoadCertificates() error {
 		case TenantServerPem:
 			tenantServerCert = ci
 		case TenantClientPem:
-			tenantClientCert = ci
+			// When there are multiple tenant client certs, pick the one we need only.
+			// In practice, this is expected only during testing, when we share a certs
+			// dir between multiple tenants.
+			if ci.Name == cm.tenantIdentifier {
+				tenantClientCert = ci
+			}
 		case TenantClientCAPem:
 			tenantClientCACert = ci
 		case UIPem:
@@ -480,6 +514,10 @@ func (cm *CertificateManager) LoadCertificates() error {
 		}
 	}
 
+	if tenantClientCert == nil && cm.tenantIdentifier != "" {
+		return makeErrorf(errors.New("tenant client cert not found"), "for %s", cm.tenantIdentifier)
+	}
+
 	if nodeClientCert == nil && nodeCert != nil {
 		// No client certificate for node, but we have a node certificate. Check that
 		// it contains the required client fields.
@@ -503,6 +541,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.serverConfig = nil
 	cm.uiServerConfig = nil
 	cm.clientConfig = nil
+
+	cm.tenantClientConfig = nil
+	cm.tenantServerConfig = nil
 
 	cm.tenantServerCACert = tenantServerCACert
 	cm.tenantServerCert = tenantServerCert
@@ -601,6 +642,70 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	}
 
 	cm.serverConfig = cfg
+	return cfg, nil
+}
+
+// GetTenantServerTLSConfig returns a server TLS config with a callback to fetch
+// the latest tenant server TLS config. We still attempt to get the config to
+// make sure the initial call has a valid config loaded.
+func (cm *CertificateManager) GetTenantServerTLSConfig() (*tls.Config, error) {
+	f := cm.getEmbeddedTenantServerTLSConfig
+	if _, err := f(nil); err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		GetConfigForClient: f,
+		// NB: this is needed to use (*http.Server).ServeTLS, which tries to load
+		// a certificate eagerly from the supplied strings (which are empty in
+		// our case) unless:
+		//
+		// 	(len(config.Certificates) > 0 || config.GetCertificate != nil) == true
+		//
+		// TODO(tbg): should we generally do this for all server certs? The docs
+		// are not clear whether this is a bug or feature.
+		GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return nil, nil
+		},
+	}, nil
+}
+
+// getEmbeddedTenantServerTLSConfig is like getEmbeddedServerTLSConfig, but
+// for serving tenants.
+func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
+	_ *tls.ClientHelloInfo,
+) (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.tenantServerConfig != nil {
+		return cm.tenantServerConfig, nil
+	}
+
+	serverCA, err := cm.getTenantServerCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	serverCert, err := cm.getTenantServerCertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	tenantCA, err := cm.getTenantClientCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newServerTLSConfig(
+		serverCert.FileContents,
+		serverCert.KeyFileContents,
+		serverCA.FileContents,
+		tenantCA.FileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	cm.tenantServerConfig = cfg
 	return cfg, nil
 }
 
@@ -733,6 +838,79 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 		return nil, makeError(err, "problem with node client certificate")
 	}
 	return cm.nodeClientCert, nil
+}
+
+// getTenantCACertLocked returns the node's CA cert.
+// cm.mu must be held.
+func (cm *CertificateManager) getTenantServerCACertLocked() (*CertInfo, error) {
+	c := cm.tenantServerCACert
+	if err := checkCertIsValid(c); err != nil {
+		return nil, makeError(err, "problem with tenant CA certificate")
+	}
+	return c, nil
+}
+
+// getTenantNodeCertLocked returns the tenant node cert.
+// cm.mu must be held.
+func (cm *CertificateManager) getTenantServerCertLocked() (*CertInfo, error) {
+	c := cm.tenantServerCert
+	if err := checkCertIsValid(c); err != nil {
+		return nil, makeError(err, "problem with tenant server certificate")
+	}
+	return c, nil
+}
+
+// getTenantClientCACertLocked returns the CA cert used to verify tenant client
+// certificates. Use the client CA if it exists, otherwise fall back on the
+// general CA. cm.mu must be held.
+func (cm *CertificateManager) getTenantClientCACertLocked() (*CertInfo, error) {
+	c := cm.tenantClientCACert
+	if err := checkCertIsValid(c); err != nil {
+		return nil, makeError(err, "problem with tenant client CA certificate")
+	}
+	return c, nil
+}
+
+// getTenantClientCertLocked returns the tenant node cert.
+// cm.mu must be held.
+func (cm *CertificateManager) getTenantClientCertLocked() (*CertInfo, error) {
+	c := cm.tenantClientCert
+	if err := checkCertIsValid(c); err != nil {
+		return nil, makeError(err, "problem with tenant client certificate")
+	}
+	return c, nil
+}
+
+// GetTenantClientTLSConfig returns the most up-to-date tenant client
+// tls.Config.
+func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.tenantClientConfig != nil {
+		return cm.tenantClientConfig, nil
+	}
+
+	ca, err := cm.getTenantServerCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	tenantClientCert, err := cm.getTenantClientCertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newClientTLSConfig(
+		tenantClientCert.FileContents,
+		tenantClientCert.KeyFileContents,
+		ca.FileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	cm.tenantClientConfig = cfg
+	return cfg, nil
 }
 
 // GetClientTLSConfig returns the most up-to-date client tls.Config.

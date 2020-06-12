@@ -33,6 +33,15 @@ const (
 	EmbeddedRootKey      = "client.root.key"
 	EmbeddedTestUserCert = "client.testuser.crt"
 	EmbeddedTestUserKey  = "client.testuser.key"
+
+	EmbeddedTenantID           = 123456789
+	EmbeddedTenantCertsDir     = "test_certs/mt"
+	EmbeddedTenantServerCACert = "ca-server-tenant.crt"        // CA for tenant server (KV server)
+	EmbeddedTenantServerCert   = "server-tenant.crt"           // tenant server (KV server) cert
+	EmbeddedTenantServerKey    = "server-tenant.key"           // tenant server (KV server) key
+	EmbeddedTenantClientCACert = "ca-client-tenant.crt"        // CA for client connections (auth broker)
+	EmbeddedTenantClientCert   = "client-tenant.123456789.crt" // tenant client cert (SQL server)
+	EmbeddedTenantClientKey    = "client-tenant.123456789.key" // tenant client key (SQL server)
 )
 
 // LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
