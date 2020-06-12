@@ -168,3 +168,18 @@ t7  CREATE TABLE t7 (
     INDEX t6i3 (b DESC) WHERE b > 8,
     FAMILY "primary" (b, rowid)
 )
+
+#### EXPLAIN output shows the partial=true label on scans over partial indexes.
+
+statement ok
+CREATE TABLE t8 (b bool, INDEX (b) WHERE b)
+
+query TTT
+EXPLAIN SELECT b FROM t8 WHERE b
+----
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         t8@t8_b_idx
+·     spans         FULL SCAN
+·     partial       true

@@ -184,6 +184,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			if n.canParallelize() && (len(n.spans) > 1 || n.maxResults > 1) {
 				v.observer.attr(name, "parallel", "")
 			}
+			if n.index.IsPartial() {
+				v.observer.attr(name, "partial", "true")
+			}
 			if n.hardLimit > 0 && isFilterTrue(n.filter) {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
 			}
