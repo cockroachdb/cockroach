@@ -378,6 +378,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
+		if ic := t.InvertedConstraint; ic != nil {
+			idx := md.Table(t.Table).Index(t.Index)
+			var b strings.Builder
+			for i := 0; i < idx.KeyColumnCount(); i++ {
+				b.WriteRune('/')
+				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal)))
+			}
+			n := tp.Childf("inverted constraint: %s", b.String())
+			ic.Format(n)
+		}
 		if t.HardLimit.IsSet() {
 			tp.Childf("limit: %s", t.HardLimit)
 		}
