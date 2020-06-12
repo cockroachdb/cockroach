@@ -112,7 +112,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 		stopper:            stopper,
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		settings:           serverCtx.settings,
+		settings:           serverCtx.Settings,
 		nodeID:             &serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
@@ -125,7 +125,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 
 	clientCtx := newTestContext(clusterID, clock, stopper)
 	// Make the interval shorter to speed up the test.
-	clientCtx.heartbeatInterval = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
 	go func() { heartbeat.ready <- nil }()
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).
 		Connect(context.Background()); err != nil {

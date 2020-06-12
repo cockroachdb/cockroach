@@ -71,15 +71,15 @@ func NewNetwork(
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.RPCContext = rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		n.Stopper,
-		cluster.MakeTestingClusterSettings(),
-	)
+	n.RPCContext = rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     &base.Config{Insecure: true},
+		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Stopper:    n.Stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	var err error
-	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
+	n.tlsConfig, err = n.RPCContext.Config.GetServerTLSConfig()
 	if err != nil {
 		log.Fatalf(context.TODO(), "%v", err)
 	}

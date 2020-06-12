@@ -113,7 +113,13 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
-	cfg.RPCContext = rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper, cfg.Settings)
+	cfg.RPCContext = rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: ambient,
+		Config:     baseCtx,
+		Clock:      ltc.Clock,
+		Stopper:    ltc.Stopper,
+		Settings:   cfg.Settings,
+	})
 	cfg.RPCContext.NodeID.Set(ambient.AnnotateCtx(context.Background()), nodeID)
 	c := &cfg.RPCContext.ClusterID
 	server := rpc.NewServer(cfg.RPCContext) // never started
