@@ -634,10 +634,9 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
 │
 └ Node 1
   └ *colexec.orderedAggregator
-    └ *colexec.oneShotOp
-      └ *colexec.distinctChainOps
-        └ *rowexec.indexJoiner
-          └ *colexec.colBatchScan
+    └ *colexec.distinctChainOps
+      └ *rowexec.indexJoiner
+        └ *colexec.colBatchScan
 
 # Query 7
 query T
@@ -798,22 +797,21 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
   └ *colexec.projDivFloat64Float64Op
     └ *colexec.projMultFloat64Float64ConstOp
       └ *colexec.orderedAggregator
-        └ *colexec.oneShotOp
-          └ *colexec.distinctChainOps
-            └ *colexec.projMultFloat64Float64Op
-              └ *colexec.projMinusFloat64ConstFloat64Op
-                └ *colexec.caseOp
-                  ├ *colexec.bufferOp
-                  │ └ *colexec.hashJoiner
-                  │   ├ *colexec.colBatchScan
-                  │   └ *rowexec.indexJoiner
-                  │     └ *colexec.colBatchScan
-                  ├ *colexec.projMultFloat64Float64Op
-                  │ └ *colexec.projMinusFloat64ConstFloat64Op
-                  │   └ *colexec.projPrefixBytesBytesConstOp
-                  │     └ *colexec.bufferOp
-                  └ *colexec.constFloat64Op
-                    └ *colexec.bufferOp
+        └ *colexec.distinctChainOps
+          └ *colexec.projMultFloat64Float64Op
+            └ *colexec.projMinusFloat64ConstFloat64Op
+              └ *colexec.caseOp
+                ├ *colexec.bufferOp
+                │ └ *colexec.hashJoiner
+                │   ├ *colexec.colBatchScan
+                │   └ *rowexec.indexJoiner
+                │     └ *colexec.colBatchScan
+                ├ *colexec.projMultFloat64Float64Op
+                │ └ *colexec.projMinusFloat64ConstFloat64Op
+                │   └ *colexec.projPrefixBytesBytesConstOp
+                │     └ *colexec.bufferOp
+                └ *colexec.constFloat64Op
+                  └ *colexec.bufferOp
 
 # Query 15
 statement ok
@@ -863,18 +861,17 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, par
 └ Node 1
   └ *colexec.projDivFloat64Float64ConstOp
     └ *colexec.orderedAggregator
-      └ *colexec.oneShotOp
-        └ *colexec.distinctChainOps
+      └ *colexec.distinctChainOps
+        └ *rowexec.joinReader
           └ *rowexec.joinReader
-            └ *rowexec.joinReader
-              └ *colexec.projMultFloat64Float64ConstOp
-                └ *colexec.orderedAggregator
-                  └ *colexec.distinctChainOps
+            └ *colexec.projMultFloat64Float64ConstOp
+              └ *colexec.orderedAggregator
+                └ *colexec.distinctChainOps
+                  └ *rowexec.joinReader
                     └ *rowexec.joinReader
-                      └ *rowexec.joinReader
+                      └ *colexec.selEQBytesBytesConstOp
                         └ *colexec.selEQBytesBytesConstOp
-                          └ *colexec.selEQBytesBytesConstOp
-                            └ *colexec.colBatchScan
+                          └ *colexec.colBatchScan
 
 # Query 18
 query T
@@ -903,52 +900,51 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
 │
 └ Node 1
   └ *colexec.orderedAggregator
-    └ *colexec.oneShotOp
-      └ *colexec.distinctChainOps
-        └ *colexec.projMultFloat64Float64Op
-          └ *colexec.projMinusFloat64ConstFloat64Op
-            └ *colexec.caseOp
-              ├ *colexec.bufferOp
-              │ └ *colexec.hashJoiner
-              │   ├ *colexec.selEQBytesBytesConstOp
-              │   │ └ *colexec.selectInOpBytes
-              │   │   └ *colexec.colBatchScan
-              │   └ *colexec.selGEInt64Int64ConstOp
-              │     └ *colexec.colBatchScan
-              ├ *colexec.constBoolOp
-              │ └ *colexec.orProjOp
-              │   ├ *colexec.bufferOp
-              │   ├ *colexec.andProjOp
-              │   │ ├ *colexec.andProjOp
-              │   │ │ ├ *colexec.andProjOp
-              │   │ │ │ ├ *colexec.andProjOp
-              │   │ │ │ │ ├ *colexec.projEQBytesBytesConstOp
-              │   │ │ │ │ └ *colexec.projectInOpBytes
-              │   │ │ │ └ *colexec.projGEFloat64Float64ConstOp
-              │   │ │ └ *colexec.projLEFloat64Float64ConstOp
-              │   │ └ *colexec.projLEInt64Int64ConstOp
-              │   └ *colexec.andProjOp
-              │     ├ *colexec.andProjOp
-              │     │ ├ *colexec.andProjOp
-              │     │ │ ├ *colexec.andProjOp
-              │     │ │ │ ├ *colexec.projEQBytesBytesConstOp
-              │     │ │ │ └ *colexec.projectInOpBytes
-              │     │ │ └ *colexec.projGEFloat64Float64ConstOp
-              │     │ └ *colexec.projLEFloat64Float64ConstOp
-              │     └ *colexec.projLEInt64Int64ConstOp
-              ├ *colexec.constBoolOp
-              │ └ *colexec.andProjOp
-              │   ├ *colexec.bufferOp
-              │   ├ *colexec.andProjOp
-              │   │ ├ *colexec.andProjOp
-              │   │ │ ├ *colexec.andProjOp
-              │   │ │ │ ├ *colexec.projEQBytesBytesConstOp
-              │   │ │ │ └ *colexec.projectInOpBytes
-              │   │ │ └ *colexec.projGEFloat64Float64ConstOp
-              │   │ └ *colexec.projLEFloat64Float64ConstOp
-              │   └ *colexec.projLEInt64Int64ConstOp
-              └ *colexec.constBoolOp
-                └ *colexec.bufferOp
+    └ *colexec.distinctChainOps
+      └ *colexec.projMultFloat64Float64Op
+        └ *colexec.projMinusFloat64ConstFloat64Op
+          └ *colexec.caseOp
+            ├ *colexec.bufferOp
+            │ └ *colexec.hashJoiner
+            │   ├ *colexec.selEQBytesBytesConstOp
+            │   │ └ *colexec.selectInOpBytes
+            │   │   └ *colexec.colBatchScan
+            │   └ *colexec.selGEInt64Int64ConstOp
+            │     └ *colexec.colBatchScan
+            ├ *colexec.constBoolOp
+            │ └ *colexec.orProjOp
+            │   ├ *colexec.bufferOp
+            │   ├ *colexec.andProjOp
+            │   │ ├ *colexec.andProjOp
+            │   │ │ ├ *colexec.andProjOp
+            │   │ │ │ ├ *colexec.andProjOp
+            │   │ │ │ │ ├ *colexec.projEQBytesBytesConstOp
+            │   │ │ │ │ └ *colexec.projectInOpBytes
+            │   │ │ │ └ *colexec.projGEFloat64Float64ConstOp
+            │   │ │ └ *colexec.projLEFloat64Float64ConstOp
+            │   │ └ *colexec.projLEInt64Int64ConstOp
+            │   └ *colexec.andProjOp
+            │     ├ *colexec.andProjOp
+            │     │ ├ *colexec.andProjOp
+            │     │ │ ├ *colexec.andProjOp
+            │     │ │ │ ├ *colexec.projEQBytesBytesConstOp
+            │     │ │ │ └ *colexec.projectInOpBytes
+            │     │ │ └ *colexec.projGEFloat64Float64ConstOp
+            │     │ └ *colexec.projLEFloat64Float64ConstOp
+            │     └ *colexec.projLEInt64Int64ConstOp
+            ├ *colexec.constBoolOp
+            │ └ *colexec.andProjOp
+            │   ├ *colexec.bufferOp
+            │   ├ *colexec.andProjOp
+            │   │ ├ *colexec.andProjOp
+            │   │ │ ├ *colexec.andProjOp
+            │   │ │ │ ├ *colexec.projEQBytesBytesConstOp
+            │   │ │ │ └ *colexec.projectInOpBytes
+            │   │ │ └ *colexec.projGEFloat64Float64ConstOp
+            │   │ └ *colexec.projLEFloat64Float64ConstOp
+            │   └ *colexec.projLEInt64Int64ConstOp
+            └ *colexec.constBoolOp
+              └ *colexec.bufferOp
 
 # Query 20
 query T

@@ -161,6 +161,5 @@ EXPLAIN (VEC) SELECT max(c) FROM a
 │
 └ Node 1
   └ *colexec.orderedAggregator
-    └ *colexec.oneShotOp
-      └ *colexec.distinctChainOps
-        └ *colexec.colBatchScan
+    └ *colexec.distinctChainOps
+      └ *colexec.colBatchScan

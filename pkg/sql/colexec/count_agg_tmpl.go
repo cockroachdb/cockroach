@@ -62,7 +62,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
-	a.curIdx = -1
+	a.curIdx = 0
 	a.curAgg = 0
 	a.nulls.UnsetNulls()
 }
@@ -146,9 +146,7 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[i] {
-		if a.curIdx != -1 {
-			a.vec[a.curIdx] = a.curAgg
-		}
+		a.vec[a.curIdx] = a.curAgg
 		a.curIdx++
 		a.curAgg = int64(0)
 	}

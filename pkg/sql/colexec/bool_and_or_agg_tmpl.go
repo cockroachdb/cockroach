@@ -77,7 +77,7 @@ func (b *bool_OP_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 }
 
 func (b *bool_OP_TYPE_AGGKINDAgg) Reset() {
-	b.curIdx = -1
+	b.curIdx = 0
 	b.nulls.UnsetNulls()
 	// _DEFAULT_VAL indicates whether we are doing an AND aggregate or OR aggregate.
 	// For bool_and the _DEFAULT_VAL is true and for bool_or the _DEFAULT_VAL is false.
@@ -148,12 +148,10 @@ func _ACCUMULATE_BOOLEAN(b *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if b.groups[i] {
-		if b.curIdx >= 0 {
-			if !b.sawNonNull {
-				b.nulls.SetNull(b.curIdx)
-			} else {
-				b.vec[b.curIdx] = b.curAgg
-			}
+		if !b.sawNonNull {
+			b.nulls.SetNull(b.curIdx)
+		} else {
+			b.vec[b.curIdx] = b.curAgg
 		}
 		b.curIdx++
 		// {{with .Global}}

@@ -121,24 +121,24 @@ func NewOrderedAggregator(
 	}
 
 	a := &orderedAggregator{}
-	if len(groupCols) == 0 {
-		// If there were no groupCols, we can't rely on the distinct operators to
-		// mark the first row as distinct, so we have to do it ourselves. Set up a
-		// oneShotOp to set the first row to distinct.
-		op = &oneShotOp{
-			OneInputNode: NewOneInputNode(op),
-			fn: func(batch coldata.Batch) {
-				if batch.Length() == 0 {
-					return
-				}
-				if sel := batch.Selection(); sel != nil {
-					groupCol[sel[0]] = true
-				} else {
-					groupCol[0] = true
-				}
-			},
-			outputSourceRef: &a.input,
-		}
+	// The contract of aggregateFunc.Init requires that the very first group in
+	// the whole input is not marked as a start of a new group with 'true'
+	// value in groupCol. In order to satisfy that requirement we plan a
+	// oneShotOp that explicitly sets groupCol for the very first tuple it
+	// sees to 'false' and then deletes itself from the operator tree.
+	op = &oneShotOp{
+		OneInputNode: NewOneInputNode(op),
+		fn: func(batch coldata.Batch) {
+			if batch.Length() == 0 {
+				return
+			}
+			if sel := batch.Selection(); sel != nil {
+				groupCol[sel[0]] = false
+			} else {
+				groupCol[0] = false
+			}
+		},
+		outputSourceRef: &a.input,
 	}
 
 	*a = orderedAggregator{

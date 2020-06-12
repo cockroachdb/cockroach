@@ -96,7 +96,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
 }
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Reset() {
-	a.curIdx = -1
+	a.curIdx = 0
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
 }
@@ -203,18 +203,14 @@ func _FIND_ANY_NOT_NULL(
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[i] {
-		// The `a.curIdx` check is necessary because for the first
-		// group in the result set there is no "current group."
-		if a.curIdx >= 0 {
-			// If this is a new group, check if any non-nulls have been found for the
-			// current group.
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(a.curIdx)
-			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
-			}
+		// If this is a new group, check if any non-nulls have been found for the
+		// current group.
+		if !a.foundNonNullForCurrentGroup {
+			a.nulls.SetNull(a.curIdx)
+		} else {
+			// {{with .Global}}
+			execgen.SET(a.col, a.curIdx, a.curAgg)
+			// {{end}}
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false

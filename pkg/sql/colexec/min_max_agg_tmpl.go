@@ -151,7 +151,7 @@ func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *_AGG_TYPE_AGGKINDAgg) Reset() {
-	a.curIdx = -1
+	a.curIdx = 0
 	a.foundNonNullForCurrentGroup = false
 	a.nulls.UnsetNulls()
 }
@@ -247,16 +247,13 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null. If a.curIdx is
-		// negative, it means that this is the first group.
-		if a.curIdx >= 0 {
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(a.curIdx)
-			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
-			}
+		// current group, the output for this group should be null.
+		if !a.foundNonNullForCurrentGroup {
+			a.nulls.SetNull(a.curIdx)
+		} else {
+			// {{with .Global}}
+			execgen.SET(a.col, a.curIdx, a.curAgg)
+			// {{end}}
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false

@@ -38,16 +38,17 @@ var SupportedAggFns = []execinfrapb.AggregatorSpec_Func{
 // aggregateFunc is an aggregate function that performs computation on a batch
 // when Compute(batch) is called and writes the output to the Vec passed in
 // in Init. The aggregateFunc performs an aggregation per group and outputs the
-// aggregation once the end of the group is reached. If the end of the group is
-// not reached before the batch is finished, the aggregateFunc will store a
-// carry value that it will use next time Compute is called. Note that this
-// carry value is stored at the output index. Therefore if any memory
+// aggregation once the start of the new group is reached. If the end of the
+// group is not reached before the batch is finished, the aggregateFunc will
+// store a carry value that it will use next time Compute is called. Note that
+// this carry value is stored at the output index. Therefore if any memory
 // modification of the output vector is made, the caller *MUST* copy the value
 // at the current index inclusive for a correct aggregation.
 type aggregateFunc interface {
 	// Init sets the groups for the aggregation and the output vector. Each index
 	// in groups corresponds to a column value in the input batch. true represents
-	// the first value of a new group.
+	// the start of a new group. Note that the very first group in the whole
+	// input should *not* be marked as a start of a new group.
 	Init(groups []bool, vec coldata.Vec)
 
 	// Reset resets the aggregate function for another run. Primarily used for
