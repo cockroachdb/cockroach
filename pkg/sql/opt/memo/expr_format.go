@@ -1225,6 +1225,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
+		if _, ok := tab.Index(t.Index).Predicate(); ok {
+			f.Buffer.WriteString(",partial")
+		}
 
 	case *SequenceSelectPrivate:
 		seq := f.Memo.metadata.Sequence(t.Sequence)
