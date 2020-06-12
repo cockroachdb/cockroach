@@ -224,13 +224,26 @@ func (sq *splitQueue) processAttempt(
 			batchHandledQPS,
 			raftAppliedQPS,
 		)
+		// Add a small delay (default of 5m) to any subsequent attempt to merge
+		// this range split away. While the merge queue does takes into account
+		// load to avoids merging ranges that would be immediately re-split due
+		// to load-based splitting, it doesn't take into account historical
+		// load. So this small delay is the only thing that prevents split
+		// points created due to load from being immediately merged away after
+		// load is stopped, which can be a problem for benchmarks where data is
+		// first imported and then the workload begins after a small delay.
+		var expTime hlc.Timestamp
+		if expDelay := SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
+			expTime = sq.store.Clock().Now().Add(expDelay.Nanoseconds(), 0)
+		}
 		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key: splitByLoadKey,
 				},
-				SplitKey: splitByLoadKey,
+				SplitKey:       splitByLoadKey,
+				ExpirationTime: expTime,
 			},
 			desc,
 			false, /* delayable */
