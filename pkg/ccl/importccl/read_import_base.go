@@ -52,13 +52,15 @@ func runImport(
 	}
 
 	// This group holds the go routines that are responsible for producing KV batches.
-	// After this group is done, we need to close kvCh.
+	// and ingesting produced KVs.
 	// Depending on the import implementation both conv.start and conv.readFiles can
 	// produce KVs so we should close the channel only after *both* are finished.
-	producerGroup := ctxgroup.WithContext(ctx)
-	conv.start(producerGroup)
+	group := ctxgroup.WithContext(ctx)
+	conv.start(group)
+
 	// Read input files into kvs
-	producerGroup.GoCtx(func(ctx context.Context) error {
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(kvCh)
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
 		var inputs map[int32]string
@@ -77,13 +79,6 @@ func runImport(
 		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage)
 	})
 
-	// This group links together the producers (via producerGroup) and the KV ingester.
-	group := ctxgroup.WithContext(ctx)
-	group.Go(func() error {
-		defer close(kvCh)
-		return producerGroup.Wait()
-	})
-
 	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *roachpb.BulkOpSummary
@@ -99,11 +94,15 @@ func runImport(
 			prog.CompletedFraction[i] = 1.0
 			prog.ResumePos[i] = math.MaxInt64
 		}
-		progCh <- prog
-		return nil
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case progCh <- prog:
+			return nil
+		}
 	})
 
-	if err := group.Wait(); err != nil {
+	if err = group.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -394,7 +393,7 @@ type importFileContext struct {
 // handleCorruptRow reports an error encountered while processing a row
 // in an input file.
 func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
-	log.Error(ctx, err)
+	log.Errorf(ctx, "%+v", err)
 
 	if rowErr, isRowErr := err.(*importRowError); isRowErr && fileCtx.rejected != nil {
 		fileCtx.rejected <- rowErr.row + "\n"
@@ -544,7 +543,7 @@ func runParallelImport(
 		}
 
 		if producer.Err() == nil {
-			return importer.flush(ctx)
+			return importer.close(ctx)
 		}
 		return producer.Err()
 	})
@@ -568,22 +567,25 @@ func (p *parallelImporter) add(
 	return nil
 }
 
-// Flush flushes currently accumulated data.
+// close closes this importer, flushing remaining accumulated data if needed.
+func (p *parallelImporter) close(ctx context.Context) error {
+	if len(p.b.data) > 0 {
+		return p.flush(ctx)
+	}
+	return nil
+}
+
+// flush flushes currently accumulated data.
 func (p *parallelImporter) flush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	default:
-	}
-
-	// if the batch isn't empty, we need to flush it.
-	if len(p.b.data) > 0 {
-		p.recordCh <- p.b
+	case p.recordCh <- p.b:
 		p.b = batch{
 			data: make([]interface{}, 0, cap(p.b.data)),
 		}
+		return nil
 	}
-	return nil
 }
 
 func (p *parallelImporter) importWorker(
