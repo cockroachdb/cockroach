@@ -112,7 +112,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Init(groups []bool, v coldata.Vec) {
 }
 
 func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
-	a.scratch.curIdx = -1
+	a.scratch.curIdx = 0
 	a.scratch.foundNonNullForCurrentGroup = false
 	a.scratch.nulls.UnsetNulls()
 }
@@ -213,14 +213,11 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null. If
-		// a.scratch.curIdx is negative, it means that this is the first group.
-		if a.scratch.curIdx >= 0 {
-			if !a.scratch.foundNonNullForCurrentGroup {
-				a.scratch.nulls.SetNull(a.scratch.curIdx)
-			} else {
-				a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
-			}
+		// current group, the output for this group should be null.
+		if !a.scratch.foundNonNullForCurrentGroup {
+			a.scratch.nulls.SetNull(a.scratch.curIdx)
+		} else {
+			a.scratch.vec[a.scratch.curIdx] = a.scratch.curAgg
 		}
 		a.scratch.curIdx++
 		// {{with .Global}}
