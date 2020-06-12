@@ -1108,6 +1108,11 @@ func (r *Replica) checkExecutionCanProceed(
 		// Only check for a pending merge if latches are held and the Range
 		// lease is held by this Replica. Without both of these conditions,
 		// checkForPendingMergeRLocked could return false negatives.
+		//
+		// In practice, this means that follower reads or any request where
+		// concurrency.shouldAcquireLatches() == false (e.g. lease requests)
+		// will not check for a pending merge before executing and, as such,
+		// can execute while a range is in a merge's critical phase.
 		return r.checkForPendingMergeRLocked(ba)
 	}
 	return nil
