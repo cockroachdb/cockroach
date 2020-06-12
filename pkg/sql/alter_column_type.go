@@ -90,16 +90,17 @@ func AlterColumnType(
 		return err
 	}
 
-	// No-op if the types are Identical.  We don't use Equivalent here because
-	// the user may be trying to change the type of the column without changing
-	// the type family.
-	if col.Type.Identical(typ) {
-		return nil
-	}
-
-	kind, err := schemachange.ClassifyConversion(ctx, col.Type, typ)
-	if err != nil {
-		return err
+	var kind schemachange.ColumnConversionKind
+	if t.Using != nil {
+		// If an expression is provided, we always need to try a general conversion.
+		// We have to follow the process to create a new column and backfill it
+		// using the expression.
+		kind = schemachange.ColumnConversionGeneral
+	} else {
+		kind, err = schemachange.ClassifyConversion(ctx, col.Type, typ)
+		if err != nil {
+			return err
+		}
 	}
 
 	switch kind {
