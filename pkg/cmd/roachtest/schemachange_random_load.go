@@ -13,7 +13,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 )
+
+type randomLoadBenchSpec struct {
+	Nodes       int
+	Ops         int
+	Concurrency int
+}
 
 func registerSchemaChangeRandomLoad(r *testRegistry) {
 	r.Add(testSpec{
@@ -29,7 +36,40 @@ func registerSchemaChangeRandomLoad(r *testRegistry) {
 			}
 			runSchemaChangeRandomLoad(ctx, t, c, maxOps, concurrency)
 		},
-		Skip: "deadlocks because of pgx bug",
+	})
+
+	// Run a few representative scbench specs in CI.
+	registerRandomLoadBenchSpec(r, randomLoadBenchSpec{
+		Nodes:       3,
+		Ops:         2000,
+		Concurrency: 1,
+	})
+
+	registerRandomLoadBenchSpec(r, randomLoadBenchSpec{
+		Nodes:       3,
+		Ops:         10000,
+		Concurrency: 20,
+	})
+}
+
+func registerRandomLoadBenchSpec(r *testRegistry, b randomLoadBenchSpec) {
+	nameParts := []string{
+		"scbench",
+		"randomload",
+		fmt.Sprintf("nodes=%d", b.Nodes),
+		fmt.Sprintf("ops=%d", b.Ops),
+		fmt.Sprintf("conc=%d", b.Concurrency),
+	}
+	name := strings.Join(nameParts, "/")
+
+	r.Add(testSpec{
+		Name:       name,
+		Owner:      OwnerSQLSchema,
+		Cluster:    makeClusterSpec(b.Nodes),
+		MinVersion: "v20.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSchemaChangeRandomLoad(ctx, t, c, b.Ops, b.Concurrency)
+		},
 	})
 }
 
