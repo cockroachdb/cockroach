@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
@@ -35,38 +36,58 @@ import (
 type testJobSchedulerEnv struct {
 	scheduledJobsTableName string
 	jobsTableName          string
-	now                    time.Time
+	mu                     struct {
+		syncutil.Mutex
+		now time.Time
+	}
 }
 
-func (t *testJobSchedulerEnv) ScheduledJobsTableName() string {
-	return t.scheduledJobsTableName
+func (e *testJobSchedulerEnv) ScheduledJobsTableName() string {
+	return e.scheduledJobsTableName
 }
 
-func (t *testJobSchedulerEnv) SystemJobsTableName() string {
-	return t.jobsTableName
+func (e *testJobSchedulerEnv) SystemJobsTableName() string {
+	return e.jobsTableName
 }
 
-func (t *testJobSchedulerEnv) Now() time.Time {
-	return t.now
+func (e *testJobSchedulerEnv) Now() time.Time {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mu.now
 }
 
-func (t *testJobSchedulerEnv) NowExpr() string {
-	return fmt.Sprintf("TIMESTAMPTZ '%s'",
-		t.now.Format("2020-01-02 03:04:05.999999999"))
+func (e *testJobSchedulerEnv) AdvanceTime(d time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.now = e.mu.now.Add(d)
+}
+
+func (e *testJobSchedulerEnv) SetTime(t time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.now = t
+}
+
+const timestampTZLayout = "2006-01-02 15:04:05.000000"
+
+func (e *testJobSchedulerEnv) NowExpr() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return fmt.Sprintf("TIMESTAMPTZ '%s'", e.mu.now.Format(timestampTZLayout))
 }
 
 // Returns schema for the scheduled jobs table.
-func (t *testJobSchedulerEnv) getScheduledJobsTableSchema() string {
+func (e *testJobSchedulerEnv) getScheduledJobsTableSchema() string {
 	return strings.Replace(sqlbase.ScheduledJobsTableSchema,
-		"system.scheduled_jobs", t.scheduledJobsTableName, 1)
+		"system.scheduled_jobs", e.scheduledJobsTableName, 1)
 }
 
 // Returns schema for the jobs table.
-func (t *testJobSchedulerEnv) getJobsTableSchema() string {
-	if t.jobsTableName == "system.jobs" {
+func (e *testJobSchedulerEnv) getJobsTableSchema() string {
+	if e.jobsTableName == "system.jobs" {
 		return sqlbase.JobsTableSchema
 	}
-	return strings.Replace(sqlbase.JobsTableSchema, "system.jobs", t.jobsTableName, 1)
+	return strings.Replace(sqlbase.JobsTableSchema, "system.jobs", e.jobsTableName, 1)
 }
 
 type testHelper struct {
@@ -77,11 +98,12 @@ type testHelper struct {
 }
 
 func newTestCronEnv() *testJobSchedulerEnv {
-	return &testJobSchedulerEnv{
+	env := &testJobSchedulerEnv{
 		scheduledJobsTableName: "defaultdb.scheduled_jobs",
 		jobsTableName:          "defaultdb.system_jobs",
-		now:                    timeutil.Now(),
 	}
+	env.mu.now = timeutil.Now()
+	return env
 }
 
 // newTestHelper creates and initializes appropriate state for a test,
@@ -113,12 +135,21 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 }
 
 // NewScheduledJob is a helper to create job with helper environment.
-func (h *testHelper) newScheduledJob(t *testing.T, jobName, sql string) *ScheduledJob {
+func (h *testHelper) newScheduledJob(t *testing.T, scheduleName, sql string) *ScheduledJob {
 	j := NewScheduledJob(h.env)
-	j.SetScheduleName(jobName)
+	j.SetScheduleName(scheduleName)
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
+	return j
+}
+
+func (h *testHelper) newScheduledJobForExecutor(
+	scheduleName, executorName string, executorArgs *types.Any,
+) *ScheduledJob {
+	j := NewScheduledJob(h.env)
+	j.SetScheduleName(scheduleName)
+	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
 	return j
 }
 
@@ -136,4 +167,15 @@ func (h *testHelper) loadJob(t *testing.T, id int64) *ScheduledJob {
 	require.Equal(t, 1, len(rows))
 	require.NoError(t, j.InitFromDatums(rows[0], cols))
 	return j
+}
+
+func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) func() {
+	RegisterScheduledJobExecutorFactory(
+		name,
+		func(_ sqlutil.InternalExecutor) (ScheduledJobExecutor, error) {
+			return ex, nil
+		})
+	return func() {
+		delete(registeredExecutorFactories, name)
+	}
 }

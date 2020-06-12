@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -40,16 +39,8 @@ func (s *statusTrackingExecutor) NotifyJobTermination(
 
 var _ ScheduledJobExecutor = &statusTrackingExecutor{}
 
-func newScopedStatusTrackingExecutor(name string) (*statusTrackingExecutor, func()) {
-	ex := &statusTrackingExecutor{counts: make(map[Status]int)}
-	RegisterScheduledJobExecutorFactory(
-		name,
-		func(_ sqlutil.InternalExecutor) (ScheduledJobExecutor, error) {
-			return ex, nil
-		})
-	return ex, func() {
-		delete(registeredExecutorFactories, name)
-	}
+func newStatusTrackingExecutor() *statusTrackingExecutor {
+	return &statusTrackingExecutor{counts: make(map[Status]int)}
 }
 
 func TestNotifyJobTerminationExpectsTerminalState(t *testing.T) {
@@ -71,8 +62,8 @@ func TestScheduledJobExecutorRegistration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const executorName = "test-executor"
-	instance, cleanupExecutor := newScopedStatusTrackingExecutor(executorName)
-	defer cleanupExecutor()
+	instance := newStatusTrackingExecutor()
+	defer registerScopedScheduledJobExecutor(executorName, instance)()
 
 	registered, err := NewScheduledJobExecutor(executorName, nil)
 	require.NoError(t, err)
@@ -85,12 +76,11 @@ func TestJobTerminationNotification(t *testing.T) {
 	defer cleanup()
 
 	const executorName = "test-executor"
-	ex, cleanupExecutor := newScopedStatusTrackingExecutor(executorName)
-	defer cleanupExecutor()
+	ex := newStatusTrackingExecutor()
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
 
 	// Create a single job.
-	schedule := h.newScheduledJob(t, "test_job", "test sql")
-	schedule.rec.ExecutorType = executorName
+	schedule := h.newScheduledJobForExecutor("test_job", executorName, nil)
 	ctx := context.Background()
 	require.NoError(t, schedule.Create(ctx, h.ex, nil))
 
