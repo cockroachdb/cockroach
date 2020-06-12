@@ -453,14 +453,14 @@ func makeSQLServerArgs(
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
-	rpcContext := rpc.NewContextWithTestingKnobs(
-		baseCfg.AmbientCtx,
-		baseCfg.Config,
-		clock,
-		stopper,
-		st,
-		rpcTestingKnobs,
-	)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: baseCfg.AmbientCtx,
+		Config:     baseCfg.Config,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   st,
+		Knobs:      rpcTestingKnobs,
+	})
 
 	// TODO(tbg): expose this registry via prometheus. See:
 	// https://github.com/cockroachdb/cockroach/issues/47905

@@ -285,13 +285,13 @@ func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
 	cfg.RPCHeartbeatInterval = 10 * time.Millisecond
-	rctx := rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		cfg,
-		clock,
-		stopper,
-		cluster.MakeTestingClusterSettings(),
-	)
+	rctx := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     cfg,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.

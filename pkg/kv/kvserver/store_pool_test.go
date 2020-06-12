@@ -100,8 +100,13 @@ func createTestStorePool(
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, clock, stopper, st)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		Config:     &base.Config{Insecure: true},
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   st,
+	})
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	mnl := newMockNodeLiveness(defaultNodeStatus)

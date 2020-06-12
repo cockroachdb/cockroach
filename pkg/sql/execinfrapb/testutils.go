@@ -42,13 +42,13 @@ func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []ProducerMetadat
 }
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-		cluster.MakeTestingClusterSettings(),
-	)
+	return rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     &base.Config{Insecure: true},
+		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Stopper:    stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 }
 
 // StartMockDistSQLServer starts a MockDistSQLServer and returns the address on
