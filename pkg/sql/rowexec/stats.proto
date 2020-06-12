@@ -91,3 +91,11 @@ message InvertedFiltererStats {
   int64 max_allocated_mem = 2;
   int64 max_allocated_disk = 3;
 }
+
+// InvertedJoinerStats are the stats collected during an invertedJoiner run.
+message InvertedJoinerStats {
+  InputStats input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats index_scan_stats = 2 [(gogoproto.nullable) = false];
+  int64 max_allocated_mem = 3;
+  int64 max_allocated_disk = 4;
+}

@@ -203,44 +203,44 @@ func checkEqual(t *testing.T, expected, actual []InvertedSpan) {
 
 func TestSetUnion(t *testing.T) {
 	checkEqual(t,
-		[]InvertedSpan{span("b", "b\x00")},
-		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "b\x00")},
-		),
-	)
-	checkEqual(t,
-		[]InvertedSpan{span("b", "b\x00\x00")},
-		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{single("b\x00")},
-		),
-	)
-	checkEqual(t,
 		[]InvertedSpan{span("b", "c")},
 		unionSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b\x00", "c")},
-		),
-	)
-	checkEqual(t,
-		[]InvertedSpan{span("b", "c")},
-		unionSpans(
-			[]InvertedSpan{span("b", "b\x00")},
 			[]InvertedSpan{span("b", "c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c"), single("d\x00")},
+		[]InvertedSpan{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c")},
-			[]InvertedSpan{single("d\x00")},
+			[]InvertedSpan{single("b")},
+			[]InvertedSpan{single("c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c"), single("d"), single("e")},
+		[]InvertedSpan{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c"), single("e")},
+			[]InvertedSpan{single("b")},
+			[]InvertedSpan{span("c", "d")},
+		),
+	)
+	checkEqual(t,
+		[]InvertedSpan{span("b", "d")},
+		unionSpans(
+			[]InvertedSpan{span("b", "c")},
+			[]InvertedSpan{span("c", "d")},
+		),
+	)
+	checkEqual(t,
+		[]InvertedSpan{span("b", "c"), single("d")},
+		unionSpans(
+			[]InvertedSpan{span("b", "c")},
+			[]InvertedSpan{single("d")},
+		),
+	)
+	checkEqual(t,
+		[]InvertedSpan{span("b", "c"), single("d"), single("f")},
+		unionSpans(
+			[]InvertedSpan{span("b", "c"), single("f")},
 			[]InvertedSpan{single("d")},
 		),
 	)
@@ -265,14 +265,14 @@ func TestSetIntersection(t *testing.T) {
 		[]InvertedSpan{single("b")},
 		intersectSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "b\x00")},
+			[]InvertedSpan{span("b", "c")},
 		),
 	)
 	checkEqual(t,
 		nil,
 		intersectSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b\x00", "c")},
+			[]InvertedSpan{span("c", "d")},
 		),
 	)
 	checkEqual(t,
@@ -289,7 +289,7 @@ func TestSetSubtraction(t *testing.T) {
 		nil,
 		subtractSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "b\x00")},
+			[]InvertedSpan{span("b", "c")},
 		),
 	)
 	checkEqual(t,
@@ -307,11 +307,11 @@ func TestSetSubtraction(t *testing.T) {
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("d", "da"), span("da\x00", "dc"),
+		[]InvertedSpan{span("d", "da"), span("db", "dc"),
 			span("dd", "df"), span("fa", "g")},
 		subtractSpans(
 			[]InvertedSpan{single("b"), span("d", "e"), span("f", "g")},
-			[]InvertedSpan{span("b", "b\x00"), single("da"),
+			[]InvertedSpan{span("b", "c"), span("da", "db"),
 				span("dc", "dd"), span("df", "e"), span("f", "fa")},
 		),
 	)

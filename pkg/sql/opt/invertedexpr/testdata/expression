@@ -174,32 +174,32 @@ tight: true, toRead: ["a", "j") unionSpans: ["a", "j")
 # [b, j) and [a, c)
 and result=bj-and-ac left=bj right=ac
 ----
-tight: true, toRead: ["a", "j") unionSpans: ["b", "c")
+tight: true, toRead: ["a", "j") unionSpans: ["b", "b"]
 INTERSECTION
  ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
- └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
+ └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
 
 # And of these expressions promotes the factored span [b, c)
 and result=foo left=aj right=bj-and-ac
 ----
-tight: true, toRead: ["a", "j") unionSpans: ["b", "c")
+tight: true, toRead: ["a", "j") unionSpans: ["b", "b"]
 INTERSECTION
- ├── tight: true, toRead: ["a", "j") unionSpans: ["a", "b") ["c", "j")
+ ├── tight: true, toRead: ["a", "j") unionSpans: ["a", "a"] ["c", "j")
  └── tight: true, toRead: ["a", "j") unionSpans: empty
      INTERSECTION
       ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
-      └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
+      └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
 
 # Same parameters reversed
 and result=foo left=bj-and-ac right=aj
 ----
-tight: true, toRead: ["a", "j") unionSpans: ["b", "c")
+tight: true, toRead: ["a", "j") unionSpans: ["b", "b"]
 INTERSECTION
  ├── tight: true, toRead: ["a", "j") unionSpans: empty
  │   INTERSECTION
  │    ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
- │    └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
- └── tight: true, toRead: ["a", "j") unionSpans: ["a", "b") ["c", "j")
+ │    └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
+ └── tight: true, toRead: ["a", "j") unionSpans: ["a", "a"] ["c", "j")
 
 # Or of these expressions causes the children of bj-and-ac to be
 # promoted. Note that the unionSpans of the root subsume the
@@ -211,23 +211,23 @@ or result=bar left=aj right=bj-and-ac
 tight: true, toRead: ["a", "j") unionSpans: ["a", "j")
 INTERSECTION
  ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
- └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
+ └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
 
 and result=foo-and-bar left=foo right=bar
 ----
-tight: true, toRead: ["a", "j") unionSpans: ["b", "c")
+tight: true, toRead: ["a", "j") unionSpans: ["b", "b"]
 INTERSECTION
  ├── tight: true, toRead: ["a", "j") unionSpans: empty
  │   INTERSECTION
  │    ├── tight: true, toRead: ["a", "j") unionSpans: empty
  │    │   INTERSECTION
  │    │    ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
- │    │    └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
- │    └── tight: true, toRead: ["a", "j") unionSpans: ["a", "b") ["c", "j")
- └── tight: true, toRead: ["a", "j") unionSpans: ["a", "b") ["c", "j")
+ │    │    └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
+ │    └── tight: true, toRead: ["a", "j") unionSpans: ["a", "a"] ["c", "j")
+ └── tight: true, toRead: ["a", "j") unionSpans: ["a", "a"] ["c", "j")
      INTERSECTION
       ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
-      └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
+      └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
 
 or result=foo-or-bar left=foo right=bar
 ----
@@ -238,12 +238,12 @@ UNION
  │    ├── tight: true, toRead: ["a", "j") unionSpans: empty
  │    │   INTERSECTION
  │    │    ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
- │    │    └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
- │    └── tight: true, toRead: ["a", "j") unionSpans: ["a", "b") ["c", "j")
+ │    │    └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
+ │    └── tight: true, toRead: ["a", "j") unionSpans: ["a", "a"] ["c", "j")
  └── tight: true, toRead: ["a", "j") unionSpans: empty
      INTERSECTION
       ├── tight: true, toRead: ["b", "j") unionSpans: ["c", "j")
-      └── tight: true, toRead: ["a", "c") unionSpans: ["a", "b")
+      └── tight: true, toRead: ["a", "c") unionSpans: ["a", "a"]
 
 to-proto name=foo-and-bar
 ----
