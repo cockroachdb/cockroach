@@ -224,13 +224,18 @@ func (sq *splitQueue) processAttempt(
 			batchHandledQPS,
 			raftAppliedQPS,
 		)
+		var expTime hlc.Timestamp
+		if expDelay := SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
+			expTime = sq.store.Clock().Now().Add(expDelay.Nanoseconds(), 0)
+		}
 		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key: splitByLoadKey,
 				},
-				SplitKey: splitByLoadKey,
+				SplitKey:       splitByLoadKey,
+				ExpirationTime: expTime,
 			},
 			desc,
 			false, /* delayable */
