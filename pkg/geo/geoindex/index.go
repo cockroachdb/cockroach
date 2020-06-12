@@ -330,16 +330,13 @@ func innerCovering(rc *s2.RegionCoverer, regions []s2.Region) s2.CellUnion {
 	for _, r := range regions {
 		switch region := r.(type) {
 		case s2.Point:
-			cellID := s2.CellFromPoint(region).ID()
-			if !cellID.IsLeaf() {
-				panic("bug in S2")
-			}
+			cellID := cellIDCoveringPoint(region, rc.MaxLevel)
 			u = append(u, cellID)
 		case *s2.Polyline:
 			// TODO(sumeer): for long lines could also pick some intermediate
 			// points along the line. Decide based on experiments.
 			for _, p := range *region {
-				cellID := s2.CellFromPoint(p).ID()
+				cellID := cellIDCoveringPoint(p, rc.MaxLevel)
 				u = append(u, cellID)
 			}
 		case *s2.Polygon:
@@ -347,7 +344,7 @@ func innerCovering(rc *s2.RegionCoverer, regions []s2.Region) s2.CellUnion {
 			if region.NumLoops() > 0 {
 				loop := region.Loop(0)
 				for _, p := range loop.Vertices() {
-					cellID := s2.CellFromPoint(p).ID()
+					cellID := cellIDCoveringPoint(p, rc.MaxLevel)
 					u = append(u, cellID)
 				}
 				// Arbitrary threshold value. This is to avoid computing an expensive
@@ -377,6 +374,14 @@ func innerCovering(rc *s2.RegionCoverer, regions []s2.Region) s2.CellUnion {
 	// largest cell. Decide based on experiments.
 
 	return u
+}
+
+func cellIDCoveringPoint(point s2.Point, level int) s2.CellID {
+	cellID := s2.CellFromPoint(point).ID()
+	if !cellID.IsLeaf() {
+		panic("bug in S2")
+	}
+	return cellID.Parent(level)
 }
 
 // ancestorCells returns the set of cells containing these cells, not
