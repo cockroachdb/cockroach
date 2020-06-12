@@ -30,3 +30,28 @@ func GetSingleRune(s string) (rune, error) {
 	}
 	return r, nil
 }
+
+// TruncateString truncates a string to a given number of runes.
+func TruncateString(s string, maxRunes int) string {
+	// This is a fast path (len(s) is an upper bound for RuneCountInString).
+	if len(s) <= maxRunes {
+		return s
+	}
+	n := utf8.RuneCountInString(s)
+	if n <= maxRunes {
+		return s
+	}
+	// Fast path for ASCII strings.
+	if len(s) == n {
+		return s[:maxRunes]
+	}
+	i := 0
+	for pos := range s {
+		if i == maxRunes {
+			return s[:pos]
+		}
+		i++
+	}
+	// This code should be unreachable.
+	return s
+}
