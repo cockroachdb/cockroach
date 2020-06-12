@@ -262,6 +262,11 @@ SELECT 'a' COLLATE en::STRING || 'b'
 ----
 ab
 
+query T
+SELECT 'a🐛b🏠c' COLLATE en::VARCHAR(3)
+----
+a🐛b
+
 query B
 SELECT 't' COLLATE en::BOOLEAN
 ----
