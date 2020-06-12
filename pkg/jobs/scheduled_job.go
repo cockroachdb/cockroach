@@ -106,6 +106,11 @@ func (j *ScheduledJob) SetSchedule(scheduleExpr string) error {
 	return j.ScheduleNextRun()
 }
 
+// HasRecurringSchedule returns true if this schedule job runs periodically.
+func (j *ScheduledJob) HasRecurringSchedule() bool {
+	return len(j.rec.ScheduleExpr) > 0
+}
+
 // ScheduleNextRun updates next run based on job schedule.
 func (j *ScheduledJob) ScheduleNextRun() error {
 	expr, err := cronexpr.Parse(j.rec.ScheduleExpr)
