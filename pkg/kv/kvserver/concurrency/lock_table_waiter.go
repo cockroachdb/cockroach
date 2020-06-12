@@ -48,8 +48,16 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 	// - a per-store cache of recently detected abandoned transaction IDs
 	// - a per-range reverse index from transaction ID to locked keys
 	//
-	// TODO(nvanbenschoten): increasing this default value.
-	10*time.Millisecond,
+	// EDIT: The finalizedTxnCache gets us part of the way here. It allows us to
+	// pay the liveness push delay cost once per abandoned transaction per range
+	// instead of once per each of an abandoned transaction's locks. This helped
+	// us to feel comfortable increasing the default delay from the original
+	// 10ms to the current 50ms. Still, to feel comfortable increasing this
+	// further, we'd want to improve this cache (e.g. lifting it to the store
+	// level) to reduce the cost to once per abandoned transaction per store.
+	//
+	// TODO(nvanbenschoten): continue increasing this default value.
+	50*time.Millisecond,
 )
 
 // LockTableDeadlockDetectionPushDelay sets the delay before pushing in order to
