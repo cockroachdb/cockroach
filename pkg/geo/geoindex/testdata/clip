@@ -1,14 +1,14 @@
 geometry
-SRID=4;MULTIPOINT((1.0 5.0), (3.0 4.0))
+SRID=4004;MULTIPOINT((1.0 5.0), (3.0 4.0))
 ----
 
 clip xmin=10 ymin=10 xmax=20 ymax=20
 ----
-55 => 13 (srid: 4)
+55 => 13 (srid: 4004)
 
 clip xmin=0 ymin=0 xmax=10 ymax=10
 ----
-55 => 55 (srid: 4)
+55 => 55 (srid: 4004)
 
 geometry
 MULTIPOINT((1.0 5.0), (3.0 4.0))

@@ -155,10 +155,7 @@ func summaryFlag(t geom.T, isGeography bool) (f string, err error) {
 		f += "Z"
 	}
 
-	bbox, err := BoundingBoxFromGeom(t)
-	if err != nil {
-		return "", err
-	}
+	bbox := boundingBoxFromGeom(t)
 
 	if bbox != nil {
 		f += "B"
