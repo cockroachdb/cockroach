@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1059,6 +1060,11 @@ func (oi *optIndex) InterleavedBy(i int) (table, index cat.StableID) {
 	return cat.StableID(ref.Table), cat.StableID(ref.Index)
 }
 
+// GeoConfig is part of the cat.Index interface.
+func (oi *optIndex) GeoConfig() *geoindex.Config {
+	return &oi.desc.GeoConfig
+}
+
 type optTableStat struct {
 	stat           *stats.TableStatistic
 	columnOrdinals []int
@@ -1715,6 +1721,11 @@ func (oi *optVirtualIndex) InterleavedByCount() int {
 // InterleavedBy is part of the cat.Index interface.
 func (oi *optVirtualIndex) InterleavedBy(i int) (table, index cat.StableID) {
 	panic("no interleavings")
+}
+
+// GeoConfig is part of the cat.Index interface.
+func (oi *optVirtualIndex) GeoConfig() *geoindex.Config {
+	return nil
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

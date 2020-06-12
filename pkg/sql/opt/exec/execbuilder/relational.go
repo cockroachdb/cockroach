@@ -489,6 +489,11 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		locking = forUpdateLocking
 	}
 
+	// TODO(rytaft): Add support for inverted constraints.
+	if scan.InvertedConstraint != nil {
+		return execPlan{}, errors.Errorf("Geospatial constrained scans are not yet supported")
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),

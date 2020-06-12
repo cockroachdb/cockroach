@@ -11,6 +11,7 @@
 package cat
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -213,6 +214,10 @@ type Index interface {
 	// InterleavedBy returns information about an index that is interleaved into
 	// this index; see InterleavedByCount.
 	InterleavedBy(i int) (table, index StableID)
+
+	// GeoConfig returns a geospatial index configuration. If non-nil, it
+	// describes the configuration for this geospatial inverted index.
+	GeoConfig() *geoindex.Config
 }
 
 // IndexColumn describes a single column that is part of an index definition.

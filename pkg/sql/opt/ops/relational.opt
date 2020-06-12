@@ -53,6 +53,10 @@ define ScanPrivate {
     # that need to be scanned.
     Constraint Constraint
 
+    # If set, the scan is a constrained scan of an inverted index; the
+    # SpanExpression contains the spans that need to be scanned.
+    InvertedConstraint SpanExpression
+
     # HardLimit specifies the maximum number of rows that the scan can return
     # (after applying any constraint), as well as the required scan direction.
     # This is a "hard" limit, meaning that the scan operator must never return

@@ -581,7 +581,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
 
-	if scan.Constraint != nil {
+	if scan.Constraint != nil || scan.InvertedConstraint != nil {
 		// Calculate distinct counts and histograms for constrained columns
 		// ----------------------------------------------------------------
 		var numUnappliedConjuncts float64
@@ -595,8 +595,17 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		//
 		// For now, don't apply constraints on inverted index columns.
 		if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
-			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
-				numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
+			if scan.InvertedConstraint != nil {
+				// For now, just assume a single closed span such as ["\xfd", "\xfe").
+				// This corresponds to two "conjuncts" as defined in
+				// numConjunctsInConstraint.
+				// TODO(rytaft): Use the constraint to estimate selectivity.
+				numUnappliedConjuncts += 2
+			}
+			if scan.Constraint != nil {
+				for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+					numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
+				}
 			}
 		} else {
 			constrainedCols, histCols = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
