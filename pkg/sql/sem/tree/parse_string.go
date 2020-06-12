@@ -53,6 +53,12 @@ func ParseAndRequireString(t *types.T, s string, ctx ParseTimeContext) (Datum, e
 		i, err := ParseDInt(s)
 		return NewDOid(*i), err
 	case types.StringFamily:
+		// If the string type specifies a limit we truncate to that limit:
+		//   'hello'::CHAR(2) -> 'he'
+		// This is true of all the string type variants.
+		if t.Width() > 0 && int(t.Width()) < len(s) {
+			s = s[:t.Width()]
+		}
 		return NewDString(s), nil
 	case types.TimeFamily:
 		return ParseDTime(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))

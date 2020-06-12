@@ -169,6 +169,16 @@ SELECT '{hello}'::VARCHAR(2)[]
 ----
 {he}
 
+# Regression test for #50132.
+statement ok
+CREATE TABLE hello (s STRING);
+INSERT INTO hello VALUES ('{hello}')
+
+query T
+SELECT s::VARCHAR(2)[] FROM hello
+----
+{he}
+
 # array casting
 
 query T

@@ -1090,3 +1090,14 @@ eval
 '-10'::interval::decimal
 ----
 -10.000000000
+
+eval
+'{hello}'::VARCHAR(2)[]
+----
+ARRAY['he']
+
+# Test the same cast, but not with a literal constant (see #50132).
+eval
+('{he' || 'llo}')::VARCHAR(2)[]
+----
+ARRAY['he']
