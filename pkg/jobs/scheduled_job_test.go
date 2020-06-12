@@ -56,7 +56,7 @@ func TestSetsSchedule(t *testing.T) {
 
 	// The job is expected to run at midnight the next day.
 	// We want to ensure nextRun correctly persisted in the cron table.
-	expectedNextRun := h.env.now.Truncate(24 * time.Hour).Add(24 * time.Hour)
+	expectedNextRun := h.env.Now().Truncate(24 * time.Hour).Add(24 * time.Hour)
 
 	require.NoError(t, j.Create(context.Background(), h.ex, nil))
 
