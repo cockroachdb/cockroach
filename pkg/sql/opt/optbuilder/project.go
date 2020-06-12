@@ -233,6 +233,7 @@ func (b *Builder) finishBuildScalar(
 		return scalar
 	}
 
+	b.trackRegclassDependenciesForViews(texpr)
 	b.populateSynthesizedColumn(outCol, scalar)
 	return scalar
 }
