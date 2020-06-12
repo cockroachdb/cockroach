@@ -628,15 +628,7 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.FiltersExpr) memo.FiltersEx
 func (c *CustomFuncs) RemoveFiltersItem(
 	filters memo.FiltersExpr, search *memo.FiltersItem,
 ) memo.FiltersExpr {
-	newFilters := make(memo.FiltersExpr, len(filters)-1)
-	for i := range filters {
-		if search == &filters[i] {
-			copy(newFilters, filters[:i])
-			copy(newFilters[i:], filters[i+1:])
-			return newFilters
-		}
-	}
-	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
+	return filters.RemoveFiltersItem(search)
 }
 
 // ReplaceFiltersItem returns a new list that is a copy of the given list,

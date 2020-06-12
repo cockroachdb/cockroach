@@ -44,8 +44,7 @@ func TestBoundingBoxFromGeom(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%#v", tc.g), func(t *testing.T) {
-			bbox, err := BoundingBoxFromGeom(tc.g)
-			require.NoError(t, err)
+			bbox := boundingBoxFromGeom(tc.g)
 			require.Equal(t, tc.expected, bbox)
 		})
 	}

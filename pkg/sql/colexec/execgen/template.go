@@ -89,50 +89,77 @@ func replaceTemplateVars(
 // and a caller
 //   b(true)
 // this function will generate
-//   x = 3
+//   if true {
+//     x = 3
+//   } else {
+//     x = 4
+//   }
 //   return x
+//
+// but because true is a constant, it will be reduced to
+//
+// x = 3
+// return x
+//
+// Note that this method lexically replaces all formal parameters, so together
+// with createTemplateFuncVariants, it enables templates to call other templates
+// with template variables.
 func monomorphizeTemplate(n dst.Node, info *funcInfo, args []dst.Expr) dst.Node {
+	// Create map from formal param name to arg.
+	paramMap := make(map[string]dst.Expr)
+	for i, p := range info.templateParams {
+		paramMap[p.field.Names[0].Name] = args[i]
+	}
+	n = dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
+		// Replace all usages of the formal parameter with the template arg.
+		c := cursor.Node()
+		switch t := c.(type) {
+		case *dst.Ident:
+			if arg := paramMap[t.Name]; arg != nil {
+				cursor.Replace(dst.Clone(arg))
+			}
+		}
+		return true
+	}, nil)
+
+	return foldConditionals(n, info, args)
+}
+
+// foldConditionals edits conditional statements to try to remove branches that
+// are statically falsifiable.
+func foldConditionals(n dst.Node, info *funcInfo, args []dst.Expr) dst.Node {
 	return dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()
 		switch n := n.(type) {
 		case *dst.IfStmt:
 			switch c := n.Cond.(type) {
 			case *dst.Ident:
-				for i, p := range info.templateParams {
-					if ident, ok := p.field.Type.(*dst.Ident); !ok || ident.Name != "bool" {
-						// Can only template bool types right now.
-						continue
+				if c.Name == "true" {
+					newBody := foldConditionals(n.Body, info, args).(*dst.BlockStmt)
+					for _, stmt := range newBody.List {
+						cursor.InsertBefore(stmt)
 					}
-					if c.Name == p.field.Names[0].Name {
-						if ident, ok := args[i].(*dst.Ident); ok {
-							if ident.Name == "true" {
-								newBody := monomorphizeTemplate(n.Body, info, args).(*dst.BlockStmt)
-								for _, stmt := range newBody.List {
-									cursor.InsertBefore(stmt)
-								}
-								cursor.Delete()
-								return true
-							} else if n.Else != nil {
-								newElse := monomorphizeTemplate(n.Else, info, args)
-								switch e := newElse.(type) {
-								case *dst.BlockStmt:
-									for _, stmt := range e.List {
-										cursor.InsertBefore(stmt)
-									}
-									cursor.Delete()
-								default:
-									cursor.Replace(newElse)
-								}
-								return true
-							} else {
-								cursor.Delete()
+					cursor.Delete()
+					return true
+				}
+				if c.Name == "false" {
+					if n.Else != nil {
+						newElse := foldConditionals(n.Else, info, args)
+						switch e := newElse.(type) {
+						case *dst.BlockStmt:
+							for _, stmt := range e.List {
+								cursor.InsertBefore(stmt)
 							}
+							cursor.Delete()
+						default:
+							cursor.Replace(newElse)
 						}
+					} else {
+						cursor.Delete()
 					}
 				}
 			}
 		}
-
 		return true
 	}, nil)
 }

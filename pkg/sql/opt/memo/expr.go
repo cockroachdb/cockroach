@@ -230,6 +230,22 @@ func (n *FiltersExpr) Deduplicate() {
 	*n = dedup
 }
 
+// RemoveFiltersItem returns a new list that is a copy of the given list, except
+// that it does not contain the given FiltersItem. If the list contains the item
+// multiple times, then only the first instance is removed. If the list does not
+// contain the item, then the method panics.
+func (n FiltersExpr) RemoveFiltersItem(search *FiltersItem) FiltersExpr {
+	newFilters := make(FiltersExpr, len(n)-1)
+	for i := range n {
+		if search == &n[i] {
+			copy(newFilters, n[:i])
+			copy(newFilters[i:], n[i+1:])
+			return newFilters
+		}
+	}
+	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
+}
+
 // RemoveCommonFilters removes the filters found in other from n.
 func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map
