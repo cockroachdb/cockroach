@@ -1,0 +1,429 @@
+exec-ddl
+CREATE TABLE zip_code (
+    zc_code CHAR(12) NOT NULL PRIMARY KEY,
+    zc_town CHAR(80) NOT NULL,
+    zc_div  CHAR(80) NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE taxrate (
+    tx_id   CHAR(4) NOT NULL PRIMARY KEY,
+    tx_name CHAR(50) NOT NULL,
+    tx_rate DECIMAL(6,5) NOT NULL CHECK (tx_rate >= 0)
+)
+----
+
+exec-ddl
+CREATE TABLE status_type (
+    st_id CHAR(4) NOT NULL PRIMARY KEY,
+    st_name CHAR(10) NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE address (
+    ad_id      INT8 NOT NULL PRIMARY KEY,
+    ad_line1   CHAR(80),
+    ad_line2   CHAR(80),
+    ad_zc_code CHAR(12) NOT NULL,
+    ad_ctry    CHAR(80),
+    FOREIGN KEY (ad_zc_code) REFERENCES zip_code(zc_code)
+)
+----
+
+exec-ddl
+CREATE TABLE sector (
+    sc_id CHAR(2) NOT NULL PRIMARY KEY,
+    sc_name CHAR(30) NOT NULL,
+    UNIQUE INDEX (sc_name)
+)
+----
+
+exec-ddl
+CREATE TABLE industry (
+    in_id    CHAR(2) NOT NULL PRIMARY KEY,
+    in_name  CHAR(50) NOT NULL,
+    in_sc_id CHAR(2) NOT NULL,
+    FOREIGN KEY (in_sc_id) REFERENCES sector(sc_id)
+)
+----
+
+exec-ddl
+CREATE TABLE exchange (
+    ex_id       CHAR(6) NOT NULL PRIMARY KEY,
+    ex_name     CHAR(100) NOT NULL,
+    ex_num_symb INT4 NOT NULL,
+    ex_open     INT2 NOT NULL,
+    ex_close    INT2 NOT NULL,
+    ex_desc     CHAR(150),
+    ex_ad_id    INT8 NOT NULL,
+    FOREIGN KEY (ex_ad_id) REFERENCES address(ad_id)
+)
+----
+
+exec-ddl
+CREATE TABLE company (
+    co_id        INT8 NOT NULL PRIMARY KEY,
+    co_st_id     CHAR(4) NOT NULL,
+    co_name      CHAR(60) NOT NULL,
+    co_in_id     CHAR(2) NOT NULL,
+    co_sp_rate   CHAR(4) NOT NULL,
+    co_ceo       CHAR(46) NOT NULL,
+    co_ad_id     INT8 NOT NULL,
+    co_desc      CHAR(150) NOT NULL,
+    co_open_date DATE NOT NULL,
+    UNIQUE INDEX (co_name),
+    FOREIGN KEY (co_st_id) REFERENCES status_type(st_id),
+    FOREIGN KEY (co_in_id) REFERENCES industry(in_id),
+    FOREIGN KEY (co_ad_id) REFERENCES address(ad_id)
+)
+----
+
+exec-ddl
+CREATE TABLE company_competitor (
+    cp_co_id      INT8 NOT NULL,
+    cp_comp_co_id INT8 NOT NULL,
+    cp_in_id      CHAR(2) NOT NULL,
+    PRIMARY KEY (cp_co_id, cp_comp_co_id, cp_in_id),
+    FOREIGN KEY (cp_co_id) REFERENCES company(co_id),
+    FOREIGN KEY (cp_comp_co_id) REFERENCES company(co_id),
+    FOREIGN KEY (cp_in_id) REFERENCES industry(in_id)
+)
+----
+
+exec-ddl
+CREATE TABLE financial (
+    fi_co_id          INT8 NOT NULL,
+    fi_year           INT2 NOT NULL,
+    fi_qtr            INT2 NOT NULL CHECK (fi_qtr IN (1, 2, 3, 4)),
+    fi_qtr_start_date DATE NOT NULL,
+    fi_revenue        DECIMAL(15,2) NOT NULL,
+    fi_net_earn       DECIMAL(15,2) NOT NULL,
+    fi_basic_eps      DECIMAL(10,2) NOT NULL,
+    fi_dilut_eps      DECIMAL(10,2) NOT NULL,
+    fi_margin         DECIMAL(10,2) NOT NULL,
+    fi_inventory      DECIMAL(15,2) NOT NULL,
+    fi_assets         DECIMAL(15,2) NOT NULL,
+    fi_liability      DECIMAL(15,2) NOT NULL,
+    fi_out_basic      INT8 NOT NULL,
+    fi_out_dilut      INT8 NOT NULL,
+    PRIMARY KEY (fi_co_id, fi_year, fi_qtr),
+    FOREIGN KEY (fi_co_id) REFERENCES company(co_id)
+)
+----
+
+exec-ddl
+CREATE TABLE broker (
+    b_id         INT8 NOT NULL PRIMARY KEY,
+    b_st_id      CHAR(4) NOT NULL,
+    b_name       CHAR(49) NOT NULL,
+    b_num_trades INT8 NOT NULL,
+    b_comm_total DECIMAL(12,2) NOT NULL,
+    UNIQUE INDEX (b_name),
+    FOREIGN KEY (b_st_id) REFERENCES status_type(st_id)
+)
+----
+
+exec-ddl
+CREATE TABLE news_item (
+    ni_id       INT8 NOT NULL PRIMARY KEY,
+    ni_headline CHAR(80) NOT NULL,
+    ni_summary  CHAR(255) NOT NULL,
+    ni_item     BYTEA NOT NULL,
+    ni_dts      TIMESTAMP NOT NULL,
+    ni_source   CHAR(30) NOT NULL,
+    ni_author   CHAR(30),
+    FAMILY f1 (ni_id, ni_headline, ni_summary, ni_dts, ni_source, ni_author),
+    FAMILY f2 (ni_item)
+)
+----
+
+exec-ddl
+CREATE TABLE news_xref (
+    nx_ni_id INT8 NOT NULL,
+    nx_co_id INT8 NOT NULL,
+    PRIMARY KEY (nx_ni_id, nx_co_id),
+    FOREIGN KEY (nx_ni_id) REFERENCES news_item(ni_id),
+    FOREIGN KEY (nx_co_id) REFERENCES company(co_id)
+)
+----
+
+exec-ddl
+CREATE TABLE security (
+    s_symb           CHAR(15) NOT NULL PRIMARY KEY,
+    s_issue          CHAR(6) NOT NULL,
+    s_st_id          CHAR(4) NOT NULL,
+    s_name           CHAR(70) NOT NULL,
+    s_ex_id          CHAR(6) NOT NULL,
+    s_co_id          INT8 NOT NULL,
+    s_num_out        INT8 NOT NULL,
+    s_start_date     DATE NOT NULL,
+    s_exch_date      DATE NOT NULL,
+    s_pe             DECIMAL(10,2) NOT NULL,
+    s_52wk_high      DECIMAL(8,2) NOT NULL,
+    s_52wk_high_date DATE NOT NULL,
+    s_52wk_low       DECIMAL(8,2) NOT NULL,
+    s_52wk_low_date  DATE NOT NULL,
+    s_dividend       DECIMAL(10,2) NOT NULL,
+    s_yield          DECIMAL(5,2) NOT NULL,
+    UNIQUE INDEX (s_co_id, s_issue) STORING (s_ex_id, s_name),
+    FOREIGN KEY (s_st_id) REFERENCES status_type(st_id),
+    FOREIGN KEY (s_ex_id) REFERENCES exchange(ex_id),
+    FOREIGN KEY (s_co_id) REFERENCES company(co_id)
+)
+----
+
+exec-ddl
+CREATE TABLE last_trade (
+    lt_s_symb     CHAR(15) NOT NULL PRIMARY KEY,
+    lt_dts        TIMESTAMP NOT NULL,
+    lt_price      DECIMAL(8,2) NOT NULL,
+    lt_open_price DECIMAL(8,2) NOT NULL,
+    lt_vol        INT8 NOT NULL,
+    FOREIGN KEY (lt_s_symb) REFERENCES security(s_symb)
+)
+----
+
+exec-ddl
+CREATE TABLE daily_market (
+    dm_date   DATE NOT NULL,
+    dm_s_symb CHAR(15) NOT NULL,
+    dm_close  DECIMAL(8,2) NOT NULL,
+    dm_high   DECIMAL(8,2) NOT NULL,
+    dm_low    DECIMAL(8,2) NOT NULL,
+    dm_vol    INT8 NOT NULL,
+    PRIMARY KEY (dm_date, dm_s_symb),
+    UNIQUE INDEX (dm_s_symb, dm_date) STORING (dm_close, dm_high, dm_low, dm_vol),
+    FOREIGN KEY (dm_s_symb) REFERENCES security(s_symb)
+)
+----
+
+exec-ddl
+CREATE TABLE customer (
+    c_id      INT8 NOT NULL PRIMARY KEY,
+    c_tax_id  CHAR(20) NOT NULL,
+    c_st_id   CHAR(4) NOT NULL,
+    c_l_name  CHAR(25) NOT NULL,
+    c_f_name  CHAR(20) NOT NULL,
+    c_m_name  CHAR,
+    c_gndr    CHAR,
+    c_tier    INT2 NOT NULL CHECK (c_tier IN (1, 2, 3)),
+    c_dob     DATE NOT NULL,
+    c_ad_id   INT8 NOT NULL,
+    c_ctry_1  CHAR(3),
+    c_area_1  CHAR(3),
+    c_local_1 CHAR(10),
+    c_ext_1   CHAR(5),
+    c_ctry_2  CHAR(3),
+    c_area_2  CHAR(3),
+    c_local_2 CHAR(10),
+    c_ext_2   CHAR(5),
+    c_ctry_3  CHAR(3),
+    c_area_3  CHAR(3),
+    c_local_3 CHAR(10),
+    c_ext_3   CHAR(5),
+    c_email_1 CHAR(50),
+    c_email_2 CHAR(50),
+    UNIQUE INDEX (c_tax_id),
+    FOREIGN KEY (c_st_id) REFERENCES status_type(st_id),
+    FOREIGN KEY (c_ad_id) REFERENCES address(ad_id)
+)
+----
+
+exec-ddl
+CREATE TABLE customer_account (
+    ca_id     INT8 NOT NULL PRIMARY KEY,
+    ca_b_id   INT8 NOT NULL,
+    ca_c_id   INT8 NOT NULL,
+    ca_name   CHAR(50),
+    ca_tax_st INT2 NOT NULL CHECK (ca_tax_st IN (0, 1, 2)),
+    ca_bal    DECIMAL(12,2) NOT NULL,
+    FOREIGN KEY (ca_b_id) REFERENCES broker(b_id),
+    FOREIGN KEY (ca_c_id) REFERENCES customer(c_id)
+)
+----
+
+exec-ddl
+CREATE TABLE trade_type (
+    tt_id      CHAR(3) NOT NULL PRIMARY KEY,
+    tt_name    CHAR(12) NOT NULL,
+    tt_is_sell BOOL NOT NULL,
+    tt_is_mrkt BOOL NOT NULL
+)
+----
+
+exec-ddl
+CREATE TABLE trade (
+    t_id          INT8 NOT NULL PRIMARY KEY,
+    t_dts         TIMESTAMP NOT NULL,
+    t_st_id       CHAR(4) NOT NULL,
+    t_tt_id       CHAR(3) NOT NULL,
+    t_is_cash     BOOL NOT NULL,
+    t_s_symb      CHAR(15) NOT NULL,
+    t_qty         INT4 NOT NULL CHECK (t_qty > 0),
+    t_bid_price   DECIMAL(8,2) CHECK (t_bid_price > 0),
+    t_ca_id       INT8 NOT NULL,
+    t_exec_name   CHAR(49) NOT NULL,
+    t_trade_price DECIMAL(8,2),
+    t_chrg        DECIMAL(10,2) NOT NULL CHECK (t_chrg >= 0),
+    t_comm        DECIMAL(10,2) NOT NULL CHECK (t_comm >= 0),
+    t_tax         DECIMAL(10,2) NOT NULL CHECK (t_tax >= 0),
+    t_lifo        BOOL NOT NULL,
+    INDEX (t_ca_id, t_dts DESC) STORING (t_st_id, t_tt_id, t_is_cash, t_s_symb, t_qty, t_bid_price, t_exec_name, t_trade_price, t_chrg),
+    INDEX (t_s_symb, t_dts ASC) STORING (t_ca_id, t_exec_name, t_is_cash, t_trade_price, t_qty, t_tt_id),
+    FOREIGN KEY (t_st_id) REFERENCES status_type(st_id),
+    FOREIGN KEY (t_tt_id) REFERENCES trade_type(tt_id),
+    FOREIGN KEY (t_s_symb) REFERENCES security(s_symb),
+    FOREIGN KEY (t_ca_id) REFERENCES customer_account(ca_id)
+)
+----
+
+exec-ddl
+CREATE TABLE trade_history (
+    th_t_id  INT8 NOT NULL,
+    th_dts   TIMESTAMP NOT NULL,
+    th_st_id CHAR(4) NOT NULL,
+    PRIMARY KEY (th_t_id, th_st_id),
+    FOREIGN KEY (th_t_id) REFERENCES trade(t_id),
+    FOREIGN KEY (th_st_id) REFERENCES status_type(st_id)
+)
+----
+
+exec-ddl
+CREATE TABLE trade_request (
+    tr_t_id      INT8 NOT NULL PRIMARY KEY,
+    tr_tt_id     CHAR(3) NOT NULL,
+    tr_s_symb    CHAR(15) NOT NULL,
+    tr_qty       INT4 NOT NULL CHECK (tr_qty > 0),
+    tr_bid_price DECIMAL(8,2) NOT NULL CHECK (tr_bid_price > 0),
+    tr_b_id      INT8 NOT NULL,
+    INDEX (tr_s_symb, tr_b_id) STORING (tr_qty, tr_bid_price),
+    FOREIGN KEY (tr_t_id) REFERENCES trade(t_id),
+    FOREIGN KEY (tr_tt_id) REFERENCES trade_type(tt_id),
+    FOREIGN KEY (tr_s_symb) REFERENCES security(s_symb),
+    FOREIGN KEY (tr_b_id) REFERENCES broker(b_id)
+)
+----
+
+exec-ddl
+CREATE TABLE settlement (
+    se_t_id          INT8 NOT NULL PRIMARY KEY,
+    se_cash_type     CHAR(40) NOT NULL,
+    se_cash_due_date DATE NOT NULL,
+    se_amt           DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (se_t_id) REFERENCES trade(t_id)
+)
+----
+
+exec-ddl
+CREATE TABLE commission_rate (
+    cr_c_tier   INT2 NOT NULL CHECK (cr_c_tier IN (1, 2, 3)),
+    cr_tt_id    CHAR(3) NOT NULL,
+    cr_ex_id    CHAR(6) NOT NULL,
+    cr_from_qty INT4 NOT NULL CHECK (cr_from_qty >= 0),
+    cr_to_qty   INT4 NOT NULL CHECK (cr_to_qty > cr_from_qty),
+    cr_rate     DECIMAL(5,2) NOT NULL CHECK (cr_rate >= 0),
+    PRIMARY KEY (cr_c_tier, cr_tt_id, cr_ex_id, cr_from_qty),
+    FOREIGN KEY (cr_tt_id) REFERENCES trade_type(tt_id),
+    FOREIGN KEY (cr_ex_id) REFERENCES exchange(ex_id)
+)
+----
+
+exec-ddl
+CREATE TABLE charge (
+    ch_tt_id  CHAR(3) NOT NULL,
+    ch_c_tier INT2 NOT NULL CHECK (ch_c_tier IN (1, 2, 3)),
+    ch_chrg   DECIMAL(10,2) NOT NULL CHECK (ch_chrg >= 0),
+    PRIMARY KEY (ch_tt_id, ch_c_tier),
+    FOREIGN KEY (ch_tt_id) REFERENCES trade_type(tt_id)
+)
+----
+
+exec-ddl
+CREATE TABLE cash_transaction (
+    ct_t_id INT8 NOT NULL PRIMARY KEY,
+    ct_dts  TIMESTAMP NOT NULL,
+    ct_amt  DECIMAL(10,2) NOT NULL,
+    ct_name CHAR(100),
+    FOREIGN KEY (ct_t_id) REFERENCES trade(t_id)
+)
+----
+
+exec-ddl
+CREATE TABLE watch_list (
+    wl_id   INT8 NOT NULL PRIMARY KEY,
+    wl_c_id INT8 NOT NULL,
+    FOREIGN KEY (wl_c_id) REFERENCES customer(c_id)
+)
+----
+
+exec-ddl
+CREATE TABLE watch_item (
+    wi_wl_id  INT8 NOT NULL,
+    wi_s_symb CHAR(15) NOT NULL,
+    PRIMARY KEY (wi_wl_id, wi_s_symb),
+    FOREIGN KEY (wi_wl_id) REFERENCES watch_list(wl_id),
+    FOREIGN KEY (wi_s_symb) REFERENCES security(s_symb)
+)
+----
+
+exec-ddl
+CREATE TABLE holding_summary (
+    hs_ca_id  INT8 NOT NULL,
+    hs_s_symb CHAR(15) NOT NULL,
+    hs_qty    INT4 NOT NULL,
+    PRIMARY KEY (hs_ca_id, hs_s_symb),
+    UNIQUE INDEX (hs_s_symb, hs_ca_id) STORING (hs_qty),
+    FOREIGN KEY (hs_ca_id) REFERENCES customer_account(ca_id),
+    FOREIGN KEY (hs_s_symb) REFERENCES security(s_symb)
+)
+----
+
+exec-ddl
+CREATE TABLE holding_history (
+    hh_h_t_id     INT8 NOT NULL,
+    hh_t_id       INT8 NOT NULL,
+    hh_before_qty INT4 NOT NULL,
+    hh_after_qty  INT4 NOT NULL,
+    PRIMARY KEY (hh_h_t_id, hh_t_id),
+    FOREIGN KEY (hh_h_t_id) REFERENCES trade(t_id),
+    FOREIGN KEY (hh_t_id) REFERENCES trade(t_id)
+)
+----
+
+exec-ddl
+CREATE TABLE holding (
+    h_t_id   INT8 NOT NULL PRIMARY KEY,
+    h_ca_id  INT8 NOT NULL,
+    h_s_symb CHAR(15) NOT NULL,
+    h_dts    TIMESTAMP NOT NULL,
+    h_price  DECIMAL(8,2) NOT NULL CHECK (h_price > 0),
+    h_qty    INT4 NOT NULL,
+    INDEX (h_ca_id, h_s_symb, h_dts) STORING (h_qty, h_price),
+    FOREIGN KEY (h_t_id) REFERENCES trade(t_id),
+    FOREIGN KEY (h_ca_id, h_s_symb) REFERENCES holding_summary(hs_ca_id, hs_s_symb)
+)
+----
+
+exec-ddl
+CREATE TABLE customer_taxrate (
+    cx_tx_id CHAR(4) NOT NULL,
+    cx_c_id  INT8 NOT NULL,
+    PRIMARY KEY (cx_tx_id, cx_c_id),
+    FOREIGN KEY (cx_tx_id) REFERENCES taxrate(tx_id),
+    FOREIGN KEY (cx_c_id) REFERENCES customer(c_id)
+)
+----
+
+exec-ddl
+CREATE TABLE account_permission (
+    ap_ca_id  INT8 NOT NULL,
+    ap_acl    CHAR(4) NOT NULL,
+    ap_tax_id CHAR(20) NOT NULL,
+    ap_l_name CHAR(25) NOT NULL,
+    ap_f_name CHAR(20) NOT NULL,
+    PRIMARY KEY (ap_ca_id, ap_tax_id),
+    FOREIGN KEY (ap_ca_id) REFERENCES customer_account(ca_id)
+)
+----
