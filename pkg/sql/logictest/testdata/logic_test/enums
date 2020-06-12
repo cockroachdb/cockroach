@@ -989,3 +989,19 @@ INSERT INTO enum_referenced VALUES ('howdy')
 
 statement error pq: foreign key violation: "enum_origin" row x='hello' has no match in "enum_referenced"
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+# Convert an enum type into another with USING.
+statement ok
+SET enable_experimental_alter_column_type_general = true;
+CREATE TABLE enum_data_type (x greeting);
+INSERT INTO enum_data_type VALUES ('hello'), ('hi')
+
+statement ok
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE dbs USING
+  (CASE WHEN x = 'hello' THEN 'cockroach' ELSE 'postgres' END)
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+cockroach
+postgres
