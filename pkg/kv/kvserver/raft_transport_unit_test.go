@@ -42,8 +42,12 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	rpcC := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, 500*time.Millisecond), stopper, st)
+	rpcC := rpc.NewContext(rpc.ContextOptions{
+		Config:   &base.Config{Insecure: true},
+		Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
+		Stopper:  stopper,
+		Settings: st,
+	})
 	rpcC.ClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}

@@ -1580,7 +1580,7 @@ func (g *Gossip) startClientLocked(addr net.Addr) {
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
 	if !ok {
-		name := fmt.Sprintf("gossip %v->%v", g.rpcContext.Addr, addr)
+		name := fmt.Sprintf("gossip %v->%v", g.rpcContext.Config.Addr, addr)
 		breaker = g.rpcContext.NewBreaker(name)
 		g.clientsMu.breakers[addr.String()] = breaker
 	}

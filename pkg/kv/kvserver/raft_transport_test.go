@@ -110,13 +110,13 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		stopper:    stop.NewStopper(),
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
-	rttc.nodeRPCContext = rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		rttc.stopper,
-		cluster.MakeTestingClusterSettings(),
-	)
+	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     testutils.NewNodeTestBaseContext(),
+		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Stopper:    rttc.stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.

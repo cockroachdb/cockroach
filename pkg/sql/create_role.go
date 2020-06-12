@@ -117,7 +117,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
 			// We disallow setting a non-empty password in insecure mode
 			// because insecure means an observer may have MITM'ed the change
 			// and learned the password.
