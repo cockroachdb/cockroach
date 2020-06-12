@@ -692,18 +692,17 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
           │         └ *colexec.hashJoiner
           │           ├ *colexec.hashJoiner
           │           │ ├ *colexec.hashJoiner
-          │           │ │ ├ *colexec.colBatchScan
-          │           │ │ └ *colexec.hashJoiner
-          │           │ │   ├ *colexec.hashJoiner
-          │           │ │   │ ├ *rowexec.joinReader
-          │           │ │   │ │ └ *colexec.mergeJoinInnerOp
-          │           │ │   │ │   ├ *colexec.selEQBytesBytesConstOp
-          │           │ │   │ │   │ └ *colexec.colBatchScan
-          │           │ │   │ │   └ *colexec.colBatchScan
-          │           │ │   │ └ *colexec.colBatchScan
-          │           │ │   └ *colexec.selLEInt64Int64ConstOp
-          │           │ │     └ *colexec.selGEInt64Int64ConstOp
-          │           │ │       └ *colexec.colBatchScan
+          │           │ │ ├ *rowexec.joinReader
+          │           │ │ │ └ *colexec.hashJoiner
+          │           │ │ │   ├ *colexec.selLEInt64Int64ConstOp
+          │           │ │ │   │ └ *colexec.selGEInt64Int64ConstOp
+          │           │ │ │   │   └ *colexec.colBatchScan
+          │           │ │ │   └ *rowexec.joinReader
+          │           │ │ │     └ *colexec.mergeJoinInnerOp
+          │           │ │ │       ├ *colexec.colBatchScan
+          │           │ │ │       └ *colexec.selEQBytesBytesConstOp
+          │           │ │ │         └ *colexec.colBatchScan
+          │           │ │ └ *colexec.colBatchScan
           │           │ └ *colexec.colBatchScan
           │           └ *colexec.selEQBytesBytesConstOp
           │             └ *colexec.colBatchScan
@@ -723,11 +722,11 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
       └ *rowexec.joinReader
         └ *colexec.hashJoiner
           ├ *colexec.hashJoiner
-          │ ├ *rowexec.joinReader
-          │ │ └ *colexec.hashJoiner
-          │ │   ├ *colexec.colBatchScan
-          │ │   └ *colexec.colBatchScan
-          │ └ *colexec.colBatchScan
+          │ ├ *colexec.colBatchScan
+          │ └ *rowexec.joinReader
+          │   └ *colexec.hashJoiner
+          │     ├ *colexec.colBatchScan
+          │     └ *colexec.colBatchScan
           └ *colexec.colBatchScan
 
 # Query 10
