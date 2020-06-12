@@ -24,7 +24,7 @@ func TestGenerateAllTemplateArgs(t *testing.T) {
 		}
 	}
 
-	res := generateAllTemplateArgs(params)
+	res := generateBooleanTemplateInstantiations(params)
 
 	argsMap := map[string]struct{}{}
 	for _, args := range res {

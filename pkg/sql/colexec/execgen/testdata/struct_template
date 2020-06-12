@@ -1,0 +1,90 @@
+template
+package main
+
+// execgen:template<T>
+// execgen:instantiate<int>
+// execgen:instantiate<bool>
+type Foo struct {
+    foo int
+    bar T
+}
+
+func (f Foo) templated(a T, f bool) T {
+    var T hello
+    return f.bar
+}
+
+func (f *Foo) templatedPtr(a T, f bool) T {
+    var T hello
+    return f.bar
+}
+
+----
+----
+package main
+
+type Foo_int struct {
+	foo int
+	bar int
+}
+
+type Foo_bool struct {
+	foo int
+	bar bool
+}
+
+func (f Foo_int) templated(a int, f bool) int {
+	var int hello
+	return f.bar
+}
+
+func (f Foo_bool) templated(a bool, f bool) bool {
+	var bool hello
+	return f.bar
+}
+
+func (f *Foo_int) templatedPtr(a int, f bool) int {
+	var int hello
+	return f.bar
+}
+
+func (f *Foo_bool) templatedPtr(a bool, f bool) bool {
+	var bool hello
+	return f.bar
+}
+----
+----
+template
+package main
+
+// execgen:template<T, U>
+// execgen:instantiate<int, int>
+// execgen:instantiate<bool, int>
+type Foo struct {
+    foo int
+    bar T
+    _ int
+    baz U
+    _ int
+}
+----
+----
+package main
+
+type Foo_int_int struct {
+	foo int
+	bar int
+	_   int
+	baz int
+	_   int
+}
+
+type Foo_bool_int struct {
+	foo int
+	bar bool
+	_   int
+	baz int
+	_   int
+}
+----
+----

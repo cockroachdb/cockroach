@@ -33,6 +33,9 @@ type funcInfo struct {
 // Match // execgen:template<foo, bar>
 var templateRe = regexp.MustCompile(`\/\/ execgen:template<((?:(?:\w+),?\W*)+)>`)
 
+// Match // execgen:instantiate<foo, bar>
+var instantiateRe = regexp.MustCompile(`\/\/ execgen:instantiate<((?:(?:\w+),?\W*)+)>`)
+
 // replaceTemplateVars removes the template arguments from a callsite of a
 // templated function. It returns the template arguments that were used, and a
 // new CallExpr that doesn't have the template arguments.
@@ -195,40 +198,29 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 		n := cursor.Node()
 		switch n := n.(type) {
 		case *dst.FuncDecl:
-			var templateVars []string
-			var templateDecPosition int
-			for i, dec := range n.Decorations().Start.All() {
-				if matches := templateRe.FindStringSubmatch(dec); matches != nil {
-					match := matches[1]
-					// Match now looks like foo, bar
-					templateVars = strings.Split(match, ",")
-					for i, v := range templateVars {
-						templateVars[i] = strings.TrimSpace(v)
-					}
-					templateDecPosition = i
-					break
-				}
-			}
+			templateVars := extractTemplateVarsFromComment(n)
 			if templateVars == nil {
 				return false
 			}
-			// Remove the template decoration.
-			n.Decs.Start = append(
-				n.Decs.Start[:templateDecPosition],
-				n.Decs.Start[templateDecPosition+1:]...)
+
+			argsList := extractInstantiationsFromComment(n)
 
 			// Process template funcs: find template params from runtime definition
 			// and save in funcInfo.
 			info := &funcInfo{}
-			for _, v := range templateVars {
+			for v := range templateVars {
 				var found bool
 				for i, f := range n.Type.Params.List {
 					// We can safely 0-index here because fields always have at least
 					// one name, and we've already banned the case where they have more
 					// than one. (e.g. func a (a int, b int, c, d int))
 					if f.Names[0].Name == v {
-						if ident, ok := f.Type.(*dst.Ident); !ok || ident.Name != "bool" {
-							panic("can't currently handle non-boolean template variables :)")
+						if argsList == nil {
+							// No explicit instantiations, fall back to the boolean template
+							// logic.
+							if ident, ok := f.Type.(*dst.Ident); !ok || ident.Name != "bool" {
+								panic("can't currently handle non-boolean template variables :)")
+							}
 						}
 						info.templateParams = append(info.templateParams, templateParamInfo{
 							fieldOrdinal: i,
@@ -241,6 +233,11 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 				if !found {
 					panic(fmt.Errorf("template var %s not found", v))
 				}
+			}
+			if len(argsList) == 0 {
+				// If we have no explicit instantiations, fall back to making all
+				// combinations of booleans for boolean templates.
+				argsList = generateBooleanTemplateInstantiations(info.templateParams)
 			}
 			info.decl = n
 
@@ -258,11 +255,8 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 					newParamList = append(newParamList, field)
 				}
 			}
-			n.Type.Params.List = newParamList
 
-			// Now, make variants for every possible combination of allowed values of
-			// the template variables.
-			argsPossibilities := generateAllTemplateArgs(info.templateParams)
+			n.Type.Params.List = newParamList
 
 			funcDecs := info.decl.Decs
 			// Replace the template function with a const marker, just so we can keep
@@ -293,13 +287,13 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 				}
 			}
 
-			for _, args := range argsPossibilities {
-				newBody := monomorphizeTemplate(dst.Clone(n.Body).(*dst.BlockStmt), info, args).(*dst.BlockStmt)
-				newName := getTemplateVariantName(info, args)
+			for _, args := range argsList {
+				newFunc := monomorphizeTemplate(dst.Clone(n), info, args).(*dst.FuncDecl)
+				newName := getTemplateVariantIdent(info.decl.Name.Name, args)
 				cursor.InsertAfter(&dst.FuncDecl{
 					Name: newName,
-					Type: dst.Clone(info.decl.Type).(*dst.FuncType),
-					Body: newBody,
+					Type: newFunc.Type,
+					Body: newFunc.Body,
 					Decs: dst.FuncDeclDecorations{
 						NodeDecs: dst.NodeDecs{
 							Before: dst.EmptyLine,
@@ -318,9 +312,39 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 	return ret
 }
 
-func getTemplateVariantName(info *funcInfo, args []dst.Expr) *dst.Ident {
+// extractTemplateVarsFromComment returns a map from the template variables
+// in an execgen:template declaration to their position within the list.
+func extractTemplateVarsFromComment(n dst.Node) (templateVars map[string]int) {
+	decs := n.Decorations()
+	if len(decs.Start) == 0 {
+		return nil
+	}
+
+	ret := make(map[string]int)
+
+	var templateDecPosition int
+	for i, dec := range decs.Start.All() {
+		if matches := templateRe.FindStringSubmatch(dec); matches != nil {
+			match := matches[1]
+			// Match now looks like foo, bar
+			templateVars := strings.Split(match, ",")
+			for i, v := range templateVars {
+				ret[strings.TrimSpace(v)] = i
+			}
+			templateDecPosition = i
+			break
+		}
+	}
+	// Remove the template decoration.
+	decs.Start = append(
+		decs.Start[:templateDecPosition],
+		decs.Start[templateDecPosition+1:]...)
+	return ret
+}
+
+func getTemplateVariantIdent(objectName string, args []dst.Expr) *dst.Ident {
 	var newName strings.Builder
-	newName.WriteString(info.decl.Name.Name)
+	newName.WriteString(objectName)
 	for j := range args {
 		newName.WriteByte('_')
 		newName.WriteString(prettyPrintExprs(args[j]))
@@ -328,9 +352,9 @@ func getTemplateVariantName(info *funcInfo, args []dst.Expr) *dst.Ident {
 	return dst.NewIdent(newName.String())
 }
 
-// generateAllTemplateArgs returns every possible combination of values for the
+// generateBooleanTemplateInstantiations returns every possible combination of values for the
 // list of parameter types passed in.
-func generateAllTemplateArgs(paramInfos []templateParamInfo) [][]dst.Expr {
+func generateBooleanTemplateInstantiations(paramInfos []templateParamInfo) [][]dst.Expr {
 	if len(paramInfos) == 0 {
 		return [][]dst.Expr{nil}
 	}
@@ -338,7 +362,7 @@ func generateAllTemplateArgs(paramInfos []templateParamInfo) [][]dst.Expr {
 		panic("can't deal with non-boolean template arguments right now")
 	}
 
-	inner := generateAllTemplateArgs(paramInfos[:len(paramInfos)-1])
+	inner := generateBooleanTemplateInstantiations(paramInfos[:len(paramInfos)-1])
 
 	result := make([][]dst.Expr, 0)
 	for _, b := range []bool{true, false} {
@@ -370,7 +394,7 @@ func replaceTemplateCallSites(f *dst.File, templateFuncInfos map[string]*funcInf
 				return true
 			}
 			templateArgs, newCall := replaceTemplateVars(info, n)
-			newCall.Fun = getTemplateVariantName(info, templateArgs)
+			newCall.Fun = getTemplateVariantIdent(info.decl.Name.Name, templateArgs)
 			cursor.Replace(newCall)
 			return false
 		}
@@ -382,6 +406,7 @@ func replaceTemplateCallSites(f *dst.File, templateFuncInfos map[string]*funcInf
 // it modifies the dst.File to include all expanded template functions, and
 // edits call sites to call the newly expanded functions.
 func expandTemplates(f *dst.File) {
+	createTemplateStructVariants(f)
 	funcInfos := createTemplateFuncVariants(f)
 	replaceTemplateCallSites(f, funcInfos)
 }
