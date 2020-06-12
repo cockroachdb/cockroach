@@ -271,8 +271,13 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		User:     security.NodeUser,
 		Insecure: true,
 	}
-	rpcCtx := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, 0), c.stopper, cluster.MakeTestingClusterSettings())
+	rpcCtx := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     baseCtx,
+		Clock:      hlc.NewClock(hlc.UnixNano, 0),
+		Stopper:    c.stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 
 	n := &Node{
 		Cfg:    cfg,

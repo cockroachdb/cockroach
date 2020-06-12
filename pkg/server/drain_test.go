@@ -233,10 +233,13 @@ func getAdminClientForServer(
 	// Retrieve some parameters to initialize the client RPC context.
 	cfg := tc.Server(0).RPCContext().Config
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: execCfg.Settings.Tracer},
-		cfg, execCfg.Clock, stopper, execCfg.Settings,
-	)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		AmbientCtx: log.AmbientContext{Tracer: execCfg.Settings.Tracer},
+		Config:     cfg,
+		Clock:      execCfg.Clock,
+		Stopper:    stopper,
+		Settings:   execCfg.Settings,
+	})
 	conn, err := rpcContext.GRPCUnvalidatedDial(tc.Server(serverIdx).ServingRPCAddr()).Connect(ctx)
 	if err != nil {
 		return nil, nil, err
