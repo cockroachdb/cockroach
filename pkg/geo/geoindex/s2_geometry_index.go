@@ -156,7 +156,7 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 		}
 		gt = nil
 		if clippedEWKB != nil {
-			g, err = geo.ParseGeometryFromEWKBRaw(clippedEWKB)
+			g, err = geo.ParseGeometryFromEWKBUnsafe(clippedEWKB)
 			if err != nil {
 				return nil, false, err
 			}

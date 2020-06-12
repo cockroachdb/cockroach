@@ -812,7 +812,7 @@ values
  └── (NULL,)
 
 norm expect=FoldFunction
-SELECT ST_Length(ST_GeomFromText('LINESTRING(743238 2967416,743238 2967450)', 2249));
+SELECT ST_Length(ST_GeomFromText('LINESTRING(743238 2967416,743238 2967450)', 4326));
 ----
 values
  ├── columns: st_length:1!null

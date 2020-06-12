@@ -1,0 +1,164 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package partialidx_test
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/datadriven"
+)
+
+// The test files in testdata/predicate support only one command:
+//
+//   - predtest vars=(type1,type2, ...)
+//
+//   The vars argument sets the type of the variables (e.g. @1, @2) in the
+//   expressions.
+//
+//   The test input must be in the format:
+//
+//      [filter expression]
+//      =>
+//      [predicate expression]
+//
+//   The "=>" symbol denotes implication. For example, "a => b" tests if
+//   expression a implies expression b.
+//
+func TestPredicateImplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.Walk(t, "testdata/predicate", func(t *testing.T, path string) {
+		semaCtx := tree.MakeSemaContext()
+		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var varTypes []*types.T
+			var iVarHelper tree.IndexedVarHelper
+			var err error
+
+			var f norm.Factory
+			f.Init(&evalCtx, nil /* catalog */)
+			md := f.Metadata()
+
+			if d.Cmd != "predtest" {
+				d.Fatalf(t, "unsupported command: %s\n", d.Cmd)
+			}
+
+			for _, arg := range d.CmdArgs {
+				key, vals := arg.Key, arg.Vals
+				switch key {
+				case "vars":
+					varTypes, err = exprgen.ParseTypes(vals)
+					if err != nil {
+						d.Fatalf(t, "failed to parse vars%v\n", err)
+					}
+
+					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+
+					// Set up the columns in the metadata.
+					for i, typ := range varTypes {
+						md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+					}
+
+				default:
+					d.Fatalf(t, "unknown argument: %s\n", key)
+				}
+			}
+
+			splitInput := strings.Split(d.Input, "=>")
+			if len(splitInput) != 2 {
+				d.Fatalf(t, "input format must be: [filters] => [predicate]")
+			}
+
+			// Build the filters from the first split, everything before "=>".
+			filters, err := makeFiltersExpr(splitInput[0], &semaCtx, &evalCtx, &f)
+			if err != nil {
+				d.Fatalf(t, "unexpected error while building filters: %v\n", err)
+			}
+
+			// Build the predicate from the second split, everything after "=>".
+			pred, err := makeScalarExpr(splitInput[1], &semaCtx, &evalCtx, &f)
+			if err != nil {
+				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
+			}
+
+			remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred)
+			if !ok {
+				return "false"
+			}
+
+			var buf bytes.Buffer
+			buf.WriteString("true\n└── remaining filters: ")
+			if remainingFilters.IsTrue() {
+				buf.WriteString("none")
+			} else {
+				execBld := execbuilder.New(nil /* factory */, f.Memo(), nil /* catalog */, &remainingFilters, &evalCtx)
+				expr, err := execBld.BuildScalar(&iVarHelper)
+				if err != nil {
+					d.Fatalf(t, "unexpected error: %v\n", err)
+				}
+				buf.WriteString(expr.String())
+			}
+			return buf.String()
+		})
+	})
+}
+
+// makeFiltersExpr returns a FiltersExpr generated from the input string.
+func makeFiltersExpr(
+	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+) (memo.FiltersExpr, error) {
+	scalar, err := makeScalarExpr(input, semaCtx, evalCtx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	filters := memo.FiltersExpr{f.ConstructFiltersItem(scalar)}
+
+	// Run SimplifyFilters so that adjacent top-level AND expressions are
+	// flattened into individual FiltersItems, like they would be during
+	// normalization of a SELECT query.
+	return f.CustomFuncs().SimplifyFilters(filters), nil
+}
+
+// makeScalarExpr returns a ScalarExpr generated from the input string.
+func makeScalarExpr(
+	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
+) (opt.ScalarExpr, error) {
+	expr, err := parser.ParseExpr(input)
+	if err != nil {
+		return nil, err
+	}
+
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	if err := b.Build(expr); err != nil {
+		return nil, err
+	}
+
+	root := f.Memo().RootExpr().(opt.ScalarExpr)
+	return root, nil
+}
