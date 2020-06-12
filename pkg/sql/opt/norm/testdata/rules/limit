@@ -1358,3 +1358,109 @@ limit
  │         │         └── fd: (1)-->(2-5)
  │         └── 10
  └── 5
+
+# ----------------------------------------------------
+# AssociateLimitJoinsLeft and AssociateLimitJoinsRight
+# ----------------------------------------------------
+
+norm expect=AssociateLimitJoinsLeft format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER JOIN ab
+ON a = y
+LIMIT 10
+----
+left-join (hash)
+ ├── limit
+ │    ├── inner-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── a = y
+ │    └── 10
+ ├── scan uv
+ └── filters
+      └── x = u
+
+norm expect=AssociateLimitJoinsRight format=hide-all
+SELECT *
+FROM ab
+INNER JOIN (SELECT * FROM b LEFT JOIN uv ON x = u)
+ON a = y
+LIMIT 10
+----
+left-join (hash)
+ ├── limit
+ │    ├── inner-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── a = y
+ │    └── 10
+ ├── scan uv
+ └── filters
+      └── x = u
+
+norm expect=AssociateLimitJoinsRight format=hide-all
+SELECT *
+FROM kvr_fk
+INNER JOIN (SELECT * FROM uv LEFT JOIN ab ON v = b)
+ON r = u
+LIMIT 10
+----
+limit
+ ├── left-join (hash)
+ │    ├── inner-join (hash)
+ │    │    ├── scan uv
+ │    │    ├── limit
+ │    │    │    ├── scan kvr_fk
+ │    │    │    └── 10
+ │    │    └── filters
+ │    │         └── r = u
+ │    ├── scan ab
+ │    └── filters
+ │         └── uv.v = b
+ └── 10
+
+# No-op case because the InnerJoin filter references columns from the right side
+# of the LeftJoin.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER JOIN ab
+ON a = y AND b = v
+LIMIT 10
+----
+limit
+ ├── inner-join (hash)
+ │    ├── left-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── x = u
+ │    ├── scan ab
+ │    └── filters
+ │         ├── a = y
+ │         └── b = v
+ └── 10
+
+# No-op case because one of the joins has a join hint.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) format=hide-all
+SELECT *
+FROM (SELECT * FROM b LEFT JOIN uv ON x = u)
+INNER MERGE JOIN ab
+ON a = y
+LIMIT 10
+----
+limit
+ ├── inner-join (hash)
+ │    ├── flags: force merge join
+ │    ├── left-join (hash)
+ │    │    ├── scan b
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── x = u
+ │    ├── scan ab
+ │    └── filters
+ │         └── a = y
+ └── 10
