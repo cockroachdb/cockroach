@@ -22,6 +22,7 @@ var BinaryOpName = map[tree.BinaryOperator]string{
 	tree.Minus:        "Minus",
 	tree.Mult:         "Mult",
 	tree.Div:          "Div",
+	tree.Pow:          "Pow",
 	tree.FloorDiv:     "FloorDiv",
 	tree.Mod:          "Mod",
 	tree.Concat:       "Concat",

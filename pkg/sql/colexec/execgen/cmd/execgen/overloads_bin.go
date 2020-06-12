@@ -31,11 +31,13 @@ var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Div:      "Quo",
 	tree.FloorDiv: "QuoInteger",
 	tree.Mod:      "Rem",
+	tree.Pow:      "Pow",
 }
 
 var binaryOpFloatMethod = map[tree.BinaryOperator]string{
 	tree.FloorDiv: "math.Trunc",
 	tree.Mod:      "math.Mod",
+	tree.Pow:      "math.Pow",
 }
 
 var binaryOpDecCtx = map[tree.BinaryOperator]string{
@@ -45,6 +47,7 @@ var binaryOpDecCtx = map[tree.BinaryOperator]string{
 	tree.Div:      "DecimalCtx",
 	tree.FloorDiv: "HighPrecisionCtx",
 	tree.Mod:      "HighPrecisionCtx",
+	tree.Pow:      "DecimalCtx",
 }
 
 var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
@@ -135,12 +138,12 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Simple arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div, tree.Pow} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
-		binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}] = types.Decimal
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
+		binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}] = types.Decimal
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
 			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
@@ -319,6 +322,8 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 			computeBinOp = fmt.Sprintf("%s(float64(%s) / float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
 		case tree.Mod:
 			computeBinOp = fmt.Sprintf("%s(float64(%s), float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
+		case tree.Pow:
+			computeBinOp = fmt.Sprintf("%s(float64(%s), float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
 		default:
 			computeBinOp = fmt.Sprintf("float64(%s) %s float64(%s)", leftElem, binOp, rightElem)
 		}
@@ -387,7 +392,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				}
 			`))
 
-		case tree.Mult:
+		case tree.Mult, tree.Pow:
 			// If the inputs are small enough, then we don't have to do any further
 			// checks. For the sake of legibility, upperBound and lowerBound are both
 			// not set to their maximal/minimal values. An even more advanced check
@@ -411,22 +416,37 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 
 			args["UpperBound"] = upperBound
 			args["LowerBound"] = lowerBound
-			t = template.Must(template.New("").Parse(`
-				{
-					result := {{.Left}} * {{.Right}}
-					if {{.Left}} > {{.UpperBound}} || {{.Left}} < {{.LowerBound}} || {{.Right}} > {{.UpperBound}} || {{.Right}} < {{.LowerBound}} {
-						if {{.Left}} != 0 && {{.Right}} != 0 {
-							sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
-							if (result < 0) == sameSign {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							} else if result/{{.Right}} != {{.Left}} {
-								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+			switch binOp {
+
+			case tree.Mult:
+				t = template.Must(template.New("").Parse(`
+					{
+						result := {{.Left}} * {{.Right}}
+						if {{.Left}} > {{.UpperBound}} || {{.Left}} < {{.LowerBound}} || {{.Right}} > {{.UpperBound}} || {{.Right}} < {{.LowerBound}} {
+							if {{.Left}} != 0 && {{.Right}} != 0 {
+								sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
+								if (result < 0) == sameSign {
+									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+								} else if result/{{.Right}} != {{.Left}} {
+									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+								}
 							}
 						}
+						{{.Target}} = result
 					}
-					{{.Target}} = result
-				}
-			`))
+				`))
+
+			case tree.Pow:
+				t = template.Must(template.New("").Parse(`
+					{
+						result := Float64({{.Left}}) ** Float64({{.Right}})
+						if result < Float64({{.LowerBound}}) || result > Float64({{.UpperBound}}) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						{{.Target}} = int(result)
+					}
+				`))
+			}
 
 		case tree.Div:
 			// Note that this is the '/' operator, which has a decimal result.
