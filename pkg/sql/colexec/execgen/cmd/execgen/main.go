@@ -159,8 +159,6 @@ func (g *execgenTool) generate(path string, entry entry) error {
 			b = oldB
 			err = errors.Wrap(err, "Code formatting failed with Go parse error")
 		}
-	} else {
-		b = buf.Bytes()
 	}
 
 	// Ignore any write error if another error already occurred.
