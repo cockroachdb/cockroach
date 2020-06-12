@@ -22,25 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
-// TestTenantCertificates creates a tenant CA and from it client certificates
-// for a tenant. It then sets up a smoke test that verifies that the tenant
-// can use its client certificates to connect to a https server that trusts
-// the tenant CA.
-//
-// This foreshadows upcoming work on multi-tenancy, see:
-// https://github.com/cockroachdb/cockroach/issues/49105
-// https://github.com/cockroachdb/cockroach/issues/47898
-func TestTenantCertificates(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Don't mock assets in this test, we're creating our own one-off certs.
-	security.ResetAssetLoader()
-	defer ResetTest()
-
-	certsDir, cleanup := tempDir(t)
-	defer cleanup()
+func makeTenantCerts(t *testing.T, tenant string) (certsDir string, cleanup func()) {
+	certsDir, cleanup = tempDir(t)
 
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
@@ -55,7 +41,6 @@ func TestTenantCertificates(t *testing.T) {
 	))
 
 	// That dedicated service can make client certs for a tenant as follows:
-	const tenant = "gromphadorhina-portentosa"
 	tenantCerts, err := security.CreateTenantClientPair(
 		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant,
 	)
@@ -72,27 +57,61 @@ func TestTenantCertificates(t *testing.T) {
 	))
 	require.NoError(t, security.CreateTenantServerPair(
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
+	return certsDir, cleanup
+}
 
-	serverCACertPath := filepath.Join(certsDir, security.TenantServerCACertFilename())
+// TestTenantCertificates creates a tenant CA and from it client certificates
+// for a tenant. It then sets up a smoke test that verifies that the tenant
+// can use its client certificates to connect to a https server that trusts
+// the tenant CA.
+//
+// This foreshadows upcoming work on multi-tenancy, see:
+// https://github.com/cockroachdb/cockroach/issues/49105
+// https://github.com/cockroachdb/cockroach/issues/47898
+func TestTenantCertificates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Run("embedded-certs", func(t *testing.T) {
+		testTenantCertificatesInner(t, true /* embedded */)
+	})
+	t.Run("new-certs", func(t *testing.T) {
+		testTenantCertificatesInner(t, false /* embedded */)
+	})
+}
+
+func testTenantCertificatesInner(t *testing.T, embedded bool) {
+	defer leaktest.AfterTest(t)()
+
+	var tenant, certsDir string
+	if !embedded {
+		// Don't mock assets in this test, we're creating our own one-off certs.
+		security.ResetAssetLoader()
+		defer ResetTest()
+		tenant = fmt.Sprint(rand.Int63())
+		var cleanup func()
+		certsDir, cleanup = makeTenantCerts(t, tenant)
+		defer cleanup()
+	} else {
+		certsDir = security.EmbeddedTenantCertsDir
+		tenant = fmt.Sprint(security.EmbeddedTenantID)
+	}
 
 	// Now set up the config a server would use. The client will trust it based on
 	// the server CA and server node certs, and it will validate incoming
 	// connections based on the tenant CA.
-	serverTLSConfig, err := security.LoadServerTLSConfig(
-		serverCACertPath,
-		filepath.Join(certsDir, security.TenantClientCACertFilename()),
-		filepath.Join(certsDir, security.TenantServerCertFilename()),
-		filepath.Join(certsDir, security.TenantServerKeyFilename()),
-	)
+
+	cm, err := security.NewCertificateManager(certsDir)
+	require.NoError(t, err)
+	serverTLSConfig, err := cm.GetTenantServerTLSConfig()
+	require.NoError(t, err)
+
+	// Make a new CertificateManager for the tenant. We could've used this one
+	// for the server as well, but this way it's closer to reality.
+	cm, err = security.NewCertificateManager(certsDir, security.ForTenant(tenant))
 	require.NoError(t, err)
 
 	// The client in turn trusts the server CA and presents its tenant certs to the
 	// server (which will validate them using the tenant CA).
-	clientTLSConfig, err := security.LoadClientTLSConfig(
-		serverCACertPath,
-		filepath.Join(certsDir, security.TenantClientCertFilename(tenant)),
-		filepath.Join(certsDir, security.TenantClientKeyFilename(tenant)),
-	)
+	clientTLSConfig, err := cm.GetTenantClientTLSConfig()
 	require.NoError(t, err)
 
 	// Set up a HTTPS server using server TLS config, set up a http client using the
