@@ -1,0 +1,48 @@
+# LogicTest: local
+
+# Test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1.0 1.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (3, 'POINT(3.0 3.0)'),
+  (4, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (5, 'LINESTRING(40.0 40.0, 41.0 41.0)')
+
+
+# Split into 5 parts, each row from each table goes to one node.
+# statement ok
+# ALTER TABLE geo_table SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)
+
+# statement ok
+# ALTER TABLE geo_table EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE geo_table]
+----
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
+
+# Relocate the index. But will need to compute values of
+# indexed column
+# query TTTI colnames,rowsort
+# SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM INDEX geom_index]
+# ----
+# start_key  end_key  replicas  lease_holder
+# NULL       NULL     {1}       1
+
+# Panic in batchedInvertedExprEvaluator.addIndexRow because input row does not have
+# the inverted column.
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzsmltv2kgcxd_3U4zmiagm9owNIZYqQbvZFV1islykzVYocvAsWBibHRuSKMp3rwypwiWe8aVmJlHeuNjw-5_8c-b0NI8w_N-DJuxfdC6-DsCSeuCPXvcSfL_456rTalugZbU61_9egMrv7f6g_3fnBDxfOludzhRgryaV2d3p7GRz22wFvnXbFpjdga61vgR8BvH74M9ed3gFvlyvXxxBBfqBQyx7TkJofocIKhBDBepQgQZUYA2OFLigwZiEYUDjSx7XN7Sde2hqCnT9xTKKXx4pcBxQAs1HGLmRR6AJB_atR3rEdghVNahAh0S2662_ZkHduU0fmrMVVGB_YfuhCapq_MXdZWSCZoxxa0fjKQlBsIwW8YvxR0TLhbf1UnxZSDwyjtyVGz2YQDvV4svCyPY8ELlzYgIthKMnBW5u2QzwE_D2AUztcLqL1kRw9DRaf8aEQBM9KfkmridMfPcysYrknBknzvzyOQF1CCXO_ud8ir841VWvyHdJ6IR8C1yfUBXtbYxH_osqTfTp5DN1J9PNwxfplCYuph65J-Nl5AZ-koIv6uhZNqI1mVAysaOAqqh2ILoCuxuBnn_8Lev6xuoObqxhp1NponjA_vCy0sTxo6_doTV4fvxrJ1UgDe5CQIntPN-3u0sKnNv3YE7mAX0AyzDGxRr4y_1SaMuMYlvGFhtrxcTuDy9v2rHcevysR3yH0PWigSZWm_rRlq2WQqSl_5pMrypkBdVgoeK9TUwxSq34KPWdUVB6J0X8s0PFVVWX0ElR3pnPUpweks6ME2c-4umB3sbpwdmI7dOj_utOj7xuX65GRU6PzFvGOT3Qezw9cHr7wSksV6-qhoT2g_LO3EhhuZLOjBNnPqLl4rdhuZyN2Lbcsw_LTbbczFvGsVz8Hi1XT28_egrLNapqTUL7QXlnPk9huZLOjBNnPqLl6m_DcjkbsW25jQ_LTbbczFvGsVz9PVqukd5-jBSWW6tKaD4o78Q1vuFWVQRs3wEIBNGUUAmnx4nTH9F6jbdhvZzd2Lbe8w_rTbbezFvGsV7jPVov5_9CeiRcBH5I9mrq1z9ZixUkzoRsFA-DJR2TKxqM11-zedpd37dufxwSRpt38eZJ2__5VhjZUdqaW0vtXlmQGvIhIb0IU3qTz8QkoU64kE55mVCGDccyIDXkQ9rb8IxMeTecwyShTriQTnmZ8D6Tts20i6Tt36wzBzJEOBsbCWkiXITDVJOPCUuoExaik8H8_dhD2r-5xrwZ13d_u44zUF2-0MZGEhJG2EjFQltJTBLqVCy05T0CzuQLbWwkIWGEjVQstJXEJKFOxUJb3g1vMM-Vc3ZoOy8vtOXVmI1ULLTl1ZjDJCSMsJnEhDYOkxCd0EGXwEptR_oHaZYu4Vg6ZSkT5GASE714UIWUKmujxCh1UCiIT18cJjFdEJtJTP7iQRVSKveaczZKjFIHXcXOCYMMdgZDB7WC-BDGYRJTnfGgxBzlbCgxOYwHJSaIsRswMT89CRswDpOYeCFjB8aDEhNZy2zBckNJWINxmMTECxmLMB6UmMhaZhWWG4rdhSFOGYYkbMM4TIKCmIx9GAeqWBDLbSgyNmJYwkYMl9iIlcQkJF5wmMQEMR6UjEqJCWK4xEYs95pL2IhxmMQEMR6UjEoJ-kMydiOGOY0YlrAR4zCJCWI8KDHxQsZGjAclJvTI0IiNnn77EQAA__-Wr_Sp

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -401,7 +402,7 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 
 // getColumns returns the set of column ordinals in the table for the set of
 // column IDs, along with a mapping from the column IDs to output ordinals
-// (starting with outputOrdinalStart).
+// (starting with 0).
 func (b *Builder) getColumns(
 	cols opt.ColSet, tableID opt.TableID,
 ) (exec.TableColumnOrdinalSet, opt.ColMap) {
@@ -489,9 +490,9 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		locking = forUpdateLocking
 	}
 
-	// TODO(rytaft): Add support for inverted constraints.
+	var invertedSpans []invertedexpr.InvertedSpan
 	if scan.InvertedConstraint != nil {
-		return execPlan{}, errors.Errorf("Geospatial constrained scans are not yet supported")
+		invertedSpans = scan.InvertedConstraint.SpansToRead
 	}
 
 	root, err := b.factory.ConstructScan(
@@ -499,6 +500,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		tab.Index(scan.Index),
 		needed,
 		scan.Constraint,
+		invertedSpans,
 		hardLimit,
 		softLimit,
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
@@ -512,6 +514,12 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 	res.root = root
+	if scan.InvertedConstraint != nil {
+		if res.root, err = b.factory.ConstructInvertedFilterer(
+			res.root, tab, scan.InvertedConstraint); err != nil {
+			return execPlan{}, err
+		}
+	}
 	return res, nil
 }
 

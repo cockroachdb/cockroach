@@ -334,6 +334,8 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *filterNode:
 	case *groupNode:
 	case *indexJoinNode:
+	case *invertedFiltererNode:
+		return true
 	case *joinNode:
 	case *limitNode:
 	case *lookupJoinNode:
@@ -395,6 +397,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, err
 		}
 		return checkSupportForPlanNode(n.input)
+
+	case *invertedFiltererNode:
+		return cannotDistribute, nil
 
 	case *joinNode:
 		if err := checkExpr(n.pred.onCond); err != nil {
@@ -2380,6 +2385,23 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(planCtx, n)
+
+	case *invertedFiltererNode:
+		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.input)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(rytaft): the OnExpr is always nil. Change the optimizer
+		// to utilize OnExpr when possible.
+		invertedFiltererSpec := &execinfrapb.InvertedFiltererSpec{
+			InvertedExpr: *n.expression.ToProto(),
+		}
+		plan.PlanToStreamColMap = append(plan.PlanToStreamColMap, len(plan.ResultTypes))
+		plan.AddSingleGroupStage(dsp.nodeDesc.NodeID,
+			execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: invertedFiltererSpec,
+			},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
 
 	case *joinNode:
 		plan, err = dsp.createPlanForJoin(planCtx, n)
