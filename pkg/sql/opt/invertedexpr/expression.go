@@ -98,18 +98,18 @@ type EncInvertedVal []byte
 
 // InvertedSpan is a span of the inverted index. Represents [start, end).
 type InvertedSpan struct {
-	start, end EncInvertedVal
+	Start, End EncInvertedVal
 }
 
 // MakeSingleInvertedValSpan constructs a span equivalent to [val, val].
 func MakeSingleInvertedValSpan(val EncInvertedVal) InvertedSpan {
 	end := EncInvertedVal(roachpb.Key(val).PrefixEnd())
-	return InvertedSpan{start: val, end: end}
+	return InvertedSpan{Start: val, End: end}
 }
 
 // isSingleVal returns true iff the span is equivalent to [val, val].
 func (s InvertedSpan) isSingleVal() bool {
-	return bytes.Equal(roachpb.Key(s.start).PrefixEnd(), s.end)
+	return bytes.Equal(roachpb.Key(s.Start).PrefixEnd(), s.End)
 }
 
 // InvertedExpression is the interface representing an expression or sub-expression
@@ -318,13 +318,13 @@ func formatSpans(tp treeprinter.Node, label string, spans []InvertedSpan) {
 }
 
 func formatSpan(span InvertedSpan) string {
-	end := span.end
+	end := span.End
 	spanEndOpenOrClosed := ')'
 	if span.isSingleVal() {
-		end = span.start
+		end = span.Start
 		spanEndOpenOrClosed = ']'
 	}
-	return fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.start)),
+	return fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.Start)),
 		strconv.Quote(string(end)), spanEndOpenOrClosed)
 }
 
@@ -345,8 +345,8 @@ func getProtoSpans(spans []InvertedSpan) []SpanExpressionProto_Span {
 	out := make([]SpanExpressionProto_Span, 0, len(spans))
 	for i := range spans {
 		out = append(out, SpanExpressionProto_Span{
-			Start: spans[i].start,
-			End:   spans[i].end,
+			Start: spans[i].Start,
+			End:   spans[i].End,
 		})
 	}
 	return out
@@ -589,7 +589,7 @@ func unionSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 	// is coming from the left.
 	// REQUIRES: i < len(left) || j < len(right).
 	makeMergeSpan := func() {
-		if i >= len(left) || (j < len(right) && bytes.Compare(left[i].start, right[j].start) > 0) {
+		if i >= len(left) || (j < len(right) && bytes.Compare(left[i].Start, right[j].Start) > 0) {
 			swapLeftRight()
 		}
 		mergeSpan = left[i]
@@ -645,7 +645,7 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 	// mergeSpan.
 	// REQUIRES: i < len(left) && j < len(right)
 	makeMergeSpan := func() {
-		if bytes.Compare(left[i].start, right[j].start) > 0 {
+		if bytes.Compare(left[i].Start, right[j].Start) > 0 {
 			swapLeftRight()
 		}
 		mergeSpan = left[i]
@@ -659,12 +659,12 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 		cmpEndStart := cmpExcEndWithIncStart(mergeSpan, right[j])
 		if cmpEndStart > 0 {
 			// The intersection of these spans is non-empty.
-			mergeSpan.start = right[j].start
-			mergeSpanEnd := mergeSpan.end
+			mergeSpan.Start = right[j].Start
+			mergeSpanEnd := mergeSpan.End
 			cmpEnds := cmpEnds(mergeSpan, right[j])
 			if cmpEnds > 0 {
 				// The right span constrains the end of the intersection.
-				mergeSpan.end = right[j].end
+				mergeSpan.End = right[j].End
 			}
 			// Else the mergeSpan is not constrained by the right span,
 			// so it is already ready to be appended to the output.
@@ -681,8 +681,8 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 				// have a start <= the next span from the left and it has
 				// something leftover.
 				i++
-				mergeSpan.start = mergeSpan.end
-				mergeSpan.end = right[j].end
+				mergeSpan.Start = mergeSpan.End
+				mergeSpan.End = right[j].End
 				swapLeftRight()
 			} else if cmpEnds == 0 {
 				// Both spans end at the same key, so both are consumed.
@@ -693,8 +693,8 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 				// The right span constrained the end of the intersection.
 				// So there is something left of the original mergeSpan.
 				j++
-				mergeSpan.start = mergeSpan.end
-				mergeSpan.end = mergeSpanEnd
+				mergeSpan.Start = mergeSpan.End
+				mergeSpan.End = mergeSpanEnd
 			}
 		} else {
 			// Intersection is empty
@@ -729,12 +729,12 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 		cmpEndStart := cmpExcEndWithIncStart(mergeSpan, right[j])
 		if cmpEndStart > 0 {
 			// mergeSpan will have some part subtracted by the right span.
-			cmpStart := bytes.Compare(mergeSpan.start, right[j].start)
+			cmpStart := bytes.Compare(mergeSpan.Start, right[j].Start)
 			if cmpStart < 0 {
 				// There is some part of mergeSpan before the right span starts. Add it
 				// to the output.
-				out = append(out, InvertedSpan{start: mergeSpan.start, end: right[j].start})
-				mergeSpan.start = right[j].start
+				out = append(out, InvertedSpan{Start: mergeSpan.Start, End: right[j].Start})
+				mergeSpan.Start = right[j].Start
 			}
 			// Else cmpStart == 0, since the right side is a subset of the left.
 
@@ -749,7 +749,7 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 			}
 
 			// Invariant: cmpEnd > 0, since the right side is a subset of the left.
-			mergeSpan.start = right[j].end
+			mergeSpan.Start = right[j].End
 			j++
 		} else {
 			// Right span starts after mergeSpan ends.
@@ -773,7 +773,7 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 // [a, a\x00), [a, c) == +1
 // [a, c), [d, e) == -1
 func cmpExcEndWithIncStart(left, right InvertedSpan) int {
-	return bytes.Compare(left.end, right.start)
+	return bytes.Compare(left.End, right.Start)
 }
 
 // Extends the left span using the right span. Will return true iff
@@ -782,13 +782,13 @@ func cmpExcEndWithIncStart(left, right InvertedSpan) int {
 func extendSpanEnd(left *InvertedSpan, right InvertedSpan, cmpExcEndIncStart int) bool {
 	if cmpExcEndIncStart == 0 {
 		// Definitely extends.
-		left.end = right.end
+		left.End = right.End
 		return true
 	}
 	// cmpExcEndIncStart > 0, so left covers at least right.start. But may not
 	// cover right.end.
-	if bytes.Compare(left.end, right.end) < 0 {
-		left.end = right.end
+	if bytes.Compare(left.End, right.End) < 0 {
+		left.End = right.End
 		return true
 	}
 	return false
@@ -796,7 +796,7 @@ func extendSpanEnd(left *InvertedSpan, right InvertedSpan, cmpExcEndIncStart int
 
 // Compares the end keys of left and right.
 func cmpEnds(left, right InvertedSpan) int {
-	return bytes.Compare(left.end, right.end)
+	return bytes.Compare(left.End, right.End)
 }
 
 // Representing multi-column constraints

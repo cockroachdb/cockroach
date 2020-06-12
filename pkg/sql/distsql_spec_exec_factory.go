@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -87,6 +88,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	index cat.Index,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	invertedSpans []invertedexpr.InvertedSpan,
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
@@ -136,7 +138,11 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// scanNode.canParallelize() returns true. We should plumb that info from
 	// here somehow as well.
 	var spans roachpb.Spans
-	spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	if invertedSpans != nil {
+		spans, err = GenerateInvertedSpans(invertedSpans, sb)
+	} else {
+		spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +261,12 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	}
 	plan.distribution = plan.distribution.compose(distribution)
 	return plan, nil
+}
+
+func (e *distSQLSpecExecFactory) ConstructInvertedFilterer(
+	n exec.Node, expression *invertedexpr.SpanExpression,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(

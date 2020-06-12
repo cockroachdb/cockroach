@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,6 +77,7 @@ func (ef *execFactory) ConstructScan(
 	index cat.Index,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	invertedSpans []invertedexpr.InvertedSpan,
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
@@ -122,7 +124,11 @@ func (ef *execFactory) ConstructScan(
 	scan.maxResults = maxResults
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
-	scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	if invertedSpans != nil {
+		scan.spans, err = GenerateInvertedSpans(invertedSpans, sb)
+	} else {
+		scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -252,6 +258,16 @@ func (ef *execFactory) ConstructFilter(
 		f.source.plan = spool.source
 		spool.source = f
 		return spool, nil
+	}
+	return f, nil
+}
+
+func (ef *execFactory) ConstructInvertedFilterer(
+	n exec.Node, expression *invertedexpr.SpanExpression,
+) (exec.Node, error) {
+	f := &invertedFiltererNode{
+		input:      n.(planNode),
+		expression: expression,
 	}
 	return f, nil
 }
