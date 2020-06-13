@@ -203,12 +203,9 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		txn,
 		cb.evalCtx.Codec,
 		tableDesc,
-		nil, /* fkTables */
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
-		row.SkipFKs,
-		cb.evalCtx,
 		&cb.alloc,
 	)
 	if err != nil {
@@ -285,7 +282,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 		}
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, row.CheckFKs, traceKV,
+			ctx, b, oldValues, updateValues, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

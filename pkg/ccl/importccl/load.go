@@ -230,7 +230,7 @@ func Load(
 			}
 
 			ri, err = row.MakeInserter(
-				ctx, nil, evalCtx.Codec, tableDesc, tableDesc.Columns, row.SkipFKs, nil /* fkTables */, &sqlbase.DatumAlloc{},
+				ctx, nil /* txn */, evalCtx.Codec, tableDesc, tableDesc.Columns, &sqlbase.DatumAlloc{},
 			)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")
@@ -369,12 +369,10 @@ func insertStmtToKVs(
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", insertRow)
 		}
-		// TODO(bram): Is the checking of FKs here required? If not, turning them
-		// off may provide a speed boost.
 		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
 		// not add entries to.
 		var ignoreIndexes util.FastIntSet
-		if err := ri.InsertRow(ctx, b, insertRow, ignoreIndexes, true, row.CheckFKs, false /* traceKV */); err != nil {
+		if err := ri.InsertRow(ctx, b, insertRow, ignoreIndexes, true, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", insertRow)
 		}
 	}

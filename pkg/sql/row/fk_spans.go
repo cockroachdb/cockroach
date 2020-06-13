@@ -17,16 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// spanForValues produce access spans for a single FK constraint and a
-// tuple of columns.
-func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
-	if values == nil {
-		key := roachpb.Key(f.spanBuilder.KeyPrefix)
-		return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
-	}
-	return FKCheckSpan(f.spanBuilder, values, f.ids, f.prefixLen)
-}
-
 // FKCheckSpan returns a span that can be scanned to ascertain existence of a
 // specific row in a given index.
 func FKCheckSpan(
