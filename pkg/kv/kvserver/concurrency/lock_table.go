@@ -509,6 +509,10 @@ type lockHolderInfo struct {
 	ts hlc.Timestamp
 }
 
+func (lh *lockHolderInfo) isEmpty() bool {
+	return lh.txn == nil && lh.seqs == nil && lh.ts.IsEmpty()
+}
+
 // Per lock state in lockTableImpl.
 //
 // NOTE: we can't easily pool lockState objects without some form of reference
@@ -772,7 +776,7 @@ func (l *lockState) Format(buf *strings.Builder) {
 		}
 		fmt.Fprintln(b, "")
 	}
-	txn, ts := l.getLockerInfo()
+	txn, ts := l.getLockHolder()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
 		writeResInfo(buf, l.reservation.txn, l.reservation.writeTS)
@@ -836,7 +840,7 @@ func (l *lockState) tryBreakReservation(seqNum uint64) bool {
 func (l *lockState) informActiveWaiters() {
 	waitForState := waitingState{kind: waitFor, key: l.key}
 	findDistinguished := l.distinguishedWaiter == nil
-	if lockHolderTxn, _ := l.getLockerInfo(); lockHolderTxn != nil {
+	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
 		waitForState.txn = lockHolderTxn
 		waitForState.held = true
 	} else {
@@ -945,6 +949,24 @@ func (l *lockState) tryMakeNewDistinguished() {
 	}
 }
 
+// Returns true iff the lockState is empty, i.e., there is no lock holder or
+// reservation.
+// REQUIRES: l.mu is locked.
+func (l *lockState) isEmptyLock() bool {
+	if !l.holder.locked && l.reservation == nil {
+		for i := range l.holder.holder {
+			if !l.holder.holder[i].isEmpty() {
+				panic("lockState with !locked but non-zero lockHolderInfo")
+			}
+		}
+		if l.waitingReaders.Len() > 0 || l.queuedWriters.Len() > 0 {
+			panic("lockState with waiters but no holder or reservation")
+		}
+		return true
+	}
+	return false
+}
+
 // Returns true iff the lock is currently held by the transaction with the
 // given id.
 // REQUIRES: l.mu is locked.
@@ -964,7 +986,7 @@ func (l *lockState) isLockedBy(id uuid.UUID) bool {
 // Returns information about the current lock holder if the lock is held, else
 // returns nil.
 // REQUIRES: l.mu is locked.
-func (l *lockState) getLockerInfo() (*enginepb.TxnMeta, hlc.Timestamp) {
+func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 	if !l.holder.locked {
 		return nil, hlc.Timestamp{}
 	}
@@ -986,6 +1008,15 @@ func (l *lockState) getLockerInfo() (*enginepb.TxnMeta, hlc.Timestamp) {
 	return l.holder.holder[index].txn, l.holder.holder[index].ts
 }
 
+// Removes the current lock holder from the lock.
+// REQUIRES: l.mu is locked.
+func (l *lockState) clearLockHolder() {
+	l.holder.locked = false
+	for i := range l.holder.holder {
+		l.holder.holder[i] = lockHolderInfo{}
+	}
+}
+
 // Decides whether the request g with access sa should actively wait at this
 // lock and if yes, adjusts the data-structures appropriately. The notify
 // parameter is true iff the request's new state channel should be notified --
@@ -1005,7 +1036,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 	}
 
 	// Lock is not empty.
-	lockHolderTxn, lockHolderTS := l.getLockerInfo()
+	lockHolderTxn, lockHolderTS := l.getLockHolder()
 	if lockHolderTxn != nil && g.isSameTxn(lockHolderTxn) {
 		// Already locked by this txn.
 		return false
@@ -1155,7 +1186,7 @@ func (l *lockState) acquireLock(
 	defer l.mu.Unlock()
 	if l.holder.locked {
 		// Already held.
-		beforeTxn, beforeTs := l.getLockerInfo()
+		beforeTxn, beforeTs := l.getLockHolder()
 		if txn.ID != beforeTxn.ID {
 			return errors.Errorf("caller violated contract: " +
 				"existing lock cannot be acquired by different transaction")
@@ -1202,7 +1233,7 @@ func (l *lockState) acquireLock(
 		// regress, so by forwarding its timestamp during the second acquisition
 		// instead if assigning to it blindly, it remains at 20.
 		//
-		// However, a lock's timestamp as reported by getLockerInfo can regress
+		// However, a lock's timestamp as reported by getLockHolder can regress
 		// if it is acquired at a lower timestamp and a different durability
 		// than it was previously held with. This is necessary to support
 		// because the hard constraint which we must uphold here that the
@@ -1225,7 +1256,7 @@ func (l *lockState) acquireLock(
 		l.holder.holder[durability].ts.Forward(ts)
 		l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
 
-		_, afterTs := l.getLockerInfo()
+		_, afterTs := l.getLockHolder()
 		if beforeTs.Less(afterTs) {
 			l.increasedLockTs(afterTs)
 		}
@@ -1381,7 +1412,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
 	var waitState waitingState
 	if replicatedHeld && !force {
-		lockHolderTxn, _ := l.getLockerInfo()
+		lockHolderTxn, _ := l.getLockHolder()
 		// Note that none of the current waiters can be requests
 		// from lockHolderTxn.
 		waitState = waitingState{
@@ -1392,7 +1423,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 			guardAccess: spanset.SpanReadOnly,
 		}
 	} else {
-		l.holder.locked = false
+		l.clearLockHolder()
 		waitState = waitingState{kind: doneWaiting}
 	}
 
@@ -1436,19 +1467,6 @@ func (l *lockState) tryClearLock(force bool) bool {
 	return true
 }
 
-// Returns true iff the lockState is empty, i.e., there is no lock holder or
-// reservation.
-// REQUIRES: l.mu is locked.
-func (l *lockState) isEmptyLock() bool {
-	if !l.holder.locked && l.reservation == nil {
-		if l.waitingReaders.Len() > 0 || l.queuedWriters.Len() > 0 {
-			panic("lockTable bug")
-		}
-		return true
-	}
-	return false
-}
-
 // Removes the TxnSeqs in heldSeqNums that are contained in ignoredSeqNums.
 // REQUIRES: ignoredSeqNums contains non-overlapping ranges and sorted in
 // increasing seq order.
@@ -1479,17 +1497,14 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		return false, nil
 	}
 	if up.Status.IsFinalized() {
-		l.holder.locked = false
-		for i := range l.holder.holder {
-			l.holder.holder[i] = lockHolderInfo{}
-		}
+		l.clearLockHolder()
 		gc = l.lockIsFree()
 		return gc, nil
 	}
 
 	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
-	_, beforeTs := l.getLockerInfo()
+	_, beforeTs := l.getLockHolder()
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	for i := range l.holder.holder {
@@ -1513,8 +1528,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		// best-effort mirror the behavior of mvccResolveWriteIntent() by updating
 		// the timestamp.
 		if lock.Durability(i) == lock.Replicated || txn.Epoch > holder.txn.Epoch {
-			holder.txn = nil
-			holder.seqs = nil
+			*holder = lockHolderInfo{}
 			continue
 		}
 		// Unreplicated lock held in same epoch or a higher epoch.
@@ -1528,7 +1542,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 		if txn.Epoch == holder.txn.Epoch {
 			holder.seqs = removeIgnored(holder.seqs, up.IgnoredSeqNums)
 			if len(holder.seqs) == 0 {
-				holder.txn = nil
+				*holder = lockHolderInfo{}
 				continue
 			}
 			if advancedTs {
@@ -1541,7 +1555,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 	}
 
 	if !isLocked {
-		l.holder.locked = false
+		l.clearLockHolder()
 		gc = l.lockIsFree()
 		return gc, nil
 	}
@@ -1673,7 +1687,9 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 
 	// The lock is uncontended by other writers, so we're safe to drop it.
 	// This may release readers who were waiting on the lock.
-	if gc := l.lockIsFree(); !gc {
+	l.clearLockHolder()
+	gc := l.lockIsFree()
+	if !gc {
 		panic("expected lockIsFree to return true")
 	}
 	return true
@@ -1683,6 +1699,9 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 // waiters, but there cannot be a reservation.
 // REQUIRES: l.mu is locked.
 func (l *lockState) lockIsFree() (gc bool) {
+	if l.holder.locked {
+		panic("called lockIsFree on lock with holder")
+	}
 	if l.reservation != nil {
 		panic("called lockIsFree on lock with reservation")
 	}
