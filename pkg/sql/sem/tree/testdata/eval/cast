@@ -378,6 +378,11 @@ eval
 'he'
 
 eval
+'a🐛b🏠c'::char(3)
+----
+e'a\U0001F41Bb'
+
+eval
 'hello'::bytes
 ----
 '\x68656c6c6f'
@@ -1023,6 +1028,11 @@ eval
 ARRAY['hello','world']::char(2)[]
 ----
 ARRAY['he','wo']
+
+eval
+ARRAY['a🐛b🏠c','def']::char(2)[]
+----
+ARRAY[e'a\U0001F41B','de']
 
 # regression for #45850
 eval

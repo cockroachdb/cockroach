@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -3549,14 +3550,14 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
-			if t.Width() > 0 && int(t.Width()) < len(s) {
-				s = s[:t.Width()]
+			if t.Width() > 0 {
+				s = util.TruncateString(s, int(t.Width()))
 			}
 			return NewDString(s), nil
 		case types.CollatedStringFamily:
 			// Ditto truncation like for TString.
-			if t.Width() > 0 && int(t.Width()) < len(s) {
-				s = s[:t.Width()]
+			if t.Width() > 0 {
+				s = util.TruncateString(s, int(t.Width()))
 			}
 			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv)
 		}
