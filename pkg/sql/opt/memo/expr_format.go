@@ -1112,9 +1112,6 @@ func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivat
 	if p.WithID != 0 {
 		tp.Childf("input binding: &%d", p.WithID)
 	}
-	if p.FKFallback {
-		tp.Childf("fk-fallback")
-	}
 	if len(p.FKCascades) > 0 {
 		c := tp.Childf("cascades")
 		for i := range p.FKCascades {

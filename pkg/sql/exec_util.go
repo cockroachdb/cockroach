@@ -183,18 +183,6 @@ var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
-var optDrivenFKChecksClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.optimizer_foreign_keys.enabled",
-	"default value for optimizer_foreign_keys session setting; enables optimizer-driven foreign key checks by default",
-	true,
-)
-
-var optDrivenFKCascadesClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled",
-	"default value for experimental_optimizer_foreign_key_cascades session setting; enables optimizer-driven foreign key cascades by default",
-	true,
-)
-
 var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
 	"sql.defaults.foreign_key_cascades_limit",
 	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
@@ -2037,14 +2025,6 @@ func (m *sessionDataMutator) SetVectorize(val sessiondata.VectorizeExecMode) {
 
 func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 	m.data.VectorizeRowCountThreshold = val
-}
-
-func (m *sessionDataMutator) SetOptimizerFKChecks(val bool) {
-	m.data.OptimizerFKChecks = val
-}
-
-func (m *sessionDataMutator) SetOptimizerFKCascades(val bool) {
-	m.data.OptimizerFKCascades = val
 }
 
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {

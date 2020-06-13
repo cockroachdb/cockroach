@@ -1,8 +1,5 @@
 # LogicTest: local
 
-statement ok
-SET optimizer_foreign_keys = true
-
 # We will test the fast path later.
 statement ok
 SET enable_insert_fast_path = false
@@ -894,9 +891,6 @@ UPSERT INTO t46397_child(c) VALUES (2)
 
 
 # Verify that cascade information shows up in EXPLAIN.
-statement ok
-SET experimental_optimizer_foreign_key_cascades = true
-
 statement ok
 CREATE TABLE cascadeparent (p INT PRIMARY KEY);
 CREATE TABLE cascadechild (

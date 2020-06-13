@@ -204,8 +204,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	// Set any OptTester-wide session flags here.
 
 	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
-	ot.evalCtx.SessionData.OptimizerFKChecks = true
-	ot.evalCtx.SessionData.OptimizerFKCascades = true
 	ot.evalCtx.SessionData.OptimizerUseHistograms = true
 	ot.evalCtx.SessionData.OptimizerUseMultiColStats = true
 	ot.evalCtx.SessionData.ReorderJoinsLimit = opt.DefaultJoinOrderLimit
