@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,6 +80,12 @@ func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	case types.JsonFamily:
 		return ParseDJSON(s)
 	case types.StringFamily:
+		// If the string type specifies a limit we truncate to that limit:
+		//   'hello'::CHAR(2) -> 'he'
+		// This is true of all the string type variants.
+		if t.Width() > 0 {
+			s = util.TruncateString(s, int(t.Width()))
+		}
 		return NewDString(s), nil
 	case types.TimeFamily:
 		return ParseDTime(ctx, s)
