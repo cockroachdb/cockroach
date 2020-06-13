@@ -1024,6 +1024,22 @@ SELECT * FROM enum_data_type
 hello
 howdy
 
+# Convert an enum type into another with USING.
+statement ok
+DROP TABLE enum_data_type;
+CREATE TABLE enum_data_type (x greeting);
+INSERT INTO enum_data_type VALUES ('hello'), ('hi')
+
+statement ok
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE dbs USING
+  (CASE WHEN x = 'hello' THEN 'cockroach' ELSE 'postgres' END)
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+cockroach
+postgres
+
 # Test when the conversion of string -> enum should fail.
 statement ok
 DROP TABLE enum_data_type;
