@@ -236,6 +236,7 @@ func IsRecordable(os opentracing.Span) bool {
 }
 
 // Recording represents a group of RecordedSpans, as returned by GetRecording.
+// Spans are sorted by StartTime.
 type Recording []RecordedSpan
 
 // GetRecording retrieves the current recording, if the span has recording
@@ -868,20 +869,26 @@ func (ss *spanGroup) addSpan(s *span) {
 }
 
 // getSpans returns all the local and remote spans accumulated in this group.
-// The first result is the first local span - i.e. the span originally passed to
-// StartRecording().
+// The spans are sorted by StartTime; the first result is naturally the first
+// local span - i.e. the span originally passed to StartRecording().
 func (ss *spanGroup) getSpans() Recording {
 	ss.Lock()
 	spans := ss.spans
 	remoteSpans := ss.remoteSpans
 	ss.Unlock()
 
-	result := make(Recording, 0, len(spans)+len(remoteSpans))
+	result := make([]RecordedSpan, 0, len(spans)+len(remoteSpans))
 	for _, s := range spans {
 		rs := s.getRecording()
 		result = append(result, rs)
 	}
-	return append(result, remoteSpans...)
+	result = append(result, remoteSpans...)
+	// Sort the spans by StartTime. ss.spans were already naturally sorted, but
+	// ss.remoteSpans weren't.
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartTime.Before(result[j].StartTime)
+	})
+	return result
 }
 
 type noopSpanContext struct{}
