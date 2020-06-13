@@ -2569,3 +2569,157 @@ query TT
 SELECT min(NULL::STRING COLLATE en_us), max(NULL::STRING COLLATE en_us)
 ----
 NULL NULL
+
+subtest json_object_agg
+
+statement ok
+CREATE TABLE profiles (
+  userid int not null,
+  property string not null,
+  value string not null
+)
+
+statement ok
+INSERT INTO profiles VALUES
+(1, 'email', 'user1@gmail.com'),
+(1, 'phone', '111111111111111'),
+(1, 'home_page', 'user1.org1.com'),
+(2, 'email', 'user2@gmail.com'),
+(2, 'phone', '222222222222222'),
+(2, 'home_page', 'user2.org1.com')
+
+query T
+SELECT json_object_agg(property, value) FROM profiles GROUP BY userid ORDER BY userid
+----
+{"email": "user1@gmail.com", "home_page": "user1.org1.com", "phone": "111111111111111"}
+{"email": "user2@gmail.com", "home_page": "user2.org1.com", "phone": "222222222222222"}
+
+statement ok
+CREATE TABLE users (
+  userid int primary key,
+  user_name string not null
+)
+
+statement ok
+CREATE TABLE user_networks(
+  userid int not null references users(userid),
+  network_name string not null,
+  user_account_id string not null
+)
+
+statement ok
+INSERT INTO users VALUES
+(1, 'Alice'),
+(2, 'Bob')
+
+statement ok
+INSERT INTO user_networks VALUES
+('1', 'Facebook', 'Alice_fb'),
+('1', 'Twitter', '@Alice'),
+('1', 'Instagram', 'AliceInst'),
+('2', 'Facebook', 'Bob_fb'),
+('2', 'LinkedIn', 'Bob The Builder')
+
+query T
+SELECT json_object_agg(user_name, networks) FROM
+  (SELECT u.userid as userid, u.user_name, json_object_agg(un.network_name, un.user_account_id) as networks FROM
+    users u, user_networks un
+      WHERE u.userid = un.userid
+      GROUP BY u.userid
+      ORDER BY u.userid)
+  GROUP BY userid
+  ORDER BY userid
+----
+{"Alice": {"Facebook": "Alice_fb", "Instagram": "AliceInst", "Twitter": "@Alice"}}
+{"Bob": {"Facebook": "Bob_fb", "LinkedIn": "Bob The Builder"}}
+
+statement error pq: field name must not be null
+select json_object_agg(null, null)
+
+statement error pq: field name must not be null
+select json_object_agg(null, 1)
+
+statement ok
+CREATE TABLE persons(
+  id string PRIMARY KEY,
+  name string NOT NULL
+)
+
+statement ok
+CREATE TABLE companies(
+  id string PRIMARY KEY,
+  company_name string NOT NULL
+)
+
+statement ok
+CREATE TABLE jobs(
+  id string PRIMARY KEY,
+  person_id string NOT NULL REFERENCES persons(id),
+  company_id string NOT NULL REFERENCES companies(id),
+  job_title string NOT NULL
+)
+
+statement ok
+INSERT INTO persons VALUES
+('1', 'Alice'),
+('2', 'Bob')
+
+statement ok
+INSERT INTO companies VALUES
+('1', 'Facebook'),
+('2', 'Google'),
+('3', 'Twitter'),
+('4', 'IBM'),
+('5', 'Cockroach Labs')
+
+statement ok
+INSERT INTO jobs VALUES
+('1', '1', '1', 'Developer'),
+('2', '1', '2', 'Full Stack'),
+('3', '1', '4', 'Research'),
+('4', '2', '3', 'Frontend'),
+('5', '2', '5', 'DB Developer'),
+('6', '2', '2', 'DevOps')
+
+query T
+SELECT json_build_object(p.name, json_object_agg(c.company_name, j.job_title))
+FROM persons p
+  LEFT OUTER JOIN jobs j ON p.id = j.person_id
+    LEFT OUTER JOIN companies c ON c.id = j.company_id
+GROUP BY p.name
+ORDER BY p.name
+----
+{"Alice": {"Facebook": "Developer", "Google": "Full Stack", "IBM": "Research"}}
+{"Bob": {"Cockroach Labs": "DB Developer", "Google": "DevOps", "Twitter": "Frontend"}}
+
+statement ok
+CREATE TABLE blog(
+  id string NOT NULL,
+  name string NOT NULL
+)
+
+statement ok
+INSERT INTO blog VALUES ('1', 'Test Blog')
+
+statement ok
+CREATE TABLE blog_properties(
+  blog_id string NOT NULL,
+  property_name string NOT NULL,
+  property_value string NOT NULL
+)
+
+statement ok
+INSERT INTO blog_properties VALUES
+('1', 'Application Name', 'Instagram'),
+('1', 'Admin Email', 'admin@email.com'),
+('1', 'Blog Name', 'Wordpress Blog'),
+('1', 'Application Name', 'Twitter'),
+('1', 'KeepAlive', 'true'),
+('1', 'Session Timeout', '1000ms')
+
+query T
+SELECT json_build_object(b.name, json_object_agg(p.property_name, p.property_value ORDER BY p.property_value))
+FROM blog b, blog_properties p WHERE b.id = p.blog_id
+GROUP BY b.name
+----
+{"Test Blog": {"Admin Email": "admin@email.com", "Application Name": "Twitter", "Blog Name": "Wordpress Blog", "KeepAlive": "true", "Session Timeout": "1000ms"}}
