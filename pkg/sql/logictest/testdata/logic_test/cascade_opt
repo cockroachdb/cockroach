@@ -1,13 +1,5 @@
 # LogicTest: !3node-tenant(50048)
 
-# The tests in this file target the new optimizer-driven FK paths (with
-# fall back on the legacy paths for unsupported cases).
-statement ok
-SET optimizer_foreign_keys = true
-
-statement ok
-SET experimental_optimizer_foreign_key_cascades = true
-
 # Tests for the experimental opt-driven cascades.
 subtest OptDriven
 

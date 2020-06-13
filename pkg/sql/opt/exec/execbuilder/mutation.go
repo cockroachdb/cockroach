@@ -92,8 +92,6 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
 	returnOrds := ordinalSetFromColList(ins.ReturnCols)
-	// If we planned FK checks, disable the execution code for FK checks.
-	disableExecFKs := !ins.FKFallback
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
@@ -101,7 +99,6 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		returnOrds,
 		checkOrds,
 		b.allowAutoCommit && len(ins.Checks) == 0 && len(ins.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -122,9 +119,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 // tryBuildFastPathInsert attempts to construct an insert using the fast path,
 // checking all required conditions. See exec.Factory.ConstructInsertFastPath.
 func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok bool, _ error) {
-	// If FKFallback is set, the optimizer-driven FK checks are disabled. We must
-	// use the legacy path.
-	if !b.allowInsertFastPath || ins.FKFallback {
+	if !b.allowInsertFastPath {
 		return execPlan{}, false, nil
 	}
 
@@ -314,7 +309,6 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		}
 	}
 
-	disableExecFKs := !upd.FKFallback
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
@@ -324,7 +318,6 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		checkOrds,
 		passthroughCols,
 		b.allowAutoCommit && len(upd.Checks) == 0 && len(upd.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -392,7 +385,6 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
 	returnColOrds := ordinalSetFromColList(ups.ReturnCols)
 	checkOrds := ordinalSetFromColList(ups.CheckCols)
-	disableExecFKs := !ups.FKFallback
 	node, err := b.factory.ConstructUpsert(
 		input.root,
 		tab,
@@ -403,7 +395,6 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		b.allowAutoCommit && len(ups.Checks) == 0 && len(ups.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -451,14 +442,12 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
-	disableExecFKs := !del.FKFallback
 	node, err := b.factory.ConstructDelete(
 		input.root,
 		tab,
 		fetchColOrds,
 		returnColOrds,
 		b.allowAutoCommit && len(del.Checks) == 0 && len(del.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err

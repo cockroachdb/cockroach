@@ -157,10 +157,6 @@ define MutationPrivate {
 
     # FKCascades stores metadata necessary for building cascading queries.
     FKCascades FKCascades
-
-    # FKFallback is true if we need to fall back to the legacy path for FK
-    # checks / cascades.
-    FKFallback bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from

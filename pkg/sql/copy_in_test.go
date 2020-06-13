@@ -464,7 +464,6 @@ func TestCopyFKCheck(t *testing.T) {
 		  a INT PRIMARY KEY,
 		  p INT REFERENCES p(p)
 		);
-		SET optimizer_foreign_keys = true;
 	`)
 
 	txn, err := db.Begin()

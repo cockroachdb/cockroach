@@ -1212,7 +1212,6 @@ func (ef *execFactory) ConstructInsert(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1225,20 +1224,10 @@ func (ef *execFactory) ConstructInsert(
 		return nil, err
 	}
 
-	var fkTables row.FkTableMetadata
-	checkFKs := row.SkipFKs
-	if !skipFKChecks {
-		checkFKs = row.CheckFKs
-		// Determine the foreign key tables involved in the update.
-		var err error
-		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckInserts)
-		if err != nil {
-			return nil, err
-		}
-	}
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, checkFKs, fkTables, ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs,
+		row.SkipFKs, nil /* fkTables */, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1369,7 +1358,6 @@ func (ef *execFactory) ConstructUpdate(
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1391,29 +1379,17 @@ func (ef *execFactory) ConstructUpdate(
 		sourceSlots[i] = scalarSlot{column: updateColDescs[i], sourceIndex: len(fetchColDescs) + i}
 	}
 
-	var fkTables row.FkTableMetadata
-	checkFKs := row.SkipFKs
-	if !skipFKChecks {
-		checkFKs = row.CheckFKs
-		// Determine the foreign key tables involved in the update.
-		var err error
-		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Create the table updater, which does the bulk of the work.
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		fkTables,
+		nil, /* fkTables */
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
-		checkFKs,
+		row.SkipFKs,
 		ef.planner.EvalContext(),
 		ef.planner.alloc,
 	)
@@ -1486,34 +1462,6 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
-func (ef *execFactory) makeFkMetadata(
-	tabDesc *sqlbase.ImmutableTableDescriptor, fkCheckType row.FKCheckType,
-) (row.FkTableMetadata, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
-
-	// Create a CheckHelper, used in case of cascading actions that cause changes
-	// in the original table. This is only possible with UPDATE (together with
-	// cascade loops or self-references).
-	var checkHelper *sqlbase.CheckHelper
-	if fkCheckType == row.CheckUpdates {
-		var err error
-		checkHelper, err = sqlbase.NewEvalCheckHelper(ctx, ef.planner.analyzeExpr, tabDesc)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Determine the foreign key tables involved in the upsert.
-	return row.MakeFkMetadata(
-		ef.planner.extendedEvalCtx.Context,
-		tabDesc,
-		fkCheckType,
-		ef.planner.LookupTableByID,
-		ef.planner.CheckPrivilege,
-		ef.planner.analyzeExpr,
-		checkHelper,
-	)
-}
-
 func (ef *execFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
@@ -1524,7 +1472,6 @@ func (ef *execFactory) ConstructUpsert(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1539,19 +1486,6 @@ func (ef *execFactory) ConstructUpsert(
 		return nil, err
 	}
 
-	var fkTables row.FkTableMetadata
-	checkFKs := row.SkipFKs
-	if !skipFKChecks {
-		checkFKs = row.CheckFKs
-
-		// Determine the foreign key tables involved in the upsert.
-		var err error
-		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckUpdates)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Create the table inserter, which does the bulk of the insert-related work.
 	ri, err := row.MakeInserter(
 		ctx,
@@ -1559,8 +1493,8 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		insertColDescs,
-		checkFKs,
-		fkTables,
+		row.SkipFKs,
+		nil, /* fkTables */
 		ef.planner.alloc,
 	)
 	if err != nil {
@@ -1573,11 +1507,11 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		fkTables,
+		nil, /* fkTables */
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
-		checkFKs,
+		row.SkipFKs,
 		ef.planner.EvalContext(),
 		ef.planner.alloc,
 	)
@@ -1608,7 +1542,6 @@ func (ef *execFactory) ConstructUpsert(
 				ri:            ri,
 				alloc:         ef.planner.alloc,
 				canaryOrdinal: int(canaryCol),
-				fkTables:      fkTables,
 				fetchCols:     fetchColDescs,
 				updateCols:    updateColDescs,
 				ru:            ru,
@@ -1651,7 +1584,6 @@ func (ef *execFactory) ConstructDelete(
 	fetchColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1664,17 +1596,6 @@ func (ef *execFactory) ConstructDelete(
 		return nil, err
 	}
 
-	var fkTables row.FkTableMetadata
-	checkFKs := row.SkipFKs
-	if !skipFKChecks {
-		checkFKs = row.CheckFKs
-		// Determine the foreign key tables involved in the update.
-		var err error
-		fkTables, err = ef.makeFkMetadata(tabDesc, row.CheckDeletes)
-		if err != nil {
-			return nil, err
-		}
-	}
 	// Create the table deleter, which does the bulk of the work. In the HP,
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
@@ -1684,9 +1605,9 @@ func (ef *execFactory) ConstructDelete(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		fkTables,
+		nil, /* fkTables */
 		fetchColDescs,
-		checkFKs,
+		row.SkipFKs,
 		ef.planner.EvalContext(),
 		ef.planner.alloc,
 	)
