@@ -383,12 +383,12 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// final type of the column.
 		{
 			"x INT DEFAULT (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END)",
-			`CASE WHEN b'\x80':::@53::@53 = b'\x80':::@53::@53 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN b'\x80':::@53 = b'\x80':::@53 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getDefault,
 		},
 		{
 			"x BOOL DEFAULT ('hello'::greeting IS OF (greeting, greeting))",
-			`b'\x80':::@53::@53 IS OF (@53, @53)`,
+			`b'\x80':::@53 IS OF (@53, @53)`,
 			getDefault,
 		},
 		// Test check constraints.
@@ -410,7 +410,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		},
 		{
 			"x INT AS (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END) STORED",
-			`CASE WHEN b'\x80':::@53::@53 = b'\x80':::@53::@53 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN b'\x80':::@53 = b'\x80':::@53 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getComputed,
 		},
 	}
