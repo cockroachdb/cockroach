@@ -8,6 +8,16 @@ set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
+function check_clean() {
+  # The workspace is clean iff `git status --porcelain` produces no output. Any
+  # output is either an error message or a listing of an untracked/dirty file.
+  if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
+    git status >&2 || true
+    git diff -a >&2 || true
+    exit 1
+  fi
+}
+
 tc_prepare
 
 if [ "$require_justification" = 1 ]; then
@@ -23,21 +33,22 @@ if [ "$require_justification" = 1 ]; then
 fi
 
 tc_start_block "Ensure dependencies are up-to-date"
-run build/builder.sh go install ./vendor/github.com/golang/dep/cmd/dep ./pkg/cmd/github-pull-request-make
-run build/builder.sh env GITHUB_API_TOKEN="$GITHUB_API_TOKEN" BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=checkdeps github-pull-request-make
+# Run go mod tidy and `make -k vendor_update` and ensure nothing changes.
+run build/builder.sh go mod tidy
+check_clean
+# Check the vendor directory is up to date.
+run build/builder.sh make -k vendor_update
+cd vendor
+check_clean
+cd ..
+check_clean
 tc_end_block "Ensure dependencies are up-to-date"
 
 tc_start_block "Ensure generated code is up-to-date"
 # Buffer noisy output and only print it on failure.
 run build/builder.sh make generate buildshort &> artifacts/generate.log || (cat artifacts/generate.log && false)
 rm artifacts/generate.log
-# The workspace is clean iff `git status --porcelain` produces no output. Any
-# output is either an error message or a listing of an untracked/dirty file.
-if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
-  git status >&2 || true
-  git diff -a >&2 || true
-  exit 1
-fi
+check_clean
 tc_end_block "Ensure generated code is up-to-date"
 
 tc_start_block "Lint"

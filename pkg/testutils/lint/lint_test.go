@@ -29,7 +29,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
-	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/go/packages"
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
@@ -1255,27 +1255,20 @@ func TestLint(t *testing.T) {
 				buildContext := build.Default
 				buildContext.CgoEnabled = true
 				buildContext.UseAllFiles = useAllFiles
-			outer:
-				for path := range buildutil.ExpandPatterns(&buildContext, []string{filepath.Join(cockroachDB, pkgScope)}) {
-					importPkg, err := buildContext.Import(path, crdb.Dir, 0)
-					switch err.(type) {
-					case nil:
-						for _, s := range importPkg.Imports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-						for _, s := range importPkg.TestImports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-						for _, s := range importPkg.XTestImports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-					case *build.NoGoError:
-					case *build.MultiplePackageError:
-						if useAllFiles {
-							continue outer
-						}
-					default:
-						return errors.Wrapf(err, "error loading package %s", path)
+
+				pkgPath := filepath.Join(cockroachDB, pkgScope)
+				pkgs, err := packages.Load(
+					&packages.Config{
+						Mode: packages.NeedImports | packages.NeedName,
+					},
+					pkgPath,
+				)
+				if err != nil {
+					return errors.Wrapf(err, "error loading package %s", pkgPath)
+				}
+				for _, pkg := range pkgs {
+					for _, s := range pkg.Imports {
+						arg.Out <- pkg.PkgPath + ": " + s.PkgPath
 					}
 				}
 			}
@@ -1698,6 +1691,13 @@ func TestLint(t *testing.T) {
 			"pgerror.Newf",
 			"SetDetailf",
 			"SetHintf",
+			"pgnotice.Newf",
+			"pgnotice.NewWithSeverityf",
+			"errors.Errorf",
+			"errors.New",
+			"errors.Newf",
+			"errors.Wrap",
+			"errors.Wrapf",
 			"Unimplemented",
 			"Unimplementedf",
 			"UnimplementedWithDepthf",
