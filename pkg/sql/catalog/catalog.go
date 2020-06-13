@@ -39,11 +39,6 @@ type VirtualObject interface {
 // TableEntry is the value type of FkTableMetadata: An optional table
 // descriptor, populated when the table is public/leasable, and an IsAdding
 // flag.
-//
-// This also includes an optional CheckHelper for the table (for CHECK
-// constraints). This is needed for FK work because CASCADE actions
-// can modify rows, and CHECK constraints must be applied to rows
-// modified by CASCADE.
 type TableEntry struct {
 	// Desc is the descriptor of the table. This can be nil if eg.
 	// the table is not public.
@@ -51,10 +46,4 @@ type TableEntry struct {
 
 	// IsAdding indicates the descriptor is being created.
 	IsAdding bool
-
-	// CheckHelper is the utility responsible for CHECK constraint
-	// checks. The lookup function (see TableLookupFunction below) needs
-	// not populate this field; this is populated by the lookup queue
-	// below.
-	CheckHelper *sqlbase.CheckHelper
 }

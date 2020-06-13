@@ -418,9 +418,6 @@ func ClearTableDataInChunks(
 				codec,
 				sqlbase.NewImmutableTableDescriptor(*tableDesc),
 				nil,
-				nil,
-				row.SkipFKs,
-				nil, /* *tree.EvalContext */
 				alloc,
 			)
 			if err != nil {

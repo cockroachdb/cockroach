@@ -393,8 +393,6 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.ExecCfg().Codec,
 				sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
 				desc.Columns,
-				row.SkipFKs,
-				nil, /* fkTables */
 				params.p.alloc)
 			if err != nil {
 				return err

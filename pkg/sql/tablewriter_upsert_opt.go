@@ -98,9 +98,6 @@ type optTableUpserter struct {
 	// resultRow is a reusable slice of Datums used to store result rows.
 	resultRow tree.Datums
 
-	// fkTables is used for foreign key checks in the update case.
-	fkTables row.FkTableMetadata
-
 	// ru is used when updating rows.
 	ru row.Updater
 
@@ -308,7 +305,7 @@ func (tu *optTableUpserter) insertNonConflictingRow(
 	// TODO(mgartner): Pass ignoreIndexes to InsertRow and do not write index
 	// entries for indexes in the set.
 	var ignoreIndexes util.FastIntSet
-	if err := tu.ri.InsertRow(ctx, b, insertRow, ignoreIndexes, overwrite, row.CheckFKs, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, b, insertRow, ignoreIndexes, overwrite, traceKV); err != nil {
 		return err
 	}
 
@@ -370,7 +367,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, row.CheckFKs, traceKV)
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, traceKV)
 	if err != nil {
 		return err
 	}
