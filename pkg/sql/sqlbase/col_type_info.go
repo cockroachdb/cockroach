@@ -54,21 +54,3 @@ func (ti ColTypeInfo) Type(idx int) *types.T {
 	}
 	return ti.colTypes[idx]
 }
-
-// MakeColTypeInfo returns a ColTypeInfo initialized from the given
-// TableDescriptor and map from column ID to row index.
-func MakeColTypeInfo(
-	tableDesc *ImmutableTableDescriptor, colIDToRowIndex map[ColumnID]int,
-) (ColTypeInfo, error) {
-	colTypeInfo := ColTypeInfo{
-		colTypes: make([]*types.T, len(colIDToRowIndex)),
-	}
-	for colID, rowIndex := range colIDToRowIndex {
-		col, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return ColTypeInfo{}, err
-		}
-		colTypeInfo.colTypes[rowIndex] = col.Type
-	}
-	return colTypeInfo, nil
-}

@@ -89,11 +89,6 @@ func NewDiskBackedNumberedRowContainer(
 	return d
 }
 
-// Len returns the number of rows in this container.
-func (d *DiskBackedNumberedRowContainer) Len() int {
-	return d.idx
-}
-
 // UsingDisk returns whether the primary container is using disk.
 func (d *DiskBackedNumberedRowContainer) UsingDisk() bool {
 	return d.rc.UsingDisk()

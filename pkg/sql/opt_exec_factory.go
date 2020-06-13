@@ -1226,8 +1226,7 @@ func (ef *execFactory) ConstructInsert(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs,
-		row.SkipFKs, nil /* fkTables */, ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1292,7 +1291,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1385,12 +1384,9 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		nil, /* fkTables */
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
-		row.SkipFKs,
-		ef.planner.EvalContext(),
 		ef.planner.alloc,
 	)
 	if err != nil {
@@ -1493,8 +1489,6 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		insertColDescs,
-		row.SkipFKs,
-		nil, /* fkTables */
 		ef.planner.alloc,
 	)
 	if err != nil {
@@ -1507,12 +1501,9 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		nil, /* fkTables */
 		updateColDescs,
 		fetchColDescs,
 		row.UpdaterDefault,
-		row.SkipFKs,
-		ef.planner.EvalContext(),
 		ef.planner.alloc,
 	)
 	if err != nil {
@@ -1605,10 +1596,7 @@ func (ef *execFactory) ConstructDelete(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		nil, /* fkTables */
 		fetchColDescs,
-		row.SkipFKs,
-		ef.planner.EvalContext(),
 		ef.planner.alloc,
 	)
 	if err != nil {

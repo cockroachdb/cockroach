@@ -42,9 +42,6 @@ type Updater struct {
 	rd Deleter
 	ri Inserter
 
-	Fks      fkExistenceCheckForUpdate
-	cascader *cascader
-
 	// For allocation avoidance.
 	marshaled       []roachpb.Value
 	newValues       []tree.Datum
@@ -66,6 +63,12 @@ const (
 	UpdaterOnlyColumns rowUpdaterType = 1
 )
 
+type returnTrue struct{}
+
+func (returnTrue) Error() string { panic(errors.AssertionFailedf("unimplemented")) }
+
+var returnTruePseudoError error = returnTrue{}
+
 // MakeUpdater creates a Updater for the given table.
 //
 // UpdateCols are the columns being updated and correspond to the updateValues
@@ -79,49 +82,9 @@ func MakeUpdater(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables FkTableMetadata,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
-	checkFKs checkFKConstraints,
-	evalCtx *tree.EvalContext,
-	alloc *sqlbase.DatumAlloc,
-) (Updater, error) {
-	rowUpdater, err := makeUpdaterWithoutCascader(
-		ctx, txn, codec, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc,
-	)
-	if err != nil {
-		return Updater{}, err
-	}
-	if checkFKs == CheckFKs {
-		rowUpdater.cascader, err = makeUpdateCascader(
-			ctx, txn, tableDesc, fkTables, updateCols, evalCtx, alloc,
-		)
-		if err != nil {
-			return Updater{}, err
-		}
-	}
-	return rowUpdater, nil
-}
-
-type returnTrue struct{}
-
-func (returnTrue) Error() string { panic(errors.AssertionFailedf("unimplemented")) }
-
-var returnTruePseudoError error = returnTrue{}
-
-// makeUpdaterWithoutCascader is the same function as MakeUpdater but does not
-// create a cascader.
-func makeUpdaterWithoutCascader(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	fkTables FkTableMetadata,
-	updateCols []sqlbase.ColumnDescriptor,
-	requestedCols []sqlbase.ColumnDescriptor,
-	updateType rowUpdaterType,
-	checkFKs checkFKConstraints,
 	alloc *sqlbase.DatumAlloc,
 ) (Updater, error) {
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
@@ -201,15 +164,15 @@ func makeUpdaterWithoutCascader(
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
 		var err error
-		if ru.rd, err = makeRowDeleterWithoutCascader(
-			ctx, txn, codec, tableDesc, fkTables, tableCols, SkipFKs, alloc,
+		if ru.rd, err = MakeDeleter(
+			ctx, txn, codec, tableDesc, tableCols, alloc,
 		); err != nil {
 			return Updater{}, err
 		}
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
 		if ru.ri, err = MakeInserter(
-			ctx, txn, codec, tableDesc, tableCols, SkipFKs, nil /* fkTables */, alloc,
+			ctx, txn, codec, tableDesc, tableCols, alloc,
 		); err != nil {
 			return Updater{}, err
 		}
@@ -279,17 +242,6 @@ func makeUpdaterWithoutCascader(
 	// have length len(tableCols).
 	ru.newValues = make(tree.Datums, len(ru.FetchCols))
 
-	if checkFKs == CheckFKs {
-		var err error
-		if primaryKeyColChange {
-			updateCols = nil
-		}
-		if ru.Fks, err = makeFkExistenceCheckHelperForUpdate(
-			ctx, txn, codec, tableDesc, fkTables, updateCols, ru.FetchColIDtoRowIndex, alloc,
-		); err != nil {
-			return Updater{}, err
-		}
-	}
 	return ru, nil
 }
 
@@ -305,13 +257,8 @@ func (ru *Updater) UpdateRow(
 	batch *kv.Batch,
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
-	checkFKs checkFKConstraints,
 	traceKV bool,
 ) ([]tree.Datum, error) {
-	if ru.cascader != nil {
-		batch = ru.cascader.txn.NewBatch()
-	}
-
 	if len(oldValues) != len(ru.FetchCols) {
 		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.FetchCols))
 	}
@@ -443,63 +390,16 @@ func (ru *Updater) UpdateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, SkipFKs, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, traceKV); err != nil {
 			return nil, err
 		}
 		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
 		// not write entries to.
 		var ignoreIndexes util.FastIntSet
 		if err := ru.ri.InsertRow(
-			ctx, batch, ru.newValues, ignoreIndexes, false /* ignoreConflicts */, SkipFKs, traceKV,
+			ctx, batch, ru.newValues, ignoreIndexes, false /* ignoreConflicts */, traceKV,
 		); err != nil {
 			return nil, err
-		}
-
-		if ru.Fks.checker != nil {
-			ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID, ru.Helper.TableDesc.PrimaryIndex.Type)
-			for i := range ru.Helper.Indexes {
-				if ru.Helper.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
-					// We ignore FK existence checks for inverted indexes.
-					//
-					// TODO(knz): verify that this is indeed correct.
-					continue
-				}
-				// * We always will have at least 1 entry in the index, so indexing 0 is safe.
-				// * The only difference between column family 0 vs other families encodings is
-				//   just the family key ending of the key, so if index[0] is different, the other
-				//   index entries will be different as well.
-				if !bytes.Equal(ru.newIndexEntries[i][0].Key, ru.oldIndexEntries[i][0].Key) {
-					ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID, ru.Helper.Indexes[i].Type)
-				}
-			}
-
-			if ru.cascader != nil {
-				if err := ru.cascader.txn.Run(ctx, batch); err != nil {
-					return nil, ConvertBatchError(ctx, ru.Helper.TableDesc, batch)
-				}
-				if err := ru.cascader.cascadeAll(
-					ctx,
-					ru.Helper.TableDesc,
-					tree.Datums(oldValues),
-					tree.Datums(ru.newValues),
-					ru.FetchColIDtoRowIndex,
-					traceKV,
-				); err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if checkFKs {
-			if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues, traceKV); err != nil {
-				return nil, err
-			}
-			if !ru.Fks.hasFKs() {
-				return ru.newValues, nil
-			}
-			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
-				return nil, err
-			}
 		}
 
 		return ru.newValues, nil
@@ -546,7 +446,6 @@ func (ru *Updater) UpdateRow(
 					newIdx++
 					var expValue *roachpb.Value
 					if !bytes.Equal(oldEntry.Key, newEntry.Key) {
-						ru.Fks.addCheckForIndex(index.ID, index.Type)
 						if traceKV {
 							log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
 						}
@@ -655,33 +554,6 @@ func (ru *Updater) UpdateRow(
 				log.VEventf(ctx, 2, "Del %s", deletedSecondaryIndexEntry.Key)
 			}
 			batch.Del(deletedSecondaryIndexEntry.Key)
-		}
-	}
-
-	if ru.cascader != nil {
-		if err := ru.cascader.txn.Run(ctx, batch); err != nil {
-			return nil, ConvertBatchError(ctx, ru.Helper.TableDesc, batch)
-		}
-		if err := ru.cascader.cascadeAll(
-			ctx,
-			ru.Helper.TableDesc,
-			tree.Datums(oldValues),
-			tree.Datums(ru.newValues),
-			ru.FetchColIDtoRowIndex,
-			traceKV,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	if checkFKs == CheckFKs {
-		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues, traceKV); err != nil {
-			return nil, err
-		}
-		if ru.Fks.hasFKs() {
-			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
-				return nil, err
-			}
 		}
 	}
 
