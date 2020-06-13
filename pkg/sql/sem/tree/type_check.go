@@ -460,9 +460,9 @@ func isEmptyArray(expr Expr) bool {
 func (expr *CastExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, _ *types.T,
 ) (TypedExpr, error) {
-	// The desired type provided to a CastExpr is ignored. Instead,
-	// types.Any is passed to the child of the cast. There are two
-	// exceptions, described below.
+	// The desired type provided to a CastExpr is ignored. Instead, types.Any is
+	// passed to the child of the cast. There are a few exceptions, described
+	// below.
 	desired := types.Any
 	exprType, err := ResolveType(ctx, expr.Type, semaCtx.GetTypeResolver())
 	if err != nil {
@@ -470,19 +470,14 @@ func (expr *CastExpr) TypeCheck(
 	}
 	switch {
 	case isConstant(expr.Expr):
-		if canConstantBecome(expr.Expr.(Constant), exprType) {
+		c := expr.Expr.(Constant)
+		if canConstantBecome(c, exprType) {
 			// If a Constant is subject to a cast which it can naturally become (which
-			// is in its resolvable type set), we desire the cast's type for the Constant,
-			// which will result in the CastExpr becoming an identity cast.
+			// is in its resolvable type set), we desire the cast's type for the
+			// Constant. In many cases, the CastExpr will then become a no-op and will
+			// be elided below. In other cases, the types may be equivalent but not
+			// Identical (e.g. string vs char(2)) and the CastExpr is still needed.
 			desired = exprType
-
-			// If the type doesn't have any possible parameters (like length,
-			// precision), the CastExpr becomes a no-op and can be elided.
-			switch exprType.Family() {
-			case types.BoolFamily, types.DateFamily, types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily,
-				types.IntervalFamily, types.BytesFamily:
-				return expr.Expr.TypeCheck(ctx, semaCtx, exprType)
-			}
 		}
 	case semaCtx.isUnresolvedPlaceholder(expr.Expr):
 		// This case will be triggered if ProcessPlaceholderAnnotations found
@@ -503,6 +498,11 @@ func (expr *CastExpr) TypeCheck(
 	typedSubExpr, err := expr.Expr.TypeCheck(ctx, semaCtx, desired)
 	if err != nil {
 		return nil, err
+	}
+
+	// Elide the cast if it is a no-op.
+	if typedSubExpr.ResolvedType().Identical(exprType) {
+		return typedSubExpr, nil
 	}
 
 	castFrom := typedSubExpr.ResolvedType()

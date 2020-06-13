@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"go/constant"
 	"go/token"
 	"math"
@@ -42,11 +43,15 @@ type Constant interface {
 	// past the decimal point. It is possible to resolve this constant as a
 	// decimal, but it is not desirable.
 	DesirableTypes() []*types.T
-	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
-	// error if the Constant could not be resolved as that type. The method should only
-	// be passed a type returned from AvailableTypes and should never be called more than
-	// once for a given Constant.
-	ResolveAsType(*SemaContext, *types.T) (Datum, error)
+	// ResolveAsType resolves the Constant as the specified type, or returns an
+	// error if the Constant could not be resolved as that type. The method should
+	// only be passed a type returned from AvailableTypes and should never be
+	// called more than once for a given Constant.
+	//
+	// The returned expression is either a Datum or a CastExpr wrapping a Datum;
+	// the latter is necessary for cases where the result would depend on the
+	// context (like the timezone or the current time).
+	ResolveAsType(*SemaContext, *types.T) (TypedExpr, error)
 }
 
 var _ Constant = &NumVal{}
@@ -94,7 +99,7 @@ func naturalConstantType(c Constant) *types.T {
 }
 
 // canConstantBecome returns whether the provided Constant can become resolved
-// as the provided type.
+// as a type that is Equivalent to the given type.
 func canConstantBecome(c Constant, typ *types.T) bool {
 	avail := c.AvailableTypes()
 	for _, availTyp := range avail {
@@ -286,7 +291,7 @@ func (expr *NumVal) DesirableTypes() []*types.T {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
+func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (TypedExpr, error) {
 	switch typ.Family() {
 	case types.IntFamily:
 		// We may have already set expr.resInt in AsInt64.
@@ -516,7 +521,7 @@ func (expr *StrVal) DesirableTypes() []*types.T {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
+func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (TypedExpr, error) {
 	if expr.scannedAsBytes {
 		// We're looking at typing a byte literal constant into some value type.
 		switch typ.Family() {
@@ -545,10 +550,29 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		return &expr.resString, nil
 	case types.BytesFamily:
 		return ParseDByte(expr.s)
-	}
 
-	datum, err := ParseAndRequireString(typ, expr.s, ctx)
-	return datum, err
+	case types.ArrayFamily,
+		types.DateFamily,
+		types.TimeFamily,
+		types.TimeTZFamily,
+		types.TimestampFamily,
+		types.TimestampTZFamily:
+		// Interpreting a string as one of these types may depend on the timezone or
+		// the current time; if we do it now, the result won't be safe to reuse
+		// later. So in this case we return a CastExpr and let the conversion happen
+		// at evaluation time. We still want to error out if the conversion is not
+		// possible though.
+		_, err := ParseAndRequireString(typ, expr.s, ctx)
+		if err != nil {
+			return nil, err
+		}
+		expr.resString = DString(expr.s)
+		c := NewTypedCastExpr(&expr.resString, typ)
+		return c.TypeCheck(context.TODO(), ctx, typ)
+
+	default:
+		return ParseAndRequireString(typ, expr.s, ctx)
+	}
 }
 
 type constantFolderVisitor struct{}

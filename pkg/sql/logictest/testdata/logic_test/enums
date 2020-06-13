@@ -418,7 +418,7 @@ SELECT ARRAY['hello']::_greeting, ARRAY['hello'::greeting]
 {hello} {hello}
 
 # Test that we can't mix enums in an array.
-query error pq: expected 'cockroach'::public.dbs to be of type greeting, found type dbs
+query error pq: expected 'cockroach'::dbs to be of type greeting, found type dbs
 SELECT ARRAY['hello'::greeting, 'cockroach'::dbs]
 
 statement ok
@@ -582,7 +582,7 @@ SHOW CREATE enum_checks
 enum_checks  CREATE TABLE enum_checks (
              x public.greeting NULL,
              FAMILY "primary" (x, rowid),
-             CONSTRAINT check_x CHECK (x = 'hello':::public.greeting::public.greeting),
+             CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
              CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
 )
 
@@ -848,17 +848,20 @@ statement ok
 ROLLBACK
 
 # Test CTAS from a VALUES clause.
-statement ok
-CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
-
-query TT
-SELECT * FROM enum_ctas
-----
-howdy cockroach
+# TODO(radu): test skipped because of #50164.
+#statement ok
+#CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
+#
+#query TT
+#SELECT * FROM enum_ctas
+#----
+#howdy cockroach
+#
+#statement ok
+#DROP TABLE enum_ctas;
 
 # Test CTAS from a VALUES clause in a transaction.
 statement ok
-DROP TABLE enum_ctas;
 BEGIN;
 CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
 

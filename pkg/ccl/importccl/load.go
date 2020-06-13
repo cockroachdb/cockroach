@@ -352,8 +352,11 @@ func insertStmtToKVs(
 			if !ok {
 				return errors.Errorf("unsupported expr: %q", expr)
 			}
-			var err error
-			insertRow[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type)
+			typedExpr, err := c.ResolveAsType(nil, tableDesc.Columns[i].Type)
+			if err != nil {
+				return err
+			}
+			insertRow[i], err = typedExpr.Eval(evalCtx)
 			if err != nil {
 				return err
 			}

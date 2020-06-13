@@ -382,6 +382,8 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 	}
 
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
 	for i, test := range testCases {
 		parseableCount := 0
 
@@ -396,7 +398,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			}
 
 			semaCtx := tree.MakeSemaContext()
-			res, err := test.c.ResolveAsType(&semaCtx, availType)
+			typedExpr, err := test.c.ResolveAsType(&semaCtx, availType)
+			var res tree.Datum
+			if err == nil {
+				res, err = typedExpr.Eval(evalCtx)
+			}
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") && !strings.Contains(err.Error(), "parsing") {
 					// Parsing errors are permitted for this test, but the number of correctly
@@ -414,8 +420,6 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					i, availType, test.c, res)
 			} else {
 				expectedDatum := parseFuncs[availType](t, test.c.RawString())
-				evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-				defer evalCtx.Stop(context.Background())
 				if res.Compare(evalCtx, expectedDatum) != 0 {
 					t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
 						", found %v",

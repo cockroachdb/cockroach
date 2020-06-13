@@ -759,7 +759,7 @@ values
 # FoldCast
 # --------------------------------------------------
 norm expect=FoldCast
-SELECT 1::int/1
+SELECT 1.1::int/1
 ----
 values
  ├── columns: "?column?":1!null

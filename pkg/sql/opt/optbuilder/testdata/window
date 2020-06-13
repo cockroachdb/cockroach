@@ -87,7 +87,7 @@ project
       │    ├── scan kv
       │    │    └── columns: k:1!null v:2 w:3 f:4 d:5 s:6 b:7
       │    └── projections
-      │         ├── 'foo'::STRING [as=lag_1_arg1:10]
+      │         ├── 'foo' [as=lag_1_arg1:10]
       │         ├── 1 [as=lag_1_arg2:11]
       │         ├── NULL::STRING [as=lag_1_arg3:12]
       │         └── NULL::INT8 [as=lag_2_arg3:13]
