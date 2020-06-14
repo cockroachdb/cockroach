@@ -31,11 +31,13 @@ var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Div:      "Quo",
 	tree.FloorDiv: "QuoInteger",
 	tree.Mod:      "Rem",
+	tree.Pow:      "Pow",
 }
 
 var binaryOpFloatMethod = map[tree.BinaryOperator]string{
 	tree.FloorDiv: "math.Trunc",
 	tree.Mod:      "math.Mod",
+	tree.Pow:      "math.Pow",
 }
 
 var binaryOpDecCtx = map[tree.BinaryOperator]string{
@@ -45,6 +47,7 @@ var binaryOpDecCtx = map[tree.BinaryOperator]string{
 	tree.Div:      "DecimalCtx",
 	tree.FloorDiv: "HighPrecisionCtx",
 	tree.Mod:      "HighPrecisionCtx",
+	tree.Pow:      "DecimalCtx",
 }
 
 var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
@@ -185,6 +188,19 @@ func registerBinOpOutputTypes() {
 		}
 	}
 
+	// Pow arithmetic binary operators.
+	for _, binOp := range []tree.BinaryOperator{tree.Pow} {
+		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
+		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
+		binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}] = types.Decimal
+		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			for _, intWidth2 := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+				binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.IntFamily, intWidth2}] = types.Int
+			}
+			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
+		}
+	}
+
 	// Other non-arithmetic binary operators.
 	binOpOutputTypes[tree.Concat] = map[typePair]*types.T{
 		{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}:                                       types.Bytes,
@@ -317,7 +333,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		switch binOp {
 		case tree.FloorDiv:
 			computeBinOp = fmt.Sprintf("%s(float64(%s) / float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
-		case tree.Mod:
+		case tree.Mod, tree.Pow:
 			computeBinOp = fmt.Sprintf("%s(float64(%s), float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
 		default:
 			computeBinOp = fmt.Sprintf("float64(%s) %s float64(%s)", leftElem, binOp, rightElem)
@@ -329,6 +345,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 			"ComputeBinOp":     computeBinOp,
 		}
 		buf := strings.Builder{}
+
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
@@ -339,6 +356,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 				{{.Target}} = {{.ComputeBinOp}}
 			}
 			`))
+
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -444,7 +462,24 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				}
 			}
 		`))
+		case tree.Pow:
+			args["Ctx"] = binaryOpDecCtx[binOp]
 
+			t = template.Must(template.New("").Parse(`
+			{
+				leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
+				leftTmpDec.SetInt64(int64({{.Left}}))
+				rightTmpDec.SetInt64(int64({{.Right}}))
+				if _, err := tree.{{.Ctx}}.Pow(leftTmpDec, leftTmpDec, rightTmpDec); err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				resultInt, err := leftTmpDec.Int64()
+				if err != nil {
+					colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+				}
+				{{.Target}} = resultInt
+			}
+			`))
 		case tree.FloorDiv, tree.Mod:
 			// Note that these operators have integer result.
 			t = template.Must(template.New("").Parse(fmt.Sprintf(`

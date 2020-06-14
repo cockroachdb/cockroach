@@ -109,6 +109,37 @@ EXPLAIN (VEC) SELECT _inet - _int2 FROM many_types
   └ *colexec.projMinusDatumInt16Op
     └ *colexec.colBatchScan
 
+query T
+EXPLAIN (VEC) SELECT _int2^_int4 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projPowInt16Int32Op
+    └ *colexec.colBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _int2^_int FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projPowInt16Int64Op
+    └ *colexec.colBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _float^_float FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projPowFloat64Float64Op
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT (_float^_float)::STRING FROM many_types
+----
+NULL
+1.28998092100128
+1011.29924392386
+
 query T rowsort
 SELECT _inet - _int2 FROM many_types
 ----
@@ -282,6 +313,20 @@ EXPLAIN (VEC) SELECT _json -> _int2 FROM many_types
 └ Node 1
   └ *colexec.projJSONFetchValDatumInt16Op
     └ *colexec.colBatchScan
+
+
+query T rowsort
+SELECT (_int2^_int2)::STRING FROM many_types WHERE _int2 < 10 AND _int2 < 10
+----
+4
+
+statement error integer out of range
+SELECT (_int2^_int2)::STRING FROM many_types
+
+query T rowsort
+SELECT (_int2^_int4)::STRING FROM many_types WHERE _int2 < 10 AND _int4 < 10
+----
+4
 
 query T
 SELECT _json -> _int2 FROM many_types
