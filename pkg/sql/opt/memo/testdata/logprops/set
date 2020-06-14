@@ -19,15 +19,18 @@ union
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (2)
  │    └── interesting orderings: (+1)
  └── project
       ├── columns: u:3(int) v:4(int!null)
       ├── prune: (3,4)
+      ├── reject-nulls: (3)
       └── scan uv
            ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
            ├── key: (5)
            ├── fd: (5)-->(3,4)
            ├── prune: (3-5)
+           ├── reject-nulls: (3)
            └── interesting orderings: (+5)
 
 build
@@ -43,6 +46,7 @@ intersect
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (2)
  │    └── interesting orderings: (+1)
  └── select
       ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
@@ -55,6 +59,7 @@ intersect
       │    ├── key: (5)
       │    ├── fd: (5)-->(3,4)
       │    ├── prune: (3-5)
+      │    ├── reject-nulls: (3)
       │    └── interesting orderings: (+5)
       └── filters
            └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
@@ -74,6 +79,7 @@ except
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (2)
  │    └── interesting orderings: (+1)
  └── project
       ├── columns: u:3(int!null) v:4(int!null)
@@ -90,6 +96,7 @@ except
            │    ├── key: (5)
            │    ├── fd: (5)-->(3,4)
            │    ├── prune: (3-5)
+           │    ├── reject-nulls: (3)
            │    └── interesting orderings: (+5)
            └── filters
                 └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
@@ -105,12 +112,14 @@ select
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (2)
  │    └── interesting orderings: (+1)
  └── filters
       └── eq [type=bool, outer=(1,2), immutable, correlated-subquery]
@@ -137,11 +146,13 @@ select
            │              │    │    ├── outer: (1)
            │              │    │    ├── fd: ()-->(6)
            │              │    │    ├── prune: (3,6)
+           │              │    │    ├── reject-nulls: (3)
            │              │    │    ├── scan uv
            │              │    │    │    ├── columns: uv.u:3(int) v:4(int!null) rowid:5(int!null)
            │              │    │    │    ├── key: (5)
            │              │    │    │    ├── fd: (5)-->(3,4)
            │              │    │    │    ├── prune: (3-5)
+           │              │    │    │    ├── reject-nulls: (3)
            │              │    │    │    └── interesting orderings: (+5)
            │              │    │    └── projections
            │              │    │         └── variable: xy.x:1 [as=x:6, type=int, outer=(1)]
@@ -155,6 +166,7 @@ select
            │              │         │    ├── key: (9)
            │              │         │    ├── fd: (9)-->(7,8)
            │              │         │    ├── prune: (7-9)
+           │              │         │    ├── reject-nulls: (7)
            │              │         │    └── interesting orderings: (+9)
            │              │         └── projections
            │              │              └── variable: xy.y:2 [as=y:10, type=int, outer=(2)]

@@ -37,6 +37,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
+ │    │    ├── reject-nulls: (1,2)
  │    │    └── unfiltered-cols: (1,2)
  │    └── filters (true)
  └── filters (true)
@@ -59,9 +60,11 @@ inner-join (lookup abcd)
  │    ├── select
  │    │    ├── columns: m:1(int) n:2(int!null)
  │    │    ├── prune: (1)
+ │    │    ├── reject-nulls: (1)
  │    │    ├── scan small
  │    │    │    ├── columns: m:1(int) n:2(int)
- │    │    │    └── prune: (1,2)
+ │    │    │    ├── prune: (1,2)
+ │    │    │    └── reject-nulls: (1,2)
  │    │    └── filters
  │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
  │    │              ├── variable: n:2 [type=int]
@@ -87,6 +90,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
+ │    │    ├── reject-nulls: (1,2)
  │    │    └── unfiltered-cols: (1,2)
  │    └── filters
  │         └── gt [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
@@ -111,6 +115,7 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    ├── prune: (1,2)
+ │    │    ├── reject-nulls: (1,2)
  │    │    └── unfiltered-cols: (1,2)
  │    └── filters (true)
  └── filters
@@ -131,11 +136,27 @@ inner-join (lookup abcd)
  │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
  │    ├── key columns: [1 2] = [4 5]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
- │    ├── scan small
- │    │    ├── columns: m:1(int) n:2(int)
- │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1,2)
- │    └── filters (true)
+ │    ├── select
+ │    │    ├── columns: m:1(int!null) n:2(int!null)
+ │    │    ├── scan small
+ │    │    │    ├── columns: m:1(int) n:2(int)
+ │    │    │    ├── prune: (1,2)
+ │    │    │    ├── reject-nulls: (1,2)
+ │    │    │    └── unfiltered-cols: (1,2)
+ │    │    └── filters
+ │    │         ├── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ │    │         │    ├── variable: m:1 [type=int]
+ │    │         │    └── null
+ │    │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    │              ├── variable: n:2 [type=int]
+ │    │              └── null
+ │    └── filters
+ │         ├── is-not [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │         │    ├── variable: a:4 [type=int]
+ │         │    └── null
+ │         └── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+ │              ├── variable: b:5 [type=int]
+ │              └── null
  └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
            ├── variable: c:6 [type=int]

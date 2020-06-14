@@ -45,6 +45,7 @@ project
       │    │    ├── fd: (1)-->(2-7)
       │    │    ├── limit hint: 10.00
       │    │    ├── prune: (1-7)
+      │    │    ├── reject-nulls: (2-7)
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
       └── windows
@@ -78,6 +79,7 @@ project
       │    │    ├── fd: (1)-->(2-7)
       │    │    ├── limit hint: 10.00
       │    │    ├── prune: (1-7)
+      │    │    ├── reject-nulls: (2-7)
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
       └── windows
@@ -100,6 +102,7 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-7)
  │    ├── prune: (1-7)
+ │    ├── reject-nulls: (2-7)
  │    └── interesting orderings: (+1)
  └── projections
       └── subquery [as="?column?":11, type=int, outer=(1), immutable, correlated-subquery]
@@ -165,12 +168,14 @@ project
       │    ├── key: (1)
       │    ├── fd: ()-->(10-13), (1)-->(2-7)
       │    ├── prune: (1-7,10-13)
+      │    ├── reject-nulls: (2-7)
       │    ├── interesting orderings: (+1)
       │    ├── scan kv
       │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-7)
       │    │    ├── prune: (1-7)
+      │    │    ├── reject-nulls: (2-7)
       │    │    └── interesting orderings: (+1)
       │    └── projections
       │         ├── cast: STRING [as=lag_1_arg1:10, type=string, immutable]

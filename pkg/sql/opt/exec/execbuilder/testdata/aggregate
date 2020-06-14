@@ -734,6 +734,7 @@ render                ·             ·                                 (sum dec
            └── scan   ·             ·                                 (d decimal)           ·
 ·                     table         abc@primary                       ·                     ·
 ·                     spans         FULL SCAN                         ·                     ·
+·                     filter        ((d)[decimal] IS NOT NULL)[bool]  ·                     ·
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
 statement ok

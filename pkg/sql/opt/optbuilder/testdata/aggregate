@@ -2937,6 +2937,7 @@ group-by
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
+      ├── reject-nulls: (2)
       ├── interesting orderings: (+1,+2)
       └── scan t.public.xyz
            ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float)
@@ -2945,6 +2946,7 @@ group-by
            ├── key: (1)
            ├── fd: (1)-->(2,3)
            ├── prune: (1-3)
+           ├── reject-nulls: (2,3)
            └── interesting orderings: (+1,+2) (+3,+2,+1)
 
 # Testing ordered aggregations.

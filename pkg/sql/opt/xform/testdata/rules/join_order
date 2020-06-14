@@ -39,18 +39,26 @@ inner-join (lookup cy)
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup bx)
- │    ├── columns: a:1!null abc.b:2!null abc.c:3 d:4 bx.b:5!null x:6
+ │    ├── columns: a:1!null abc.b:2!null abc.c:3!null d:4 bx.b:5!null x:6
  │    ├── key columns: [2] = [5]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-6)
- │    ├── scan abc
- │    │    ├── columns: a:1!null abc.b:2 abc.c:3 d:4
- │    │    ├── constraint: /1: [/1 - /1]
+ │    ├── select
+ │    │    ├── columns: a:1!null abc.b:2!null abc.c:3!null d:4
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(1-4)
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan abc
+ │    │    │    ├── columns: a:1!null abc.b:2 abc.c:3 d:4
+ │    │    │    ├── constraint: /1: [/1 - /1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(1-4)
+ │    │    └── filters
+ │    │         ├── abc.c:3 IS NOT NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
+ │    │         └── abc.b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
  │    └── filters (true)
  └── filters (true)
 
@@ -65,18 +73,26 @@ inner-join (lookup bx)
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
- │    ├── columns: a:3!null abc.b:4 abc.c:5!null d:6 cy.c:7!null y:8
+ │    ├── columns: a:3!null abc.b:4!null abc.c:5!null d:6 cy.c:7!null y:8
  │    ├── key columns: [5] = [7]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3-8)
- │    ├── scan abc
- │    │    ├── columns: a:3!null abc.b:4 abc.c:5 d:6
- │    │    ├── constraint: /3: [/1 - /1]
+ │    ├── select
+ │    │    ├── columns: a:3!null abc.b:4!null abc.c:5!null d:6
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(3-6)
+ │    │    ├── fd: ()-->(3-6)
+ │    │    ├── scan abc
+ │    │    │    ├── columns: a:3!null abc.b:4 abc.c:5 d:6
+ │    │    │    ├── constraint: /3: [/1 - /1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(3-6)
+ │    │    └── filters
+ │    │         ├── abc.b:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │    │         └── abc.c:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
  │    └── filters (true)
  └── filters (true)
 
@@ -91,18 +107,26 @@ inner-join (lookup bx)
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
- │    ├── columns: cy.c:3!null y:4 a:5!null abc.b:6 abc.c:7!null d:8
+ │    ├── columns: cy.c:3!null y:4 a:5!null abc.b:6!null abc.c:7!null d:8
  │    ├── key columns: [7] = [3]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3-8)
- │    ├── scan abc
- │    │    ├── columns: a:5!null abc.b:6 abc.c:7 d:8
- │    │    ├── constraint: /5: [/1 - /1]
+ │    ├── select
+ │    │    ├── columns: a:5!null abc.b:6!null abc.c:7!null d:8
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(5-8)
+ │    │    ├── fd: ()-->(5-8)
+ │    │    ├── scan abc
+ │    │    │    ├── columns: a:5!null abc.b:6 abc.c:7 d:8
+ │    │    │    ├── constraint: /5: [/1 - /1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(5-8)
+ │    │    └── filters
+ │    │         ├── abc.b:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ │    │         └── abc.c:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
  │    └── filters (true)
  └── filters (true)
 
@@ -117,29 +141,37 @@ inner-join (lookup bx)
  ├── key: ()
  ├── fd: ()-->(1-8)
  ├── inner-join (lookup cy)
- │    ├── columns: cy.c:3!null y:4 a:5!null abc.b:6 abc.c:7!null d:8
+ │    ├── columns: cy.c:3!null y:4 a:5!null abc.b:6!null abc.c:7!null d:8
  │    ├── key columns: [7] = [3]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3-8)
- │    ├── scan abc
- │    │    ├── columns: a:5!null abc.b:6 abc.c:7 d:8
- │    │    ├── constraint: /5: [/1 - /1]
+ │    ├── select
+ │    │    ├── columns: a:5!null abc.b:6!null abc.c:7!null d:8
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    └── fd: ()-->(5-8)
+ │    │    ├── fd: ()-->(5-8)
+ │    │    ├── scan abc
+ │    │    │    ├── columns: a:5!null abc.b:6 abc.c:7 d:8
+ │    │    │    ├── constraint: /5: [/1 - /1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(5-8)
+ │    │    └── filters
+ │    │         ├── abc.b:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ │    │         └── abc.c:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
  │    └── filters (true)
  └── filters (true)
 
 memo join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~32KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
- ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+6) (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8)) (inner-join G6 G7 G8) (inner-join G9 G10 G11) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+3,+7) (inner-join G10 G9 G11) (lookup-join G7 G5 cy,keyCols=[7],outCols=(1-8)) (lookup-join G12 G11 abc,keyCols=[11],outCols=(1-8))
+memo (optimized, ~123KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+6) (inner-join G2 G6 G4) (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8)) (inner-join G7 G8 G9) (inner-join G10 G11 G12) (inner-join G7 G13 G9) (inner-join G14 G11 G12) (inner-join G6 G2 G4) (merge-join G2 G6 G5 inner-join,+1,+6) (inner-join G8 G7 G9) (merge-join G7 G8 G5 inner-join,+3,+7) (inner-join G11 G10 G12) (inner-join G15 G11 G12) (inner-join G13 G7 G9) (merge-join G7 G13 G5 inner-join,+3,+7) (inner-join G11 G14 G12) (inner-join G16 G11 G12) (lookup-join G6 G5 bx,keyCols=[6],outCols=(1-8)) (inner-join G17 G11 G12) (inner-join G7 G18 G9) (lookup-join G8 G5 cy,keyCols=[7],outCols=(1-8)) (lookup-join G19 G12 abc,keyCols=[18],outCols=(1-8)) (inner-join G11 G15 G12) (lookup-join G13 G5 cy,keyCols=[7],outCols=(1-8)) (inner-join G2 G20 G4) (lookup-join G21 G22 abc,keyCols=[19],outCols=(1-8)) (inner-join G11 G16 G12) (inner-join G11 G17 G12) (inner-join G18 G7 G9) (merge-join G7 G18 G5 inner-join,+3,+7) (lookup-join G23 G24 abc,keyCols=[21],outCols=(1-8)) (inner-join G20 G2 G4) (merge-join G2 G20 G5 inner-join,+1,+6) (lookup-join G25 G26 abc,keyCols=[22],outCols=(1-8)) (lookup-join G27 G28 abc,keyCols=[23],outCols=(1-8)) (lookup-join G18 G5 cy,keyCols=[7],outCols=(1-8)) (lookup-join G20 G5 bx,keyCols=[6],outCols=(1-8))
  │    └── [presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
- │         ├── best: (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8))
- │         └── cost: 13.11
+ │         ├── best: (lookup-join G6 G5 bx,keyCols=[6],outCols=(1-8))
+ │         └── cost: 13.05
  ├── G2: (scan bx)
  │    ├── [ordering: +1]
  │    │    ├── best: (scan bx)
@@ -147,60 +179,179 @@ memo (optimized, ~32KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
  │    └── []
  │         ├── best: (scan bx)
  │         └── cost: 1040.02
- ├── G3: (inner-join G6 G9 G8) (inner-join G9 G6 G8) (merge-join G6 G9 G5 inner-join,+3,+7) (lookup-join G13 G8 abc,keyCols=[9],outCols=(3-8)) (lookup-join G9 G5 cy,keyCols=[7],outCols=(3-8))
+ ├── G3: (inner-join G7 G10 G9) (inner-join G10 G7 G9) (merge-join G7 G10 G5 inner-join,+3,+7) (lookup-join G29 G9 abc,keyCols=[9],outCols=(3-8)) (inner-join G7 G14 G9) (lookup-join G10 G5 cy,keyCols=[7],outCols=(3-8)) (inner-join G14 G7 G9) (merge-join G7 G14 G5 inner-join,+3,+7) (lookup-join G30 G31 abc,keyCols=[10],outCols=(3-8)) (lookup-join G14 G5 cy,keyCols=[7],outCols=(3-8))
  │    └── []
- │         ├── best: (lookup-join G9 G5 cy,keyCols=[7],outCols=(3-8))
- │         └── cost: 7.12
- ├── G4: (filters G14)
+ │         ├── best: (lookup-join G14 G5 cy,keyCols=[7],outCols=(3-8))
+ │         └── cost: 7.10
+ ├── G4: (filters G32)
  ├── G5: (filters)
- ├── G6: (scan cy)
+ ├── G6: (inner-join G7 G17 G9) (inner-join G17 G7 G9) (merge-join G7 G17 G5 inner-join,+3,+7) (lookup-join G33 G34 abc,keyCols=[11],outCols=(3-8)) (inner-join G7 G15 G9) (lookup-join G17 G5 cy,keyCols=[7],outCols=(3-8)) (inner-join G15 G7 G9) (merge-join G7 G15 G5 inner-join,+3,+7) (lookup-join G35 G36 abc,keyCols=[12],outCols=(3-8)) (lookup-join G15 G5 cy,keyCols=[7],outCols=(3-8))
+ │    └── []
+ │         ├── best: (lookup-join G15 G5 cy,keyCols=[7],outCols=(3-8))
+ │         └── cost: 7.06
+ ├── G7: (scan cy)
  │    ├── [ordering: +3]
  │    │    ├── best: (scan cy)
  │    │    └── cost: 1040.02
  │    └── []
  │         ├── best: (scan cy)
  │         └── cost: 1040.02
- ├── G7: (inner-join G9 G2 G4) (inner-join G2 G9 G4) (lookup-join G9 G5 bx,keyCols=[6],outCols=(1,2,5-8)) (merge-join G2 G9 G5 inner-join,+1,+6) (lookup-join G15 G4 abc,keyCols=[10],outCols=(1,2,5-8))
+ ├── G8: (inner-join G10 G2 G4) (inner-join G2 G10 G4) (lookup-join G10 G5 bx,keyCols=[6],outCols=(1,2,5-8)) (inner-join G17 G2 G4) (merge-join G2 G10 G5 inner-join,+1,+6) (lookup-join G37 G4 abc,keyCols=[13],outCols=(1,2,5-8)) (inner-join G2 G17 G4) (lookup-join G17 G5 bx,keyCols=[6],outCols=(1,2,5-8)) (merge-join G2 G17 G5 inner-join,+1,+6) (lookup-join G38 G39 abc,keyCols=[14],outCols=(1,2,5-8))
  │    └── []
- │         ├── best: (lookup-join G9 G5 bx,keyCols=[6],outCols=(1,2,5-8))
- │         └── cost: 7.12
- ├── G8: (filters G16)
- ├── G9: (select G17 G18) (scan abc,constrained)
+ │         ├── best: (lookup-join G17 G5 bx,keyCols=[6],outCols=(1,2,5-8))
+ │         └── cost: 7.10
+ ├── G9: (filters G40)
+ ├── G10: (select G41 G42) (scan abc,constrained)
  │    └── []
  │         ├── best: (scan abc,constrained)
  │         └── cost: 1.09
- ├── G10: (inner-join G6 G2 G5) (inner-join G2 G6 G5)
+ ├── G11: (inner-join G7 G2 G5) (inner-join G2 G7 G5)
  │    └── []
- │         ├── best: (inner-join G6 G2 G5)
+ │         ├── best: (inner-join G7 G2 G5)
  │         └── cost: 12110.05
- ├── G11: (filters G14 G16)
- ├── G12: (project G10 G19 b x c y)
+ ├── G12: (filters G32 G40)
+ ├── G13: (inner-join G14 G2 G4) (inner-join G2 G14 G4) (lookup-join G14 G5 bx,keyCols=[6],outCols=(1,2,5-8)) (inner-join G16 G2 G4) (merge-join G2 G14 G5 inner-join,+1,+6) (lookup-join G43 G44 abc,keyCols=[15],outCols=(1,2,5-8)) (inner-join G2 G16 G4) (lookup-join G16 G5 bx,keyCols=[6],outCols=(1,2,5-8)) (merge-join G2 G16 G5 inner-join,+1,+6) (lookup-join G45 G46 abc,keyCols=[16],outCols=(1,2,5-8))
  │    └── []
- │         ├── best: (project G10 G19 b x c y)
+ │         ├── best: (lookup-join G16 G5 bx,keyCols=[6],outCols=(1,2,5-8))
+ │         └── cost: 7.06
+ ├── G14: (select G41 G47) (select G48 G49)
+ │    └── []
+ │         ├── best: (select G48 G49)
+ │         └── cost: 1.11
+ ├── G15: (select G41 G50) (select G51 G52)
+ │    └── []
+ │         ├── best: (select G51 G52)
+ │         └── cost: 1.11
+ ├── G16: (select G41 G53) (select G54 G55)
+ │    └── []
+ │         ├── best: (select G54 G55)
+ │         └── cost: 1.11
+ ├── G17: (select G41 G56) (select G57 G58)
+ │    └── []
+ │         ├── best: (select G57 G58)
+ │         └── cost: 1.11
+ ├── G18: (inner-join G15 G2 G4) (inner-join G2 G15 G4) (lookup-join G15 G5 bx,keyCols=[6],outCols=(1,2,5-8)) (merge-join G2 G15 G5 inner-join,+1,+6) (lookup-join G59 G60 abc,keyCols=[17],outCols=(1,2,5-8))
+ │    └── []
+ │         ├── best: (lookup-join G15 G5 bx,keyCols=[6],outCols=(1,2,5-8))
+ │         └── cost: 7.08
+ ├── G19: (project G11 G61 b x c y)
+ │    └── []
+ │         ├── best: (project G11 G61 b x c y)
  │         └── cost: 32110.06
- ├── G13: (project G6 G19 c y)
+ ├── G20: (inner-join G16 G7 G9) (inner-join G7 G16 G9) (lookup-join G16 G5 cy,keyCols=[7],outCols=(3-8)) (merge-join G7 G16 G5 inner-join,+3,+7) (lookup-join G62 G63 abc,keyCols=[20],outCols=(3-8))
  │    └── []
- │         ├── best: (project G6 G19 c y)
- │         └── cost: 1060.03
- ├── G14: (eq G20 G21)
- ├── G15: (project G2 G19 b x)
+ │         ├── best: (lookup-join G16 G5 cy,keyCols=[7],outCols=(3-8))
+ │         └── cost: 7.08
+ ├── G21: (project G11 G61 b x c y)
  │    └── []
- │         ├── best: (project G2 G19 b x)
+ │         ├── best: (project G11 G61 b x c y)
+ │         └── cost: 32110.06
+ ├── G22: (filters G32 G40 G64)
+ ├── G23: (project G11 G61 b x c y)
+ │    └── []
+ │         ├── best: (project G11 G61 b x c y)
+ │         └── cost: 32110.06
+ ├── G24: (filters G32 G40 G65 G64)
+ ├── G25: (project G11 G61 b x c y)
+ │    └── []
+ │         ├── best: (project G11 G61 b x c y)
+ │         └── cost: 32110.06
+ ├── G26: (filters G32 G40 G64 G65)
+ ├── G27: (project G11 G61 b x c y)
+ │    └── []
+ │         ├── best: (project G11 G61 b x c y)
+ │         └── cost: 32110.06
+ ├── G28: (filters G32 G40 G65)
+ ├── G29: (project G7 G61 c y)
+ │    └── []
+ │         ├── best: (project G7 G61 c y)
  │         └── cost: 1060.03
- ├── G16: (eq G22 G23)
- ├── G17: (scan abc)
+ ├── G30: (project G7 G61 c y)
+ │    └── []
+ │         ├── best: (project G7 G61 c y)
+ │         └── cost: 1060.03
+ ├── G31: (filters G40 G64)
+ ├── G32: (eq G66 G67)
+ ├── G33: (project G7 G61 c y)
+ │    └── []
+ │         ├── best: (project G7 G61 c y)
+ │         └── cost: 1060.03
+ ├── G34: (filters G40 G65)
+ ├── G35: (project G7 G61 c y)
+ │    └── []
+ │         ├── best: (project G7 G61 c y)
+ │         └── cost: 1060.03
+ ├── G36: (filters G40 G65 G64)
+ ├── G37: (project G2 G61 b x)
+ │    └── []
+ │         ├── best: (project G2 G61 b x)
+ │         └── cost: 1060.03
+ ├── G38: (project G2 G61 b x)
+ │    └── []
+ │         ├── best: (project G2 G61 b x)
+ │         └── cost: 1060.03
+ ├── G39: (filters G32 G65)
+ ├── G40: (eq G68 G69)
+ ├── G41: (scan abc)
  │    └── []
  │         ├── best: (scan abc)
  │         └── cost: 1080.02
- ├── G18: (filters G24)
- ├── G19: (projections G25)
- ├── G20: (variable abc.b)
- ├── G21: (variable bx.b)
- ├── G22: (variable abc.c)
- ├── G23: (variable cy.c)
- ├── G24: (eq G26 G25)
- ├── G25: (const 1)
- └── G26: (variable a)
+ ├── G42: (filters G70)
+ ├── G43: (project G2 G61 b x)
+ │    └── []
+ │         ├── best: (project G2 G61 b x)
+ │         └── cost: 1060.03
+ ├── G44: (filters G32 G64)
+ ├── G45: (project G2 G61 b x)
+ │    └── []
+ │         ├── best: (project G2 G61 b x)
+ │         └── cost: 1060.03
+ ├── G46: (filters G32 G64 G65)
+ ├── G47: (filters G70 G64)
+ ├── G48: (scan abc,constrained)
+ │    └── []
+ │         ├── best: (scan abc,constrained)
+ │         └── cost: 1.09
+ ├── G49: (filters G64)
+ ├── G50: (filters G70 G65 G64)
+ ├── G51: (scan abc,constrained)
+ │    └── []
+ │         ├── best: (scan abc,constrained)
+ │         └── cost: 1.09
+ ├── G52: (filters G65 G64)
+ ├── G53: (filters G70 G64 G65)
+ ├── G54: (scan abc,constrained)
+ │    └── []
+ │         ├── best: (scan abc,constrained)
+ │         └── cost: 1.09
+ ├── G55: (filters G64 G65)
+ ├── G56: (filters G70 G65)
+ ├── G57: (scan abc,constrained)
+ │    └── []
+ │         ├── best: (scan abc,constrained)
+ │         └── cost: 1.09
+ ├── G58: (filters G65)
+ ├── G59: (project G2 G61 b x)
+ │    └── []
+ │         ├── best: (project G2 G61 b x)
+ │         └── cost: 1060.03
+ ├── G60: (filters G32 G65 G64)
+ ├── G61: (projections G71)
+ ├── G62: (project G7 G61 c y)
+ │    └── []
+ │         ├── best: (project G7 G61 c y)
+ │         └── cost: 1060.03
+ ├── G63: (filters G40 G64 G65)
+ ├── G64: (is-not G68 G72)
+ ├── G65: (is-not G66 G72)
+ ├── G66: (variable abc.b)
+ ├── G67: (variable bx.b)
+ ├── G68: (variable abc.c)
+ ├── G69: (variable cy.c)
+ ├── G70: (eq G73 G71)
+ ├── G71: (const 1)
+ ├── G72: (null)
+ └── G73: (variable a)
 
 opt join-limit=4
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
@@ -251,6 +402,7 @@ inner-join (cross)
  ├── key: (5,7,9)
  ├── fd: ()-->(1-4), (5)-->(6), (7)-->(8), (9)-->(10)
  ├── prune: (2-10)
+ ├── reject-nulls: (2-4,6,8,10)
  ├── interesting orderings: (+7) (+9) (+5) (+1)
  ├── inner-join (cross)
  │    ├── columns: t.public.bx.b:5(int!null) t.public.bx.x:6(int) t.public.cy.c:7(int!null) t.public.cy.y:8(int) t.public.dz.d:9(int!null) t.public.dz.z:10(int)
@@ -259,6 +411,7 @@ inner-join (cross)
  │    ├── key: (5,7,9)
  │    ├── fd: (5)-->(6), (7)-->(8), (9)-->(10)
  │    ├── prune: (5-10)
+ │    ├── reject-nulls: (6,8,10)
  │    ├── interesting orderings: (+7) (+9) (+5)
  │    ├── join-size: 3
  │    ├── inner-join (cross)
@@ -268,6 +421,7 @@ inner-join (cross)
  │    │    ├── key: (7,9)
  │    │    ├── fd: (7)-->(8), (9)-->(10)
  │    │    ├── prune: (7-10)
+ │    │    ├── reject-nulls: (8,10)
  │    │    ├── interesting orderings: (+7) (+9)
  │    │    ├── join-size: 2
  │    │    ├── scan t.public.cy
@@ -277,6 +431,7 @@ inner-join (cross)
  │    │    │    ├── key: (7)
  │    │    │    ├── fd: (7)-->(8)
  │    │    │    ├── prune: (7,8)
+ │    │    │    ├── reject-nulls: (8)
  │    │    │    ├── interesting orderings: (+7)
  │    │    │    └── unfiltered-cols: (7,8)
  │    │    ├── scan t.public.dz
@@ -286,6 +441,7 @@ inner-join (cross)
  │    │    │    ├── key: (9)
  │    │    │    ├── fd: (9)-->(10)
  │    │    │    ├── prune: (9,10)
+ │    │    │    ├── reject-nulls: (10)
  │    │    │    ├── interesting orderings: (+9)
  │    │    │    └── unfiltered-cols: (9,10)
  │    │    └── filters (true)
@@ -296,6 +452,7 @@ inner-join (cross)
  │    │    ├── key: (5)
  │    │    ├── fd: (5)-->(6)
  │    │    ├── prune: (5,6)
+ │    │    ├── reject-nulls: (6)
  │    │    ├── interesting orderings: (+5)
  │    │    └── unfiltered-cols: (5,6)
  │    └── filters (true)
@@ -308,6 +465,7 @@ inner-join (cross)
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── prune: (2-4)
+ │    ├── reject-nulls: (2-4)
  │    └── interesting orderings: (+1)
  └── filters (true)
 

@@ -182,9 +182,11 @@ render           ·             ·                  (x)     ·
       ├── scan   ·             ·                  (x)     ·
       │          table         twocolumn@primary  ·       ·
       │          spans         FULL SCAN          ·       ·
+      │          filter        x IS NOT NULL      ·       ·
       └── scan   ·             ·                  (y)     ·
 ·                table         twocolumn@primary  ·       ·
 ·                spans         FULL SCAN          ·       ·
+·                filter        y IS NOT NULL      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
@@ -381,7 +383,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 9   ·                          type                inner
 9   ·                          equality            (confrelid) = (attrelid)
 10  filter                     ·                   ·
-10  ·                          filter              contype = 'f'
+10  ·                          filter              (contype = 'f') AND (confrelid IS NOT NULL)
 11  render                     ·                   ·
 11  ·                          render 0            oid
 11  ·                          render 1            conname
@@ -400,7 +402,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 7   ·                          type                inner
 7   ·                          equality            (oid) = (relnamespace)
 8   filter                     ·                   ·
-8   ·                          filter              nspname = 'public'
+8   ·                          filter              (nspname = 'public') AND (oid IS NOT NULL)
 9   render                     ·                   ·
 9   ·                          render 0            oid
 9   ·                          render 1            nspname
@@ -411,7 +413,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 8   ·                          type                inner
 8   ·                          equality            (oid) = (attrelid)
 9   filter                     ·                   ·
-9   ·                          filter              relname = 'orders'
+9   ·                          filter              (relname = 'orders') AND (relnamespace IS NOT NULL)
 10  render                     ·                   ·
 10  ·                          render 0            oid
 10  ·                          render 1            relname
@@ -635,7 +637,7 @@ render               ·             ·
            └── scan  ·             ·
 ·                    table         pairs@primary
 ·                    spans         FULL SCAN
-·                    filter        a > 1
+·                    filter        (a > 1) AND (b IS NOT NULL)
 
 # The simpler plan for an inner join, to compare.
 query TTT
@@ -1374,9 +1376,11 @@ render           ·             ·
       ├── scan   ·             ·
       │          table         foo@primary
       │          spans         FULL SCAN
+      │          filter        b IS NOT NULL
       └── scan   ·             ·
 ·                table         bar@primary
 ·                spans         FULL SCAN
+·                filter        b IS NOT NULL
 
 # Only a can be an equality column.
 query TTT
@@ -1443,9 +1447,11 @@ cross-join  ·             ·
  ├── scan   ·             ·
  │          table         foo@primary
  │          spans         FULL SCAN
+ │          filter        b IS NOT NULL
  └── scan   ·             ·
 ·           table         bar@primary
 ·           spans         FULL SCAN
+·           filter        b IS NOT NULL
 
 # Only a can be an equality column.
 query TTT
@@ -1479,9 +1485,11 @@ cross-join  ·             ·
  ├── scan   ·             ·
  │          table         foo@primary
  │          spans         FULL SCAN
+ │          filter        b IS NOT NULL
  └── scan   ·             ·
 ·           table         bar@primary
 ·           spans         FULL SCAN
+·           filter        b IS NOT NULL
 
 # Only a can be an equality column.
 query TTT

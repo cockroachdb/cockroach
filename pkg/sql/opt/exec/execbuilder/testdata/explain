@@ -191,12 +191,12 @@ render                                       ·             ·
                 │                            type          inner
                 │                            equality      (oid) = (relnamespace)
                 ├── filter                   ·             ·
-                │    │                       filter        nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+                │    │                       filter        (nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')) AND (oid IS NOT NULL)
                 │    └── render              ·             ·
                 │         └── virtual table  ·             ·
                 │                            source        pg_namespace@primary
                 └── filter                   ·             ·
-                     │                       filter        relkind IN ('S', 'r', 'v')
+                     │                       filter        (relkind IN ('S', 'r', 'v')) AND (relnamespace IS NOT NULL)
                      └── render              ·             ·
                           └── virtual table  ·             ·
 ·                                            source        pg_class@primary
@@ -217,17 +217,17 @@ render                                            ·             ·
                 │    │                            type          inner
                 │    │                            equality      (oid) = (relnamespace)
                 │    ├── filter                   ·             ·
-                │    │    │                       filter        nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
+                │    │    │                       filter        (nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')) AND (oid IS NOT NULL)
                 │    │    └── render              ·             ·
                 │    │         └── virtual table  ·             ·
                 │    │                            source        pg_namespace@primary
                 │    └── filter                   ·             ·
-                │         │                       filter        relkind IN ('S', 'r', 'v')
+                │         │                       filter        (relkind IN ('S', 'r', 'v')) AND (relnamespace IS NOT NULL)
                 │         └── render              ·             ·
                 │              └── virtual table  ·             ·
                 │                                 source        pg_class@primary
                 └── filter                        ·             ·
-                     │                            filter        objsubid = 0
+                     │                            filter        (objsubid = 0) AND (objoid IS NOT NULL)
                      └── render                   ·             ·
                           └── virtual table       ·             ·
 ·                                                 source        pg_description@primary
@@ -377,7 +377,7 @@ render                                            ·             ·
                 │                                 type          inner
                 │                                 equality      (oid) = (relnamespace)
                 ├── filter                        ·             ·
-                │    │                            filter        nspname = 'public'
+                │    │                            filter        (nspname = 'public') AND (oid IS NOT NULL)
                 │    └── render                   ·             ·
                 │         └── virtual table       ·             ·
                 │                                 source        pg_namespace@primary
@@ -386,7 +386,7 @@ render                                            ·             ·
                      │                            type          inner
                      │                            equality      (oid) = (conrelid)
                      └── filter                   ·             ·
-                          │                       filter        relname = 'foo'
+                          │                       filter        (relname = 'foo') AND (relnamespace IS NOT NULL)
                           └── render              ·             ·
                                └── virtual table  ·             ·
 ·                                                 source        pg_class@primary
@@ -956,6 +956,7 @@ inner-join (hash)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1100.02
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1,2)
  ├── scan t
@@ -965,6 +966,7 @@ inner-join (hash)
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── prune: (4,5)
+ │    ├── reject-nulls: (5)
  │    ├── interesting orderings: (+4)
  │    └── unfiltered-cols: (4,5)
  └── filters

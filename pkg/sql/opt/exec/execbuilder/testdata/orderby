@@ -893,10 +893,10 @@ render           ·                   ·                  (k)           ·
       │          mergeJoinOrder      -"(v=v)",+"(k=k)"  ·             ·
       ├── scan   ·                   ·                  (k, v)        -v,+k
       │          table               kv@foo             ·             ·
-      │          spans               FULL SCAN          ·             ·
+      │          spans               -/NULL             ·             ·
       └── scan   ·                   ·                  (k, v)        -v,+k
 ·                table               kv@foo             ·             ·
-·                spans               FULL SCAN          ·             ·
+·                spans               -/NULL             ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))

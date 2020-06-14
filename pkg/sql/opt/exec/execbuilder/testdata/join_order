@@ -36,23 +36,24 @@ SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-·                 distribution           local        ·                         ·
-·                 vectorized             true         ·                         ·
-lookup-join       ·                      ·            (a, b, c, d, b, x, c, y)  ·
- │                table                  cy@primary   ·                         ·
- │                type                   inner        ·                         ·
- │                equality               (c) = (c)    ·                         ·
- │                equality cols are key  ·            ·                         ·
- │                parallel               ·            ·                         ·
- └── lookup-join  ·                      ·            (a, b, c, d, b, x)        ·
-      │           table                  bx@primary   ·                         ·
-      │           type                   inner        ·                         ·
-      │           equality               (b) = (b)    ·                         ·
-      │           equality cols are key  ·            ·                         ·
-      │           parallel               ·            ·                         ·
-      └── scan    ·                      ·            (a, b, c, d)              ·
-·                 table                  abc@primary  ·                         ·
-·                 spans                  /1-/1/#      ·                         ·
+·                 distribution           local                                ·                         ·
+·                 vectorized             true                                 ·                         ·
+lookup-join       ·                      ·                                    (a, b, c, d, b, x, c, y)  ·
+ │                table                  cy@primary                           ·                         ·
+ │                type                   inner                                ·                         ·
+ │                equality               (c) = (c)                            ·                         ·
+ │                equality cols are key  ·                                    ·                         ·
+ │                parallel               ·                                    ·                         ·
+ └── lookup-join  ·                      ·                                    (a, b, c, d, b, x)        ·
+      │           table                  bx@primary                           ·                         ·
+      │           type                   inner                                ·                         ·
+      │           equality               (b) = (b)                            ·                         ·
+      │           equality cols are key  ·                                    ·                         ·
+      │           parallel               ·                                    ·                         ·
+      └── scan    ·                      ·                                    (a, b, c, d)              ·
+·                 table                  abc@primary                          ·                         ·
+·                 spans                  /1-/1/#                              ·                         ·
+·                 filter                 (c IS NOT NULL) AND (b IS NOT NULL)  ·                         ·
 
 statement ok
 SET reorder_joins_limit = 3
@@ -60,20 +61,21 @@ SET reorder_joins_limit = 3
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-·                 distribution           local        ·                         ·
-·                 vectorized             true         ·                         ·
-lookup-join       ·                      ·            (a, b, c, d, b, x, c, y)  ·
- │                table                  cy@primary   ·                         ·
- │                type                   inner        ·                         ·
- │                equality               (c) = (c)    ·                         ·
- │                equality cols are key  ·            ·                         ·
- │                parallel               ·            ·                         ·
- └── lookup-join  ·                      ·            (a, b, c, d, b, x)        ·
-      │           table                  bx@primary   ·                         ·
-      │           type                   inner        ·                         ·
-      │           equality               (b) = (b)    ·                         ·
-      │           equality cols are key  ·            ·                         ·
-      │           parallel               ·            ·                         ·
-      └── scan    ·                      ·            (a, b, c, d)              ·
-·                 table                  abc@primary  ·                         ·
-·                 spans                  /1-/1/#      ·                         ·
+·                 distribution           local                                ·                         ·
+·                 vectorized             true                                 ·                         ·
+lookup-join       ·                      ·                                    (a, b, c, d, b, x, c, y)  ·
+ │                table                  cy@primary                           ·                         ·
+ │                type                   inner                                ·                         ·
+ │                equality               (c) = (c)                            ·                         ·
+ │                equality cols are key  ·                                    ·                         ·
+ │                parallel               ·                                    ·                         ·
+ └── lookup-join  ·                      ·                                    (a, b, c, d, b, x)        ·
+      │           table                  bx@primary                           ·                         ·
+      │           type                   inner                                ·                         ·
+      │           equality               (b) = (b)                            ·                         ·
+      │           equality cols are key  ·                                    ·                         ·
+      │           parallel               ·                                    ·                         ·
+      └── scan    ·                      ·                                    (a, b, c, d)              ·
+·                 table                  abc@primary                          ·                         ·
+·                 spans                  /1-/1/#                              ·                         ·
+·                 filter                 (c IS NOT NULL) AND (b IS NOT NULL)  ·                         ·

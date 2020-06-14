@@ -935,11 +935,12 @@ project
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-6)
       │    │    ├── select
-      │    │    │    ├── columns: person_id:10 order_id:11!null
+      │    │    │    ├── columns: person_id:10!null order_id:11!null
       │    │    │    ├── scan phones1_
       │    │    │    │    └── columns: person_id:10 order_id:11
       │    │    │    └── filters
-      │    │    │         └── order_id:11 IS NOT NULL [outer=(11), constraints=(/11: (/NULL - ]; tight)]
+      │    │    │         ├── order_id:11 IS NOT NULL [outer=(11), constraints=(/11: (/NULL - ]; tight)]
+      │    │    │         └── person_id:10 IS NOT NULL [outer=(10), constraints=(/10: (/NULL - ]; tight)]
       │    │    └── filters
       │    │         └── person0_.id:1 = person_id:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    └── aggregations
@@ -1216,11 +1217,12 @@ project
       │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:7!null phones2_.phone_type:9!null phones2_.person_id:10!null phones2_.order_id:11 phones1_.person_id:15!null phones1_.order_id:16!null
       │    │    ├── fd: ()-->(9), (1)-->(2-6), (7)-->(10,11), (1)==(10,15), (10)==(1,15), (15)==(1,10)
       │    │    ├── select
-      │    │    │    ├── columns: phones1_.person_id:15 phones1_.order_id:16!null
+      │    │    │    ├── columns: phones1_.person_id:15!null phones1_.order_id:16!null
       │    │    │    ├── scan phones1_
       │    │    │    │    └── columns: phones1_.person_id:15 phones1_.order_id:16
       │    │    │    └── filters
-      │    │    │         └── phones1_.order_id:16 IS NOT NULL [outer=(16), constraints=(/16: (/NULL - ]; tight)]
+      │    │    │         ├── phones1_.order_id:16 IS NOT NULL [outer=(16), constraints=(/16: (/NULL - ]; tight)]
+      │    │    │         └── phones1_.person_id:15 IS NOT NULL [outer=(15), constraints=(/15: (/NULL - ]; tight)]
       │    │    ├── inner-join (lookup person)
       │    │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:7!null phones2_.phone_type:9!null phones2_.person_id:10!null phones2_.order_id:11
       │    │    │    ├── key columns: [10] = [1]
@@ -1228,7 +1230,7 @@ project
       │    │    │    ├── key: (7)
       │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (7)-->(10,11), (1)==(10), (10)==(1)
       │    │    │    ├── select
-      │    │    │    │    ├── columns: phones2_.id:7!null phones2_.phone_type:9!null phones2_.person_id:10 phones2_.order_id:11
+      │    │    │    │    ├── columns: phones2_.id:7!null phones2_.phone_type:9!null phones2_.person_id:10!null phones2_.order_id:11
       │    │    │    │    ├── key: (7)
       │    │    │    │    ├── fd: ()-->(9), (7)-->(10,11)
       │    │    │    │    ├── scan phones2_
@@ -1236,7 +1238,8 @@ project
       │    │    │    │    │    ├── key: (7)
       │    │    │    │    │    └── fd: (7)-->(9-11)
       │    │    │    │    └── filters
-      │    │    │    │         └── phones2_.phone_type:9 = 'LAND_LINE' [outer=(9), constraints=(/9: [/'LAND_LINE' - /'LAND_LINE']; tight), fd=()-->(9)]
+      │    │    │    │         ├── phones2_.phone_type:9 = 'LAND_LINE' [outer=(9), constraints=(/9: [/'LAND_LINE' - /'LAND_LINE']; tight), fd=()-->(9)]
+      │    │    │    │         └── phones2_.person_id:10 IS NOT NULL [outer=(10), constraints=(/10: (/NULL - ]; tight)]
       │    │    │    └── filters (true)
       │    │    └── filters
       │    │         └── person0_.id:1 = phones1_.person_id:15 [outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]

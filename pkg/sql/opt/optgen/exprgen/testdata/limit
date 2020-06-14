@@ -24,6 +24,7 @@ limit
  │    ├── ordering: +1
  │    ├── limit hint: 10.00
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (1,2)
  │    └── interesting orderings: (+1,+2)
  └── const: 10 [type=int]
 

@@ -84,12 +84,18 @@ inner-join (lookup a)
  ├── key columns: [1] = [4]
  ├── lookup columns are key
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(4)=99, null(4)=0]
- ├── cost: 7069.53
+ ├── cost: 7039.54
  ├── fd: (1)==(4), (4)==(1)
- ├── scan b
- │    ├── columns: x:1
- │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── cost: 1040.02
+ ├── select
+ │    ├── columns: x:1!null
+ │    ├── stats: [rows=990, distinct(1)=100, null(1)=0]
+ │    ├── cost: 1050.03
+ │    ├── scan b
+ │    │    ├── columns: x:1
+ │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    │    └── cost: 1040.02
+ │    └── filters
+ │         └── x:1 IS NOT NULL [outer=(1), constraints=(/1: (/NULL - ]; tight)]
  └── filters (true)
 
 
@@ -282,7 +288,7 @@ limit
  ├── columns: id:1!null sender_id:2!null receiver_id:3!null amount:4!null creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 id:14!null name:15!null gender:16 email:17 first_name:18 last_name:19 creation_date:20!null situation:21 balance:22!null is_blocked:23 id:24!null name:25!null gender:26 email:27 first_name:28 last_name:29 creation_date:30!null situation:31 balance:32!null is_blocked:33
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 2357.55
+ ├── cost: 1502.50545
  ├── key: (1)
  ├── fd: (1)-->(2-13), (14)-->(15-23), (2)==(14), (14)==(2), (24)-->(25-33), (3)==(24), (24)==(3)
  ├── inner-join (lookup wallet)
@@ -290,7 +296,7 @@ limit
  │    ├── key columns: [3] = [24]
  │    ├── lookup columns are key
  │    ├── stats: [rows=980.1, distinct(3)=98.9950071, null(3)=0, distinct(24)=98.9950071, null(24)=0]
- │    ├── cost: 2357.44
+ │    ├── cost: 1502.39545
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-13), (14)-->(15-23), (2)==(14), (14)==(2), (24)-->(25-33), (3)==(24), (24)==(3)
  │    ├── limit hint: 10.00
@@ -299,17 +305,26 @@ limit
  │    │    ├── key columns: [2] = [14]
  │    │    ├── lookup columns are key
  │    │    ├── stats: [rows=990, distinct(1)=628.605476, null(1)=0, distinct(2)=99, null(2)=0, distinct(3)=99.9950071, null(3)=9.9, distinct(4)=99.9950071, null(4)=0, distinct(5)=99.9950071, null(5)=0, distinct(14)=99, null(14)=0, distinct(15)=99.9950071, null(15)=0, distinct(20)=99.9950071, null(20)=0, distinct(22)=99.9950071, null(22)=0]
- │    │    ├── cost: 1739.63
+ │    │    ├── cost: 884.585455
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (14)-->(15-23), (2)==(14), (14)==(2)
  │    │    ├── limit hint: 100.00
- │    │    ├── scan t
- │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
- │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0]
- │    │    │    ├── cost: 504.02
+ │    │    ├── select
+ │    │    │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
+ │    │    │    ├── stats: [rows=990, distinct(1)=990, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=9.9, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0]
+ │    │    │    ├── cost: 264.575455
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-13)
- │    │    │    └── limit hint: 200.00
+ │    │    │    ├── limit hint: 100.00
+ │    │    │    ├── scan t
+ │    │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
+ │    │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(2,3)=1000, null(2,3)=0.1]
+ │    │    │    │    ├── cost: 254.565455
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: (1)-->(2-13)
+ │    │    │    │    └── limit hint: 101.01
+ │    │    │    └── filters
+ │    │    │         └── sender_id:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
  │    │    └── filters (true)
  │    └── filters (true)
  └── 10

@@ -31,16 +31,17 @@ ALTER TABLE def INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         FULL SCAN    ·                   ·
+tree         field         description    columns             ordering
+·            distribution  full           ·                   ·
+·            vectorized    true           ·                   ·
+lookup-join  ·             ·              (a, b, c, d, e, f)  ·
+ │           table         def@primary    ·                   ·
+ │           type          inner          ·                   ·
+ │           equality      (b) = (f)      ·                   ·
+ └── scan    ·             ·              (a, b, c)           ·
+·            table         abc@primary    ·                   ·
+·            spans         FULL SCAN      ·                   ·
+·            filter        b IS NOT NULL  ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
@@ -57,6 +58,7 @@ lookup-join  ·                      ·                (a, b, c, d, e, f)  ·
  └── scan    ·                      ·                (a, b, c)           ·
 ·            table                  abc@primary      ·                   ·
 ·            spans                  FULL SCAN        ·                   ·
+·            filter                 b IS NOT NULL    ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
@@ -91,32 +93,34 @@ lookup-join  ·             ·            (a, b, c, d, e, f)  ·
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- │           pred          @1 >= @5     ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         FULL SCAN    ·                   ·
+tree         field         description    columns             ordering
+·            distribution  full           ·                   ·
+·            vectorized    true           ·                   ·
+lookup-join  ·             ·              (a, b, c, d, e, f)  ·
+ │           table         def@primary    ·                   ·
+ │           type          inner          ·                   ·
+ │           equality      (b) = (f)      ·                   ·
+ │           pred          @1 >= @5       ·                   ·
+ └── scan    ·             ·              (a, b, c)           ·
+·            table         abc@primary    ·                   ·
+·            spans         FULL SCAN      ·                   ·
+·            filter        b IS NOT NULL  ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup-join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- │           pred          @1 >= @5     ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         FULL SCAN    ·                   ·
+tree         field         description    columns             ordering
+·            distribution  full           ·                   ·
+·            vectorized    true           ·                   ·
+lookup-join  ·             ·              (a, b, c, d, e, f)  ·
+ │           table         def@primary    ·                   ·
+ │           type          inner          ·                   ·
+ │           equality      (b) = (f)      ·                   ·
+ │           pred          @1 >= @5       ·                   ·
+ └── scan    ·             ·              (a, b, c)           ·
+·            table         abc@primary    ·                   ·
+·            spans         FULL SCAN      ·                   ·
+·            filter        b IS NOT NULL  ·                   ·
 
 # Verify a distsql plan.
 statement ok
@@ -219,22 +223,23 @@ ALTER TABLE books2 INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
-tree                   field         description        columns                       ordering
-·                      distribution  full               ·                             ·
-·                      vectorized    true               ·                             ·
-distinct               ·             ·                  (title)                       ·
- │                     distinct on   title              ·                             ·
- │                     order key     title              ·                             ·
- └── render            ·             ·                  (title)                       +title
-      │                render 0      title              ·                             ·
-      └── lookup-join  ·             ·                  (title, shelf, title, shelf)  +title
-           │           table         books2@primary     ·                             ·
-           │           type          inner              ·                             ·
-           │           equality      (title) = (title)  ·                             ·
-           │           pred          @2 != @4           ·                             ·
-           └── scan    ·             ·                  (title, shelf)                +title
-·                      table         books@primary      ·                             ·
-·                      spans         FULL SCAN          ·                             ·
+tree                   field         description                      columns                       ordering
+·                      distribution  full                             ·                             ·
+·                      vectorized    true                             ·                             ·
+distinct               ·             ·                                (title)                       ·
+ │                     distinct on   title                            ·                             ·
+ │                     order key     title                            ·                             ·
+ └── render            ·             ·                                (title)                       +title
+      │                render 0      title                            ·                             ·
+      └── lookup-join  ·             ·                                (title, shelf, title, shelf)  +title
+           │           table         books2@primary                   ·                             ·
+           │           type          inner                            ·                             ·
+           │           equality      (title) = (title)                ·                             ·
+           │           pred          (@2 != @4) AND (@4 IS NOT NULL)  ·                             ·
+           └── scan    ·             ·                                (title, shelf)                +title
+·                      table         books@primary                    ·                             ·
+·                      spans         FULL SCAN                        ·                             ·
+·                      filter        shelf IS NOT NULL                ·                             ·
 
 statement ok
 CREATE TABLE authors (name STRING, book STRING)
@@ -303,6 +308,7 @@ render               ·             ·                 (name)               +nam
            └── scan  ·             ·                 (name, book)         ·
 ·                    table         authors@primary   ·                    ·
 ·                    spans         FULL SCAN         ·                    ·
+·                    filter        book IS NOT NULL  ·                    ·
 
 # Cross joins should not be planned as lookup joins.
 query TTTTT colnames
@@ -330,7 +336,7 @@ render           ·             ·               (title, edition, shelf, title, 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkdFr1EAQxt_9K4Z5Upm2l5wVWShENGLKmdTcgULJw_Z2qGvTnbi7AeW4_12S3GEr3qlvmW--35cvmQ2Gby0qXOaL_M0Ket_Cu7r6ANf556vF66KEp2-L5Wr5cfEMdpbnk0H38Yv4AEVZ5jVcVkUJNyJ3IYVq_3TKxkYrDi4ggU_v8zrfL6KNLcPFPuR0kBskdGK41PccUF1jgoTn2BB2XtYcgvhB3oymwnxHNSO0ruvjIDeEa_GMaoNjOCos5US6sxQJDUdt29G2JZQ-_oJC1LeMar6lB8HJ8eCVvmm5Zm3Yn80exWPn7b32P7LdhyHhstMuKDhBwpqdYa8gUUoV5eoVQZYQZCkeapX8T6tLsW5XKvlzqennI-FC5K7v4KtYB-IUZHPKBqbqo4IspWF-Qdk5ZS8PdksfdfvLKWoOnbjA_3SL2bYhZHPL07mD9H7NV17W42umsRq5UTAc4rSdT0PhptVQ8CGcHIXT43B6FJ79BjfbJz8DAAD__0gqE20=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkt9r1EAQx9_9K4Z5Upm2l5wVWShENMWUuKm5iELJQ3oZ6tp0J-5uQDnuf5ckd9iKPfUt8-PzzSdMNui_dahwlebpmwoG18F5WbyHq_TzZf460_D0bbaqVh_yZ7BbeT4vNEP4Is5DpnVawkWRabgWufUxFPunY25NMGLhDCL49C4t0_0gmNAxnO1Djsd2jYRWWtbNHXtUVxgh4SnWhL2TNXsvbmxvpqWs_Y5qQWhsP4SxXROuxTGqDU7hqFDLkfQnMRK2HBrTTWtbQhnCL8iH5oZRLbd0Lzg6HFw11x2X3LTsThYP4rF35q5xP5LdhyHhqm-sV3CEhOemC-wUJDFkK9BFBfpjniNhybYdB5FSKtPVK4IkIkhifEw3-h_dCzF2Zxv92Xa-ChLmIrdDD1_FWBCrIFlSMjLFEEZtGusXlJxS8vJRt_iB219uVLLvxXr-pyMttjUhtzc8_wdeBrfmSyfr6TVzWUzc1GjZh3m6nIvMzqNR8D4cHYTjw3B8EF78BtfbJz8DAAD__wOxGjc=
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -551,18 +557,19 @@ CREATE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                 distribution  full             ·                ·
-·                 vectorized    true             ·                ·
-render            ·             ·                (a)              ·
- │                render 0      a                ·                ·
- └── lookup-join  ·             ·                (a, d, e, a, d)  ·
-      │           table         u@idx            ·                ·
-      │           type          inner            ·                ·
-      │           equality      (d, a) = (d, a)  ·                ·
-      └── scan    ·             ·                (a, d, e)        ·
-·                 table         t@primary        ·                ·
-·                 spans         FULL SCAN        ·                ·
-·                 filter        e = 5            ·                ·
+·                 distribution  full                                               ·                ·
+·                 vectorized    true                                               ·                ·
+render            ·             ·                                                  (a)              ·
+ │                render 0      a                                                  ·                ·
+ └── lookup-join  ·             ·                                                  (a, d, e, a, d)  ·
+      │           table         u@idx                                              ·                ·
+      │           type          inner                                              ·                ·
+      │           equality      (d, a) = (d, a)                                    ·                ·
+      │           pred          @5 IS NOT NULL                                     ·                ·
+      └── scan    ·             ·                                                  (a, d, e)        ·
+·                 table         t@primary                                          ·                ·
+·                 spans         FULL SCAN                                          ·                ·
+·                 filter        ((e = 5) AND (a IS NOT NULL)) AND (d IS NOT NULL)  ·                ·
 
 # Test unique version of same index. (Lookup join should not use column a.)
 statement ok
@@ -600,18 +607,19 @@ CREATE INDEX idx ON u (d, a)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-·                 distribution  full                   ·                      ·
-·                 vectorized    true                   ·                      ·
-render            ·             ·                      (a)                    ·
- │                render 0      a                      ·                      ·
- └── lookup-join  ·             ·                      (a, b, d, e, a, b, d)  ·
-      │           table         u@idx                  ·                      ·
-      │           type          inner                  ·                      ·
-      │           equality      (d, a, b) = (d, a, b)  ·                      ·
-      └── scan    ·             ·                      (a, b, d, e)           ·
-·                 table         t@primary              ·                      ·
-·                 spans         FULL SCAN              ·                      ·
-·                 filter        e = 5                  ·                      ·
+·                 distribution  full                                                                     ·                      ·
+·                 vectorized    true                                                                     ·                      ·
+render            ·             ·                                                                        (a)                    ·
+ │                render 0      a                                                                        ·                      ·
+ └── lookup-join  ·             ·                                                                        (a, b, d, e, a, b, d)  ·
+      │           table         u@idx                                                                    ·                      ·
+      │           type          inner                                                                    ·                      ·
+      │           equality      (d, a, b) = (d, a, b)                                                    ·                      ·
+      │           pred          @7 IS NOT NULL                                                           ·                      ·
+      └── scan    ·             ·                                                                        (a, b, d, e)           ·
+·                 table         t@primary                                                                ·                      ·
+·                 spans         FULL SCAN                                                                ·                      ·
+·                 filter        (((e = 5) AND (a IS NOT NULL)) AND (b IS NOT NULL)) AND (d IS NOT NULL)  ·                      ·
 
 # Test index with middle primary key column explicit and the rest implicit.
 statement ok
@@ -623,18 +631,19 @@ CREATE INDEX idx ON u (d, b)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-·                 distribution  full                   ·                      ·
-·                 vectorized    true                   ·                      ·
-render            ·             ·                      (a)                    ·
- │                render 0      a                      ·                      ·
- └── lookup-join  ·             ·                      (a, b, d, e, a, b, d)  ·
-      │           table         u@idx                  ·                      ·
-      │           type          inner                  ·                      ·
-      │           equality      (d, b, a) = (d, b, a)  ·                      ·
-      └── scan    ·             ·                      (a, b, d, e)           ·
-·                 table         t@primary              ·                      ·
-·                 spans         FULL SCAN              ·                      ·
-·                 filter        e = 5                  ·                      ·
+·                 distribution  full                                                                     ·                      ·
+·                 vectorized    true                                                                     ·                      ·
+render            ·             ·                                                                        (a)                    ·
+ │                render 0      a                                                                        ·                      ·
+ └── lookup-join  ·             ·                                                                        (a, b, d, e, a, b, d)  ·
+      │           table         u@idx                                                                    ·                      ·
+      │           type          inner                                                                    ·                      ·
+      │           equality      (d, b, a) = (d, b, a)                                                    ·                      ·
+      │           pred          @7 IS NOT NULL                                                           ·                      ·
+      └── scan    ·             ·                                                                        (a, b, d, e)           ·
+·                 table         t@primary                                                                ·                      ·
+·                 spans         FULL SCAN                                                                ·                      ·
+·                 filter        (((e = 5) AND (a IS NOT NULL)) AND (b IS NOT NULL)) AND (d IS NOT NULL)  ·                      ·
 
 # Test index with last primary key column explicit and the rest implicit.
 statement ok

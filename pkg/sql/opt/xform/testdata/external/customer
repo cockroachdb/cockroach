@@ -294,7 +294,8 @@ group-by
  │    ├── right ordering: +9
  │    ├── fd: (3)==(9), (9)==(3)
  │    ├── scan r@rides_vehicle_id_idx
- │    │    ├── columns: vehicle_id:3
+ │    │    ├── columns: vehicle_id:3!null
+ │    │    ├── constraint: /3/1: (/NULL - ]
  │    │    └── ordering: +3
  │    ├── scan v@vehicles_id_idx
  │    │    ├── columns: v.id:9!null owner_id:12

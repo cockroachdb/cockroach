@@ -555,10 +555,12 @@ count                               ·                   ·                     
                 └── merge-join      ·                   ·                                      (a, b, c, x, y, z)               ·
                      │              type                right outer                            ·                                ·
                      │              equality            (b, c) = (y, z)                        ·                                ·
+                     │              left cols are key   ·                                      ·                                ·
                      │              mergeJoinOrder      +"(b=y)",+"(c=z)"                      ·                                ·
                      ├── scan       ·                   ·                                      (a, b, c)                        +b,+c
                      │              table               target@target_b_c_key                  ·                                ·
-                     │              spans               FULL SCAN                              ·                                ·
+                     │              spans               /!NULL-                                ·                                ·
+                     │              filter              c IS NOT NULL                          ·                                ·
                      └── distinct   ·                   ·                                      (x, y, z)                        +y,+z
                           │         distinct on         y, z                                   ·                                ·
                           │         nulls are distinct  ·                                      ·                                ·

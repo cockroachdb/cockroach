@@ -126,12 +126,20 @@ inner-join (lookup abcd)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
  │    ├── key columns: [1 2] = [4 5]
- │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(4)=0.970299, null(4)=0, distinct(5)=1e-10, null(5)=0]
+ │    ├── stats: [rows=0.9791199, distinct(1)=0.9791199, null(1)=0, distinct(2)=0.9791199, null(2)=0, distinct(4)=0.9791199, null(4)=0, distinct(5)=0.9791199, null(5)=0, distinct(4,5)=0.9791199, null(4,5)=0]
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
- │    ├── scan small
- │    │    ├── columns: m:1(int) n:2(int)
- │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
- │    └── filters (true)
+ │    ├── select
+ │    │    ├── columns: m:1(int!null) n:2(int!null)
+ │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
+ │    │    ├── scan small
+ │    │    │    ├── columns: m:1(int) n:2(int)
+ │    │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
+ │    │    └── filters
+ │    │         ├── m:1 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ │    │         └── n:2 IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    └── filters
+ │         ├── a:4 IS NOT NULL [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │         └── b:5 IS NOT NULL [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
  └── filters
       └── c:6 > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
 
@@ -449,7 +457,7 @@ inner-join (hash)
  │    ├── fd: ()-->(6)
  │    ├── scan wxyz
  │    │    ├── columns: w:4(int) x:5(int) y:6(int) z:7(int)
- │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10, distinct(6)=11, null(6)=0]
+ │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10, distinct(6)=11, null(6)=0, distinct(5,6)=1000, null(5,6)=0]
  │    │        histogram(6)=  0 10  90 900
  │    │                     <--- 0 ---- 10
  │    └── filters
