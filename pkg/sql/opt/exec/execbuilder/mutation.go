@@ -996,7 +996,36 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 // TODO(nvanbenschoten): implement this method to match on appropriate Upsert
 // expression trees and apply a row-level locking mode.
 func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) bool {
-	return false
+	if !b.evalCtx.SessionData.ImplicitSelectForUpdate {
+		return false
+	}
+
+	// Try to match the Upsert's input expression against the pattern:
+	//
+	//   [Project] (LeftJoin Scan | LookupJoin) [Project] Values
+	//
+	input := ups.Input
+	if proj, ok := input.(*memo.ProjectExpr); ok {
+		input = proj.Input
+	}
+	switch join := input.(type) {
+	case *memo.LeftJoinExpr:
+		if _, ok := join.Right.(*memo.ScanExpr); !ok {
+			return false
+		}
+		input = join.Left
+
+	case *memo.LookupJoinExpr:
+		input = join.Input
+
+	default:
+		return false
+	}
+	if proj, ok := input.(*memo.ProjectExpr); ok {
+		input = proj.Input
+	}
+	_, ok := input.(*memo.ValuesExpr)
+	return ok
 }
 
 // tryApplyImplicitLockingToDeleteInput determines whether or not the builder

@@ -1560,6 +1560,11 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
 
+	var locking *tree.LockingItem
+	if b.forceForUpdateLocking {
+		locking = forUpdateLocking
+	}
+
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinOpToJoinType(join.JoinType),
 		input.root,
@@ -1570,6 +1575,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		lookupOrdinals,
 		onExpr,
 		res.reqOrdering(join),
+		locking,
 	)
 	if err != nil {
 		return execPlan{}, err

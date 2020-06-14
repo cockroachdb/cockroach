@@ -244,6 +244,7 @@ define LookupJoin {
     LookupCols exec.TableColumnOrdinalSet
     OnCond tree.TypedExpr
     ReqOrdering exec.OutputOrdering
+    Locking *tree.LockingItem
 }
 
 # InvertedJoin performs a lookup join into an inverted index.
