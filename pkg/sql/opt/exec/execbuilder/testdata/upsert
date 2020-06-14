@@ -164,6 +164,49 @@ upsert                                  ·                    ·
 ·                                       estimated row count  1 (missing stats)
 ·                                       table                indexed@primary
 ·                                       spans                /1-/1/#
+·                                       locking strength     for update
+
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1), (2), (3), (4)
+]
+----
+·                                        distribution           local
+·                                        vectorized             false
+upsert                                   ·                      ·
+ │                                       estimated row count    0 (missing stats)
+ │                                       into                   indexed(a, b, c, d)
+ │                                       auto commit            ·
+ └── project                             ·                      ·
+      └── render                         ·                      ·
+           │                             estimated row count    4 (missing stats)
+           │                             render 0               column8 > 0
+           │                             render 1               column1
+           │                             render 2               column7
+           │                             render 3               column8
+           │                             render 4               column9
+           │                             render 5               a
+           │                             render 6               b
+           │                             render 7               c
+           │                             render 8               d
+           └── lookup join (left outer)  ·                      ·
+                │                        estimated row count    4 (missing stats)
+                │                        table                  indexed@primary
+                │                        equality               (column1) = (a)
+                │                        equality cols are key  ·
+                │                        locking strength       for update
+                └── render               ·                      ·
+                     │                   estimated row count    4
+                     │                   render 0               column1 + 10
+                     │                   render 1               CAST(NULL AS INT8)
+                     │                   render 2               10
+                     │                   render 3               column1
+                     └── values          ·                      ·
+·                                        size                   1 column, 4 rows
+·                                        row 0, expr 0          1
+·                                        row 1, expr 0          2
+·                                        row 2, expr 0          3
+·                                        row 3, expr 0          4
 
 # Drop index and verify that existing values no longer need to be fetched.
 statement ok

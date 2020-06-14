@@ -497,6 +497,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attr("equality cols are key", "")
 		}
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
+		e.emitLockingPolicy(a.Locking)
 
 	case interleavedJoinOp:
 		a := n.args.(*interleavedJoinArgs)
