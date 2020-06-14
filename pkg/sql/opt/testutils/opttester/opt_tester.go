@@ -576,7 +576,7 @@ func formatRuleSet(r RuleSet) string {
 }
 
 func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
-	fillInLazyProps(e)
+	fillInLazyProps(&ot.evalCtx, e)
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
@@ -597,20 +597,20 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 }
 
 // Fills in lazily-derived properties (for display).
-func fillInLazyProps(e opt.Expr) {
+func fillInLazyProps(evalCtx *tree.EvalContext, e opt.Expr) {
 	if rel, ok := e.(memo.RelExpr); ok {
 		// Derive columns that are candidates for pruning.
 		norm.DerivePruneCols(rel)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(rel)
+		norm.DeriveRejectNullCols(evalCtx, rel)
 
 		// Make sure the interesting orderings are calculated.
 		xform.DeriveInterestingOrderings(rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		fillInLazyProps(e.Child(i))
+		fillInLazyProps(evalCtx, e.Child(i))
 	}
 }
 

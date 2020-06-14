@@ -2963,3 +2963,93 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 		Locking: sp.Locking,
 	}
 }
+
+// IsPushingDownNullRejectionFiltersPossible checks the given join operator
+// to see if it is possible to derive not-null columns by on-condition and push
+// down null rejection filters to input without change output result or stepping
+// into infinite recursion
+func (c *CustomFuncs) IsPushingDownNullRejectionFiltersPossible(
+	joinOperator opt.Operator, on memo.FiltersExpr, left memo.RelExpr, right memo.RelExpr,
+) bool {
+	// NullRejectCols coming from outer join operator may not reflect null rejection
+	// filters that has been pushed in some situation, such lost of information can lead
+	// lead to an infinite recursion, so we give up the chance to push down null rejection
+	// filters if it is the case
+	leftIsOuterJoin := false
+	rightIsOuterJoin := false
+	switch left.Op() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.FullJoinOp:
+		leftIsOuterJoin = true
+	}
+	switch right.Op() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.FullJoinOp:
+		rightIsOuterJoin = true
+	}
+
+	switch joinOperator {
+	case opt.InnerJoinOp:
+		if leftIsOuterJoin || rightIsOuterJoin || c.DerivePushableNullRejectionForJoin(joinOperator, on, left, right).Empty() {
+			return false
+		}
+	case opt.LeftJoinOp:
+		if rightIsOuterJoin || c.DerivePushableNullRejectionForJoin(joinOperator, on, left, right).Empty() {
+			return false
+		}
+	case opt.RightJoinOp:
+		if leftIsOuterJoin || c.DerivePushableNullRejectionForJoin(joinOperator, on, left, right).Empty() {
+			return false
+		}
+	}
+	return true
+}
+
+// DerivePushableNullRejectionForJoin derive null rejections that can be pushed down to
+// inputs without change output result. It returns columns from input that can be made not-null
+func (c *CustomFuncs) DerivePushableNullRejectionForJoin(
+	joinOperator opt.Operator, on memo.FiltersExpr, left memo.RelExpr, right memo.RelExpr,
+) opt.ColSet {
+
+	leftRejectNullCols := c.RejectNullCols(left)
+	rightRejectNullCols := c.RejectNullCols(right)
+	notNullColsInFilters := norm.ExtractAllNotNullColsFromFilters(c.e.evalCtx, on)
+	var notNullCols opt.ColSet
+	switch joinOperator {
+	case opt.InnerJoinOp:
+		notNullCols = notNullColsInFilters.Intersection(leftRejectNullCols.Union(rightRejectNullCols))
+	case opt.LeftJoinOp:
+		notNullCols = notNullColsInFilters.Intersection(rightRejectNullCols)
+	case opt.RightJoinOp:
+		notNullCols = notNullColsInFilters.Intersection(leftRejectNullCols)
+	}
+	return notNullCols
+}
+
+// RejectNullsForExpr wrap the given expression in select expression with null rejection
+// filters construct from given not-null columns
+func (c *CustomFuncs) RejectNullsForExpr(expr memo.RelExpr, notNullCols opt.ColSet) memo.RelExpr {
+	rejectNullCols := c.RejectNullCols(expr)
+	if rejectNullCols.Empty() {
+		return expr
+	}
+	colToRejectNull := rejectNullCols.Intersection(notNullCols)
+	nullRejectionFilter := c.nullRejectionFilters(colToRejectNull)
+	return c.e.f.ConstructSelect(
+		expr,
+		nullRejectionFilter,
+	)
+}
+
+// nullRejectionFilters use the given columns set to construct null-rejection filters.
+//
+func (c *CustomFuncs) nullRejectionFilters(colToRejectNull opt.ColSet) []memo.FiltersItem {
+	var filters memo.FiltersExpr
+	colToRejectNull.ForEach(func(col opt.ColumnID) {
+		filterItem := c.e.f.ConstructFiltersItem(
+			c.e.f.ConstructIsNot(
+				c.e.f.ConstructVariable(col),
+				c.e.f.ConstructNull(c.CustomFuncs.AnyType()),
+			))
+		filters = append(filters, filterItem)
+	})
+	return filters
+}

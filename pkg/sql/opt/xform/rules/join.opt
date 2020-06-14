@@ -238,3 +238,62 @@
     (SortFilters (ExtractUnboundConditions $newOn $cols))
     (EmptyJoinPrivate)
 )
+
+# PushDownNullRejectionForJoin derive not-null cols based on current filters in
+# join operator and push down null rejection filters to inputs. It handles statement
+# like these:
+#
+#   SELECT * FROM t1 JOIN t2 ON t1.x = t2.x
+#
+# and construct:
+#
+#   SELECT * FROM (SELECT * from t1 WHERE t1.x IS NOT NULL) as t1_ JOIN (SELECT * from t2 where t2.x IS NOT NULL) as t2_ ON t1_.x = t2_.x
+#
+# The condition t1.x = t.x implies that t1.x IS NOT NULL AND t.x IS NOT NULL, we
+# may want to construct is-not-null filters and add them into current filter express.
+# By doing this, we may push these filters down to inputs, which may bring potential
+# benefits if input contain a lot of null values.
+#
+# This rule applies to three join operator: InnerJoin, LeftJoin, RightJoin. For InnerJoin
+# there is possibility for us to push down is-not-null filters to both left input and right
+# input or only singe side. For outer join, we can only push is-not-null filters to another side,
+# that is to say, we push filters to right side in LeftJoin and left side in RightJoin.Consider
+# following statement:
+#
+#    [1] SELECT * FROM t1 LEFT JOIN t2 ON t1.x = t2.x
+#
+# even thought the on-condition implies that t1.x is not null, but if we push down it into left:
+#
+#    [2] SELECT * FROM (select * from t1 where t1.x is not null) as t1_ LEFT JOIN t2 on t1.x=t2.x
+#
+# we lost some output rows whose t1.x is null, while statement [1] remains them. So we don't push down
+# is-not-null filters to another side in outer join
+#
+[PushDownNullRejectionForJoin, Explore]
+(InnerJoin | LeftJoin | RightJoin
+    $left:*
+    $right:*
+    $on:* &
+        (IsPushingDownNullRejectionFiltersPossible
+            (OpName)
+            $on
+            $left
+            $right
+        )
+    $private:*
+)
+=>
+((OpName)
+    (RejectNullsForExpr
+        $left
+        $notNullCols:(DerivePushableNullRejectionForJoin
+            (OpName)
+            $on
+            $left
+            $right
+        )
+    )
+    (RejectNullsForExpr $right $notNullCols)
+    $on
+    $private
+)

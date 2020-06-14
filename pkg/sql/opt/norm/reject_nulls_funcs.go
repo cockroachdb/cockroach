@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -21,7 +22,7 @@ import (
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
 func (c *CustomFuncs) RejectNullCols(in memo.RelExpr) opt.ColSet {
-	return DeriveRejectNullCols(in)
+	return DeriveRejectNullCols(c.f.evalCtx, in)
 }
 
 // HasNullRejectingFilter returns true if the filter causes some of the columns
@@ -63,7 +64,7 @@ func (c *CustomFuncs) NullRejectAggVar(
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
-func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
+func DeriveRejectNullCols(evalCtx *tree.EvalContext, in memo.RelExpr) opt.ColSet {
 	// Lazily calculate and store the RejectNullCols value.
 	relProps := in.Relational()
 	if relProps.IsAvailable(props.RejectNullCols) {
@@ -76,17 +77,26 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		// Pass through null-rejecting columns from both inputs.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr)))
 		}
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(1).(memo.RelExpr)))
+		}
+
+		if expr, ok := in.(*memo.InnerJoinExpr); ok {
+			notNullColsFromFilters := ExtractAllNotNullColsFromFilters(evalCtx, expr.On)
+			relProps.Rule.RejectNullCols.Difference(notNullColsFromFilters)
+		}
+		if expr, ok := in.(*memo.InnerJoinApplyExpr); ok {
+			notNullColsFromFilters := ExtractAllNotNullColsFromFilters(evalCtx, expr.On)
+			relProps.Rule.RejectNullCols.Difference(notNullColsFromFilters)
 		}
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Pass through null-rejection columns from left input, and request null-
 		// rejection on right columns.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr)))
 		}
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(1).(memo.RelExpr).Relational().OutputCols)
 
@@ -95,7 +105,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		// rejection on left columns.
 		relProps.Rule.RejectNullCols = in.Child(0).(memo.RelExpr).Relational().OutputCols
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(1).(memo.RelExpr)))
 		}
 
 	case opt.FullJoinOp:
@@ -103,17 +113,61 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		relProps.Rule.RejectNullCols = relProps.OutputCols
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		relProps.Rule.RejectNullCols = deriveGroupByRejectNullCols(in)
+		relProps.Rule.RejectNullCols = deriveGroupByRejectNullCols(evalCtx, in)
 
 	case opt.ProjectOp:
 		// Pass through all null-rejection columns that the Project passes through.
 		// The PushSelectIntoProject rule is able to push the IS NOT NULL filter
 		// below the Project for these columns.
-		rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+		rejectNullCols := DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr))
 		relProps.Rule.RejectNullCols = relProps.OutputCols.Intersection(rejectNullCols)
+
+	case opt.ScanOp:
+		relProps.Rule.RejectNullCols = deriveRejectNullColsFromScan(evalCtx, in.(*memo.ScanExpr))
+
+	case opt.SelectOp:
+		expr := in.(*memo.SelectExpr)
+		notNullColsFromFilters := ExtractAllNotNullColsFromFilters(evalCtx, expr.Filters)
+		relProps.Rule.RejectNullCols = DeriveRejectNullCols(evalCtx, expr.Input)
+		relProps.Rule.RejectNullCols = relProps.Rule.RejectNullCols.Difference(notNullColsFromFilters)
+
 	}
 
 	return relProps.Rule.RejectNullCols
+}
+
+// ExtractAllNotNullColsFromFilters extract all not null columns implied
+// by null rejection filters contained in given filters expression
+//
+func ExtractAllNotNullColsFromFilters(
+	evalCtx *tree.EvalContext, filters memo.FiltersExpr,
+) (notNullCols opt.ColSet) {
+	for i := range filters {
+		constraints := filters[i].ScalarProps().Constraints
+		if constraints == nil {
+			continue
+		}
+		notNullCols = notNullCols.Union(constraints.ExtractNotNullCols(evalCtx))
+	}
+	return
+}
+
+// deriveRejectNullColsFromScan return the set of output columns from scan that are
+// eligible for null rejection.
+func deriveRejectNullColsFromScan(evalCtx *tree.EvalContext, scanExpr *memo.ScanExpr) opt.ColSet {
+	md := scanExpr.Memo().Metadata()
+	notNullCols := opt.ColSet{}
+	tab := md.Table(scanExpr.Table)
+	for i := 0; i < tab.ColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() {
+			notNullCols.Add(scanExpr.Table.ColumnID(i))
+		}
+	}
+	constraint := scanExpr.Constraint
+	if constraint != nil {
+		notNullCols = notNullCols.Union(constraint.ExtractNotNullCols(evalCtx))
+	}
+	return scanExpr.Relational().OutputCols.Difference(notNullCols)
 }
 
 // deriveGroupByRejectNullCols returns the set of GroupBy columns that are
@@ -133,7 +187,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 //      ignored because all rows in each group must have the same value for this
 //      column, so it doesn't matter which rows are filtered.
 //
-func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
+func deriveGroupByRejectNullCols(evalCtx *tree.EvalContext, in memo.RelExpr) opt.ColSet {
 	input := in.Child(0).(memo.RelExpr)
 	aggs := *in.Child(1).(*memo.AggregationsExpr)
 
@@ -164,7 +218,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 		savedInColID = inColID
 
-		if !DeriveRejectNullCols(input).Contains(inColID) {
+		if !DeriveRejectNullCols(evalCtx, input).Contains(inColID) {
 			// Input has not requested null rejection on the input column.
 			return opt.ColSet{}
 		}
