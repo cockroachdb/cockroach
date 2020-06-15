@@ -201,7 +201,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
 	for iter.Next() {
 		pred := tabMeta.PartialIndexPredicates[iter.IndexOrdinal()]
-		remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred)
+		remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, c.e.f)
 		if !ok {
 			// The filters do not imply the predicate, so the partial index
 			// cannot be used.
@@ -328,7 +328,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectInvertedIndexes|rejectPartialIndexes)
 	for iter.Next() {
 		// TODO(mgartner): Generate constrained scans for partial indexes if
-		//  they are implied by the filter.
+		// they are implied by the filter.
 
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
