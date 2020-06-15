@@ -551,7 +551,8 @@ func (r *Replica) leaseStatus(
 			// use the lease nor do we want to attempt to acquire it.
 			if err != nil {
 				if leaseStatusLogLimiter.ShouldLog() {
-					log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %+v", err)
+					log.Warningf(context.TODO(), "%s: can't determine lease status of %s due to node liveness error: %+v",
+						r, lease.Replica, err)
 				}
 			}
 			status.State = kvserverpb.LeaseState_ERROR
