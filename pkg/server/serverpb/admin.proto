@@ -439,8 +439,8 @@ message DecommissionStatusRequest {
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
-// DecommissionRequest requests the server to set the Decommissioning flag on
-// all nodes specified by 'node_id' to the value of 'CommissionStatus'.
+// DecommissionRequest requests the server to set the commission status on
+// all nodes specified by 'node_id' to the value of CommissionStatus.
 //
 // If no 'node_id' is given, targets the recipient node.
 //

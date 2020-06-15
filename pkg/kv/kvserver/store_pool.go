@@ -131,16 +131,19 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 //  - At tExp, the IsLive() method starts returning false. The state becomes
 //    UNAVAILABLE (or stays DECOMISSIONING or UNAVAILABLE if draining).
 //  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//
+// TODO(irfansharif): Reconsider usage of kvserverpb.NodeLivenessStatus. It's
+// yet another representation of liveness commission status.
 func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
-		if l.DeprecatedDecommissioning {
+		if l.DecommissioningOrDecommissioned() {
 			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
 		}
 		return kvserverpb.NodeLivenessStatus_DEAD
 	}
-	if l.DeprecatedDecommissioning {
+	if l.DecommissioningOrDecommissioned() {
 		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
 	}
 	if l.Draining {

@@ -59,7 +59,7 @@ export const NODE_RESTART = "node_restart";
 export const NODE_DECOMMISSIONING = "node_decommissioning";
 // Recorded when a node is marked as decommissioned.
 export const NODE_DECOMMISSIONED = "node_decommissioned";
-// Recorded when a decommissioned node is recommissioned.
+// Recorded when a decommissioning node is recommissioned.
 export const NODE_RECOMMISSIONED = "node_recommissioned";
 // Recorded when a cluster setting is changed.
 export const SET_CLUSTER_SETTING = "set_cluster_setting";

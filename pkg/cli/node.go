@@ -187,8 +187,8 @@ GROUP BY node_id`
 	const decommissionQuery = `
 SELECT node_id AS id,
        ranges AS gossiped_replicas,
-       decommissioning AS is_decommissioning,
-	   commission_status AS commission_status,
+       commission_status = 'decommissioning' OR commission_status = 'decommissioned' as is_decommissioning,
+       commission_status AS commission_status,
        draining AS is_draining
 FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`
 
@@ -413,7 +413,7 @@ func runDecommissionNodeImpl(
 		allDecommissioning := true
 		for _, status := range resp.Status {
 			replicaCount += status.ReplicaCount
-			allDecommissioning = allDecommissioning && status.CommissionStatus.ToBooleanForm()
+			allDecommissioning = allDecommissioning && status.CommissionStatus.DecommissioningOrDecommissioned()
 			// XXX: Getting false is_decommissioning, and unknown commission_status.
 			// XXX: Write tests for what we expect partway through
 			// decommissioning. End of decommissioning.
@@ -472,7 +472,7 @@ func decommissionResponseValueToRows(
 			strconv.FormatInt(int64(node.NodeID), 10),
 			strconv.FormatBool(node.IsLive),
 			strconv.FormatInt(node.ReplicaCount, 10),
-			strconv.FormatBool(node.CommissionStatus.ToBooleanForm()),
+			strconv.FormatBool(node.CommissionStatus.DecommissioningOrDecommissioned()),
 			node.CommissionStatus.String(),
 			strconv.FormatBool(node.Draining),
 		})

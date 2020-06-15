@@ -1805,7 +1805,7 @@ func (s *Server) Decommission(
 	case kvserverpb.CommissionStatus_DECOMMISSIONED_:
 		eventType = sql.EventLogNodeDecommissioned
 	case kvserverpb.CommissionStatus_COMMISSIONED_:
-		eventType = sql.EventLogNodeRecommissioned
+		eventType = sql.EventLogNodeCommissioned
 	default:
 		panic("unexpected target commission status")
 	}

@@ -41,10 +41,14 @@ func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
 	return !now.Before(deadAsOf)
 }
 
+func (l *Liveness) DecommissioningOrDecommissioned() bool {
+	return l.CommissionStatus.DecommissioningOrDecommissioned()
+}
+
 func (l Liveness) String() string {
 	var extra string
-	if l.Draining || l.DeprecatedDecommissioning {
-		extra = fmt.Sprintf(" drain:%t decom:%t", l.Draining, l.DeprecatedDecommissioning)
+	if l.Draining || l.DecommissioningOrDecommissioned() {
+		extra = fmt.Sprintf(" drain:%t comm:%s dep:%t", l.Draining, l.CommissionStatus.String(), l.DeprecatedDecommissioning) // XXX: Remove this last one.
 	}
 	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
 }
@@ -75,14 +79,14 @@ func CommissionStatusFromBooleanForm(decommissioning bool) CommissionStatus {
 	return CommissionStatus_COMMISSIONED_
 }
 
-// ToBooleanForm converts the CommissionStatus to the deprecated boolean representation
-// used in the v20.1 liveness proto definition.
+// DecommissioningOrDecommissioned converts the CommissionStatus to the
+// deprecated boolean representation used in the v20.1 liveness proto
+// definition.
 //
 // TODO(irfansharif): Remove this once v20.2 is cut, as we no longer need to be
 // compatible with the deprecated boolean decommissioning representation used by
 // v20.1 nodes.
-// XXX: Rename to IsDeprecatedDecommissioning?
-func (c CommissionStatus) ToBooleanForm() bool {
+func (c CommissionStatus) DecommissioningOrDecommissioned() bool {
 	return c == CommissionStatus_DECOMMISSIONING_ || c == CommissionStatus_DECOMMISSIONED_
 }
 

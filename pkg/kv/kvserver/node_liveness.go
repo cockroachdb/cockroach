@@ -41,7 +41,7 @@ import (
 var (
 	// ErrNoLivenessRecord is returned when asking for liveness information
 	// about a node for which nothing is known.
-	ErrNoLivenessRecord = errors.New("node not in the liveness table")
+	ErrNoLivenessRecord = errors.New("node not in the liveness table") // XXX: Make sure to only be checking for this error, and not, empty liveness.
 
 	// errChangeCommissionStatusFailed is returned when we're not able to
 	// conditionally write the target commissioning status. It's safe to retry
@@ -169,7 +169,8 @@ type NodeLiveness struct {
 
 	mu struct {
 		syncutil.RWMutex
-		callbacks         []IsLiveCallback
+		callbacks []IsLiveCallback
+		// XXX: TODO: Invariant: Has to store reconciled state.
 		nodes             map[roachpb.NodeID]LivenessRecord
 		heartbeatCallback HeartbeatCallback
 		// Before heartbeating, we write to each of these engines to avoid
@@ -332,18 +333,24 @@ func (nl *NodeLiveness) SetCommissionStatus(
 			raw:      kv.Value,
 		}
 
-		// We may have discovered a Liveness not yet received via Gossip. Offer
-		// it to make sure that when we actually try to update the liveness, the
-		// previous view is correct. This, too, is required to de-flake
-		// TestNodeLivenessDecommissionAbsent.
-		//
-		// XXX: We need our inmemory store to be the reconciled version. Is it
-		// fine for use to reconcile on the fly? The mutations for
-		// oldLivenessRec.Liveness here and in setCommissionStatusInternal are
-		// hard to follow.
-		olrCopy := oldLivenessRec
-		olrCopy.Liveness = reconcileMixedVersionLiveness(oldLivenessRec.Liveness)
-		nl.maybeUpdate(olrCopy)
+		// XXX: I want to maybe update with the reconciled version, but
+		// commissionStatusInternal expects empty liveness, if none existed.
+		// Need to work off a copy.
+		{
+			empty := oldLiveness == kvserverpb.Liveness{}
+			// We may have read a liveness record written by a v20.1 node, so we
+			// reconcile.
+			oldLivenessRecCopy := oldLivenessRec // XXX: Does this deep copy?
+			reconcileMixedVersionLivenessV2(&oldLivenessRecCopy.Liveness)
+			if empty && (oldLivenessRecCopy.Liveness != kvserverpb.Liveness{}) {
+				panic("changed the copy - good")
+			}
+			// We may have discovered a Liveness not yet received via Gossip. Offer
+			// it to make sure that when we actually try to update the liveness, the
+			// previous view is correct. This, too, is required to de-flake
+			// TestNodeLivenessDecommissionAbsent.
+			nl.maybeUpdate(oldLivenessRecCopy)
+		}
 
 		return nl.setCommissionStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus)
 	}
@@ -379,14 +386,15 @@ func (nl *NodeLiveness) setDrainingInternal(
 		oldRaw:      oldLivenessRec.raw,
 		ignoreCache: true,
 	}
-	if oldLivenessRec.Liveness != (kvserverpb.Liveness{}) {
-		update.new = oldLivenessRec.Liveness
-	} else {
+	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
 		// Liveness record didn't previously exist, so we create one.
+		// XXX: Expects empty liveness.
 		update.new = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
 		}
+	} else {
+		update.new = oldLivenessRec.Liveness
 	}
 
 	if reporter != nil && drain && !update.new.Draining {
@@ -396,11 +404,14 @@ func (nl *NodeLiveness) setDrainingInternal(
 	update.new.Draining = drain
 	// We may have read a liveness record written by a v20.1 node, so we
 	// reconcile.
-	update.new = reconcileMixedVersionLiveness(update.new)
+	reconcileMixedVersionLivenessV2(&update.new)
 
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
-		actual.Liveness = reconcileMixedVersionLiveness(actual.Liveness)
+		// We may have read a liveness record written by a v20.1 node, so we
+		// reconcile.
+		reconcileMixedVersionLivenessV2(&actual.Liveness)
 		nl.maybeUpdate(actual)
+
 		if actual.Draining == update.new.Draining {
 			return errNodeDrainingSet
 		}
@@ -415,6 +426,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		}
 		return err
 	}
+
 	nl.maybeUpdate(written)
 	return nil
 }
@@ -454,6 +466,7 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 	var newLiveness kvserverpb.Liveness
 	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
 		// Liveness record didn't previously exist, so we create one.
+		// XXX: Expects empty liveness.
 		newLiveness = kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
@@ -466,7 +479,7 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 	newLiveness.CommissionStatus = targetStatus
 	// We backfill in the boolean representation to ensure v20.1 nodes are able
 	// to interpret it correctly.
-	newLiveness.DeprecatedDecommissioning = targetStatus.ToBooleanForm()
+	newLiveness.DeprecatedDecommissioning = targetStatus.DecommissioningOrDecommissioned()
 	update := livenessUpdate{
 		new:         newLiveness,
 		old:         oldLivenessRec.Liveness,
@@ -488,6 +501,16 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 	// sneaking in from under us. Why can't we just blindly retry? Do the whole
 	// read+write all over again? It's to dedup events in the event log.
 	// (newLiveness.CommissionStatus != oldLivenessRec.CommissionStatus)
+
+	// decommissioned -> targetStatus
+	// true -> deprecated
+
+	// reconcileMixedVersionLivenessV2(&update.new)
+
+	// decommissioned -> targetStatus
+	// true -> deprecated
+
+	assert(update.new)
 
 	statusChanged = true
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
@@ -592,7 +615,6 @@ func (nl *NodeLiveness) StartHeartbeat(
 						if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 							log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 						}
-						liveness = reconcileMixedVersionLiveness(liveness) // XXX: Because we can expect empty liveness record.
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 							if errors.Is(err, ErrEpochIncremented) {
 								log.Infof(ctx, "%s; retrying", err)
@@ -699,20 +721,22 @@ func (nl *NodeLiveness) heartbeatInternal(
 	update := livenessUpdate{
 		old: liveness,
 	}
-	if liveness != (kvserverpb.Liveness{}) {
+	if liveness == (kvserverpb.Liveness{}) {
+		// Liveness record didn't previously exist, so we create one.
+		// XXX: Expects empty liveness.
+		update.new = kvserverpb.Liveness{
+			NodeID: nodeID,
+			Epoch:  1,
+		}
+	} else {
 		update.new = liveness
 		if incrementEpoch {
 			update.new.Epoch++
 			// Clear draining field.
 			update.new.Draining = false
 		}
-	} else {
-		// Liveness record didn't previously exist, so we create one.
-		update.new = kvserverpb.Liveness{
-			NodeID: nodeID,
-			Epoch:  1,
-		}
 	}
+
 	// We may have read a liveness record written by a v20.1 node, so we
 	// reconcile.
 	//
@@ -720,7 +744,8 @@ func (nl *NodeLiveness) heartbeatInternal(
 	// representation? A: Heartbeats are only ever sent out by live nodes, and
 	// operators aren't allowed to deploy clusters such that there's a 20.1
 	// node heartbeating a 21.1 cluster. Still, can we foolproof this somehow?
-	update.new = reconcileMixedVersionLiveness(update.new)
+	reconcileMixedVersionLivenessV2(&update.new)
+
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
 	{
@@ -736,8 +761,12 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		// Update liveness to actual value on mismatch.
-		actual.Liveness = reconcileMixedVersionLiveness(actual.Liveness)
+
+		// We may have read a liveness record written by a v20.1 node, so we
+		// reconcile.
+		reconcileMixedVersionLivenessV2(&actual.Liveness)
 		nl.maybeUpdate(actual)
+
 		// If the actual liveness is different than expected, but is
 		// considered live, treat the heartbeat as a success. This can
 		// happen when the periodic heartbeater races with a concurrent
@@ -780,6 +809,7 @@ func (nl *NodeLiveness) Self() (kvserverpb.Liveness, error) {
 	if err != nil {
 		return kvserverpb.Liveness{}, err
 	}
+	assert(rec.Liveness)
 	return rec.Liveness, err
 }
 
@@ -788,7 +818,12 @@ func (nl *NodeLiveness) Self() (kvserverpb.Liveness, error) {
 func (nl *NodeLiveness) SelfEx() (LivenessRecord, error) {
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
-	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
+
+	rec, err := nl.getLivenessLocked(nl.gossip.NodeID.Get())
+	if err != ErrNoLivenessRecord {
+		assert(rec.Liveness)
+	}
+	return rec, err
 }
 
 // IsLiveMapEntry encapsulates data about current liveness for a
@@ -810,8 +845,9 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	defer nl.mu.RUnlock()
 	now := nl.clock.Now().GoTime()
 	for nID, l := range nl.mu.nodes {
+		assert(l.Liveness)
 		isLive := l.IsLive(now)
-		if !isLive && l.DeprecatedDecommissioning {
+		if !isLive && l.DecommissioningOrDecommissioned() {
 			// This is a node that was completely removed. Skip over it.
 			continue
 		}
@@ -831,6 +867,7 @@ func (nl *NodeLiveness) GetLivenesses() []kvserverpb.Liveness {
 	defer nl.mu.RUnlock()
 	livenesses := make([]kvserverpb.Liveness, 0, len(nl.mu.nodes))
 	for _, l := range nl.mu.nodes {
+		assert(l.Liveness)
 		livenesses = append(livenesses, l.Liveness)
 	}
 	return livenesses
@@ -849,6 +886,7 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (LivenessRecord, erro
 
 func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (LivenessRecord, error) {
 	if l, ok := nl.mu.nodes[nodeID]; ok {
+		assert(l.Liveness)
 		return l, nil
 	}
 	return LivenessRecord{}, ErrNoLivenessRecord
@@ -899,12 +937,13 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness kvserverpb.
 		old: liveness,
 	}
 	update.new.Epoch++
-	update.new = reconcileMixedVersionLiveness(update.new)
+	reconcileMixedVersionLivenessV2(&update.new)
+
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
-		defer func() {
-			actual.Liveness = reconcileMixedVersionLiveness(actual.Liveness)
-			nl.maybeUpdate(actual)
-		}()
+		// We may have read a liveness record written by a v20.1 node, so we
+		// reconcile.
+		reconcileMixedVersionLivenessV2(&actual.Liveness)
+		nl.maybeUpdate(actual)
 
 		if actual.Epoch > liveness.Epoch {
 			return ErrEpochAlreadyIncremented
@@ -956,6 +995,7 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 func (nl *NodeLiveness) updateLiveness(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual LivenessRecord) error,
 ) (LivenessRecord, error) {
+	assert(update.new)
 	for {
 		// Before each attempt, ensure that the context has not expired.
 		if err := ctx.Err(); err != nil {
@@ -1080,8 +1120,12 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 // registered callbacks if the node became live in the process.
 func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 	nl.mu.Lock()
-	// Note that this works fine even if `old` is empty.
-	old := nl.mu.nodes[new.NodeID]
+	old, ok := nl.mu.nodes[new.NodeID]
+	if ok {
+		assert(old.Liveness)
+	}
+	assert(new.Liveness)
+
 	should := shouldReplaceLiveness(old.Liveness, new.Liveness)
 	var callbacks []IsLiveCallback
 	if should {
@@ -1102,12 +1146,15 @@ func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 	}
 }
 
+// shouldReplaceLiveness checks to see if the new liveness, is infact, newer
+// than the old liveness.
 func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
+	// XXX: Expects empty liveness.
 	if (old == kvserverpb.Liveness{}) {
 		return true
 	}
 
-	// Compare first Epoch, and no change there, Expiration.
+	// Compare Epoch, and if no change there, Expiration.
 	if old.Epoch != new.Epoch {
 		return old.Epoch < new.Epoch
 	}
@@ -1123,7 +1170,9 @@ func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
 	// number.
 	//
 	// See #18219.
-	return old.Draining != new.Draining || old.DeprecatedDecommissioning != new.DeprecatedDecommissioning
+	return old.Draining != new.Draining ||
+		old.DeprecatedDecommissioning != new.DeprecatedDecommissioning ||
+		old.CommissionStatus != new.CommissionStatus
 }
 
 // livenessGossipUpdate is the gossip callback used to keep the
@@ -1138,8 +1187,7 @@ func (nl *NodeLiveness) livenessGossipUpdate(_ string, content roachpb.Value) {
 	// We may be in a mixed version cluster with v20.1 nodes, and thus be
 	// receiving liveness gossip with the old proto representation. We have to
 	// reconcile it with the new proto representation, if so.
-	liveness = reconcileMixedVersionLiveness(liveness)
-
+	reconcileMixedVersionLivenessV2(&liveness)
 	nl.maybeUpdate(LivenessRecord{Liveness: liveness, raw: &content})
 }
 
@@ -1178,6 +1226,7 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	}
 	var liveNodes int64
 	for _, l := range nl.mu.nodes {
+		assert(l.Liveness)
 		if l.IsLive(now) {
 			liveNodes++
 		}
@@ -1209,32 +1258,18 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	defer nl.mu.RUnlock()
 	var count int
 	for _, l := range nl.mu.nodes {
-		if !l.DeprecatedDecommissioning {
+		assert(l.Liveness)
+		if !l.DecommissioningOrDecommissioned() {
 			count++
 		}
 	}
 	return count
 }
 
-// reconcileMixedVersionLiveness is able to reconcile Liveness protos
-// across both v20.1 and v20.2 representations. v20.1 used the now deprecated
-// decommissioning bool to represent commissioning status. v20.2 uses a
-// dedicated enum instead. reconcileMixedVersionLiveness then generates a
-// liveness record that can be understood by both v20.1 and v20.2 nodes (by
-// keeping the representations internally consistent). If what's passed in is
-// the deprecated representation, the boolean state is considered authoritative.
-// If what's passed in is the newer representation, the enum state is considered
-// authoritative.
-//
-// TODO(irfansharif): Remove this once v20.2 is cut.
-func reconcileMixedVersionLiveness(old kvserverpb.Liveness) (new kvserverpb.Liveness) {
-	new = old
-	if !old.CommissionStatus.Unknown() {
-		// Liveness is from node running v20.2, we fill in the deprecated
-		// boolean decommissioning state.
-		new.DeprecatedDecommissioning = old.CommissionStatus.ToBooleanForm()
-	} else {
-		// Liveness is from node running v20.1, we fill in the commission state.
+func reconcileMixedVersionLivenessV2(l *kvserverpb.Liveness) {
+	if l.CommissionStatus.Unknown() {
+		// Liveness is from node running v20.1, or is an empty
+		// kvserverpb.Liveness, we fill in the commission state.
 		// XXX: Check all instances of maybeUpdate. I run into this panic on a
 		// fresh v20.2 node, and I shouldn't. I should only ever see the new
 		// proto in that case. Improve the interface for
@@ -1245,8 +1280,32 @@ func reconcileMixedVersionLiveness(old kvserverpb.Liveness) (new kvserverpb.Live
 		// (need to confirm), and implicitly dealing with empty liveness
 		// records.
 		//panic("here")
-		new.CommissionStatus = kvserverpb.CommissionStatusFromBooleanForm(old.DeprecatedDecommissioning)
+		l.CommissionStatus = kvserverpb.CommissionStatusFromBooleanForm(l.DeprecatedDecommissioning)
+	} else {
+		// Liveness is from node running v20.2, we fill in the deprecated
+		// boolean decommissioning state.
+		l.DeprecatedDecommissioning = l.DecommissioningOrDecommissioned()
+	}
+}
+
+// assert checks that the liveness record is internally consistent (i.e. it's
+// deprecated v20.1 representation is consistent with the v20.2 representation).
+//
+// XXX: TODO: Rename.
+// XXX: Won't work for empty liveness.
+func assert(l kvserverpb.Liveness) {
+	if l.CommissionStatus.Unknown() {
+		panic("invalid commission status")
 	}
 
-	return new
+	err := fmt.Sprintf("inconsistent liveness representation: %v", l.String())
+	if l.CommissionStatus.DecommissioningOrDecommissioned() {
+		if !l.DeprecatedDecommissioning {
+			panic(err)
+		}
+	} else {
+		if l.DeprecatedDecommissioning {
+			panic(err)
+		}
+	}
 }

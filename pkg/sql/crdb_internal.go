@@ -2734,7 +2734,6 @@ CREATE TABLE crdb_internal.gossip_liveness (
   epoch           	INT NOT NULL,
   expiration      	STRING NOT NULL,
   draining        	BOOL NOT NULL,
-  decommissioning 	BOOL NOT NULL,
   commission_status STRING NOT NULL,
   updated_at      	TIMESTAMP
 )
@@ -2796,8 +2795,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 				tree.NewDInt(tree.DInt(l.Epoch)),
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
-				tree.MakeDBool(tree.DBool(l.DeprecatedDecommissioning)),
-				tree.NewDString(l.CommissionStatus.String()), // XXX: Make this string form nicer.
+				tree.NewDString(l.CommissionStatus.String()),
 				updatedTSDatum,
 			); err != nil {
 				return err
