@@ -1338,10 +1338,6 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	var eqCols opt.ColSet
-	for i := range join.KeyCols {
-		eqCols.Add(join.Table.ColumnID(idx.Column(i).Ordinal))
-	}
 
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinOpToJoinType(join.JoinType),
