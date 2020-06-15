@@ -290,8 +290,7 @@ func testSideloadingSideloadedStorage(
 		if err == nil {
 			t.Fatalf("sideloaded directory should not have been removable due to extra file %s", nonRemovableFile)
 		}
-		expectedTruncateError := "while purging %q: remove %s: directory not empty"
-		if err.Error() != fmt.Sprintf(expectedTruncateError, ss.(*diskSideloadStorage).dir, ss.(*diskSideloadStorage).dir) {
+		if !strings.HasSuffix(strings.ToLower(err.Error()), "directory not empty") {
 			t.Fatalf("error truncating sideloaded storage: %+v", err)
 		}
 		// Now remove extra file and let truncation proceed to remove directory.
