@@ -230,6 +230,17 @@ func descriptorsMatchingTargets(
 			ret.descs = append(ret.descs, resolver.descByID[id])
 		}
 	}
+	getTypeByID := func(id sqlbase.ID) (*sqlbase.TypeDescriptor, error) {
+		desc, ok := resolver.descByID[id]
+		if !ok {
+			return nil, errors.Newf("type with ID %d not found", id)
+		}
+		typeDesc := desc.GetType()
+		if typeDesc == nil {
+			return nil, errors.Newf("descriptor %d is not a type, but a %T", id, desc.Union)
+		}
+		return typeDesc, nil
+	}
 
 	// Process all the TABLE requests.
 	// Pulling in a table needs to pull in the underlying database too.
@@ -281,7 +292,11 @@ func descriptorsMatchingTargets(
 				ret.descs = append(ret.descs, desc)
 			}
 			// Get all the types used by this table.
-			for _, id := range tableDesc.GetAllReferencedTypeIDs() {
+			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(getTypeByID)
+			if err != nil {
+				return ret, err
+			}
+			for _, id := range typeIDs {
 				maybeAddTypeDesc(id)
 			}
 
@@ -328,7 +343,11 @@ func descriptorsMatchingTargets(
 					ret.descs = append(ret.descs, desc)
 				}
 				// Get all the types used by this table.
-				for _, id := range table.GetAllReferencedTypeIDs() {
+				typeIDs, err := table.GetAllReferencedTypeIDs(getTypeByID)
+				if err != nil {
+					return ret, err
+				}
+				for _, id := range typeIDs {
 					maybeAddTypeDesc(id)
 				}
 			} else if typ := desc.GetType(); typ != nil {

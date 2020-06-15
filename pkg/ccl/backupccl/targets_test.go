@@ -49,6 +49,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		mkTyp := func(desc typDesc) sqlbase.Descriptor {
 			return *sqlbase.NewImmutableTypeDescriptor(desc).DescriptorProto()
 		}
+		typeExpr := "'hello'::@15 = 'hello'::@15"
+		typeArrExpr := "'hello'::@16 = 'hello'::@16"
 		descriptors = []sqlbase.Descriptor{
 			mkDB(0, "system"),
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
@@ -65,6 +67,71 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			mkTable(sqlbase.TableDescriptor{ParentID: 7, ID: 11, Name: "enum_arr_tbl", Columns: []sqlbase.ColumnDescriptor{{ID: 0, Type: types.MakeArray(types.MakeEnum(8, 9))}}}),
 			mkTyp(sqlbase.TypeDescriptor{ParentID: 7, ID: 12, Name: "enum2", ArrayTypeID: 13, Kind: sqlbase.TypeDescriptor_ENUM}),
 			mkTyp(sqlbase.TypeDescriptor{ParentID: 7, ID: 13, Name: "_enum2", Kind: sqlbase.TypeDescriptor_ALIAS, Alias: types.MakeEnum(12, 13)}),
+			// Create some user defined types that are used in table expressions.
+			mkDB(14, "udts_expr"),
+			mkTyp(sqlbase.TypeDescriptor{ParentID: 14, ID: 15, Name: "enum1", ArrayTypeID: 9, Kind: sqlbase.TypeDescriptor_ENUM}),
+			mkTyp(sqlbase.TypeDescriptor{ParentID: 14, ID: 16, Name: "_enum1", Kind: sqlbase.TypeDescriptor_ALIAS, Alias: types.MakeEnum(15, 16)}),
+			// Create a table with a default expression.
+			mkTable(tbDesc{
+				ID:       17,
+				Name:     "def",
+				ParentID: 14,
+				Columns: []sqlbase.ColumnDescriptor{
+					{
+						Name:        "a",
+						DefaultExpr: &typeExpr,
+						Type:        types.Bool,
+					},
+				},
+			}),
+			// Create a table with a computed column.
+			mkTable(tbDesc{
+				ID:       18,
+				Name:     "comp",
+				ParentID: 14,
+				Columns: []sqlbase.ColumnDescriptor{
+					{
+						Name:        "a",
+						DefaultExpr: &typeExpr,
+						Type:        types.Bool,
+					},
+				},
+			}),
+			// Create a table with a partial index.
+			mkTable(tbDesc{
+				ID:       19,
+				Name:     "pi",
+				ParentID: 14,
+				Indexes: []sqlbase.IndexDescriptor{
+					{
+						Name:      "idx",
+						Predicate: typeExpr,
+					},
+				},
+			}),
+			// Create a table with a check expression.
+			mkTable(tbDesc{
+				ID:       20,
+				Name:     "checks",
+				ParentID: 14,
+				Checks: []*sqlbase.TableDescriptor_CheckConstraint{
+					{
+						Expr: typeExpr,
+					},
+				},
+			}),
+			mkTable(tbDesc{
+				ID:       21,
+				Name:     "def_arr",
+				ParentID: 14,
+				Columns: []sqlbase.ColumnDescriptor{
+					{
+						Name:        "a",
+						DefaultExpr: &typeArrExpr,
+						Type:        types.Bool,
+					},
+				},
+			}),
 		}
 	}
 
@@ -140,6 +207,12 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"", "TABLE udts.enum_tbl", []string{"udts", "enum1", "_enum1", "enum_tbl"}, nil, ``},
 		// Backing up enum_arr_tbl should also pull in both the enum and its array type.
 		{"", "TABLE udts.enum_arr_tbl", []string{"udts", "enum1", "_enum1", "enum_arr_tbl"}, nil, ``},
+		// Test collecting expressions that are present in table expressions.
+		{"", "TABLE udts_expr.def", []string{"udts_expr", "enum1", "_enum1", "def"}, nil, ``},
+		{"", "TABLE udts_expr.def_arr", []string{"udts_expr", "enum1", "_enum1", "def_arr"}, nil, ``},
+		{"", "TABLE udts_expr.comp", []string{"udts_expr", "enum1", "_enum1", "comp"}, nil, ``},
+		{"", "TABLE udts_expr.pi", []string{"udts_expr", "enum1", "_enum1", "pi"}, nil, ``},
+		{"", "TABLE udts_expr.checks", []string{"udts_expr", "enum1", "_enum1", "checks"}, nil, ``},
 	}
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
