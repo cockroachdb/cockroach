@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node 5node-exp-planning
 
 # These tests are different from explain_analyze because they require manual
 # data placement.

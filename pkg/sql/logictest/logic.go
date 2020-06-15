@@ -412,6 +412,8 @@ type testClusterConfig struct {
 	overrideVectorize string
 	// if non-empty, overrides the default automatic statistics mode.
 	overrideAutoStats string
+	// if non-empty, overrides the default experimental DistSQL planning mode.
+	overrideExperimentalDistSQLPlanning string
 	// if set, queries using distSQL processors or vectorized operators that can
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
@@ -468,13 +470,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize: "201auto",
 	},
 	{
-		name:                "fakedist",
-		numNodes:            3,
-		useFakeSpanResolver: true,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-	},
-	{
 		name:                "local-mixed-19.2-20.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
@@ -482,6 +477,20 @@ var logicTestConfigs = []testClusterConfig{
 		bootstrapVersion:    roachpb.Version{Major: 19, Minor: 2},
 		binaryVersion:       roachpb.Version{Major: 20, Minor: 1},
 		disableUpgrade:      true,
+	},
+	{
+		name:                                "local-exp-planning",
+		numNodes:                            1,
+		overrideDistSQLMode:                 "off",
+		overrideAutoStats:                   "false",
+		overrideExperimentalDistSQLPlanning: "on",
+	},
+	{
+		name:                "fakedist",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
 	},
 	{
 		name:                "fakedist-vec-off",
@@ -528,6 +537,14 @@ var logicTestConfigs = []testClusterConfig{
 		skipShort:           true,
 	},
 	{
+		name:                                "fakedist-exp-planning",
+		numNodes:                            3,
+		useFakeSpanResolver:                 true,
+		overrideDistSQLMode:                 "on",
+		overrideAutoStats:                   "false",
+		overrideExperimentalDistSQLPlanning: "on",
+	},
+	{
 		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
@@ -564,6 +581,13 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats:   "false",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
+	},
+	{
+		name:                                "5node-exp-planning",
+		numNodes:                            5,
+		overrideDistSQLMode:                 "on",
+		overrideAutoStats:                   "false",
+		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
 		name:     "3node-tenant",
@@ -1345,6 +1369,14 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			// See #37751 for details.
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if cfg.overrideExperimentalDistSQLPlanning != "" {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.experimental_distsql_planning = $1::string", cfg.overrideExperimentalDistSQLPlanning,
 			); err != nil {
 				t.Fatal(err)
 			}
