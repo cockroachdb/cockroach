@@ -412,12 +412,12 @@ func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec st
 	return fmt.Sprintf("%s = %s(%s)", targetElem, o.overloadBase.OpStr, vElem)
 }
 
-func (b *argWidthOverloadBase) GoTypeSliceName() string {
-	switch b.CanonicalTypeFamily {
+func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
+	switch canonicalTypeFamily {
 	case types.BytesFamily:
 		return "*coldata.Bytes"
 	case types.IntFamily:
-		switch b.Width {
+		switch width {
 		case 16:
 			return "[]int16"
 		case 32:
@@ -425,15 +425,19 @@ func (b *argWidthOverloadBase) GoTypeSliceName() string {
 		case 64, anyWidth:
 			return "[]int64"
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", b.Width))
+			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", width))
 			// This code is unreachable, but the compiler cannot infer that.
 			return ""
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "coldata.DatumVec"
 	default:
-		return "[]" + toPhysicalRepresentation(b.CanonicalTypeFamily, b.Width)
+		return "[]" + toPhysicalRepresentation(canonicalTypeFamily, width)
 	}
+}
+
+func (b *argWidthOverloadBase) GoTypeSliceName() string {
+	return goTypeSliceName(b.CanonicalTypeFamily, b.Width)
 }
 
 func get(family types.Family, target, i string) string {
@@ -454,15 +458,19 @@ func (o *lastArgWidthOverload) ReturnGet(target, i string) string {
 	return get(typeconv.TypeFamilyToCanonicalTypeFamily(o.RetType.Family()), target, i)
 }
 
-// CopyVal is a function that should only be used in templates.
-func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
-	switch b.CanonicalTypeFamily {
+func copyVal(canonicalTypeFamily types.Family, dest, src string) string {
+	switch canonicalTypeFamily {
 	case types.BytesFamily:
 		return fmt.Sprintf("%[1]s = append(%[1]s[:0], %[2]s...)", dest, src)
 	case types.DecimalFamily:
 		return fmt.Sprintf("%s.Set(&%s)", dest, src)
 	}
 	return fmt.Sprintf("%s = %s", dest, src)
+}
+
+// CopyVal is a function that should only be used in templates.
+func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
+	return copyVal(b.CanonicalTypeFamily, dest, src)
 }
 
 func set(family types.Family, target, i, new string) string {

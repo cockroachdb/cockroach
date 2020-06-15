@@ -105,6 +105,7 @@ message ProcessorCoreUnion {
   optional BulkRowWriterSpec bulkRowWriter = 28;
   optional InvertedFiltererSpec invertedFilterer = 29;
   optional InvertedJoinerSpec invertedJoiner = 30;
+  optional BackupDataSpec backupData = 31;
 
   reserved 6, 12;
 }

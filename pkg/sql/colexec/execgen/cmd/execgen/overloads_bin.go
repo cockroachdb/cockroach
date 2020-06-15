@@ -199,6 +199,21 @@ func registerBinOpOutputTypes() {
 	}
 }
 
+func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
+	opStr := op.String()
+	if op == tree.Bitxor {
+		// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
+		// we override the former.
+		opStr = "^"
+	}
+	return &overloadBase{
+		kind:  binaryOverload,
+		Name:  execgen.BinaryOpName[op],
+		BinOp: op,
+		OpStr: opStr,
+	}
+}
+
 func populateBinOpOverloads() {
 	registerBinOpOutputTypes()
 
@@ -218,20 +233,8 @@ func populateBinOpOverloads() {
 	})
 
 	for _, op := range allBinaryOperators {
-		opStr := op.String()
-		if op == tree.Bitxor {
-			// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
-			// we override the former.
-			opStr = "^"
-		}
-		ob := &overloadBase{
-			kind:  binaryOverload,
-			Name:  execgen.BinaryOpName[op],
-			BinOp: op,
-			OpStr: opStr,
-		}
 		sameTypeBinaryOpToOverloads[op] = populateTwoArgsOverloads(
-			ob, binOpOutputTypes[op],
+			newBinaryOverloadBase(op), binOpOutputTypes[op],
 			func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
 				if b, ok := customizer.(binOpTypeCustomizer); ok {
 					lawo.AssignFunc = b.getBinOpAssignFunc()
@@ -458,6 +461,63 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.OpStr))
+		}
+
+		if err := t.Execute(&buf, args); err != nil {
+			colexecerror.InternalError(err)
+		}
+		return buf.String()
+	}
+}
+
+// getBinOpAssignFuncWithPromotedReturnType returns assignFunc that performs
+// a binary operation on integers and returns the result of requested
+// returnType. Note that intermediate computations are upcasted to int64
+// regardless of the returnType's width.
+func (c intCustomizer) getBinOpAssignFuncWithPromotedReturnType(returnType *types.T) assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		// TODO(yuzefovich): it seems like all type binary type customizers
+		// only use BinOp field of lastArgWidthOverload. Consider changing
+		// the signature of assignFunc to take that instead of the whole
+		// struct.
+		if typeconv.TypeFamilyToCanonicalTypeFamily(returnType.Family()) != types.IntFamily {
+			colexecerror.InternalError("non integer return type is not supported")
+		}
+		var conversionStr string
+		switch returnType.Width() {
+		case 16:
+			conversionStr = "int16"
+		case 32:
+			conversionStr = "int32"
+		default:
+			// Both operands are upcasted to int64, so their sum will already
+			// be of the desired type.
+			conversionStr = ""
+		}
+		args := map[string]string{
+			"Target":     targetElem,
+			"Left":       fmt.Sprintf("int64(%s)", leftElem),
+			"Right":      fmt.Sprintf("int64(%s)", rightElem),
+			"Conversion": conversionStr,
+		}
+		buf := strings.Builder{}
+		var t *template.Template
+
+		switch op.overloadBase.BinOp {
+
+		case tree.Plus:
+			t = template.Must(template.New("").Parse(`
+				{
+					result := {{.Conversion}}({{.Left}} + {{.Right}})
+					if (result < {{.Left}}) != ({{.Right}} < 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					{{.Target}} = result
+				}
+			`))
+
+		default:
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp))
 		}
 
 		if err := t.Execute(&buf, args); err != nil {

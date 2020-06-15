@@ -14,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -129,16 +130,18 @@ func newAggregateFuncsAlloc(
 			funcAllocs[i], err = newAnyNotNullAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_AVG:
 			funcAllocs[i], err = newAvgAggAlloc(allocator, aggTyps[i][0], allocSize)
-		case execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT:
+		case execinfrapb.AggregatorSpec_SUM:
 			funcAllocs[i], err = newSumAggAlloc(allocator, aggTyps[i][0], allocSize)
+		case execinfrapb.AggregatorSpec_SUM_INT:
+			funcAllocs[i], err = newSumIntAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
 			funcAllocs[i] = newCountRowsAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_COUNT:
 			funcAllocs[i] = newCountAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_MIN:
-			funcAllocs[i], err = newMinAggAlloc(allocator, aggTyps[i][0], allocSize)
+			funcAllocs[i] = newMinAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_MAX:
-			funcAllocs[i], err = newMaxAggAlloc(allocator, aggTyps[i][0], allocSize)
+			funcAllocs[i] = newMaxAggAlloc(allocator, aggTyps[i][0], allocSize)
 		case execinfrapb.AggregatorSpec_BOOL_AND:
 			funcAllocs[i] = newBoolAndAggAlloc(allocator, allocSize)
 		case execinfrapb.AggregatorSpec_BOOL_OR:
@@ -147,7 +150,7 @@ func newAggregateFuncsAlloc(
 		// function, make sure to account for the memory under that struct in
 		// its constructor.
 		default:
-			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
+			return nil, errors.AssertionFailedf("didn't find aggregateFuncAlloc for %s", aggFns[i].String())
 		}
 
 		if err != nil {
@@ -187,31 +190,14 @@ func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 func makeAggregateFuncsOutputTypes(
 	aggTyps [][]*types.T, aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]*types.T, error) {
+	var err error
 	outTyps := make([]*types.T, len(aggFns))
-
-	for i := range aggFns {
-		// Set the output type of the aggregate.
-		switch aggFns[i] {
-		case execinfrapb.AggregatorSpec_COUNT_ROWS, execinfrapb.AggregatorSpec_COUNT:
-			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
-			// should come with their own output types, somehow.
-			outTyps[i] = types.Int
-		case
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_AVG,
-			execinfrapb.AggregatorSpec_SUM,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_MIN,
-			execinfrapb.AggregatorSpec_MAX,
-			execinfrapb.AggregatorSpec_BOOL_AND,
-			execinfrapb.AggregatorSpec_BOOL_OR:
-			// Output types are the input types for now.
-			outTyps[i] = aggTyps[i][0]
-		default:
-			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
+	for i, aggFn := range aggFns {
+		_, outTyps[i], err = execinfrapb.GetAggregateInfo(aggFn, aggTyps[i]...)
+		if err != nil {
+			return nil, err
 		}
 	}
-
 	return outTyps, nil
 }
 
@@ -219,72 +205,164 @@ func makeAggregateFuncsOutputTypes(
 // corresponding to each aggregation function.
 func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 	aggTyps := make([][]*types.T, len(aggCols))
-
 	for aggIdx := range aggCols {
 		aggTyps[aggIdx] = make([]*types.T, len(aggCols[aggIdx]))
 		for i, colIdx := range aggCols[aggIdx] {
 			aggTyps[aggIdx][i] = typs[colIdx]
 		}
 	}
-
 	return aggTyps
 }
 
-// isAggregateSupported returns whether the aggregate function that operates on
+// isAggregateSupported checks whether the aggregate function that operates on
 // columns of types 'inputTypes' (which can be empty in case of COUNT_ROWS) is
-// supported.
-func isAggregateSupported(
-	allocator *colmem.Allocator, aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
-) (bool, error) {
-	switch aggFn {
-	case execinfrapb.AggregatorSpec_SUM:
-		switch inputTypes[0].Family() {
-		case types.IntFamily:
-			// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
-			// at the end, mod issues with overflow. Perhaps to avoid the overflow
-			// issues, at first, we could plan SUM for all types besides Int64.
-			return false, errors.Newf("sum on int cols not supported (use sum_int)")
-		}
-	case execinfrapb.AggregatorSpec_SUM_INT:
-		// TODO(yuzefovich): support this case through vectorize.
-		if inputTypes[0].Width() != 64 {
-			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
+// supported and returns an error if it isn't.
+func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T) error {
+	supported := false
+	for _, supportedAggFn := range SupportedAggFns {
+		if aggFn == supportedAggFn {
+			supported = true
+			break
 		}
 	}
+	if !supported {
+		return errors.Errorf("unsupported columnar aggregate function %s", aggFn.String())
+	}
+	_, err := makeAggregateFuncsOutputTypes(
+		[][]*types.T{inputTypes},
+		[]execinfrapb.AggregatorSpec_Func{aggFn},
+	)
+	return err
+}
 
-	// We're only interested in resolving the aggregate functions and will not
-	// be actually creating them with the alloc, so we use 0 as the allocation
-	// size.
-	_, err := newAggregateFuncsAlloc(
-		allocator,
-		[][]*types.T{inputTypes},
-		[]execinfrapb.AggregatorSpec_Func{aggFn},
-		0, /* allocSize */
-	)
-	if err != nil {
-		return false, err
+type aggAllocBase struct {
+	allocator *colmem.Allocator
+	allocSize int64
+}
+
+func newAvgAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch t.Family() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &avgInt16AggAlloc{aggAllocBase: allocBase}, nil
+		case 32:
+			return &avgInt32AggAlloc{aggAllocBase: allocBase}, nil
+		default:
+			return &avgInt64AggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.DecimalFamily:
+		return &avgDecimalAggAlloc{aggAllocBase: allocBase}, nil
+	case types.FloatFamily:
+		return &avgFloat64AggAlloc{aggAllocBase: allocBase}, nil
+	case types.IntervalFamily:
+		return &avgIntervalAggAlloc{aggAllocBase: allocBase}, nil
+	default:
+		return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
 	}
-	outputTypes, err := makeAggregateFuncsOutputTypes(
-		[][]*types.T{inputTypes},
-		[]execinfrapb.AggregatorSpec_Func{aggFn},
-	)
-	if err != nil {
-		return false, err
+}
+
+func newSumAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch t.Family() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &sumInt16AggAlloc{aggAllocBase: allocBase}, nil
+		case 32:
+			return &sumInt32AggAlloc{aggAllocBase: allocBase}, nil
+		default:
+			return &sumInt64AggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.DecimalFamily:
+		return &sumDecimalAggAlloc{aggAllocBase: allocBase}, nil
+	case types.FloatFamily:
+		return &sumFloat64AggAlloc{aggAllocBase: allocBase}, nil
+	case types.IntervalFamily:
+		return &sumIntervalAggAlloc{aggAllocBase: allocBase}, nil
+	default:
+		return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 	}
-	_, retType, err := execinfrapb.GetAggregateInfo(aggFn, inputTypes...)
-	if err != nil {
-		return false, err
+}
+
+func newSumIntAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch t.Family() {
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &sumIntInt16AggAlloc{aggAllocBase: allocBase}, nil
+		case 32:
+			return &sumIntInt32AggAlloc{aggAllocBase: allocBase}, nil
+		default:
+			return &sumIntInt64AggAlloc{aggAllocBase: allocBase}, nil
+		}
+	default:
+		return nil, errors.Errorf("unsupported sum_int agg type %s", t.Name())
 	}
-	// The columnar aggregates will return the same physical output type as their
-	// input. However, our current builtin resolution might say that the return
-	// type is the canonical for the family (for example, MAX on INT4 is said to
-	// return INT8), so we explicitly check whether the type the columnar
-	// aggregate returns and the type the planning code will expect it to return
-	// are the same. If they are not, we fallback to row-by-row engine.
-	if !retType.Identical(outputTypes[0]) {
-		// TODO(yuzefovich): support this case through vectorize. Probably it needs
-		// to be done at the same time as #38845.
-		return false, errors.Newf("aggregates with different input and output types are not supported")
+}
+
+func newMinAggAlloc(allocator *colmem.Allocator, t *types.T, allocSize int64) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		return &minBoolAggAlloc{aggAllocBase: allocBase}
+	case types.BytesFamily:
+		return &minBytesAggAlloc{aggAllocBase: allocBase}
+	case types.DecimalFamily:
+		return &minDecimalAggAlloc{aggAllocBase: allocBase}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &minInt16AggAlloc{aggAllocBase: allocBase}
+		case 32:
+			return &minInt32AggAlloc{aggAllocBase: allocBase}
+		default:
+			return &minInt64AggAlloc{aggAllocBase: allocBase}
+		}
+	case types.FloatFamily:
+		return &minFloat64AggAlloc{aggAllocBase: allocBase}
+	case types.TimestampTZFamily:
+		return &minTimestampAggAlloc{aggAllocBase: allocBase}
+	case types.IntervalFamily:
+		return &minIntervalAggAlloc{aggAllocBase: allocBase}
+	default:
+		return &minDatumAggAlloc{aggAllocBase: allocBase}
 	}
-	return true, nil
+}
+
+func newMaxAggAlloc(allocator *colmem.Allocator, t *types.T, allocSize int64) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		return &maxBoolAggAlloc{aggAllocBase: allocBase}
+	case types.BytesFamily:
+		return &maxBytesAggAlloc{aggAllocBase: allocBase}
+	case types.DecimalFamily:
+		return &maxDecimalAggAlloc{aggAllocBase: allocBase}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &maxInt16AggAlloc{aggAllocBase: allocBase}
+		case 32:
+			return &maxInt32AggAlloc{aggAllocBase: allocBase}
+		default:
+			return &maxInt64AggAlloc{aggAllocBase: allocBase}
+		}
+	case types.FloatFamily:
+		return &maxFloat64AggAlloc{aggAllocBase: allocBase}
+	case types.TimestampTZFamily:
+		return &maxTimestampAggAlloc{aggAllocBase: allocBase}
+	case types.IntervalFamily:
+		return &maxIntervalAggAlloc{aggAllocBase: allocBase}
+	default:
+		return &maxDatumAggAlloc{aggAllocBase: allocBase}
+	}
 }

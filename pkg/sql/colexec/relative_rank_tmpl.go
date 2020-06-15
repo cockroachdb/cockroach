@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -78,7 +79,7 @@ func NewRelativeRankOperator(
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_PERCENT_RANK:
-		if partitionColIdx != columnOmitted {
+		if partitionColIdx != tree.NoColumnIdx {
 			return &percentRankWithPartitionOp{
 				relativeRankInitFields: rrInitFields,
 			}, nil
@@ -87,7 +88,7 @@ func NewRelativeRankOperator(
 			relativeRankInitFields: rrInitFields,
 		}, nil
 	case execinfrapb.WindowerSpec_CUME_DIST:
-		if partitionColIdx != columnOmitted {
+		if partitionColIdx != tree.NoColumnIdx {
 			return &cumeDistWithPartitionOp{
 				relativeRankInitFields: rrInitFields,
 			}, nil
