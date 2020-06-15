@@ -1197,19 +1197,138 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	return true
 }
 
+// ForEachExprStringInTableDesc runs a closure for each expression string
+// within a TableDescriptor. The closure takes in a string pointer so that
+// it can mutate the TableDescriptor if desired.
+func ForEachExprStringInTableDesc(desc *TableDescriptor, f func(expr *string) error) error {
+	// Helpers for each schema element type that can contain an expression.
+	doCol := func(c *ColumnDescriptor) error {
+		if c.HasDefault() {
+			if err := f(c.DefaultExpr); err != nil {
+				return err
+			}
+		}
+		if c.IsComputed() {
+			if err := f(c.ComputeExpr); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	doIndex := func(i *IndexDescriptor) error {
+		if i.IsPartial() {
+			return f(&i.Predicate)
+		}
+		return nil
+	}
+	doCheck := func(c *TableDescriptor_CheckConstraint) error {
+		return f(&c.Expr)
+	}
+
+	// Process columns.
+	for i := range desc.Columns {
+		if err := doCol(&desc.Columns[i]); err != nil {
+			return err
+		}
+	}
+
+	// Process indexes.
+	if err := doIndex(&desc.PrimaryIndex); err != nil {
+		return err
+	}
+	for i := range desc.Indexes {
+		if err := doIndex(&desc.Indexes[i]); err != nil {
+			return err
+		}
+	}
+
+	// Process checks.
+	for i := range desc.Checks {
+		if err := doCheck(desc.Checks[i]); err != nil {
+			return err
+		}
+	}
+
+	// Process all mutations.
+	for _, mut := range desc.Mutations {
+		if c := mut.GetColumn(); c != nil {
+			if err := doCol(c); err != nil {
+				return err
+			}
+		}
+		if i := mut.GetIndex(); i != nil {
+			if err := doIndex(i); err != nil {
+				return err
+			}
+		}
+		if c := mut.GetConstraint(); c != nil &&
+			c.ConstraintType == ConstraintToUpdate_CHECK {
+			if err := doCheck(&c.Check); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
 // this table references.
-func (desc *TableDescriptor) GetAllReferencedTypeIDs() IDs {
-	var result IDs
-	for _, c := range desc.Columns {
-		result = append(result, GetTypeDescriptorClosure(c.Type)...)
+func (desc *TableDescriptor) GetAllReferencedTypeIDs(
+	getType func(ID) (*TypeDescriptor, error),
+) (IDs, error) {
+	// All serialized expressions within a table descriptor are serialized
+	// with type annotations as ID's, so this visitor will collect them all.
+	visitor := &tree.TypeCollectorVisitor{
+		IDs: make(map[uint32]struct{}),
+	}
+
+	addIDsInExpr := func(exprStr *string) error {
+		expr, err := parser.ParseExpr(*exprStr)
+		if err != nil {
+			return err
+		}
+		expr.Walk(visitor)
+		return nil
+	}
+
+	if err := ForEachExprStringInTableDesc(desc, addIDsInExpr); err != nil {
+		return nil, err
+	}
+
+	// For each of the collected type IDs in the table descriptor expressions,
+	// collect the closure of ID's referenced.
+	ids := make(map[ID]struct{})
+	for id := range visitor.IDs {
+		typDesc, err := getType(ID(id))
+		if err != nil {
+			return nil, err
+		}
+		for child := range typDesc.GetIDClosure() {
+			ids[child] = struct{}{}
+		}
+	}
+
+	// Now add all of the column types in the table.
+	addIDsInColumn := func(c *ColumnDescriptor) {
+		for id := range GetTypeDescriptorClosure(c.Type) {
+			ids[id] = struct{}{}
+		}
+	}
+	for i := range desc.Columns {
+		addIDsInColumn(&desc.Columns[i])
 	}
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
-			result = append(result, GetTypeDescriptorClosure(c.Type)...)
+			addIDsInColumn(c)
 		}
 	}
-	return result
+
+	// Construct the output.
+	result := make(IDs, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+	return result, nil
 }
 
 func (desc *MutableTableDescriptor) initIDs() {
