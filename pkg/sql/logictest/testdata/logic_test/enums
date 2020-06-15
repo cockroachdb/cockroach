@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(50049)
 
 statement ok
 SET experimental_enable_enums=true;

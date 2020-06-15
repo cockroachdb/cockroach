@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1400,7 +1401,7 @@ CREATE DATABASE test;
 // applyBlocklistToConfigIdxs applies the given blocklist to config idxs,
 // returning the result.
 func applyBlocklistToConfigIdxs(
-	configIdxs []logicTestConfigIdx, blocklist map[string]struct{},
+	configIdxs []logicTestConfigIdx, blocklist map[string]int,
 ) []logicTestConfigIdx {
 	if len(blocklist) == 0 {
 		return configIdxs
@@ -1415,18 +1416,42 @@ func applyBlocklistToConfigIdxs(
 	return newConfigIdxs
 }
 
+// getBlocklistIssueNo takes a blocklist directive with an optional issue number
+// and returns the stripped blocklist name with the corresponding issue number
+// as an integer.
+// e.g. an input of "3node-tenant(123456)" would return "3node-tenant", 123456
+func getBlocklistIssueNo(blocklistDirective string) (string, int) {
+	parts := strings.Split(blocklistDirective, "(")
+	if len(parts) != 2 {
+		return blocklistDirective, 0
+	}
+
+	issueNo, err := strconv.Atoi(strings.TrimRight(parts[1], ")"))
+	if err != nil {
+		panic(fmt.Sprintf("possibly malformed blocklist directive: %s: %v", blocklistDirective, err))
+	}
+	return parts[0], issueNo
+}
+
 // processConfigs, given a list of configNames, returns the list of
 // corresponding logicTestConfigIdxs.
 func processConfigs(t *testing.T, path string, configNames []string) []logicTestConfigIdx {
 	const blocklistChar = '!'
-	blocklist := make(map[string]struct{})
+	// blocklist is a map from a blocked config to a corresponding issue number.
+	// If 0, there is no associated issue.
+	blocklist := make(map[string]int)
 	allConfigNamesAreBlocklistDirectives := true
 	for _, configName := range configNames {
 		if configName[0] != blocklistChar {
 			allConfigNamesAreBlocklistDirectives = false
 			continue
 		}
-		blocklist[configName[1:]] = struct{}{}
+
+		blockedConfig, issueNo := getBlocklistIssueNo(configName[1:])
+		if issueNo != 0 {
+			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, unimplemented.MakeURL(issueNo))
+		}
+		blocklist[blockedConfig] = issueNo
 	}
 
 	var configs []logicTestConfigIdx

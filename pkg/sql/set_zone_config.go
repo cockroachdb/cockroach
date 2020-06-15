@@ -103,7 +103,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy()
+		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
 	}
 
 	var yamlConfig tree.TypedExpr
@@ -837,6 +837,8 @@ func validateZoneAttrsAndLocalities(
 	return nil
 }
 
+const multitenancyZoneCfgIssueNo = 49854
+
 func writeZoneConfig(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -846,6 +848,9 @@ func writeZoneConfig(
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
+	if !execCfg.Codec.ForSystemTenant() {
+		return 0, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
+	}
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(

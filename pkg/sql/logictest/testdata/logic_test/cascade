@@ -1,5 +1,4 @@
-# This test times out when run with 3node-tenant.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(50048)
 
 # The tests in this file target the legacy FK paths.
 statement ok
