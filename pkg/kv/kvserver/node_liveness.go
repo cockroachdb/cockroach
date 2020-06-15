@@ -501,16 +501,7 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 	// sneaking in from under us. Why can't we just blindly retry? Do the whole
 	// read+write all over again? It's to dedup events in the event log.
 	// (newLiveness.CommissionStatus != oldLivenessRec.CommissionStatus)
-
-	// decommissioned -> targetStatus
-	// true -> deprecated
-
-	// reconcileMixedVersionLivenessV2(&update.new)
-
-	// decommissioned -> targetStatus
-	// true -> deprecated
-
-	assert(update.new)
+	update.new.AssertValid()
 
 	statusChanged = true
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
@@ -809,7 +800,7 @@ func (nl *NodeLiveness) Self() (kvserverpb.Liveness, error) {
 	if err != nil {
 		return kvserverpb.Liveness{}, err
 	}
-	assert(rec.Liveness)
+	rec.Liveness.AssertValid()
 	return rec.Liveness, err
 }
 
@@ -821,7 +812,7 @@ func (nl *NodeLiveness) SelfEx() (LivenessRecord, error) {
 
 	rec, err := nl.getLivenessLocked(nl.gossip.NodeID.Get())
 	if err != ErrNoLivenessRecord {
-		assert(rec.Liveness)
+		rec.Liveness.AssertValid()
 	}
 	return rec, err
 }
@@ -845,7 +836,7 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	defer nl.mu.RUnlock()
 	now := nl.clock.Now().GoTime()
 	for nID, l := range nl.mu.nodes {
-		assert(l.Liveness)
+		l.Liveness.AssertValid()
 		isLive := l.IsLive(now)
 		if !isLive && l.DecommissioningOrDecommissioned() {
 			// This is a node that was completely removed. Skip over it.
@@ -867,7 +858,7 @@ func (nl *NodeLiveness) GetLivenesses() []kvserverpb.Liveness {
 	defer nl.mu.RUnlock()
 	livenesses := make([]kvserverpb.Liveness, 0, len(nl.mu.nodes))
 	for _, l := range nl.mu.nodes {
-		assert(l.Liveness)
+		l.Liveness.AssertValid()
 		livenesses = append(livenesses, l.Liveness)
 	}
 	return livenesses
@@ -886,7 +877,7 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (LivenessRecord, erro
 
 func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (LivenessRecord, error) {
 	if l, ok := nl.mu.nodes[nodeID]; ok {
-		assert(l.Liveness)
+		l.Liveness.AssertValid()
 		return l, nil
 	}
 	return LivenessRecord{}, ErrNoLivenessRecord
@@ -995,7 +986,7 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 func (nl *NodeLiveness) updateLiveness(
 	ctx context.Context, update livenessUpdate, handleCondFailed func(actual LivenessRecord) error,
 ) (LivenessRecord, error) {
-	assert(update.new)
+	update.new.AssertValid()
 	for {
 		// Before each attempt, ensure that the context has not expired.
 		if err := ctx.Err(); err != nil {
@@ -1122,9 +1113,9 @@ func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 	nl.mu.Lock()
 	old, ok := nl.mu.nodes[new.NodeID]
 	if ok {
-		assert(old.Liveness)
+		old.Liveness.AssertValid()
 	}
-	assert(new.Liveness)
+	new.Liveness.AssertValid()
 
 	should := shouldReplaceLiveness(old.Liveness, new.Liveness)
 	var callbacks []IsLiveCallback
@@ -1226,7 +1217,7 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	}
 	var liveNodes int64
 	for _, l := range nl.mu.nodes {
-		assert(l.Liveness)
+		l.Liveness.AssertValid()
 		if l.IsLive(now) {
 			liveNodes++
 		}
@@ -1258,7 +1249,7 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	defer nl.mu.RUnlock()
 	var count int
 	for _, l := range nl.mu.nodes {
-		assert(l.Liveness)
+		l.Liveness.AssertValid()
 		if !l.DecommissioningOrDecommissioned() {
 			count++
 		}

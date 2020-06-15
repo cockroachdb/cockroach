@@ -388,9 +388,9 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
-	prevResponse := serverpb.DecommissionStatusResponse{}
+	prevResponse := serverpb.CommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		req := &serverpb.DecommissionRequest{
+		req := &serverpb.CommissionRequest{
 			NodeIDs:          nodeIDs,
 			CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONING_,
 		}
@@ -422,7 +422,7 @@ func runDecommissionNodeImpl(
 		}
 		if replicaCount == 0 {
 			// We now mark the node as fully decommissioned.
-			req := &serverpb.DecommissionRequest{
+			req := &serverpb.CommissionRequest{
 				NodeIDs:          nodeIDs,
 				CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONED_,
 			}
@@ -463,7 +463,7 @@ func decommissionResponseAlignment() string {
 // decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
 // SQL-like result rows, so that we can pretty-print them.
 func decommissionResponseValueToRows(
-	statuses []serverpb.DecommissionStatusResponse_Status,
+	statuses []serverpb.CommissionStatusResponse_Status,
 ) [][]string {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
@@ -491,7 +491,7 @@ signaling the affected nodes to participate in the cluster again.
 	RunE: MaybeDecorateGRPCError(runRecommissionNode),
 }
 
-func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
+func printDecommissionStatus(resp serverpb.CommissionStatusResponse) error {
 	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
 		newRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
@@ -517,7 +517,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 
 	c := serverpb.NewAdminClient(conn)
 
-	req := &serverpb.DecommissionRequest{
+	req := &serverpb.CommissionRequest{
 		NodeIDs:          nodeIDs,
 		CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED_,
 	}

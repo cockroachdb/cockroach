@@ -177,7 +177,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 			}
 		}
 		reconcileMixedVersionLivenessV2(&kvLiveness)
-		assert(kvLiveness)
+		kvLiveness.AssertValid()
 
 		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
 			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)

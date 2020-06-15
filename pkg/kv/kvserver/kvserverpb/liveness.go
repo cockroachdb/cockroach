@@ -53,6 +53,26 @@ func (l Liveness) String() string {
 	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
 }
 
+// AssertValid checks that the liveness record is internally consistent (i.e.
+// it's deprecated v20.1 boolean decommissioning representation is consistent
+// with the v20.2 enum representation).
+func (l Liveness) AssertValid() {
+	if l.CommissionStatus.Unknown() {
+		panic("invalid commission status")
+	}
+
+	err := fmt.Sprintf("inconsistent liveness representation: %v", l.String())
+	if l.CommissionStatus.DecommissioningOrDecommissioned() {
+		if !l.DeprecatedDecommissioning {
+			panic(err)
+		}
+	} else {
+		if l.DeprecatedDecommissioning {
+			panic(err)
+		}
+	}
+}
+
 // CommissionStatusFromBooleanForm converts the deprecated boolean
 // decommissioning state used in the v20.1 liveness proto definition to the new
 // CommissionStatus enum.

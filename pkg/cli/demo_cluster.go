@@ -370,7 +370,7 @@ func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioni
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
 
-	req := &serverpb.DecommissionRequest{
+	req := &serverpb.CommissionRequest{
 		NodeIDs:          []roachpb.NodeID{nodeID},
 		CommissionStatus: kvserverpb.CommissionStatusFromBooleanForm(decommissioning),
 	}

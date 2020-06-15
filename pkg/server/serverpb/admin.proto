@@ -432,31 +432,19 @@ message DrainResponse {
   string drain_remaining_description = 4;
 }
 
-// DecommissionStatusRequest requests the decommissioning status for the
-// specified or, if none are specified, all nodes.
-message DecommissionStatusRequest {
+// CommissionStatusRequest requests the commissioning status for the specified
+// or, if none are specified, all nodes.
+message CommissionStatusRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
-// DecommissionRequest requests the server to set the commission status on
-// all nodes specified by 'node_id' to the value of CommissionStatus.
-//
-// If no 'node_id' is given, targets the recipient node.
-//
-// XXX: Can we rename this to be CommissionRequest? Ditto for other methods/types here.
-message DecommissionRequest {
-  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
-                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  bool deprecated_decommissioning = 2;
-  cockroach.kv.kvserver.storagepb.CommissionStatus CommissionStatus = 3;
-}
-
-// DecommissionStatusResponse lists commissioning statuses for a number of NodeIDs.
-message DecommissionStatusResponse {
+// CommissionStatusResponse lists commissioning statuses for a number of
+// NodeIDs.
+message CommissionStatusResponse {
   message Status {
     int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
-                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     bool is_live = 2;
     // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
@@ -467,6 +455,17 @@ message DecommissionStatusResponse {
   }
   // Status of all affected nodes.
   repeated Status status = 2 [(gogoproto.nullable) = false];
+}
+
+// CommissionRequest requests the server to set the commission status on
+// all nodes specified by node_id to the value of CommissionStatus.
+//
+// If no node_id is given, it targets the recipient node.
+message CommissionRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  bool deprecated_decommissioning = 2;
+  cockroach.kv.kvserver.storagepb.CommissionStatus CommissionStatus = 3;
 }
 
 // SettingsRequest inquires what are the current settings in the cluster.
@@ -872,21 +871,25 @@ service Admin {
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
   }
 
-  // Decommission puts the node(s) into the specified decommissioning state.
+  // Decommission puts the node(s) into the specified commissioning state.
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
   //
-  // XXX: Can we rename this to be something else? Ditto for other methods/types here.
-  rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
-  }
+  // The name of this method, Decommission, is a misnomer for legacy
+  // reasons. It should be thought of as Commission instead.
+  //
+  // XXX: Write wrapper method around this, with the right name.
+  rpc Decommission(CommissionRequest) returns (CommissionStatusResponse) { }
 
-  // DecommissionStatus retrieves the decommissioning status of the specified nodes.
+  // DecommissionStatus retrieves the commission status of the specified nodes.
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
   //
-  // XXX: Can we rename this to be something else? Ditto for other methods/types here.
-  rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
-  }
+  // The name of this method, DecommissionStatus, is a misnomer for legacy
+  // reasons. It should be thought of as CommissionStatus instead.
+  //
+  // XXX: Write wrapper method around this, with the right name.
+  rpc DecommissionStatus(CommissionStatusRequest) returns (CommissionStatusResponse) { }
 
   // URL: /_admin/v1/rangelog
   // URL: /_admin/v1/rangelog?limit=100
