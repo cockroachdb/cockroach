@@ -168,22 +168,25 @@ func (c *sqlConn) ensureConn() error {
 func (c *sqlConn) getServerMetadata() (
 	nodeID roachpb.NodeID,
 	version, clusterID string,
+	latency time.Duration,
 	err error,
 ) {
 	// Retrieve the node ID and server build info.
+	startTime := timeutil.Now()
 	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
+	latency = timeutil.Now().Sub(startTime)
 	if errors.Is(err, driver.ErrBadConn) {
-		return 0, "", "", err
+		return 0, "", "", latency, err
 	}
 	if err != nil {
-		return 0, "", "", err
+		return 0, "", "", latency, err
 	}
 	defer func() { _ = rows.Close() }()
 
 	// Read the node_build_info table as an array of strings.
 	rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
 	if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
-		return 0, "", "", errors.New("incorrect data while retrieving the server version")
+		return 0, "", "", latency, errors.New("incorrect data while retrieving the server version")
 	}
 
 	// Extract the version fields from the query results.
@@ -200,7 +203,7 @@ func (c *sqlConn) getServerMetadata() (
 			c.clusterOrganization = row[2]
 			id, err := strconv.Atoi(row[0])
 			if err != nil {
-				return 0, "", "", errors.New("incorrect data while retrieving node id")
+				return 0, "", "", latency, errors.New("incorrect data while retrieving node id")
 			}
 			nodeID = roachpb.NodeID(id)
 
@@ -225,7 +228,7 @@ func (c *sqlConn) getServerMetadata() (
 		c.serverBuild = fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
 			v10fields[0], version, v10fields[2], v10fields[3], v10fields[4])
 	}
-	return nodeID, version, clusterID, nil
+	return nodeID, version, clusterID, latency, nil
 }
 
 // checkServerMetadata reports the server version and cluster ID
@@ -239,7 +242,7 @@ func (c *sqlConn) checkServerMetadata() error {
 		return nil
 	}
 
-	_, newServerVersion, newClusterID, err := c.getServerMetadata()
+	_, newServerVersion, newClusterID, latency, err := c.getServerMetadata()
 	if errors.Is(err, driver.ErrBadConn) {
 		return err
 	}
@@ -278,6 +281,7 @@ func (c *sqlConn) checkServerMetadata() error {
 				}
 			}
 		}
+		fmt.Printf("# Client-server latency: %s\n", latency)
 	}
 
 	// Report the cluster ID only if it it could be fetched
@@ -301,7 +305,7 @@ func (c *sqlConn) checkServerMetadata() error {
 // requireServerVersion returns an error if the version of the connected server
 // is not at least the given version.
 func (c *sqlConn) requireServerVersion(required *version.Version) error {
-	_, versionString, _, err := c.getServerMetadata()
+	_, versionString, _, _, err := c.getServerMetadata()
 	if err != nil {
 		return err
 	}

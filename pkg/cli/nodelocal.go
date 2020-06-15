@@ -112,7 +112,7 @@ func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
 		return err
 	}
 
-	nodeID, _, _, err := conn.getServerMetadata()
+	nodeID, _, _, _, err := conn.getServerMetadata()
 	if err != nil {
 		return errors.Wrap(err, "unable to get node id")
 	}
