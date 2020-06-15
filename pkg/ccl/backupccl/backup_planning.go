@@ -235,9 +235,10 @@ func backupJobDescription(
 	opts map[string]string,
 ) (string, error) {
 	b := &tree.Backup{
-		AsOf:    backup.AsOf,
-		Options: optsToKVOptions(opts),
-		Targets: backup.Targets,
+		AsOf:               backup.AsOf,
+		Options:            optsToKVOptions(opts),
+		Targets:            backup.Targets,
+		DescriptorCoverage: backup.DescriptorCoverage,
 	}
 
 	for _, t := range to {
