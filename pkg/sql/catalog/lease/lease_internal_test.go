@@ -531,7 +531,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ctx := context.Background()
 	table, _, err := leaseManager.AcquireByName(
 		ctx,
-		leaseManager.clock.Now(),
+		leaseManager.storage.clock.Now(),
 		tableDesc.ParentID,
 		tableDesc.GetParentSchemaID(),
 		"test",
@@ -557,7 +557,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}()
 
 	for i := 0; i < 50; i++ {
-		timestamp := leaseManager.clock.Now()
+		timestamp := leaseManager.storage.clock.Now()
 		ctx := context.Background()
 		table, _, err := leaseManager.AcquireByName(
 			ctx,
@@ -749,7 +749,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		m *Manager,
 		acquireChan chan Result,
 	) {
-		table, e, err := m.Acquire(ctx, m.clock.Now(), descID)
+		table, e, err := m.Acquire(ctx, m.storage.clock.Now(), descID)
 		acquireChan <- Result{err: err, exp: e, table: table}
 	}
 
