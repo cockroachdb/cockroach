@@ -480,14 +480,22 @@ func (ht *hashTable) reset(_ context.Context) {
 	}
 	ht.vals.ResetInternalBatch()
 	ht.vals.SetLength(0)
-	// ht.next, ht.same and ht.visited are reset separately before
+	// ht.probeScratch.next, ht.same and ht.visited are reset separately before
 	// they are used (these slices are not used in all of the code paths).
-	// ht.buckets doesn't need to be reset because buckets are always initialized
-	// when computing the hash.
+	// ht.probeScratch.buckets doesn't need to be reset because buckets are
+	// always initialized when computing the hash.
 	copy(ht.probeScratch.groupID[:coldata.BatchSize()], zeroUint64Column)
-	// ht.toCheck doesn't need to be reset because it is populated manually every
-	// time before checking the columns.
+	// ht.probeScratch.toCheck doesn't need to be reset because it is populated
+	// manually every time before checking the columns.
 	copy(ht.probeScratch.headID[:coldata.BatchSize()], zeroUint64Column)
 	copy(ht.probeScratch.differs[:coldata.BatchSize()], zeroBoolColumn)
 	copy(ht.probeScratch.distinct, zeroBoolColumn)
+	if ht.buildMode == hashTableDistinctBuildMode && cap(ht.buildScratch.next) > 0 {
+		// In "distinct" build mode, ht.buildScratch.next is populated
+		// iteratively, whenever we find tuples that we haven't seen before. In
+		// order to reuse the same underlying memory we need to slice up that
+		// slice (note that keyID=0 is reserved for the end of all hash chains,
+		// so we make the length 1).
+		ht.buildScratch.next = ht.buildScratch.next[:1]
+	}
 }
