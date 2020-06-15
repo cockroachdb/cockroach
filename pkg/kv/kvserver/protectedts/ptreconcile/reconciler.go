@@ -133,7 +133,7 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 }
 
 func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
-	return r.localStores.IsMeta1Leaseholder(now)
+	return r.localStores.IsMeta1Leaseholder(ctx, now)
 }
 
 func (r *Reconciler) reconcile(ctx context.Context) {

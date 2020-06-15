@@ -405,13 +405,13 @@ func (n *Node) start(
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
-		capacity, err := s.Capacity(false /* useCached */)
+		capacity, err := s.Capacity(ctx, false /* useCached */)
 		if err != nil {
 			return errors.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 
-		n.addStore(s)
+		n.addStore(ctx, s)
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
@@ -502,15 +502,15 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 	})
 }
 
-func (n *Node) addStore(store *kvserver.Store) {
+func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 	cv, err := store.GetClusterVersion(context.TODO())
 	if err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	if cv == (clusterversion.ClusterVersion{}) {
 		// The store should have had a version written to it during the store
 		// bootstrap process.
-		log.Fatal(context.TODO(), "attempting to add a store without a version")
+		log.Fatal(ctx, "attempting to add a store without a version")
 	}
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
@@ -564,7 +564,7 @@ func (n *Node) bootstrapStores(
 			if err := s.Start(ctx, stopper); err != nil {
 				return err
 			}
-			n.addStore(s)
+			n.addStore(ctx, s)
 			log.Infof(ctx, "bootstrapped store %s", s)
 			// Done regularly in Node.startGossip, but this cuts down the time
 			// until this store is used for range allocations.

@@ -115,7 +115,7 @@ type sqlServerOptionalArgs struct {
 	// Used by executorConfig.
 	recorder *status.MetricsRecorder
 	// For the temporaryObjectCleaner.
-	isMeta1Leaseholder func(hlc.Timestamp) (bool, error)
+	isMeta1Leaseholder func(context.Context, hlc.Timestamp) (bool, error)
 	// DistSQL, lease management, and others want to know the node they're on.
 	nodeIDContainer *base.SQLIDContainer
 

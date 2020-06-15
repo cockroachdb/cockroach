@@ -536,7 +536,7 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 //   processed the change in lease holdership).
 // * the client fails to read their own write.
 func (r *Replica) leaseStatus(
-	lease roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
+	ctx context.Context, lease roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
 ) kvserverpb.LeaseStatus {
 	status := kvserverpb.LeaseStatus{Timestamp: timestamp, Lease: lease}
 	var expiration hlc.Timestamp
@@ -551,7 +551,9 @@ func (r *Replica) leaseStatus(
 			// use the lease nor do we want to attempt to acquire it.
 			if err != nil {
 				if leaseStatusLogLimiter.ShouldLog() {
-					log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %+v", err)
+					ctx = r.AnnotateCtx(ctx)
+					log.Warningf(ctx, "can't determine lease status of %s due to node liveness error: %+v",
+						lease.Replica, err)
 				}
 			}
 			status.State = kvserverpb.LeaseState_ERROR
@@ -648,7 +650,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
-		status := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+		status := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
 		if status.Lease.OwnedBy(target) {
 			// The target is already the lease holder. Nothing to do.
 			return nil, nil, nil
@@ -768,27 +770,29 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 // leaseholder. Note that this method does not check to see if a transfer is
 // pending, but returns the status of the current lease and ownership at the
 // specified point in time.
-func (r *Replica) OwnsValidLease(ts hlc.Timestamp) bool {
+func (r *Replica) OwnsValidLease(ctx context.Context, ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.ownsValidLeaseRLocked(ts)
+	return r.ownsValidLeaseRLocked(ctx, ts)
 }
 
-func (r *Replica) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
+func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, ts hlc.Timestamp) bool {
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
-		r.leaseStatus(*r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
+		r.leaseStatus(ctx, *r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
 }
 
 // IsLeaseValid returns true if the replica's lease is owned by this
 // replica and is valid (not expired, not in stasis).
-func (r *Replica) IsLeaseValid(lease roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) IsLeaseValid(ctx context.Context, lease roachpb.Lease, ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isLeaseValidRLocked(lease, ts)
+	return r.isLeaseValidRLocked(ctx, lease, ts)
 }
 
-func (r *Replica) isLeaseValidRLocked(lease roachpb.Lease, ts hlc.Timestamp) bool {
-	return r.leaseStatus(lease, ts, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
+func (r *Replica) isLeaseValidRLocked(
+	ctx context.Context, lease roachpb.Lease, ts hlc.Timestamp,
+) bool {
+	return r.leaseStatus(ctx, lease, ts, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
 }
 
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
@@ -834,7 +838,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 		return kvserverpb.LeaseStatus{}, false
 	}
 
-	status := r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 	if status.State == kvserverpb.LeaseState_VALID && status.Lease.OwnedBy(r.store.StoreID()) {
 		// We own the lease...
 		if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
@@ -878,7 +882,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
-			status = r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+			status = r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
@@ -1035,7 +1039,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
-							} else if lease, _ := r.GetLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
+							} else if lease, _ := r.GetLease(); !r.IsLeaseValid(ctx, lease, r.store.Clock().Now()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
 							} else {
 								err = newNotLeaseHolderError(&lease, r.store.StoreID(), r.Desc())

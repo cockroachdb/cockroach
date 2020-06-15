@@ -364,7 +364,7 @@ func cleanupSchemaObjects(
 }
 
 // isMeta1LeaseholderFunc helps us avoid an import into pkg/storage.
-type isMeta1LeaseholderFunc func(hlc.Timestamp) (bool, error)
+type isMeta1LeaseholderFunc func(context.Context, hlc.Timestamp) (bool, error)
 
 // TemporaryObjectCleaner is a background thread job that periodically
 // cleans up orphaned temporary objects by sessions which did not close
@@ -458,7 +458,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 
 	// We only want to perform the cleanup if we are holding the meta1 lease.
 	// This ensures only one server can perform the job at a time.
-	isLeaseholder, err := c.isMeta1LeaseholderFunc(c.db.Clock().Now())
+	isLeaseholder, err := c.isMeta1LeaseholderFunc(ctx, c.db.Clock().Now())
 	if err != nil {
 		return err
 	}

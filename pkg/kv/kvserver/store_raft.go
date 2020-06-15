@@ -734,8 +734,8 @@ func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
 
-func (s *Store) updateCapacityGauges() error {
-	desc, err := s.Descriptor(false /* useCached */)
+func (s *Store) updateCapacityGauges(ctx context.Context) error {
+	desc, err := s.Descriptor(ctx, false /* useCached */)
 	if err != nil {
 		return err
 	}
