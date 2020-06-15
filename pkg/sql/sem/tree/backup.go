@@ -57,8 +57,9 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	ctx.WriteString("BACKUP ")
 	if node.DescriptorCoverage == RequestedDescriptors {
 		ctx.FormatNode(&node.Targets)
+		ctx.WriteString(" ")
 	}
-	ctx.WriteString(" TO ")
+	ctx.WriteString("TO ")
 	ctx.FormatNode(&node.To)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
@@ -91,8 +92,9 @@ func (node *Restore) Format(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
 	if node.DescriptorCoverage == RequestedDescriptors {
 		ctx.FormatNode(&node.Targets)
+		ctx.WriteString(" ")
 	}
-	ctx.WriteString(" FROM ")
+	ctx.WriteString("FROM ")
 	for i := range node.From {
 		if i > 0 {
 			ctx.WriteString(", ")
