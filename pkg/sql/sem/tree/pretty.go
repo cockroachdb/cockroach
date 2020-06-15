@@ -1932,7 +1932,9 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 6)
 
 	items = append(items, p.row("BACKUP", pretty.Nil))
-	items = append(items, node.Targets.docRow(p))
+	if node.DescriptorCoverage == RequestedDescriptors {
+		items = append(items, node.Targets.docRow(p))
+	}
 	items = append(items, p.row("TO", p.Doc(&node.To)))
 
 	if node.AsOf.Expr != nil {
@@ -1951,7 +1953,9 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 5)
 
 	items = append(items, p.row("RESTORE", pretty.Nil))
-	items = append(items, node.Targets.docRow(p))
+	if node.DescriptorCoverage == RequestedDescriptors {
+		items = append(items, node.Targets.docRow(p))
+	}
 	from := make([]pretty.Doc, len(node.From))
 	for i := range node.From {
 		from[i] = p.Doc(&node.From[i])
