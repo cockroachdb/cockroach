@@ -94,7 +94,7 @@ func NotifyJobTermination(
 	}
 
 	if env == nil {
-		env = prodJobSchedulerEnv
+		env = ProdJobSchedulerEnv
 	}
 
 	// Get the executor for this schedule.
