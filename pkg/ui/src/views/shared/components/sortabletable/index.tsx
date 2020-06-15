@@ -21,7 +21,7 @@ import { trackTableSort } from "src/util/analytics";
 import styles from "./sortabletable.module.styl";
 import { Spin, Icon } from "antd";
 import SpinIcon from "src/components/icon/spin";
-import { Empty, IEmptyProps } from "src/components/empty";
+import { Empty, EmptyProps } from "src/components/empty";
 
 const cx = classNames.bind(styles);
 /**
@@ -84,7 +84,7 @@ interface TableProps {
   loadingLabel?: string;
   // empty state for table
   empty?: boolean;
-  emptyProps?: IEmptyProps;
+  emptyProps?: EmptyProps;
 }
 
 export interface ExpandableConfig {

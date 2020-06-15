@@ -8,17 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require '~src/components/core/index.styl'
+import React from "react";
+import { storiesOf } from "@storybook/react";
 
-.diagnostics-history-view
-  &__table-container
-    background $colors--white
-    padding $spacing-medium-small
+import { SortableTable } from "./";
 
-  & .crl-table-wrapper .sort-table__row:hover .nodes-table__link
-    color $colors--primary-blue-3
-    text-decoration underline
-
-  &__table-header
-    margin-top: $spacing-medium-small
-    margin-bottom $spacing-x-small
+storiesOf("Sortable table", module)
+  .add("Empty state", () => (
+    <SortableTable
+        empty
+    />
+  ));
