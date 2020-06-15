@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
-const columnOmitted = -1
-
 // SupportedWindowFns contains all window functions supported by the
 // vectorized engine.
 var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{

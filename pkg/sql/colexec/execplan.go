@@ -180,70 +180,66 @@ func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOpera
 	*r = arg
 }
 
-const noFilterIdx = -1
-
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func isSupported(
-	allocator *colmem.Allocator, mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec,
-) (bool, error) {
+func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
 	core := spec.Core
 	isFullVectorization := mode == sessiondata.VectorizeOn ||
 		mode == sessiondata.VectorizeExperimentalAlways
 
 	switch {
 	case core.Noop != nil:
-		return true, nil
+		return nil
 
 	case core.TableReader != nil:
 		if core.TableReader.IsCheck {
-			return false, errors.Newf("scrub table reader is unsupported in vectorized")
+			return errors.Newf("scrub table reader is unsupported in vectorized")
 		}
-		return true, nil
+		return nil
 
 	case core.Aggregator != nil:
 		aggSpec := core.Aggregator
 		for _, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return false, errors.Newf("distinct aggregation not supported")
+				return errors.Newf("distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return false, errors.Newf("filtering aggregation not supported")
+				return errors.Newf("filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return false, errors.Newf("aggregates with arguments not supported")
+				return errors.Newf("aggregates with arguments not supported")
 			}
 			inputTypes := make([]*types.T, len(agg.ColIdx))
 			for pos, colIdx := range agg.ColIdx {
 				inputTypes[pos] = spec.Input[0].ColumnTypes[colIdx]
 			}
-			if supported, err := isAggregateSupported(allocator, agg.Func, inputTypes); !supported {
-				return false, err
+			if err := isAggregateSupported(agg.Func, inputTypes); err != nil {
+				return err
 			}
 		}
-		return true, nil
+		return nil
 
 	case core.Distinct != nil:
 		if core.Distinct.NullsAreDistinct {
-			return false, errors.Newf("distinct with unique nulls not supported")
+			return errors.Newf("distinct with unique nulls not supported")
 		}
 		if core.Distinct.ErrorOnDup != "" {
-			return false, errors.Newf("distinct with error on duplicates not supported")
+			return errors.Newf("distinct with error on duplicates not supported")
 		}
 		if !isFullVectorization {
 			if len(core.Distinct.OrderedColumns) < len(core.Distinct.DistinctColumns) {
-				return false, errors.Newf("unordered distinct can only run in vectorize 'on' mode")
+				return errors.Newf("unordered distinct can only run in vectorize 'on' mode")
 			}
 		}
-		return true, nil
+		return nil
 
 	case core.Ordinality != nil:
-		return true, nil
+		return nil
 
 	case core.HashJoiner != nil:
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
-			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
+			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
 		leftInput, rightInput := spec.Input[0], spec.Input[1]
 		if len(leftInput.ColumnTypes) == 0 || len(rightInput.ColumnTypes) == 0 {
@@ -252,52 +248,52 @@ func isSupported(
 			// external and in-memory) have a built-in assumption of non-empty
 			// inputs, so we will fallback to row execution in such cases.
 			// TODO(yuzefovich): implement specialized cross join operator.
-			return false, errors.Newf("can't plan vectorized hash joins with an empty input schema")
+			return errors.Newf("can't plan vectorized hash joins with an empty input schema")
 		}
-		return true, nil
+		return nil
 
 	case core.MergeJoiner != nil:
 		if !core.MergeJoiner.OnExpr.Empty() &&
 			core.MergeJoiner.Type != sqlbase.InnerJoin {
-			return false, errors.Errorf("can't plan non-inner merge join with ON expressions")
+			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
-		return true, nil
+		return nil
 
 	case core.Sorter != nil:
-		return true, nil
+		return nil
 
 	case core.Windower != nil:
 		for _, wf := range core.Windower.WindowFns {
 			if wf.Frame != nil {
 				frame, err := wf.Frame.ConvertToAST()
 				if err != nil {
-					return false, err
+					return err
 				}
 				if !frame.IsDefaultFrame() {
-					return false, errors.Newf("window functions with non-default window frames are not supported")
+					return errors.Newf("window functions with non-default window frames are not supported")
 				}
 			}
-			if wf.FilterColIdx != noFilterIdx {
-				return false, errors.Newf("window functions with FILTER clause are not supported")
+			if wf.FilterColIdx != tree.NoColumnIdx {
+				return errors.Newf("window functions with FILTER clause are not supported")
 			}
 			if wf.Func.AggregateFunc != nil {
-				return false, errors.Newf("aggregate functions used as window functions are not supported")
+				return errors.Newf("aggregate functions used as window functions are not supported")
 			}
 
 			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
-				return false, errors.Newf("window function %s is not supported", wf.String())
+				return errors.Newf("window function %s is not supported", wf.String())
 			}
 			if !isFullVectorization {
 				switch *wf.Func.WindowFunc {
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-					return false, errors.Newf("window function %s can only run in vectorize 'on' mode", wf.String())
+					return errors.Newf("window function %s can only run in vectorize 'on' mode", wf.String())
 				}
 			}
 		}
-		return true, nil
+		return nil
 
 	default:
-		return false, errors.Newf("unsupported processor core %q", core)
+		return errors.Newf("unsupported processor core %q", core)
 	}
 }
 
@@ -464,6 +460,11 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
 ) error {
+	if processorConstructor == nil {
+		// TODO(yuzefovich): update unit tests to remove panic-catcher when
+		// fallback to rowexec is not allowed.
+		return errors.New("processorConstructor is nil")
+	}
 	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 		spec.Core.JoinReader == nil {
 		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
@@ -589,8 +590,7 @@ func NewColOperator(
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := result
 
-	supported, err := isSupported(streamingAllocator, flowCtx.EvalCtx.SessionData.VectorizeMode, spec)
-	if !supported {
+	if err = isSupported(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
 		// around a planNode) because it creates complications, and a flow with
 		// such processor probably will not benefit from the vectorization.
@@ -622,7 +622,6 @@ func NewColOperator(
 		// columns. This means that we'll let those processors do any renders
 		// or filters, which isn't ideal. We could improve this.
 		post = &execinfrapb.PostProcessSpec{}
-
 	} else {
 		switch {
 		case core.Noop != nil:
@@ -702,7 +701,6 @@ func NewColOperator(
 			aggTyps := make([][]*types.T, len(aggSpec.Aggregations))
 			aggCols := make([][]uint32, len(aggSpec.Aggregations))
 			aggFns := make([]execinfrapb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-			result.ColumnTypes = make([]*types.T, len(aggSpec.Aggregations))
 			for i, agg := range aggSpec.Aggregations {
 				aggTyps[i] = make([]*types.T, len(agg.ColIdx))
 				for j, colIdx := range agg.ColIdx {
@@ -710,11 +708,10 @@ func NewColOperator(
 				}
 				aggCols[i] = agg.ColIdx
 				aggFns[i] = agg.Func
-				_, retType, err := execinfrapb.GetAggregateInfo(agg.Func, aggTyps[i]...)
-				if err != nil {
-					return result, err
-				}
-				result.ColumnTypes[i] = retType
+			}
+			result.ColumnTypes, err = makeAggregateFuncsOutputTypes(aggTyps, aggFns)
+			if err != nil {
+				return result, err
 			}
 			typs := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(typs, spec.Input[0].ColumnTypes)
@@ -977,8 +974,8 @@ func NewColOperator(
 				// temporary columns that can be appended below.
 				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
 				copy(typs, result.ColumnTypes)
-				tempColOffset, partitionColIdx := uint32(0), columnOmitted
-				peersColIdx := columnOmitted
+				tempColOffset, partitionColIdx := uint32(0), tree.NoColumnIdx
+				peersColIdx := tree.NoColumnIdx
 				windowFn := *wf.Func.WindowFunc
 				if len(core.Windower.PartitionBy) > 0 {
 					// TODO(yuzefovich): add support for hashing partitioner (probably by
@@ -1100,14 +1097,6 @@ func NewColOperator(
 		ColumnTypes: result.ColumnTypes,
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, factory, args.ExprHelper)
-	// TODO(yuzefovich): update unit tests to remove panic-catcher when fallback
-	// to rowexec is not allowed.
-	if err != nil && processorConstructor == nil {
-		// Do not attempt to wrap as a row source if there is no
-		// processorConstructor because it would fail.
-		return result, err
-	}
-
 	if err != nil {
 		log.VEventf(
 			ctx, 2,

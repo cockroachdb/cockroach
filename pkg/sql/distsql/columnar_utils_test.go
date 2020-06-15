@@ -135,12 +135,11 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 	}
 
 	constructorArgs := colexec.NewColOperatorArgs{
-		Spec:                 args.pspec,
-		Inputs:               columnarizers,
-		StreamingMemAccount:  &acc,
-		ProcessorConstructor: rowexec.NewProcessor,
-		DiskQueueCfg:         colcontainer.DiskQueueCfg{FS: tempFS},
-		FDSemaphore:          colexecbase.NewTestingSemaphore(256),
+		Spec:                args.pspec,
+		Inputs:              columnarizers,
+		StreamingMemAccount: &acc,
+		DiskQueueCfg:        colcontainer.DiskQueueCfg{FS: tempFS},
+		FDSemaphore:         colexecbase.NewTestingSemaphore(256),
 	}
 	var spilled bool
 	if args.forceDiskSpill {

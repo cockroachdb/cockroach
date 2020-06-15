@@ -11,30 +11,82 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+type sumTmplInfo struct {
+	Kind           string
+	NeedsHelper    bool
+	InputVecMethod string
+	RetGoType      string
+	RetVecMethod   string
+
+	addOverload assignFunc
+}
+
+func (s sumTmplInfo) AssignAdd(
+	targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string,
+) string {
+	// Note that we need to create lastArgWidthOverload only in order to tell
+	// the resolved overload to use Plus overload in particular, so all other
+	// fields remain unset.
+	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
+		overloadBase: newBinaryOverloadBase(tree.Plus),
+	}}
+	return s.addOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
+}
+
+var _ = sumTmplInfo{}.AssignAdd
+
+// getSumAddOverload returns the resolved overload that can be used to
+// accumulate a sum of values of inputType type. The resulting value's type is
+// determined in the same way that 'sum' aggregate function is type-checked.
+// For most types it is easy - we simply iterate over "Plus" overloads that
+// take in the same type as both arguments. However, sum of integers returns a
+// decimal result, so we need to pick the overload of appropriate width from
+// "DECIMAL + INT" overload.
+func getSumAddOverload(inputType *types.T) assignFunc {
+	if inputType.Family() == types.IntFamily {
+		var c decimalIntCustomizer
+		return c.getBinOpAssignFunc()
+	}
+	var overload *oneArgOverload
+	for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
+		if o.CanonicalTypeFamily == inputType.Family() {
+			overload = o
+			break
+		}
+	}
+	if overload == nil {
+		colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find plus binary overload for %s", inputType.String()))
+	}
+	if len(overload.WidthOverloads) != 1 {
+		colexecerror.InternalError(fmt.Sprintf("unexpectedly plus binary overload for %s doesn't contain a single overload", inputType.String()))
+	}
+	return overload.WidthOverloads[0].AssignFunc
+}
 
 const sumAggTmpl = "pkg/sql/colexec/sum_agg_tmpl.go"
 
-func genSumAgg(inputFileContents string, wr io.Writer) error {
+func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	r := strings.NewReplacer(
-		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
-		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
-		"_GOTYPE", "{{.GoType}}",
-		"_TYPE", "{{.VecMethod}}",
-		"TemplateType", "{{.VecMethod}}",
+		"_KIND", "{{.Kind}}",
+		"_RET_GOTYPE", `{{.RetGoType}}`,
+		"_RET_TYPE", "{{.RetVecMethod}}",
+		"_TYPE", "{{.InputVecMethod}}",
+		"TemplateType", "{{.InputVecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
 
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
-	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 6))
+	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
 
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 4)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4}}`)
@@ -44,15 +96,59 @@ func genSumAgg(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	overloads := sameTypeBinaryOpToOverloads[tree.Plus]
-	// We want to omit the overload that operates on datum-backed vectors.
-	if overloads[len(overloads)-1].CanonicalTypeFamily != typeconv.DatumVecCanonicalTypeFamily {
-		colexecerror.InternalError("unexpectedly plus overload on datum-backed types is not the last one")
+	var (
+		supportedTypes []*types.T
+		kind           string
+	)
+	if isSumInt {
+		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int}
+		kind = "Int"
+	} else {
+		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval}
 	}
-	overloads = overloads[:len(overloads)-1]
-	return tmpl.Execute(wr, overloads)
+	getAddOverload := func(inputType, retType *types.T) assignFunc {
+		if isSumInt {
+			var c intCustomizer
+			return c.getBinOpAssignFuncWithPromotedReturnType(retType)
+		}
+		return getSumAddOverload(inputType)
+	}
+
+	var tmplInfos []sumTmplInfo
+	for _, inputType := range supportedTypes {
+		needsHelper := false
+		// Note that we don't use execinfrapb.GetAggregateInfo because we don't
+		// want to bring in a dependency on that package to reduce the burden
+		// of regenerating execgen code when the protobufs get generated.
+		retType := inputType
+		if inputType.Family() == types.IntFamily {
+			if isSumInt {
+				retType = types.Int
+			} else {
+				// Non-integer summation of integers needs a helper because the
+				// result is a decimal.
+				needsHelper = true
+				retType = types.Decimal
+			}
+		}
+		tmplInfos = append(tmplInfos, sumTmplInfo{
+			Kind:           kind,
+			NeedsHelper:    needsHelper,
+			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
+			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
+			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
+			addOverload:    getAddOverload(inputType, retType),
+		})
+	}
+	return tmpl.Execute(wr, tmplInfos)
 }
 
 func init() {
-	registerGenerator(genSumAgg, "sum_agg.eg.go", sumAggTmpl)
+	sumAggGenerator := func(isSumInt bool) generator {
+		return func(inputFileContents string, wr io.Writer) error {
+			return genSumAgg(inputFileContents, wr, isSumInt)
+		}
+	}
+	registerGenerator(sumAggGenerator(false /* isSumInt */), "sum_agg.eg.go", sumAggTmpl)
+	registerGenerator(sumAggGenerator(true /* isSumInt */), "sum_int_agg.eg.go", sumAggTmpl)
 }

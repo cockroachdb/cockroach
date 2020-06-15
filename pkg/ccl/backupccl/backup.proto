@@ -61,6 +61,11 @@ message BackupManifest {
     sql.sqlbase.Descriptor desc = 3;
   }
 
+  message Progress {
+    repeated File files = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp rev_start_time = 2 [(gogoproto.nullable) = false];
+  }
+
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 13 [(gogoproto.customname) = "MVCCFilter"];

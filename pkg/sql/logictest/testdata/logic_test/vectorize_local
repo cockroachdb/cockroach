@@ -152,3 +152,15 @@ EXPLAIN (VEC) SELECT * FROM xyz AS t1 FULL OUTER JOIN xyz AS t2 ON t1.x = t2.x A
   └ *rowexec.hashJoiner
     ├ *colexec.colBatchScan
     └ *colexec.colBatchScan
+
+# Verify that the vectorized engine is used (there is a mismatch between
+# argument type width and the result).
+query T
+EXPLAIN (VEC) SELECT max(c) FROM a
+----
+│
+└ Node 1
+  └ *colexec.orderedAggregator
+    └ *colexec.oneShotOp
+      └ *colexec.distinctChainOps
+        └ *colexec.colBatchScan

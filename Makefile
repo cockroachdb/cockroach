@@ -869,6 +869,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/sum_agg.eg.go \
+  pkg/sql/colexec/sum_int_agg.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go

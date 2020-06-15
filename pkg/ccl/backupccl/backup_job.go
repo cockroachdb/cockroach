@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -19,13 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,10 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
@@ -50,7 +49,7 @@ func (r *RowCount) add(other RowCount) {
 	r.IndexEntries += other.IndexEntries
 }
 
-func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]struct{}) RowCount {
+func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
 	res := RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
@@ -169,8 +168,10 @@ type spanAndTime struct {
 //   file.
 func backup(
 	ctx context.Context,
+	phs sql.PlanHookState,
+	defaultURI string,
+	urisByLocalityKV map[string]string,
 	db *kv.DB,
-	numClusterNodes int,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*roachpb.ExternalStorage,
@@ -183,14 +184,9 @@ func backup(
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
-	mu := struct {
-		syncutil.Mutex
-		files          []BackupManifest_File
-		exported       RowCount
-		lastCheckpoint time.Time
-	}{}
-
-	var checkpointMu syncutil.Mutex
+	var files []BackupManifest_File
+	var exported RowCount
+	var lastCheckpoint time.Time
 
 	var ranges []roachpb.RangeDescriptor
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -209,8 +205,8 @@ func backup(
 		// TODO(benesch): verify these files, rather than accepting them as truth
 		// blindly.
 		// No concurrency yet, so these assignments are safe.
-		mu.files = checkpointDesc.Files
-		mu.exported = checkpointDesc.EntryCounts
+		files = checkpointDesc.Files
+		exported = checkpointDesc.EntryCounts
 		for _, file := range checkpointDesc.Files {
 			if file.StartTime.IsEmpty() && !file.EndTime.IsEmpty() {
 				completedIntroducedSpans = append(completedIntroducedSpans, file.Span)
@@ -226,168 +222,94 @@ func backup(
 	spans := splitAndFilterSpans(backupManifest.Spans, completedSpans, ranges)
 	introducedSpans := splitAndFilterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans, ranges)
 
-	allSpans := make([]spanAndTime, 0, len(spans)+len(introducedSpans))
-	for _, s := range introducedSpans {
-		allSpans = append(allSpans, spanAndTime{span: s, start: hlc.Timestamp{}, end: backupManifest.StartTime})
-	}
-	for _, s := range spans {
-		allSpans = append(allSpans, spanAndTime{span: s, start: backupManifest.StartTime, end: backupManifest.EndTime})
-	}
-
-	// Sequential ranges may have clustered leaseholders, for example a
-	// geo-partitioned table likely has all the leaseholders for some contiguous
-	// span of the table (i.e. a partition) pinned to just the nodes in a region.
-	// In such cases, sending spans sequentially may under-utilize the rest of the
-	// cluster given that we have a limit on the number of spans we send out at
-	// a given time. Randomizing the order of spans should help ensure a more even
-	// distribution of work across the cluster regardless of how leaseholders may
-	// or may not be clustered.
-	rand.Shuffle(len(allSpans), func(i, j int) {
-		allSpans[i], allSpans[j] = allSpans[j], allSpans[i]
-	})
-
 	progressLogger := jobs.NewChunkProgressLogger(job, len(spans), job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
-	pkIDs := make(map[uint64]struct{})
-	for _, desc := range backupManifest.Descriptors {
-		if t := desc.Table(hlc.Timestamp{}); t != nil {
-			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = struct{}{}
-		}
-	}
-
-	// We're already limiting these on the server-side, but sending all the
-	// Export requests at once would fill up distsender/grpc/something and cause
-	// all sorts of badness (node liveness timeouts leading to mass leaseholder
-	// transfers, poor performance on SQL workloads, etc) as well as log spam
-	// about slow distsender requests. Rate limit them here, too.
-	//
-	// Each node limits the number of running Export & Import requests it serves
-	// to avoid overloading the network, so multiply that by the number of nodes
-	// in the cluster and use that as the number of outstanding Export requests
-	// for the rate limiting. This attempts to strike a balance between
-	// simplicity, not getting slow distsender log spam, and keeping the server
-	// side limiter full.
-	//
-	// TODO(dan): Make this limiting per node.
-	//
-	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentExports := numClusterNodes * int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 10
-	exportsSem := make(chan struct{}, maxConcurrentExports)
-
-	g := ctxgroup.WithContext(ctx)
-
 	requestFinishedCh := make(chan struct{}, len(spans)) // enough buffer to never block
-
-	// Only start the progress logger if there are spans, otherwise this will
-	// block forever. This is needed for TestBackupRestoreResume which doesn't
-	// have any spans. Users should never hit this.
+	g := ctxgroup.WithContext(ctx)
 	if len(spans) > 0 {
 		g.GoCtx(func(ctx context.Context) error {
+			// Currently the granularity of backup progress is the % of spans
+			// exported. Would improve accuracy if we tracked the actual size of each
+			// file.
 			return progressLogger.Loop(ctx, requestFinishedCh)
 		})
 	}
+
+	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	g.GoCtx(func(ctx context.Context) error {
-		for i := range allSpans {
-			{
-				select {
-				case exportsSem <- struct{}{}:
-				case <-ctx.Done():
-					// Break the for loop to avoid creating more work - the backup
-					// has failed because either the context has been canceled or an
-					// error has been returned. Either way, Wait() is guaranteed to
-					// return an error now.
-					return ctx.Err()
-				}
+		// When a processor is done exporting a span, it will send a progress update
+		// to progCh.
+		for progress := range progCh {
+			var progDetails BackupManifest_Progress
+			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+				log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
+			}
+			if backupManifest.RevisionStartTime.Less(progDetails.RevStartTime) {
+				backupManifest.RevisionStartTime = progDetails.RevStartTime
+			}
+			for _, file := range progDetails.Files {
+				files = append(files, file)
+				exported.add(file.EntryCounts)
 			}
 
-			span := allSpans[i]
-			g.GoCtx(func(ctx context.Context) error {
-				defer func() { <-exportsSem }()
-				header := roachpb.Header{Timestamp: span.end}
-				req := &roachpb.ExportRequest{
-					RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
-					Storage:                             defaultStore.Conf(),
-					StorageByLocalityKV:                 storageByLocalityKV,
-					StartTime:                           span.start,
-					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
-					MVCCFilter:                          roachpb.MVCCFilter(backupManifest.MVCCFilter),
-					Encryption:                          encryption,
-				}
-				rawRes, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-				if pErr != nil {
-					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
-				}
-				res := rawRes.(*roachpb.ExportResponse)
+			// Signal that an ExportRequest finished to update job progress.
+			requestFinishedCh <- struct{}{}
+			var checkpointFiles BackupFileDescriptors
+			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
+				checkpointFiles = append(checkpointFiles, files...)
 
-				mu.Lock()
-				if backupManifest.RevisionStartTime.Less(res.StartTime) {
-					backupManifest.RevisionStartTime = res.StartTime
+				backupManifest.Files = checkpointFiles
+				err := writeBackupManifest(
+					ctx, settings, defaultStore, BackupManifestCheckpointName, encryption, backupManifest,
+				)
+				if err != nil {
+					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
 				}
-				for _, file := range res.Files {
-					f := BackupManifest_File{
-						Span:        file.Span,
-						Path:        file.Path,
-						Sha512:      file.Sha512,
-						EntryCounts: countRows(file.Exported, pkIDs),
-						LocalityKV:  file.LocalityKV,
-					}
-					if span.start != backupManifest.StartTime {
-						f.StartTime = span.start
-						f.EndTime = span.end
-					}
-					mu.files = append(mu.files, f)
-					mu.exported.add(f.EntryCounts)
-				}
-				var checkpointFiles BackupFileDescriptors
-				if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
-					// We optimistically assume the checkpoint will succeed to prevent
-					// multiple threads from attempting to checkpoint.
-					mu.lastCheckpoint = timeutil.Now()
-					checkpointFiles = append(checkpointFiles, mu.files...)
-				}
-				mu.Unlock()
 
-				requestFinishedCh <- struct{}{}
-
-				if checkpointFiles != nil {
-					// Make a copy while holding mu to avoid races while marshaling the
-					// manifest into the checkpoint file.
-					mu.Lock()
-					maninfestCopy := *backupManifest
-					mu.Unlock()
-
-					checkpointMu.Lock()
-					maninfestCopy.Files = checkpointFiles
-					err := writeBackupManifest(
-						ctx, settings, defaultStore, BackupManifestCheckpointName, encryption, &maninfestCopy,
-					)
-					checkpointMu.Unlock()
-					if err != nil {
-						log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
-					}
-				}
-				return nil
-			})
+				lastCheckpoint = timeutil.Now()
+			}
 		}
 		return nil
 	})
+
+	pkIDs := make(map[uint64]bool)
+	for _, desc := range backupManifest.Descriptors {
+		if t := desc.Table(hlc.Timestamp{}); t != nil {
+			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
+		}
+	}
+
+	if err := distBackup(
+		ctx,
+		phs,
+		spans,
+		introducedSpans,
+		pkIDs,
+		defaultURI,
+		urisByLocalityKV,
+		encryption,
+		roachpb.MVCCFilter(backupManifest.MVCCFilter),
+		backupManifest.StartTime,
+		backupManifest.EndTime,
+		progCh,
+	); err != nil {
+		return RowCount{}, err
+	}
 
 	if err := g.Wait(); err != nil {
 		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(len(spans)))
 	}
 
-	// No more concurrency, so no need to acquire locks below.
-
-	backupManifest.Files = mu.files
-	backupManifest.EntryCounts = mu.exported
+	backupManifest.Files = files
+	backupManifest.EntryCounts = exported
 
 	backupID := uuid.MakeV4()
 	backupManifest.ID = backupID
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
 		filesByLocalityKV := make(map[string][]BackupManifest_File)
-		for i := range mu.files {
-			file := &mu.files[i]
+		for i := range files {
+			file := &files[i]
 			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], *file)
 		}
 
@@ -424,7 +346,7 @@ func backup(
 		return RowCount{}, err
 	}
 
-	return mu.exported, nil
+	return exported, nil
 }
 
 func (b *backupResumer) releaseProtectedTimestamp(
@@ -529,8 +451,10 @@ func (b *backupResumer) Resume(
 
 	res, err := backup(
 		ctx,
+		p,
+		details.URI,
+		details.URIsByLocalityKV,
 		p.ExecCfg().DB,
-		numClusterNodes,
 		p.ExecCfg().Settings,
 		defaultStore,
 		storageByLocalityKV,
