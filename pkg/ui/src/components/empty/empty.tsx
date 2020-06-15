@@ -16,50 +16,53 @@ import styles from "./empty.module.styl";
 
 const cx = classnames.bind(styles);
 
-export interface IEmptyProps {
+interface IMainEmptyProps {
   title?: string;
   description?: string;
   label?: React.ReactNode;
   link?: string;
   anchor?: string;
   backgroundImage?: string;
-  onClick?: () => void;
-  btnType?: "button" | "anchor";
 }
+
+type OnClickXORHref =
+  | {
+      onClick?: () => void;
+      buttonHref?: never;
+    }
+  | {
+      onClick?: never;
+      buttonHref?: string;
+    };
+
+export type EmptyProps = OnClickXORHref & IMainEmptyProps;
 
 export const Empty = ({
   title,
   description,
   anchor,
   label,
-  onClick,
   link,
   backgroundImage,
-}: IEmptyProps) => (
+  onClick,
+  buttonHref,
+}: EmptyProps) => (
   <div
     className={cx("cl-empty-view")}
     style={{ backgroundImage: `url(${backgroundImage})` }}
   >
-    <Text
-      className={cx("cl-empty-view__title")}
-      textType={TextTypes.Heading3}
-    >
+    <Text className={cx("cl-empty-view__title")} textType={TextTypes.Heading3}>
       {title}
     </Text>
-    <div
-      className={cx("cl-empty-view__content")}
-    >
+    <div className={cx("cl-empty-view__content")}>
       <main className={cx("cl-empty-view__main")}>
         <Text
-          className={cx("cl-empty-view__main--text")}
           textType={TextTypes.Body}
+          className={cx("cl-empty-view__main--text")}
         >
           {description}
           {link && (
-            <Anchor
-              href={link}
-              className={cx("cl-empty-view__main--anchor")}
-            >
+            <Anchor href={link} className={cx("cl-empty-view__main--anchor")}>
               {anchor}
             </Anchor>
           )}
@@ -68,7 +71,9 @@ export const Empty = ({
       <footer className={cx("cl-empty-view__footer")}>
         <Button
           type="primary"
-          onClick={onClick}
+          onClick={() =>
+            buttonHref ? window.open(buttonHref) : onClick && onClick()
+          }
         >
           {label}
         </Button>
@@ -78,7 +83,6 @@ export const Empty = ({
 );
 
 Empty.defaultProps = {
-  onClick: () => {},
   backgroundImage: heroBannerLp,
   anchor: "Learn more",
   label: "Learn more",
