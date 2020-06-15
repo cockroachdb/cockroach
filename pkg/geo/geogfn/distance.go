@@ -38,7 +38,10 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
-	spheroid := geographiclib.WGS84Spheroid
+	spheroid, err := a.Spheroid()
+	if err != nil {
+		return 0, err
+	}
 	return distanceGeographyRegions(spheroid, useSphereOrSpheroid, aRegions, bRegions, 0)
 }
 

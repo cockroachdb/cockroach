@@ -14,7 +14,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geosegmentize"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
@@ -37,7 +36,10 @@ func Segmentize(geography *geo.Geography, segmentMaxLength float64) (*geo.Geogra
 		if segmentMaxLength <= 0 {
 			return nil, errors.Newf("maximum segment length must be positive")
 		}
-		spheroid := geographiclib.WGS84Spheroid
+		spheroid, err := geography.Spheroid()
+		if err != nil {
+			return nil, err
+		}
 		// Convert segmentMaxLength to Angle with respect to earth sphere as
 		// further calculation is done considering segmentMaxLength as Angle.
 		segmentMaxAngle := segmentMaxLength / spheroid.SphereRadius

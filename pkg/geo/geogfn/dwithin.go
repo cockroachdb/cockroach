@@ -12,7 +12,6 @@ package geogfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,7 +41,10 @@ func DWithin(
 		}
 		return false, err
 	}
-	spheroid := geographiclib.WGS84Spheroid
+	spheroid, err := a.Spheroid()
+	if err != nil {
+		return false, err
+	}
 	maybeClosestDistance, err := distanceGeographyRegions(spheroid, useSphereOrSpheroid, aRegions, bRegions, distance)
 	if err != nil {
 		return false, err

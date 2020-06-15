@@ -41,6 +41,13 @@ var distanceTestCases = []struct {
 		9124665.27317673,
 	},
 	{
+		"POINT to POINT (CDG to LAX) SRID=4004",
+		"SRID=4004;POINT(-118.4079 33.9434)",
+		"SRID=4004;POINT(2.5559 49.0083)",
+		9102062.53966977,
+		9123572.72696577,
+	},
+	{
 		"LINESTRING to POINT where POINT is on vertex",
 		"LINESTRING(2.0 2.0, 3.0 3.0)",
 		"POINT(3.0 3.0)",
