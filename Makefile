@@ -1532,13 +1532,13 @@ bin/.docgen_functions: bin/docgen
 
 docs/generated/redact_safe.md:
 	@(echo "The following types are considered always safe for reporting:"; echo; \
-	  echo "File | Type"; echo "--|--") >$@.tmp
-	@git grep '^func \(.*\) SafeValue\(\)' | \
+	  echo "File | Type"; echo "--|--") >$@.tmp || { rm -f $@.tmp; exit 1; }
+	@git grep -n '^func \(.*\) SafeValue\(\)' | \
 	  grep -v '^pkg/util/redact' | \
-	  sed -E -e 's/^([^:]*):func \(([^ ]* )?(.*)\) SafeValue.*$$/\1 | \`\3\`/g' >>$@.tmp || rm -f $@.tmp
-	@git grep 'redact\.RegisterSafeType' | \
+	  sed -E -e 's/^([^:]*):[0-9]+:func \(([^ ]* )?(.*)\) SafeValue.*$$/\1 | \`\3\`/g' >>$@.tmp || { rm -f $@.tmp; exit 1; }
+	@git grep -n 'redact\.RegisterSafeType' | \
 	  grep -v '^pkg/util/redact' | \
-	  sed -E -e 's/^([^:]*):.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' >>$@.tmp || rm -f $@.tmp
+	  sed -E -e 's/^([^:]*):[0-9]+:.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' >>$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 
 settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
