@@ -171,7 +171,7 @@ project
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
       ├── x:1 + 1.5 [as=r:3, type=decimal]
-      ├── '2000-01-01' - 15 [as=s:4, type=date]
+      ├── '2000-01-01'::DATE - 15 [as=s:4, type=date]
       ├── 10.10 * x:1 [as=t:5, type=decimal]
       ├── 1 / y:2 [as=u:6, type=decimal]
       └── x:1 // 1.5 [as=v:7, type=decimal]

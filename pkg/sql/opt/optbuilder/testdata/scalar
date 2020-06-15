@@ -350,14 +350,12 @@ false [type=bool]
 build-scalar
 1::decimal
 ----
-cast: DECIMAL [type=decimal]
- └── const: 1 [type=decimal]
+const: 1 [type=decimal]
 
 build-scalar
 1::float
 ----
-cast: FLOAT8 [type=float]
- └── const: 1.0 [type=float]
+const: 1.0 [type=float]
 
 build-scalar
 1.1::int
@@ -368,13 +366,28 @@ cast: INT8 [type=int]
 build-scalar
 '2010-05-12'::timestamp
 ----
-const: '2010-05-12 00:00:00+00:00' [type=timestamp]
+cast: TIMESTAMP [type=timestamp]
+ └── const: '2010-05-12' [type=string]
+
+build-scalar
+'now'::timestamp
+----
+cast: TIMESTAMP [type=timestamp]
+ └── const: 'now' [type=string]
+
+build-scalar
+'2010-05-12'::timestamp - 'now'
+----
+minus [type=interval]
+ ├── cast: TIMESTAMP [type=timestamp]
+ │    └── const: '2010-05-12' [type=string]
+ └── cast: TIMESTAMP [type=timestamp]
+      └── const: 'now' [type=string]
 
 build-scalar
 '123'::int
 ----
-cast: INT8 [type=int]
- └── const: 123 [type=int]
+const: 123 [type=int]
 
 build-scalar vars=(int, int)
 IFNULL(@1, @2)

@@ -322,6 +322,11 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 				panic(errorf("invalid boolean value \"%s\" (expected \"true\" or \"false\")", str))
 			}
 		}
+
+		// String to Datum.
+		if desiredType == reflect.TypeOf((*tree.Datum)(nil)).Elem() {
+			return tree.NewDString(str)
+		}
 	}
 	return nil
 }

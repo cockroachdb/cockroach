@@ -173,8 +173,7 @@ project
       │    │    ├── prune: (1-7)
       │    │    └── interesting orderings: (+1)
       │    └── projections
-      │         ├── cast: STRING [as=lag_1_arg1:10, type=string, immutable]
-      │         │    └── const: 'foo' [type=string]
+      │         ├── const: 'foo' [as=lag_1_arg1:10, type=string]
       │         ├── const: 1 [as=lag_1_arg2:11, type=int]
       │         ├── cast: STRING [as=lag_1_arg3:12, type=string, immutable]
       │         │    └── null [type=unknown]

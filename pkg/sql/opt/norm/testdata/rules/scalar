@@ -152,25 +152,40 @@ project
 # --------------------------------------------------
 # EliminateCast
 # --------------------------------------------------
-norm expect=EliminateCast
-SELECT
-    i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::bit, s::string::text
-FROM a
+
+# CastExpr removes unnecessary casts during type-checking; but it's still
+# conceivable that some other rule may create an unnecessary CastExpr.
+exprnorm expect=EliminateCast
+(Root
+  (Project
+    (Scan [ (Table "a") (Cols "i,s,arr") ])
+    [ 
+      (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
+      (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
+      (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
+      (ProjectionsItem (Cast (Null "char(2)") "bit")                           (NewColumn "c4" "bit"))
+      (ProjectionsItem (Cast (Cast (Var "s") "string") "text")                 (NewColumn "c5" "text"))
+    ]
+    ""
+  )
+  (Presentation "c1,c2,c3,c4,c5")
+  (NoOrdering)
+)
 ----
 project
- ├── columns: i:7 arr:8 jsonb:9!null bit:10 s:11
+ ├── columns: c1:7 c2:8 c3:9!null c4:10 c5:11
  ├── fd: ()-->(9,10)
  ├── scan a
- │    └── columns: a.i:2 a.s:4 a.arr:6
+ │    └── columns: i:2 s:4 arr:6
  └── projections
-      ├── a.i:2 [as=i:7, outer=(2)]
-      ├── a.arr:6 [as=arr:8, outer=(6)]
-      ├── '[1, 2]' [as=jsonb:9]
-      ├── CAST(NULL AS BIT) [as=bit:10]
-      └── a.s:4 [as=s:11, outer=(4)]
+      ├── i:2 [as=c1:7, outer=(2)]
+      ├── arr:6 [as=c2:8, outer=(6)]
+      ├── '[1, 2]' [as=c3:9]
+      ├── CAST(NULL AS BIT) [as=c4:10]
+      └── s:4 [as=c5:11, outer=(4)]
 
 # Shouldn't eliminate these casts.
-norm
+norm expect-not=EliminateCast
 SELECT
     i::float,
     arr::decimal[],

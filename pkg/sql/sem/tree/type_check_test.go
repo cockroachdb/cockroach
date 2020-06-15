@@ -52,7 +52,7 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL::int4`, `NULL::INT4`},
 		{`NULL::int8`, `NULL::INT8`},
 		{`INTERVAL '1s'`, `'00:00:01':::INTERVAL`},
-		{`(1.1::decimal)::decimal`, `1.1:::DECIMAL::DECIMAL::DECIMAL`},
+		{`(1.1::decimal)::decimal`, `1.1:::DECIMAL`},
 		{`NULL = 1`, `NULL`},
 		{`1 = NULL`, `NULL`},
 		{`true AND NULL`, `true AND NULL`},
@@ -90,14 +90,14 @@ func TestTypeCheck(t *testing.T) {
 		{`true IS NOT FALSE`, `true IS NOT false`},
 		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT8 WHEN 1:::INT8 THEN (1:::INT8, 2:::INT8) ELSE (1:::INT8, 3:::INT8) END`},
 		{`1 BETWEEN 2 AND 3`, `1:::INT8 BETWEEN 2:::INT8 AND 3:::INT8`},
-		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT8 BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8::FLOAT8`},
+		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT8 BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8`},
 		{`count(3)`, `count(3:::INT8)`},
 		{`ARRAY['a', 'b', 'c']`, `ARRAY['a':::STRING, 'b':::STRING, 'c':::STRING]:::STRING[]`},
 		{`ARRAY[1.5, 2.5, 3.5]`, `ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]:::DECIMAL[]`},
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},
 		{`ARRAY[NULL]:::int[]`, `ARRAY[NULL]:::INT8[]`},
 		{`ARRAY[NULL, NULL]:::int[]`, `ARRAY[NULL, NULL]:::INT8[]`},
-		{`ARRAY[]::INT8[]`, `ARRAY[]:::INT8[]::INT8[]`},
+		{`ARRAY[]::INT8[]`, `ARRAY[]:::INT8[]`},
 		{`ARRAY[]:::INT8[]`, `ARRAY[]:::INT8[]`},
 		{`1 = ANY ARRAY[1.5, 2.5, 3.5]`, `1:::DECIMAL = ANY ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]:::DECIMAL[]`},
 		{`true = SOME (ARRAY[true, false])`, `true = SOME ARRAY[true, false]:::BOOL[]`},
@@ -110,7 +110,7 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL = ALL current_schemas(true)`, `NULL`},
 
 		{`INTERVAL '1'`, `'00:00:01':::INTERVAL`},
-		{`DECIMAL '1.0'`, `1.0:::DECIMAL::DECIMAL`},
+		{`DECIMAL '1.0'`, `1.0:::DECIMAL`},
 
 		{`1 + 2`, `3:::INT8`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
@@ -179,10 +179,10 @@ func TestTypeCheck(t *testing.T) {
 		// output using the Parseable formatter which inserts type annotations
 		// at the end of all well-typed datums. And the second cast is caused by
 		// the test itself.
-		{`'NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
-		{`'-NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
-		{`'Inf'::decimal`, `'Infinity':::DECIMAL::DECIMAL`},
-		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL::DECIMAL`},
+		{`'NaN'::decimal`, `'NaN':::DECIMAL`},
+		{`'-NaN'::decimal`, `'NaN':::DECIMAL`},
+		{`'Inf'::decimal`, `'Infinity':::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL`},
 
 		// Test type checking with some types to resolve.
 		// Because the resolvable types right now are just aliases, the
@@ -190,7 +190,7 @@ func TestTypeCheck(t *testing.T) {
 		{`1:::d.t1`, `1:::INT8`},
 		{`1:::d.s.t3 + 1.4`, `1:::DECIMAL + 1.4:::DECIMAL`},
 		{`1 IS OF (d.t1, t2)`, `1:::INT8 IS OF (INT8, STRING)`},
-		{`1::d.t1`, `1:::INT8::INT8`},
+		{`1::d.t1`, `1:::INT8`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {
