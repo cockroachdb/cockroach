@@ -575,9 +575,6 @@ func rewriteTypeDescs(types []*sqlbase.TypeDescriptor, descriptorRewrites DescRe
 // RewriteTableDescs mutates tables to match the ID and privilege specified
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
-// TODO (rohany): I'm not sure what is a scalable way of ensuring that if new
-//  expressions are added to table descriptors that they are then given rewrite
-//  rules here, otherwise we could end up with corrupted backups.
 func RewriteTableDescs(
 	tables []*sqlbase.TableDescriptor, descriptorRewrites DescRewriteMap, overrideDB string,
 ) error {
@@ -600,6 +597,19 @@ func RewriteTableDescs(
 
 		table.ID = tableRewrite.ID
 		table.ParentID = tableRewrite.ParentID
+
+		// Remap type IDs in all serialized expressions within the TableDescriptor.
+		// TODO (rohany): This needs tests once partial indexes are ready.
+		if err := sqlbase.ForEachExprStringInTableDesc(table, func(expr *string) error {
+			newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
+			if err != nil {
+				return err
+			}
+			*expr = newExpr
+			return nil
+		}); err != nil {
+			return err
+		}
 
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			// Verify that for any interleaved index being restored, the interleave
@@ -624,15 +634,6 @@ func RewriteTableDescs(
 					)
 				}
 				index.InterleavedBy[j].Table = childRewrite.ID
-			}
-			// Rewrite the index's partial expression, if it has one.
-			// TODO (rohany): This needs tests once partial indexes are ready.
-			if index.IsPartial() {
-				newExpr, err := rewriteTypesInExpr(index.Predicate, descriptorRewrites)
-				if err != nil {
-					return err
-				}
-				index.Predicate = newExpr
 			}
 			return nil
 		}); err != nil {
@@ -696,23 +697,6 @@ func RewriteTableDescs(
 		rewriteCol := func(col *sqlbase.ColumnDescriptor) error {
 			// Rewrite the types.T's IDs present in the column.
 			rewriteIDsInTypesT(col.Type, descriptorRewrites)
-			// If the column has a default expression, remap types in the default expression.
-			if col.HasDefault() {
-				newExpr, err := rewriteTypesInExpr(*col.DefaultExpr, descriptorRewrites)
-				if err != nil {
-					return err
-				}
-				col.DefaultExpr = &newExpr
-			}
-			// If the column is computed, remap types in the computed expression.
-			if col.IsComputed() {
-				newExpr, err := rewriteTypesInExpr(*col.ComputeExpr, descriptorRewrites)
-				if err != nil {
-					return err
-				}
-				col.ComputeExpr = &newExpr
-			}
-
 			var newSeqRefs []sqlbase.ID
 			for _, seqID := range col.UsesSequenceIds {
 				if rewrite, ok := descriptorRewrites[seqID]; ok {
@@ -740,29 +724,6 @@ func RewriteTableDescs(
 		for idx := range table.Mutations {
 			if col := table.Mutations[idx].GetColumn(); col != nil {
 				if err := rewriteCol(col); err != nil {
-					return err
-				}
-			}
-		}
-
-		// rewriteCheck is a closure that rewrites IDs within a check constraint.
-		rewriteCheck := func(c *sqlbase.TableDescriptor_CheckConstraint) error {
-			newExpr, err := rewriteTypesInExpr(c.Expr, descriptorRewrites)
-			if err != nil {
-				return err
-			}
-			c.Expr = newExpr
-			return nil
-		}
-		for i := range table.Checks {
-			if err := rewriteCheck(table.Checks[i]); err != nil {
-				return err
-			}
-		}
-		for i := range table.Mutations {
-			if constraint := table.Mutations[i].GetConstraint(); constraint != nil &&
-				constraint.ConstraintType == sqlbase.ConstraintToUpdate_CHECK {
-				if err := rewriteCheck(&constraint.Check); err != nil {
 					return err
 				}
 			}
