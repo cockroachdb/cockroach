@@ -131,7 +131,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			if interval != 0 {
 				// If (some store on) this node is the leaseholder for range 1, do the
 				// work.
-				stats.meta1LeaseHolder = stats.meta1LeaseHolderStore()
+				stats.meta1LeaseHolder = stats.meta1LeaseHolderStore(ctx)
 				if stats.meta1LeaseHolder != nil {
 					if err := stats.update(
 						ctx, &constraintsSaver, &replStatsSaver, &criticalLocSaver,
@@ -252,16 +252,16 @@ func (stats *Reporter) update(
 
 // meta1LeaseHolderStore returns the node store that is the leaseholder of Meta1
 // range or nil if none of the node's stores are holding the Meta1 lease.
-func (stats *Reporter) meta1LeaseHolderStore() *kvserver.Store {
+func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Store {
 	const meta1RangeID = roachpb.RangeID(1)
 	repl, store, err := stats.localStores.GetReplicaForRangeID(meta1RangeID)
 	if roachpb.IsRangeNotFoundError(err) {
 		return nil
 	}
 	if err != nil {
-		log.Fatalf(context.TODO(), "unexpected error when visiting stores: %s", err)
+		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
-	if repl.OwnsValidLease(store.Clock().Now()) {
+	if repl.OwnsValidLease(ctx, store.Clock().Now()) {
 		return store
 	}
 	return nil

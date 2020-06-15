@@ -965,7 +965,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool) {
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
-	status := repl.leaseStatus(*repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
+	status := repl.leaseStatus(context.Background(), *repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
 	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != kvserverpb.LeaseState_VALID
 }
 
@@ -1579,7 +1579,8 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.GetLease()
-	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != kvserverpb.LeaseState_EXPIRED {
+	if tc.repl.leaseStatus(context.Background(),
+		lease, tc.Clock().Now(), hlc.Timestamp{}).State != kvserverpb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -2187,7 +2188,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		for i := 0; i < num; i++ {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
-				status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
+				status := tc.repl.leaseStatus(ctx, *tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
 				llHandle := tc.repl.requestLeaseLocked(ctx, status)
 				tc.repl.mu.Unlock()
 				wg.Done()
@@ -9430,7 +9431,7 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
+func (q *testQuiescer) ownsValidLeaseRLocked(context.Context, hlc.Timestamp) bool {
 	return q.ownsValidLease
 }
 
