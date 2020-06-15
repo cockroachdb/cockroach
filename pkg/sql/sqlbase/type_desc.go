@@ -233,10 +233,6 @@ func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupF
 // HydrateTypeInfoWithName fills in user defined type metadata for
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
-//
-// TODO (rohany): This method should eventually be defined on an
-// ImmutableTypeDescriptor so that pointers to the cached info
-// can be shared among callers.
 func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
 ) error {
@@ -282,21 +278,43 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	}
 }
 
-// GetTypeDescriptorClosure returns a slice of all type descriptor IDs that are
-// referenced by this input types.T.
-func GetTypeDescriptorClosure(typ *types.T) IDs {
-	if !typ.UserDefined() {
-		return IDs{}
-	}
-	ret := IDs{ID(typ.StableTypeID())}
-	if typ.Family() == types.ArrayFamily {
-		// If we have an array type, then maybe get the element type ID.
-		if typ.ArrayContents().UserDefined() {
-			ret = append(ret, ID(typ.ArrayContents().StableTypeID()))
+// GetIDClosure returns all type descriptor IDs that are referenced by this
+// type descriptor.
+func (desc *TypeDescriptor) GetIDClosure() map[ID]struct{} {
+	ret := make(map[ID]struct{})
+	// Collect the descriptor's own ID.
+	ret[desc.ID] = struct{}{}
+	if desc.Kind == TypeDescriptor_ALIAS {
+		// If this descriptor is an alias for another type, then get collect the
+		// closure for alias.
+		children := GetTypeDescriptorClosure(desc.Alias)
+		for id := range children {
+			ret[id] = struct{}{}
 		}
 	} else {
 		// Otherwise, take the array type ID.
-		ret = append(ret, ID(typ.StableArrayTypeID()))
+		ret[desc.ArrayTypeID] = struct{}{}
+	}
+	return ret
+}
+
+// GetTypeDescriptorClosure returns all type descriptor IDs that are
+// referenced by this input types.T.
+func GetTypeDescriptorClosure(typ *types.T) map[ID]struct{} {
+	if !typ.UserDefined() {
+		return map[ID]struct{}{}
+	}
+	// Collect the type's descriptor ID.
+	ret := map[ID]struct{}{ID(typ.StableTypeID()): {}}
+	if typ.Family() == types.ArrayFamily {
+		// If we have an array type, then collect all types in the contents.
+		children := GetTypeDescriptorClosure(typ.ArrayContents())
+		for id := range children {
+			ret[id] = struct{}{}
+		}
+	} else {
+		// Otherwise, take the array type ID.
+		ret[ID(typ.StableArrayTypeID())] = struct{}{}
 	}
 	return ret
 }
