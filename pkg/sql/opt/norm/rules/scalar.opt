@@ -55,6 +55,9 @@ $item
 
 # EliminateCast discards the cast operator if its input already has a type
 # that's equivalent to the desired static type.
+
+# Note that CastExpr removes unnecessary casts during type-checking; this rule
+# can still be helpful if some other rule creates an unnecessary CastExpr.
 [EliminateCast, Normalize]
 (Cast $input:* $targetTyp:* & (HasColType $input $targetTyp))
 =>
