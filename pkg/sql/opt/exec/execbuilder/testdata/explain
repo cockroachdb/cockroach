@@ -957,7 +957,7 @@ inner-join (hash)
  │    ├── cost: 1100.02
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
- │    └── unfiltered-cols: (1,2)
+ │    └── unfiltered-cols: (1-3)
  ├── scan t
  │    ├── columns: k:4 v:5
  │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0]
