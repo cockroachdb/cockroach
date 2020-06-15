@@ -1066,22 +1066,7 @@ Options is a flag that can be bitmasked. The options are:
 				distance := float64(*args[1].(*tree.DFloat))
 				azimuth := float64(*args[2].(*tree.DFloat))
 
-				geomT, err := g.AsGeomT()
-				if err != nil {
-					return nil, err
-				}
-
-				point, ok := geomT.(*geom.Point)
-				if !ok {
-					return nil, errors.Newf("ST_Project(geography) is only valid for point inputs")
-				}
-
-				projected, err := geogfn.Project(point, distance, s1.Angle(azimuth))
-				if err != nil {
-					return nil, err
-				}
-
-				geog, err := geo.NewGeographyFromGeom(projected)
+				geog, err := geogfn.Project(g.Geography, distance, s1.Angle(azimuth))
 				if err != nil {
 					return nil, err
 				}
