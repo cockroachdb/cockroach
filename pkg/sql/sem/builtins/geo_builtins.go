@@ -1769,6 +1769,30 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	//
 	// Binary functions
 	//
+	"st_azimuth": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				azimuth, err := geomfn.Azimuth(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				if azimuth == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(*azimuth)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.
+
+The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_distance": makeBuiltin(
 		defProps(),
 		geometryOverload2(
