@@ -15,6 +15,7 @@ import styles from "./button.module.styl";
 export interface ButtonProps {
   type?: "primary" | "secondary" | "flat" | "unstyled-link";
   disabled?: boolean;
+  textAlign?: "left" | "right" | "center";
   size?: "default" | "small";
   children?: React.ReactNode;
   icon?: () => React.ReactNode;
@@ -22,12 +23,13 @@ export interface ButtonProps {
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   className?: string;
   buttonType?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
+  tabIndex?: ButtonHTMLAttributes<HTMLButtonElement>["tabIndex"];
 }
 
 const cx = classNames.bind(styles);
 
 export function Button(props: ButtonProps) {
-  const { children, type, disabled, size, icon, iconPosition, onClick, className, buttonType } = props;
+  const { children, type, disabled, size, icon, iconPosition, onClick, className, buttonType, tabIndex, textAlign } = props;
 
   const rootStyles = cx(
     "crl-button",
@@ -56,10 +58,11 @@ export function Button(props: ButtonProps) {
       className={rootStyles}
       disabled={disabled}
       type={buttonType}
+      tabIndex={tabIndex}
     >
       <div className={cx("crl-button__container")}>
         { iconPosition === "left" && renderIcon() }
-        <div className={cx("crl-button__content")}>
+        <div className={cx("crl-button__content")} style={{textAlign}}>
           {children}
         </div>
         { iconPosition === "right" && renderIcon() }
@@ -76,4 +79,5 @@ Button.defaultProps = {
   className: "",
   iconPosition: "left",
   buttonType: "button",
+  textAlign: "left",
 };

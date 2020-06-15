@@ -45,7 +45,7 @@ export class PasswordInput extends React.Component<PasswordInputProps, PasswordI
   }
 
   renderPasswordIcon = (showPassword: boolean) => (
-    <Button type="flat" onClick={this.togglePassword} className="crl-button__show-password">
+    <Button tabIndex={-1} type="flat" onClick={this.togglePassword} className="crl-button__show-password">
       <img src={showPassword ? EyeOff : Eye} alt="Toggle Password" />
     </Button>
   )

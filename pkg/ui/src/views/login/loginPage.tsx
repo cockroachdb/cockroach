@@ -32,8 +32,10 @@ interface LoginPageState {
   password?: string;
 }
 
-export class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
-  constructor(props: LoginPageProps & RouteComponentProps) {
+type Props = LoginPageProps & RouteComponentProps;
+
+export class LoginPage extends React.Component<Props, LoginPageState> {
+  constructor(props: Props) {
     super(props);
     this.state = {
       username: "",
@@ -54,23 +56,25 @@ export class LoginPage extends React.Component<LoginPageProps & RouteComponentPr
     });
   }
 
+  componentDidUpdate() {
+    const { loginState: { loggedInUser } } = this.props;
+    if (loggedInUser !== null) {
+      const { location, history } = this.props;
+      const params = new URLSearchParams(location.search);
+      if (params.has("redirectTo")) {
+        history.push(params.get("redirectTo"));
+      } else {
+        history.push("/");
+      }
+    }
+  }
+
   handleSubmit = (evt: React.FormEvent<any>) => {
-    const { location, history, handleLogin} = this.props;
+    const { handleLogin} = this.props;
     const { username, password } = this.state;
     evt.preventDefault();
 
-    handleLogin(username, password)
-      .then((response) => {
-        const status: number = response.status;
-        if (status >= 200 && status < 300) {
-          const params = new URLSearchParams(location.search);
-          if (params.has("redirectTo")) {
-            history.push(params.get("redirectTo"));
-          } else {
-            history.push("/");
-          }
-        }
-      });
+    handleLogin(username, password);
   }
 
   renderError() {
@@ -121,7 +125,7 @@ export class LoginPage extends React.Component<LoginPageProps & RouteComponentPr
                     label="Password"
                     value={password}
                   />
-                  <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress}>
+                  <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress} textAlign={"center"}>
                     {loginState.inProgress ? "Logging in..." : "Log in"}
                   </Button>
                 </form>
