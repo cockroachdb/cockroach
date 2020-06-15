@@ -7,34 +7,14 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import { storiesOf } from "@storybook/react";
-import { ConnectedRouter, connectRouter } from "connected-react-router";
-import { createMemoryHistory } from "history";
 import React from "react";
-import { Provider } from "react-redux";
-import { combineReducers, createStore } from "redux";
-import { RenderFunction } from "storybook__react";
+import { storiesOf } from "@storybook/react";
+import { withRouterDecorator } from "src/util/decorators";
 import { LoginPage } from "./loginPage";
 import { loginPagePropsFixture, loginPagePropsLoadingFixture, loginPagePropsErrorFixture } from "./loginPage.fixture";
 
-const history = createMemoryHistory();
-const routerReducer = connectRouter(history);
-
-const store = createStore(combineReducers({
-  router: routerReducer,
-}));
-
-const withRouterProvider = (storyFn: RenderFunction) => (
-  <Provider store={store}>
-    <ConnectedRouter history={history}>
-      { storyFn() }
-    </ConnectedRouter>
-  </Provider>
-);
-
 storiesOf("LoginPage", module)
-  .addDecorator(withRouterProvider)
+  .addDecorator(withRouterDecorator)
   .add("Default state", () => (
     <LoginPage {...loginPagePropsFixture} />
   ))
