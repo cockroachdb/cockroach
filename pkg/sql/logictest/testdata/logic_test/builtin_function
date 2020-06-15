@@ -1,8 +1,6 @@
-# 3node-tenant fails due to:
-# https://github.com/cockroachdb/cockroach/issues/48375
-# Specifically, a status server is unavailable when attempting to set a zone
-# config.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(49854)
+# TODO(asubiotto): Possibly split out the test that attempts to set a zone
+# config in order to run the other ones.
 
 statement ok
 CREATE TABLE foo (a int)
