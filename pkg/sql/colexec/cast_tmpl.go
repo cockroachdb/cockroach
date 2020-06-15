@@ -56,7 +56,7 @@ const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _RIGHT_TYPE_WIDTH is the template variable.
 const _RIGHT_TYPE_WIDTH = 0
 
-func _CAST(to, from interface{}) {
+func _CAST(to, from, fromCol interface{}) {
 	colexecerror.InternalError("")
 }
 
@@ -104,7 +104,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								} else {
 									v := _L_UNSAFEGET(inputCol, i)
 									var r _R_GO_TYPE
-									_CAST(r, v)
+									_CAST(r, v, inputCol)
 									_R_SET(outputCol, i, r)
 								}
 							}
@@ -116,7 +116,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								} else {
 									v := _L_UNSAFEGET(inputCol, i)
 									var r _R_GO_TYPE
-									_CAST(r, v)
+									_CAST(r, v, inputCol)
 									_R_SET(outputCol, i, r)
 								}
 							}
@@ -127,7 +127,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 							for _, i := range sel {
 								v := _L_UNSAFEGET(inputCol, i)
 								var r _R_GO_TYPE
-								_CAST(r, v)
+								_CAST(r, v, inputCol)
 								_R_SET(outputCol, i, r)
 							}
 						} else {
@@ -135,7 +135,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 							for execgen.RANGE(i, inputCol, 0, n) {
 								v := _L_UNSAFEGET(inputCol, i)
 								var r _R_GO_TYPE
-								_CAST(r, v)
+								_CAST(r, v, inputCol)
 								_R_SET(outputCol, i, r)
 							}
 						}

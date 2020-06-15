@@ -112,6 +112,21 @@ SELECT ST_AsText(ST_Project('POINT(0 0)'::geography, 100000, radians(45.0)))
 ----
 POINT (0.635231029125537 0.639472334729198)
 
+statement error Argument must be POINT geometries
+SELECT ST_Azimuth('POLYGON((0 0, 0 0, 0 0, 0 0))'::geometry, 'POLYGON((0 0, 0 0, 0 0, 0 0))'::geometry)
+
+query RR
+SELECT
+	degrees(ST_Azimuth(ST_Point(25, 45), ST_Point(75, 100))) AS degA_B,
+	degrees(ST_Azimuth(ST_Point(75, 100), ST_Point(25, 45))) AS degB_A
+----
+42.2736890060937  222.273689006094
+
+query R
+SELECT ST_Azimuth(ST_Point(0, 0), ST_Point(0, 0))
+----
+NULL
+
 subtest cast_test
 
 query T
