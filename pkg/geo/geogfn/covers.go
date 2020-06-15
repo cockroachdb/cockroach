@@ -48,6 +48,10 @@ func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 
 // covers is the internal calculation for Covers.
 func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
+	if !a.BoundingBoxIntersects(b) {
+		return false, nil
+	}
+
 	// Ignore EMPTY regions in a.
 	aRegions, err := a.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
