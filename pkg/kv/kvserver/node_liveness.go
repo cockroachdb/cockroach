@@ -336,7 +336,14 @@ func (nl *NodeLiveness) SetCommissionStatus(
 		// it to make sure that when we actually try to update the liveness, the
 		// previous view is correct. This, too, is required to de-flake
 		// TestNodeLivenessDecommissionAbsent.
-		nl.maybeUpdate(oldLivenessRec)
+		//
+		// XXX: We need our inmemory store to be the reconciled version. Is it
+		// fine for use to reconcile on the fly? The mutations for
+		// oldLivenessRec.Liveness here and in setCommissionStatusInternal are
+		// hard to follow.
+		olrCopy := oldLivenessRec
+		olrCopy.Liveness = reconcileMixedVersionLiveness(oldLivenessRec.Liveness)
+		nl.maybeUpdate(olrCopy)
 
 		return nl.setCommissionStatusInternal(ctx, nodeID, oldLivenessRec, targetStatus)
 	}
@@ -392,6 +399,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	update.new = reconcileMixedVersionLiveness(update.new)
 
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
+		actual.Liveness = reconcileMixedVersionLiveness(actual.Liveness)
 		nl.maybeUpdate(actual)
 		if actual.Draining == update.new.Draining {
 			return errNodeDrainingSet
@@ -466,6 +474,15 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 		ignoreCache: true,
 	}
 
+	if oldLivenessRec.CommissionStatus == newLiveness.CommissionStatus {
+		// No-op. Return early.
+		// XXX: Write tests for what gets inserted into event log, and what doesn't.
+		return false, nil
+	} else if oldLivenessRec.CommissionStatus == kvserverpb.CommissionStatus_DECOMMISSIONED_ &&
+		newLiveness.CommissionStatus == kvserverpb.CommissionStatus_DECOMMISSIONING_ {
+		// Also check for old == decomm'd and new == decomm'ing.
+		return false, nil
+	}
 	// XXX: I want to add asserts on status found on oldLivenessRec.Liveness,
 	// does the following suffice? It's not, it's only catching other changes
 	// sneaking in from under us. Why can't we just blindly retry? Do the whole
@@ -575,6 +592,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 						if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 							log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 						}
+						liveness = reconcileMixedVersionLiveness(liveness) // XXX: Because we can expect empty liveness record.
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
 							if errors.Is(err, ErrEpochIncremented) {
 								log.Infof(ctx, "%s; retrying", err)
@@ -718,6 +736,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		// Update liveness to actual value on mismatch.
+		actual.Liveness = reconcileMixedVersionLiveness(actual.Liveness)
 		nl.maybeUpdate(actual)
 		// If the actual liveness is different than expected, but is
 		// considered live, treat the heartbeat as a success. This can
@@ -882,7 +901,11 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness kvserverpb.
 	update.new.Epoch++
 	update.new = reconcileMixedVersionLiveness(update.new)
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
-		defer nl.maybeUpdate(actual)
+		defer func() {
+			actual.Liveness = reconcileMixedVersionLiveness(actual.Liveness)
+			nl.maybeUpdate(actual)
+		}()
+
 		if actual.Epoch > liveness.Epoch {
 			return ErrEpochAlreadyIncremented
 		} else if actual.Epoch < liveness.Epoch {
@@ -1212,6 +1235,16 @@ func reconcileMixedVersionLiveness(old kvserverpb.Liveness) (new kvserverpb.Live
 		new.DeprecatedDecommissioning = old.CommissionStatus.ToBooleanForm()
 	} else {
 		// Liveness is from node running v20.1, we fill in the commission state.
+		// XXX: Check all instances of maybeUpdate. I run into this panic on a
+		// fresh v20.2 node, and I shouldn't. I should only ever see the new
+		// proto in that case. Improve the interface for
+		// reconcileMixedVersionLiveness so that it's used at all call sites.
+		// Maybe mutate the arg. Should this just be a method on kvserverpb.Liveness?
+		// XXX: Investigation was prompted by seeing wrong commission status
+		// during decomm bit, and I'm pretty sure it's due to this code path
+		// (need to confirm), and implicitly dealing with empty liveness
+		// records.
+		//panic("here")
 		new.CommissionStatus = kvserverpb.CommissionStatusFromBooleanForm(old.DeprecatedDecommissioning)
 	}
 

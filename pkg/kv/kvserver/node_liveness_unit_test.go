@@ -22,7 +22,7 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	l := func(epo int64, expiration hlc.Timestamp, draining, decom bool) kvserverpb.Liveness {
-		return storagepb.Liveness{
+		return kvserverpb.Liveness{
 			Epoch:                     epo,
 			Expiration:                hlc.LegacyTimestamp(expiration),
 			Draining:                  draining,

@@ -1798,10 +1798,18 @@ func (s *Server) Decommission(
 	ctx context.Context, targetStatus kvserverpb.CommissionStatus, nodeIDs []roachpb.NodeID,
 ) error {
 	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
-	eventType := sql.EventLogNodeDecommissioned
-	if targetStatus == kvserverpb.CommissionStatus_COMMISSIONED_ {
+	var eventType sql.EventLogType
+	switch targetStatus {
+	case kvserverpb.CommissionStatus_DECOMMISSIONING_:
+		eventType = sql.EventLogNodeDecommissioning
+	case kvserverpb.CommissionStatus_DECOMMISSIONED_:
+		eventType = sql.EventLogNodeDecommissioned
+	case kvserverpb.CommissionStatus_COMMISSIONED_:
 		eventType = sql.EventLogNodeRecommissioned
+	default:
+		panic("unexpected target commission status")
 	}
+
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetCommissionStatus(ctx, nodeID, targetStatus)
 		if err != nil {

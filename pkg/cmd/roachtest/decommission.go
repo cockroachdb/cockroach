@@ -327,7 +327,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 
 	decommissionHeader := []string{
-		"id", "is_live", "replicas", "is_decommissioning", "is_draining",
+		"id", "is_live", "replicas", "is_decommissioning", "commission_status", "is_draining",
 	}
 	decommissionFooter := []string{
 		"No more data reported on target nodes. " +
@@ -389,7 +389,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{"1", "true", "0", "true", "false"},
+			{"1", "true", "0", "true", "decommissioning|decommissioned", "false"},
 			decommissionFooter,
 		}
 
@@ -447,7 +447,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{"2", "true", "0", "true", "false"},
+			{"2", "true", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -474,7 +474,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{"3", "true", "0", "true", "false"},
+			{"3", "true", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -495,7 +495,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{"3", "true", "0", "true", "false"},
+			{"3", "true", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -535,7 +535,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{"1", "true|false", "0", "true", "false"},
+			{"1", "true|false", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -575,7 +575,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		// drop to zero faster than liveness times out.
 		exp := [][]string{
 			decommissionHeader,
-			{"1", `true|false`, "0", `true`, `false`},
+			{"1", `true|false`, "0", `true`, `decommissioned`, `false`},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {

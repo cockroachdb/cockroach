@@ -1692,6 +1692,7 @@ func (s *adminServer) DecommissionStatus(
 			NodeID:                    l.NodeID,
 			ReplicaCount:              replicaCounts[l.NodeID],
 			DeprecatedDecommissioning: l.DeprecatedDecommissioning,
+			CommissionStatus:          l.CommissionStatus,
 			Draining:                  l.Draining,
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
