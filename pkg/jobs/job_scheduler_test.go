@@ -18,15 +18,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe/testdata/src/github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/types"
 	"github.com/gorhill/cronexpr"
 	"github.com/stretchr/testify/require"
 )
@@ -140,24 +146,32 @@ func TestJobSchedulerDaemonInitialScanDelay(t *testing.T) {
 	}
 }
 
+func getScopedSettings() (*settings.Values, func()) {
+	sv := &settings.Values{}
+	sv.Init(nil)
+	return sv, settings.TestingSaveRegistry()
+}
+
 func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sv := settings.Values{}
-	schedulerEnabledSetting.Override(&sv, false)
+	sv, cleanup := getScopedSettings()
+	defer cleanup()
+
+	schedulerEnabledSetting.Override(sv, false)
 
 	// When disabled, we wait 5 minutes before rechecking.
-	require.True(t, 5*time.Minute == getWaitPeriod(&sv))
-	schedulerEnabledSetting.Override(&sv, true)
+	require.True(t, 5*time.Minute == getWaitPeriod(sv))
+	schedulerEnabledSetting.Override(sv, true)
 
 	// When pace is too low, we use something more reasonable.
-	schedulerPaceSetting.Override(&sv, time.Nanosecond)
-	require.True(t, minPacePeriod == getWaitPeriod(&sv))
+	schedulerPaceSetting.Override(sv, time.Nanosecond)
+	require.True(t, minPacePeriod == getWaitPeriod(sv))
 
 	// Otherwise, we use user specified setting.
 	pace := 42 * time.Second
-	schedulerPaceSetting.Override(&sv, pace)
-	require.True(t, pace == getWaitPeriod(&sv))
+	schedulerPaceSetting.Override(sv, pace)
+	require.True(t, pace == getWaitPeriod(sv))
 }
 
 type recordScheduleExecutor struct {
@@ -179,6 +193,12 @@ func (n *recordScheduleExecutor) NotifyJobTermination(
 
 var _ ScheduledJobExecutor = &recordScheduleExecutor{}
 
+func scanImmediately() func() {
+	oldScanDelay := getInitialScanDelay
+	getInitialScanDelay = func() time.Duration { return 0 }
+	return func() { getInitialScanDelay = oldScanDelay }
+}
+
 func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -186,8 +206,9 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	sv := settings.Values{}
-	schedulerEnabledSetting.Override(&sv, true)
+	sv, cleanup := getScopedSettings()
+	defer cleanup()
+	schedulerEnabledSetting.Override(sv, true)
 
 	// Register executor which keeps track of schedules it executes.
 	const executorName = "record-execute"
@@ -195,10 +216,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	defer registerScopedScheduledJobExecutor(executorName, neverExecute)()
 
 	// Disable initial scan delay.
-	defer func(f func() time.Duration) {
-		getInitialScanDelay = f
-	}(getInitialScanDelay)
-	getInitialScanDelay = func() time.Duration { return 0 }
+	defer scanImmediately()()
 
 	// Override getWaitPeriod to use small delay.
 	defer func(f func(_ *settings.Values) time.Duration) {
@@ -232,7 +250,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	}
 
 	// Run the daemon.
-	StartJobSchedulerDaemon(ctx, stopper, &sv, h.env, h.kvDB, h.ex)
+	StartJobSchedulerDaemon(ctx, stopper, sv, h.env, h.kvDB, h.ex)
 
 	// Wait for daemon to run it's scan loop few times.
 	for i := 0; i < 5; i++ {
@@ -271,6 +289,16 @@ func expectScheduledRuns(t *testing.T, h *testHelper, expected ...expectedRun) {
 	})
 }
 
+func overridePaceSetting(d time.Duration) func() {
+	oldPace := getWaitPeriod
+	getWaitPeriod = func(_ *settings.Values) time.Duration {
+		return d
+	}
+	return func() {
+		getWaitPeriod = oldPace
+	}
+}
+
 func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	h, cleanup := newTestHelper(t)
@@ -293,22 +321,13 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 	sort.Slice(scheduleIDs, func(i, j int) bool { return scheduleIDs[i] < scheduleIDs[j] })
 
 	// Make daemon run fast.
-	defer func(f func(_ *settings.Values) time.Duration) {
-		getWaitPeriod = f
-	}(getWaitPeriod)
-
-	getWaitPeriod = func(_ *settings.Values) time.Duration {
-		return 10 * time.Millisecond
-	}
-	defer func(f func() time.Duration) {
-		getInitialScanDelay = f
-	}(getInitialScanDelay)
-	getInitialScanDelay = func() time.Duration { return 0 }
+	defer overridePaceSetting(10 * time.Millisecond)()
+	defer scanImmediately()()
 
 	stopper := stop.NewStopper()
-	sv := settings.Values{}
-	schedulerEnabledSetting.Override(&sv, true)
-	StartJobSchedulerDaemon(ctx, stopper, &sv, h.env, h.kvDB, h.ex)
+	sv, cleanup := getScopedSettings()
+	defer cleanup()
+	StartJobSchedulerDaemon(ctx, stopper, sv, h.env, h.kvDB, h.ex)
 
 	// Advance our fake time 1 hour forward (plus a bit)
 	h.env.AdvanceTime(time.Hour + time.Second)
@@ -346,27 +365,17 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	sort.Slice(scheduleIDs, func(i, j int) bool { return scheduleIDs[i] < scheduleIDs[j] })
 
 	// Make daemon execute initial scan immediately, but block subsequent scans.
-	defer func(f func(_ *settings.Values) time.Duration) {
-		getWaitPeriod = f
-	}(getWaitPeriod)
-
-	getWaitPeriod = func(_ *settings.Values) time.Duration {
-		return time.Hour
-	}
-
-	defer func(f func() time.Duration) {
-		getInitialScanDelay = f
-	}(getInitialScanDelay)
-	getInitialScanDelay = func() time.Duration { return 0 }
+	defer scanImmediately()()
+	defer overridePaceSetting(time.Hour)()
 
 	// Advance our fake time 1 hour forward (plus a bit) so that the daemon finds matching jobs.
 	h.env.AdvanceTime(time.Hour + time.Second)
 
 	stopper := stop.NewStopper()
-	sv := settings.Values{}
-	schedulerEnabledSetting.Override(&sv, true)
-	schedulerMaxJobsPerIterationSetting.Override(&sv, 2)
-	StartJobSchedulerDaemon(ctx, stopper, &sv, h.env, h.kvDB, h.ex)
+	sv, cleanup := getScopedSettings()
+	defer cleanup()
+	schedulerMaxJobsPerIterationSetting.Override(sv, 2)
+	StartJobSchedulerDaemon(ctx, stopper, sv, h.env, h.kvDB, h.ex)
 
 	// Note: time is stored in the table with microsecond precision.
 	expectScheduledRuns(t, h,
@@ -378,4 +387,41 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	)
 
 	stopper.Stop(ctx)
+}
+
+func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer settings.TestingSaveRegistry()
+
+	// Make daemon run quickly
+	defer scanImmediately()()
+	defer overridePaceSetting(10 * time.Millisecond)()
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, "CREATE TABLE defaultdb.foo(a int)")
+
+	// Create a one off job which writes some values into 'foo' table.
+	schedule := NewScheduledJob(ProdJobSchedulerEnv)
+	schedule.SetScheduleName("test schedule")
+	schedule.SetNextRun(timeutil.Now())
+	any, err := types.MarshalAny(
+		&jobspb.SqlStatementExecutionArg{Statement: "INSERT INTO defaultdb.foo VALUES (1), (2), (3)"})
+	require.NoError(t, err)
+	schedule.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
+	require.NoError(t, schedule.Create(
+		ctx, s.InternalExecutor().(sqlutil.InternalExecutor), nil))
+
+	// Verify the schedule ran.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		if err := db.QueryRow(
+			"SELECT count(*) FROM defaultdb.foo").Scan(&count); err != nil || count != 3 {
+			return errors.Newf("expected 3 rows, got %d (err=%+v)", count, err)
+		}
+		return nil
+	})
 }
