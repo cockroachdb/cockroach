@@ -25,7 +25,7 @@ import "sql/sqlbase/locking.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
-import "sql/opt/invertedexpr/span_expression.proto";
+import "sql/opt/invertedexpr/expression.proto";
 import "gogoproto/gogo.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
@@ -499,16 +499,18 @@ message InvertedJoinerSpec {
 
   // The join expression is a conjunction of inverted_expr and on_expr.
 
-  // Expression involving only the indexed column and the lookup column, where
-  // @1 refers to the lookup column and @2 to the indexed column. The
-  // expression is used to construct an implementation of
-  // RowToInvertedIndexExpr which will be fed each input row and output
-  // an expression to evaluate over the inverted index.
+  // Expression involving only the indexed column and the lookup column.
+  // Assuming that the input stream has N columns and the table that has been
+  // indexed has M columns, in this expression variables @1 to @N refer to
+  // columns of the input stream and variables @(N+1) to @(N+M) refer to
+  // columns in the table. Although the numbering includes all columns, only
+  // columns corresponding to the indexed column and the lookup column may be
+  // present in this expression. Note that the column numbering matches the
+  // numbering used below by the on expression.
   //
-  // TODO(sumeer): RowToInvertedIndexExpr will be added with the
-  // invertedJoiner implementation. And update this comment when all the
-  // expression generation machinery is in place to refer to actual code
-  // abstractions.
+  // The expression is passed to xform.NewDatumToInvertedExpr to construct an
+  // implementation of invertedexpr.DatumToInvertedExpr, which will be fed each
+  // input row and output an expression to evaluate over the inverted index.
   optional Expression inverted_expr = 4 [(gogoproto.nullable) = false];
 
   // Optional expression involving the columns in the index (other than the
@@ -518,7 +520,8 @@ message InvertedJoinerSpec {
   // input stream and variables @(N+1) to @(N+M) refer to columns in the
   // table. The numbering does not omit the column in the table corresponding
   // to the inverted column, or other table columns absent from the index, but
-  // they cannot be present in this expression.
+  // they cannot be present in this expression. Note that the column numbering
+  // matches the numbering used above by the inverted expression.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   // Only INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI are supported. For indexes

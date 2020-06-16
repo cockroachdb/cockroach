@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -53,14 +54,6 @@ const (
 	// ijEmittingRows means it is emitting the results of the inverted join.
 	ijEmittingRows
 )
-
-// DatumToInvertedExpr is constructed by the caller using
-// InvertedJoinerSpec.InvertedExpr -- the invertedJoiner computes the returned
-// expression.
-type DatumToInvertedExpr interface {
-	// Convert uses the lookup column to construct an inverted expression.
-	Convert(sqlbase.EncDatum) (*invertedexpr.SpanExpressionProto, error)
-}
 
 type invertedJoiner struct {
 	execinfra.ProcessorBase
@@ -110,7 +103,7 @@ type invertedJoiner struct {
 	input               execinfra.RowSource
 	inputTypes          []*types.T
 	lookupColumnIdx     uint32
-	datumToInvertedExpr DatumToInvertedExpr
+	datumToInvertedExpr invertedexpr.DatumToInvertedExpr
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
 
@@ -158,7 +151,7 @@ func newInvertedJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InvertedJoinerSpec,
-	datumToInvertedExpr DatumToInvertedExpr,
+	datumToInvertedExpr invertedexpr.DatumToInvertedExpr,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -230,6 +223,17 @@ func newInvertedJoiner(
 		return nil, err
 	}
 	ij.combinedRow = make(sqlbase.EncDatumRow, 0, len(onExprColTypes))
+
+	if ij.datumToInvertedExpr == nil {
+		var invertedExprHelper execinfra.ExprHelper
+		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, ij.EvalCtx); err != nil {
+			return nil, err
+		}
+		ij.datumToInvertedExpr, err = xform.NewDatumToInvertedExpr(invertedExprHelper.Expr, ij.index)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var fetcher row.Fetcher
 	// In general we need all the columns in the index to compute the set
@@ -387,7 +391,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 			// result in an empty set as the evaluation result.
 			ij.batchedExprEval.exprs = append(ij.batchedExprEval.exprs, nil)
 		} else {
-			expr, err := ij.datumToInvertedExpr.Convert(row[ij.lookupColumnIdx])
+			expr, err := ij.datumToInvertedExpr.Convert(ij.Ctx, row[ij.lookupColumnIdx])
 			if err != nil {
 				ij.MoveToDraining(err)
 				return ijStateUnknown, ij.DrainHelper()

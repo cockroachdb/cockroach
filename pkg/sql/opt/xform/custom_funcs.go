@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -974,7 +975,9 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return an invertedConstraint.
-		invertedConstraint, geoOk = c.tryConstrainGeoIndex(filters, scanPrivate.Table, iter.Index())
+		invertedConstraint, geoOk = tryConstrainGeoIndex(
+			c.e.evalCtx.Context, filters, scanPrivate.Table, iter.Index(),
+		)
 		if geoOk {
 			// Geo index scans can never be tight, so remaining filters is always the
 			// same as filters.
@@ -1826,6 +1829,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 // covering, all geospatial lookup joins must be wrapped in an index join with
 // the primary index of the table. See the description of Case 2 in the comment
 // above GenerateLookupJoins for details about how this works.
+// TODO(rytaft): generalize this function to be GenerateInvertedJoins and add
+//  support for JSON and array inverted indexes.
+// TODO(rytaft): handle more complicated geo-spatial expressions
+//  e.g. ST_Intersects(x, y) AND ST_Covers(x, y) where y is the indexed value.
 func (c *CustomFuncs) GenerateGeoLookupJoins(
 	grp memo.RelExpr,
 	joinType opt.Operator,
@@ -1845,18 +1852,16 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		return
 	}
 
-	function := fn.(*memo.FunctionExpr)
-	inputProps := input.Relational()
-
-	// Extract the geospatial relationship as well as the variable inputs to
-	// the geospatial function.
-	relationship, ok := geoRelationshipMap[function.Name]
-	if !ok {
+	if !IsGeoIndexFunction(fn) {
 		panic(errors.AssertionFailedf(
 			"GenerateGeoLookupJoins called on a function that cannot be index-accelerated",
 		))
 	}
 
+	function := fn.(*memo.FunctionExpr)
+	inputProps := input.Relational()
+
+	// Extract the the variable inputs to the geospatial function.
 	if function.Args.ChildCount() < 2 {
 		panic(errors.AssertionFailedf(
 			"all index-accelerated geospatial functions should have at least two arguments",
@@ -1912,27 +1917,27 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		// primary key columns from it.
 		indexCols := pkCols.ToSet()
 
-		lookupJoin := memo.GeoLookupJoinExpr{Input: input}
+		lookupJoin := memo.InvertedJoinExpr{Input: input}
 		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.IndexOrdinal()
-		lookupJoin.GeoRelationshipType = relationship
-		lookupJoin.GeoCol = inputGeoCol
+		lookupJoin.InvertedExpr = function
+		lookupJoin.InputCol = inputGeoCol
 		lookupJoin.Cols = indexCols.Union(inputProps.OutputCols)
 
 		var indexJoin memo.LookupJoinExpr
 
 		// ON may have some conditions that are bound by the columns in the index
 		// and some conditions that refer to other columns. We can put the former
-		// in the GeospatialLookupJoin and the latter in the index join.
+		// in the InvertedJoin and the latter in the index join.
 		lookupJoin.On = c.ExtractBoundConditions(on, lookupJoin.Cols)
 		indexJoin.On = c.ExtractUnboundConditions(on, lookupJoin.Cols)
 
-		indexJoin.Input = c.e.f.ConstructGeoLookupJoin(
+		indexJoin.Input = c.e.f.ConstructInvertedJoin(
 			lookupJoin.Input,
 			lookupJoin.On,
-			&lookupJoin.GeoLookupJoinPrivate,
+			&lookupJoin.InvertedJoinPrivate,
 		)
 		indexJoin.JoinType = joinType
 		indexJoin.Table = scanPrivate.Table
@@ -3032,4 +3037,16 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 		Flags:   sp.Flags,
 		Locking: sp.Locking,
 	}
+}
+
+// NewDatumToInvertedExpr returns a new DatumToInvertedExpr. Currently there
+// is only one possible implementation returned, geoDatumToInvertedExpr.
+func NewDatumToInvertedExpr(
+	expr tree.TypedExpr, desc *sqlbase.IndexDescriptor,
+) (invertedexpr.DatumToInvertedExpr, error) {
+	if geoindex.IsEmptyConfig(&desc.GeoConfig) {
+		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
+	}
+
+	return NewGeoDatumToInvertedExpr(expr, &desc.GeoConfig)
 }
