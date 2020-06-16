@@ -372,57 +372,58 @@ func (ht *hashTable) checkColForDistinctTuples(
 // {{end}}
 // {{end}}
 
-// {{/*
-func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
-	// {{define "checkBody" -}}
+// execgen:inline
+// execgen:template<selectSameTuples, deletingProbeMode>
+func checkBody(ht *hashTable, nToCheck int, selectSameTuples bool, deletingProbeMode bool) uint64 {
+	nDiffers := uint64(0)
 	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
 		if !ht.probeScratch.differs[toCheck] {
 			// If the current key matches with the probe key, we want to update headID
 			// with the current key if it has not been set yet.
 			keyID := ht.probeScratch.groupID[toCheck]
-			// {{if .DeletingProbeMode}}
-			// We need to check whether this key hasn't been "deleted" (we
-			// reuse 'visited' array for tracking which tuples are deleted).
-			// TODO(yuzefovich): rather than reusing 'visited' array to have
-			// "deleted" marks we could be actually removing tuples' keyIDs
-			// from the hash chains. This will require changing our use of
-			// singly linked list 'next' to doubly linked list.
-			if !ht.visited[keyID] {
-				// It hasn't been deleted, so we match it with 'toCheck'
-				// probing tuple and "delete" the key.
-				ht.probeScratch.headID[toCheck] = keyID
-				ht.visited[keyID] = true
+			if deletingProbeMode {
+				// We need to check whether this key hasn't been "deleted" (we
+				// reuse 'visited' array for tracking which tuples are deleted).
+				// TODO(yuzefovich): rather than reusing 'visited' array to have
+				// "deleted" marks we could be actually removing tuples' keyIDs
+				// from the hash chains. This will require changing our use of
+				// singly linked list 'next' to doubly linked list.
+				if !ht.visited[keyID] {
+					// It hasn't been deleted, so we match it with 'toCheck'
+					// probing tuple and "delete" the key.
+					ht.probeScratch.headID[toCheck] = keyID
+					ht.visited[keyID] = true
+				} else {
+					// It has been deleted, so we need to continue probing on the
+					// next chain if it's not the end of the chain already.
+					if keyID != 0 {
+						ht.probeScratch.toCheck[nDiffers] = toCheck
+						nDiffers++
+					}
+				}
+				continue
 			} else {
-				// It has been deleted, so we need to continue probing on the
-				// next chain if it's not the end of the chain already.
-				if keyID != 0 {
-					ht.probeScratch.toCheck[nDiffers] = toCheck
-					nDiffers++
+				if ht.probeScratch.headID[toCheck] == 0 {
+					ht.probeScratch.headID[toCheck] = keyID
+				}
+				if selectSameTuples {
+					firstID := ht.probeScratch.headID[toCheck]
+					if !ht.visited[keyID] {
+						// We can then add this keyID into the same array at the end of the
+						// corresponding linked list and mark this ID as visited. Since there
+						// can be multiple keys that match this probe key, we want to mark
+						// differs at this position to be true. This way, the prober will
+						// continue probing for this key until it reaches the end of the next
+						// chain.
+						ht.probeScratch.differs[toCheck] = true
+						ht.visited[keyID] = true
+						if firstID != keyID {
+							ht.same[keyID] = ht.same[firstID]
+							ht.same[firstID] = keyID
+						}
+					}
 				}
 			}
-			continue
-			// {{else}}
-			if ht.probeScratch.headID[toCheck] == 0 {
-				ht.probeScratch.headID[toCheck] = keyID
-			}
-			// {{if .SelectSameTuples}}
-			firstID := ht.probeScratch.headID[toCheck]
-			if !ht.visited[keyID] {
-				// We can then add this keyID into the same array at the end of the
-				// corresponding linked list and mark this ID as visited. Since there
-				// can be multiple keys that match this probe key, we want to mark
-				// differs at this position to be true. This way, the prober will
-				// continue probing for this key until it reaches the end of the next
-				// chain.
-				ht.probeScratch.differs[toCheck] = true
-				ht.visited[keyID] = true
-				if firstID != keyID {
-					ht.same[keyID] = ht.same[firstID]
-					ht.same[firstID] = keyID
-				}
-			}
-			// {{end}}
-			// {{end}}
 		}
 		if ht.probeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
@@ -431,9 +432,8 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 			nDiffers++
 		}
 	}
-	// {{end}}
-	// {{/*
-} // */}}
+	return nDiffers
+}
 
 // {{if .HashTableMode.IsDistinctBuild}}
 
@@ -487,12 +487,12 @@ func (ht *hashTable) check(
 	probeVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
 ) uint64 {
 	ht.checkCols(probeVecs, ht.vals.ColVecs(), buildKeyCols, nToCheck, probeSel)
-	nDiffers := uint64(0)
+	var nDiffers uint64
 	switch ht.probeMode {
 	case hashTableDefaultProbeMode:
-		_CHECK_BODY(true, false)
+		nDiffers = checkBody(ht, nToCheck, true, false)
 	case hashTableDeletingProbeMode:
-		_CHECK_BODY(true, true)
+		nDiffers = checkBody(ht, nToCheck, true, true)
 	default:
 		colexecerror.InternalError("unsupported hash table probe mode")
 	}
@@ -509,27 +509,28 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 	for i := range ht.keyCols {
 		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
 	}
-	nDiffers := uint64(0)
-	_CHECK_BODY(false, false)
+	nDiffers := checkBody(ht, nToCheck, false, false)
 	return nDiffers
 }
 
 // {{end}}
 
-// {{/*
-func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
-	// {{define "updateSelBody" -}}
+// execgen:inline
+// execgen:template<useSel>
+func updateSelBody(ht *hashTable, b coldata.Batch, sel []int, useSel bool) int {
+	distinctCount := 0
+
 	// Reuse the buffer allocated for distinct.
 	visited := ht.probeScratch.distinct
 	copy(visited, zeroBoolColumn)
 	for i := 0; i < b.Length(); i++ {
 		if ht.probeScratch.headID[i] != 0 {
 			if hasVisited := visited[ht.probeScratch.headID[i]-1]; !hasVisited {
-				// {{if .UseSel}}
-				sel[distinctCount] = sel[ht.probeScratch.headID[i]-1]
-				// {{else}}
-				sel[distinctCount] = int(ht.probeScratch.headID[i] - 1)
-				// {{end}}
+				if useSel {
+					sel[distinctCount] = sel[ht.probeScratch.headID[i]-1]
+				} else {
+					sel[distinctCount] = int(ht.probeScratch.headID[i] - 1)
+				}
 				visited[ht.probeScratch.headID[i]-1] = true
 				// Compacting and deduplicating hash buffer.
 				ht.probeScratch.hashBuffer[distinctCount] = ht.probeScratch.hashBuffer[i]
@@ -539,9 +540,8 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 		ht.probeScratch.headID[i] = 0
 		ht.probeScratch.differs[i] = false
 	}
-	// {{end}}
-	// {{/*
-} // */}}
+	return distinctCount
+}
 
 // {{if .HashTableMode.IsDistinctBuild}}
 
@@ -553,13 +553,13 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 // key index will be used. The duplicated keyIDs will be discarded. The
 // hashBuffer will also compact and discard hash values of duplicated keys.
 func (ht *hashTable) updateSel(b coldata.Batch) {
-	distinctCount := 0
+	var distinctCount int
 	if sel := b.Selection(); sel != nil {
-		_UPDATE_SEL_BODY(true)
+		distinctCount = updateSelBody(ht, b, sel, true)
 	} else {
 		b.SetSelection(true)
 		sel = b.Selection()
-		_UPDATE_SEL_BODY(false)
+		distinctCount = updateSelBody(ht, b, sel, false)
 	}
 	b.SetLength(distinctCount)
 }

@@ -181,14 +181,13 @@ func (a *anyNotNull_TYPEAggAlloc) newAggFunc() aggregateFunc {
 // {{end}}
 // {{end}}
 
-// {{/*
 // _FIND_ANY_NOT_NULL finds a non-null value for the group that contains the ith
 // row. If a non-null value was already found, then it does nothing. If this is
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
-func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
-	// {{define "findAnyNotNull" -}}
-
+// execgen:inline
+// execgen:template<hasNulls>
+func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, hasNulls bool) {
 	if a.groups[i] {
 		// The `a.curIdx` check is necessary because for the first
 		// group in the result set there is no "current group."
@@ -198,31 +197,22 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				// {{with .Global}}
 				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
 			}
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 	}
 	var isNull bool
-	// {{if .HasNulls}}
-	isNull = nulls.NullAt(i)
-	// {{else}}
-	isNull = false
-	// {{end}}
+	if hasNulls {
+		isNull = nulls.NullAt(i)
+	}
 	if !a.foundNonNullForCurrentGroup && !isNull {
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the
 		// output.
-		// {{with .Global}}
 		val := execgen.UNSAFEGET(col, i)
 		execgen.COPYVAL(a.curAgg, val)
-		// {{end}}
 		a.foundNonNullForCurrentGroup = true
 	}
-	// {{end}}
-
-	// {{/*
-} // */}}
+}
