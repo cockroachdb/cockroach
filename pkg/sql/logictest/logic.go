@@ -121,6 +121,14 @@ import (
 //
 //   # LogicTest: !3node-tenant
 //
+// An issue can optionally be specified as the reason for blocking a given
+// configuration:
+//
+//   # LogicTest: !3node-tenant(<issue number>)
+//
+// A link to the issue will be printed out if the -print-blocklist-issues flag
+// is specified.
+//
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
 //
@@ -399,6 +407,10 @@ var (
 		"optimizer-cost-perturbation", 0,
 		"randomly perturb the estimated cost of each expression in the query tree by at most the "+
 			"given fraction for the purpose of creating alternate query plans in the optimizer.")
+	printBlocklistIssues = flag.Bool(
+		"print-blocklist-issues", false,
+		"for any test files that contain a blocklist directive, print a link to the associated issue",
+	)
 )
 
 type testClusterConfig struct {
@@ -1448,7 +1460,7 @@ func processConfigs(t *testing.T, path string, configNames []string) []logicTest
 		}
 
 		blockedConfig, issueNo := getBlocklistIssueNo(configName[1:])
-		if issueNo != 0 {
+		if *printBlocklistIssues && issueNo != 0 {
 			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, unimplemented.MakeURL(issueNo))
 		}
 		blocklist[blockedConfig] = issueNo
