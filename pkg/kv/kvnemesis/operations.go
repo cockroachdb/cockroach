@@ -27,6 +27,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *PutOperation:
 		return &o.Result
+	case *ScanOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -93,6 +95,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *GetOperation:
 		o.format(w, fctx)
 	case *PutOperation:
+		o.format(w, fctx)
+	case *ScanOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -163,12 +167,7 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 	case ResultType_Value:
 		v := `nil`
 		if len(op.Result.Value) > 0 {
-			value, err := roachpb.Value{RawBytes: op.Result.Value}.GetBytes()
-			if err != nil {
-				v = fmt.Sprintf(`<err:%s>`, err.Error())
-			} else {
-				v = `"` + string(value) + `"`
-			}
+			v = `"` + mustGetStringValue(op.Result.Value) + `"`
 		}
 		fmt.Fprintf(w, ` // (%s, nil)`, v)
 	}
@@ -177,6 +176,33 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.Put(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Value)
 	op.Result.format(w)
+}
+
+func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
+	// NB: DB.Scan has a maxRows parameter that Batch.Scan does not have.
+	maxRowsArg := `, 0`
+	if fctx.receiver == `b` {
+		maxRowsArg = ``
+	}
+	fmt.Fprintf(w, `%s.Scan(ctx, %s, %s%s)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), maxRowsArg)
+	switch op.Result.Type {
+	case ResultType_Error:
+		err := errors.DecodeError(context.TODO(), *op.Result.Err)
+		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
+	case ResultType_Values:
+		var kvs strings.Builder
+		for i, kv := range op.Result.Values {
+			if i > 0 {
+				kvs.WriteString(`, `)
+			}
+			kvs.WriteByte('"')
+			kvs.WriteString(string(kv.Key))
+			kvs.WriteString(`":"`)
+			kvs.WriteString(mustGetStringValue(kv.Value))
+			kvs.WriteByte('"')
+		}
+		fmt.Fprintf(w, ` // ([%s], nil)`, kvs.String())
+	}
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {

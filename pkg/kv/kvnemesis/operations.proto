@@ -43,6 +43,12 @@ message GetOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message ScanOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message PutOperation {
   bytes key = 1;
   bytes value = 2;
@@ -79,9 +85,10 @@ message Operation {
 
   GetOperation get = 7;
   PutOperation put = 8;
-  SplitOperation split = 9;
-  MergeOperation merge = 10;
-  ChangeReplicasOperation change_replicas = 11;
+  ScanOperation scan = 9;
+  SplitOperation split = 10;
+  MergeOperation merge = 11;
+  ChangeReplicasOperation change_replicas = 12;
 }
 
 enum ResultType {
@@ -89,13 +96,23 @@ enum ResultType {
   NoError = 1;
   Error = 2;
   Value = 3;
+  Values = 4;
+}
+
+message KeyValue {
+  bytes key = 1;
+  // The RawBytes of a roachpb.Value.
+  bytes value = 2;
 }
 
 message Result {
   ResultType type = 1;
+  // Only set if Type is ResultType_Error.
   errorspb.EncodedError err = 2;
   // Only set if Type is ResultType_Value. The RawBytes of a roachpb.Value.
   bytes value = 3;
+  // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
+  repeated KeyValue values = 4 [(gogoproto.nullable) = false];
 }
 
 message Step {
