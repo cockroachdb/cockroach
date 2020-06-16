@@ -2473,6 +2473,31 @@ SELECT rolcanlogin FROM pg_roles WHERE rolname = 'role_test_nologin';
 ----
 false
 
+subtest regression_49420
+statement ok
+CREATE USER role_test_with_date VALID UNTIL '2021-01-01';
+CREATE USER role_test_nodate;
+
+query T
+SELECT rolvaliduntil FROM pg_roles WHERE rolname = 'role_test_with_date';
+----
+2021-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT rolvaliduntil FROM pg_roles WHERE rolname = 'role_test_nodate';
+----
+NULL
+
+query T
+SELECT rolvaliduntil FROM pg_authid WHERE rolname = 'role_test_with_date';
+----
+2021-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT rolvaliduntil FROM pg_authid WHERE rolname = 'role_test_nodate';
+----
+NULL
+
 subtest mutations
 
 statement error pg_tables is a system catalog

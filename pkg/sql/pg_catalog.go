@@ -552,10 +552,19 @@ CREATE TABLE pg_catalog.pg_authid (
 )`,
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username string, isRole bool, noLogin bool) error {
+		return forEachRole(ctx, p, func(username string, isRole bool, noLogin bool, rolValidUntil time.Time) error {
 			isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 			isRoleDBool := tree.DBool(isRole)
 			roleCanLogin := tree.DBool(!noLogin)
+			roleValidUntilValue := tree.DNull
+			if !rolValidUntil.IsZero() {
+				var err error
+				roleValidUntilValue, err = tree.MakeDTimestampTZ(rolValidUntil, time.Second)
+				if err != nil {
+					return err
+				}
+			}
+
 			return addRow(
 				h.UserOid(username),          // oid
 				tree.NewDName(username),      // rolname
@@ -568,7 +577,7 @@ CREATE TABLE pg_catalog.pg_authid (
 				tree.DBoolFalse,              // rolbypassrls
 				negOneVal,                    // rolconnlimit
 				passwdStarString,             // rolpassword
-				tree.DNull,                   // rolvaliduntil
+				roleValidUntilValue,          // rolvaliduntil
 			)
 		})
 	},
@@ -2309,10 +2318,19 @@ CREATE TABLE pg_catalog.pg_roles (
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username string, isRole bool, noLogin bool) error {
+			func(username string, isRole bool, noLogin bool, rolValidUntil time.Time) error {
 				isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 				isRoleDBool := tree.DBool(isRole)
 				roleCanLogin := tree.DBool(!noLogin)
+				roleValidUntilValue := tree.DNull
+				if !rolValidUntil.IsZero() {
+					var err error
+					roleValidUntilValue, err = tree.MakeDTimestampTZ(rolValidUntil, time.Second)
+					if err != nil {
+						return err
+					}
+				}
+
 				return addRow(
 					h.UserOid(username),          // oid
 					tree.NewDName(username),      // rolname
@@ -2325,7 +2343,7 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.DBoolFalse,              // rolreplication
 					negOneVal,                    // rolconnlimit
 					passwdStarString,             // rolpassword
-					tree.DNull,                   // rolvaliduntil
+					roleValidUntilValue,          // rolvaliduntil
 					tree.DBoolFalse,              // rolbypassrls
 					tree.DNull,                   // rolconfig
 				)
@@ -2777,7 +2795,7 @@ CREATE TABLE pg_catalog.pg_user (
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username string, isRole bool, noLogin bool) error {
+			func(username string, isRole bool, noLogin bool, rolValidUntil time.Time) error {
 				if isRole {
 					return nil
 				}

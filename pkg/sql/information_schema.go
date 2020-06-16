@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1817,23 +1818,18 @@ func forEachColumnInIndex(
 }
 
 func forEachRole(
-	ctx context.Context, p *planner, fn func(username string, isRole bool, noLogin bool) error,
+	ctx context.Context, p *planner, fn func(username string, isRole bool, noLogin bool, rolValidUntil time.Time) error,
 ) error {
 	query := `
 SELECT
-	username,
+	u.username,
 	"isRole",
-	EXISTS(
-		SELECT
-			option
-		FROM
-			system.role_options AS r
-		WHERE
-			r.username = u.username AND option = 'NOLOGIN'
-	)
-		AS nologin
+	EXISTS(SELECT option FROM system.role_options AS r WHERE r.username = u.username AND option = 'NOLOGIN') AS nologin,
+	ovu.value::timestamptz AS rolvaliduntil
 FROM
-	system.users AS u;
+	system.users AS u
+LEFT JOIN 
+	system.role_options ovu ON ovu.username = u.username AND option = 'VALID UNTIL';
 `
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
 		ctx, "read-roles", p.txn, query,
@@ -1851,9 +1847,14 @@ FROM
 		}
 		noLogin, ok := row[2].(*tree.DBool)
 		if !ok {
-			return errors.Errorf("noLogin should be a boolean value, found %s instead", row[1].ResolvedType())
+			return errors.Errorf("noLogin should be a boolean value, found %s instead", row[2].ResolvedType())
 		}
-		if err := fn(string(username), bool(*isRole), bool(*noLogin)); err != nil {
+		var rolValidUntil time.Time
+		if rolValidUntilDatum, ok := row[3].(*tree.DTimestampTZ); ok {
+			rolValidUntil = rolValidUntilDatum.Time
+		}
+
+		if err := fn(string(username), bool(*isRole), bool(*noLogin), rolValidUntil); err != nil {
 			return err
 		}
 	}
