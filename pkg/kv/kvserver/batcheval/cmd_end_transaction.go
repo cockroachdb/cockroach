@@ -211,7 +211,7 @@ func EndTxn(
 		// to perform this verification for commits. Rollbacks can always write
 		// an aborted txn record.
 		if args.Commit {
-			if err := CanCreateTxnRecord(cArgs.EvalCtx, reply.Txn); err != nil {
+			if err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, reply.Txn); err != nil {
 				return result.Result{}, err
 			}
 		}
