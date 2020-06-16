@@ -779,6 +779,13 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
 }
 
+// LeaseExpiration returns an int64 to increment a manual clock with to
+// make sure that all active range leases expire.
+// TODO(lunevalex): once multiTestContext is dead remove the cfg version of this
+func (s *Store) LeaseExpiration() int64 {
+	return s.cfg.LeaseExpiration()
+}
+
 // NewStore returns a new instance of a store.
 func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
