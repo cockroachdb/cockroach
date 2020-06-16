@@ -127,23 +127,109 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 //
 //  - Let's say a node write its liveness record at tWrite. It sets the
 //    Expiration field of the record as tExp=tWrite+livenessThreshold.
-//    The node is considered LIVE (or DECOMISSIONING or UNAVAILABLE if draining).
+//    The node is considered LIVE (or DECOMMISSIONING or UNAVAILABLE if draining).
 //  - At tExp, the IsLive() method starts returning false. The state becomes
-//    UNAVAILABLE (or stays DECOMISSIONING or UNAVAILABLE if draining).
+//    UNAVAILABLE (or stays DECOMMISSIONING or UNAVAILABLE if draining).
 //  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
 //
 // TODO(irfansharif): Reconsider usage of kvserverpb.NodeLivenessStatus. It's
-// yet another representation of liveness commission status.
+// yet another representation of liveness commission status, and it doesn't
+// quite map to what's defined there.
+//
+// FIXME(irfansharif): Because of usage of NodeLivenessStatus, and this
+// deadThreshold, it's still possible to recommission a fully decommissioned
+// node (as long as you do it within deadThreshold).
+//
+// I’m terribly confused by this enum we use to represent a node’s view of
+// liveness, of another. Some states {DEAD, LIVE, UNAVAILABLE} could very well
+// overlap with other states {DECOMMISSIONED, DECOMMISSIONING}. By that I mean
+// you could very well have a DEAD node that is also DECOMMISSIONING. So I’m not
+// sure why it’s an enum in the first place.
+// We have this random code to disambiguate between all these states, but I
+// can’t make sense of why it looks the way it does. Am I missing something
+// obvious or is this weird?
 func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
-		if l.DecommissioningOrDecommissioned() {
+		if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
 			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
 		}
 		return kvserverpb.NodeLivenessStatus_DEAD
 	}
-	if l.DecommissioningOrDecommissioned() {
+	if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
+		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
+	}
+	if l.Draining {
+		return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+	}
+	if l.IsLive(now) {
+		return kvserverpb.NodeLivenessStatus_LIVE
+	}
+	return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+}
+
+// LivenessStatus returns a NodeLivenessStatus enumeration value for the
+// provided Liveness based on the provided timestamp and threshold.
+//
+// See the note on IsLive() for considerations on what should be passed in as
+// `now`.
+//
+// The timeline of the states that a liveness goes through as time passes after
+// the respective liveness record is written is the following:
+//
+//  -----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
+//       tWrite         tExp                 tExp+threshold
+//
+// Explanation:
+//
+//  - Let's say a node write its liveness record at tWrite. It sets the
+//    Expiration field of the record as tExp=tWrite+livenessThreshold.
+//    The node is considered LIVE (or DECOMMISSIONING or UNAVAILABLE if draining).
+//  - At tExp, the IsLive() method starts returning false. The state becomes
+//    UNAVAILABLE (or stays DECOMMISSIONING or UNAVAILABLE if draining).
+//  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//
+// TODO(irfansharif): Reconsider usage of kvserverpb.NodeLivenessStatus. It's
+// yet another representation of liveness commission status, and it doesn't
+// quite map to what's defined there.
+//
+// FIXME(irfansharif): Because of usage of NodeLivenessStatus, and this
+// deadThreshold, it's still possible to recommission a fully decommissioned
+// node (as long as you do it within deadThreshold).
+//
+// I’m terribly confused by this enum we use to represent a node’s view of
+// liveness, of another. Some states {DEAD, LIVE, UNAVAILABLE} could very well
+// overlap with other states {DECOMMISSIONED, DECOMMISSIONING}. By that I mean
+// you could very well have a DEAD node that is also DECOMMISSIONING. So I’m not
+// sure why it’s an enum in the first place.
+// We have this random code to disambiguate between all these states, but I
+// can’t make sense of why it looks the way it does. Am I missing something
+// obvious or is this weird?
+func LivenessStatusV2(
+	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
+) kvserverpb.NodeLivenessStatus {
+	// XXX: When recommissioning a node, CPut should check for decommissioning
+	// status.
+	// XXX: There are two things we're interested in: "Commission" status (comm,
+	// decom'ing, decom'ed), and "Liveness" status (live, unavailable,
+	// available).
+	if l.CommissionStatus.Decommissioned() {
+		return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
+	}
+	if l.CommissionStatus.Decommissioning() {
+		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
+	}
+	if l.CommissionStatus.Commissioned() {
+	}
+
+	if l.IsDead(now, deadThreshold) {
+		if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
+			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
+		}
+		return kvserverpb.NodeLivenessStatus_DEAD
+	}
+	if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
 		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
 	}
 	if l.Draining {

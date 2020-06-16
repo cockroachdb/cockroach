@@ -1799,14 +1799,13 @@ func (s *Server) Decommission(
 ) error {
 	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
 	var eventType sql.EventLogType
-	switch targetStatus {
-	case kvserverpb.CommissionStatus_DECOMMISSIONING_:
+	if targetStatus.Decommissioning() {
 		eventType = sql.EventLogNodeDecommissioning
-	case kvserverpb.CommissionStatus_DECOMMISSIONED_:
+	} else if targetStatus.Decommissioned() {
 		eventType = sql.EventLogNodeDecommissioned
-	case kvserverpb.CommissionStatus_COMMISSIONED_:
+	} else if targetStatus.Commissioned() {
 		eventType = sql.EventLogNodeCommissioned
-	default:
+	} else {
 		panic("unexpected target commission status")
 	}
 

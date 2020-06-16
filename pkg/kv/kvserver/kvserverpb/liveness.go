@@ -41,28 +41,54 @@ func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
 	return !now.Before(deadAsOf)
 }
 
-func (l *Liveness) DecommissioningOrDecommissioned() bool {
-	return l.CommissionStatus.DecommissioningOrDecommissioned()
-}
-
-func (l Liveness) String() string {
+func (l *Liveness) String() string {
 	var extra string
-	if l.Draining || l.DecommissioningOrDecommissioned() {
-		extra = fmt.Sprintf(" drain:%t comm:%s dep:%t", l.Draining, l.CommissionStatus.String(), l.DeprecatedDecommissioning) // XXX: Remove this last one.
+	if l.Draining || l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
+		extra = fmt.Sprintf(" drain:%t comm:%s", l.Draining, l.CommissionStatus.String())
 	}
 	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
+}
+
+// EnsureCompatible is typically called before transmitting/after receiving
+// Liveness objects from over the wire. The representation for a given node's
+// 'commission status' was changed in v20.2. In v20.1, we used a boolean
+// representation to indicated that a node was undergoing a decommissioning
+// process. Since it was only a boolean, we couldn't disambiguate between a node
+// currently undergoing decommissioning, and a fully decommissioned node. In
+// v20.2 we introduced a dedicated enum to be able to disambiguate between the
+// two. That being said, v20.2 nodes need to be able to operate in mixed
+// clusters with v20.1 nodes, that only know to interpret the boolean
+// representation. EnsureCompatible is able to reconcile across both
+// representations by mutating the receiver such that it's understood by both
+// v20.1 and v20.2 nodes (See AssertValid for what this entails).
+// If the receiver object is clearly one generated from a v20.1 node, we
+// consider the deprecated boolean representation as the authoritative one. We
+// consider the enum state authoritative if not.
+//
+// TODO(irfansharif): Remove this once v20.2 is cut.
+func (l *Liveness) EnsureCompatible() {
+	if l.CommissionStatus.Unknown() {
+		// Liveness is from node running v20.1, or is an empty
+		// kvserverpb.Liveness, we fill in the commission status.
+		l.CommissionStatus = CommissionStatusFromBooleanForm(l.DeprecatedDecommissioning)
+	} else {
+		// Liveness is from node running v20.2, we backfill in the deprecated
+		// boolean state.
+		l.DeprecatedDecommissioning = l.CommissionStatus.Decommissioning() ||
+			l.CommissionStatus.Decommissioned()
+	}
 }
 
 // AssertValid checks that the liveness record is internally consistent (i.e.
 // it's deprecated v20.1 boolean decommissioning representation is consistent
 // with the v20.2 enum representation).
-func (l Liveness) AssertValid() {
+func (l *Liveness) AssertValid() {
 	if l.CommissionStatus.Unknown() {
 		panic("invalid commission status")
 	}
 
 	err := fmt.Sprintf("inconsistent liveness representation: %v", l.String())
-	if l.CommissionStatus.DecommissioningOrDecommissioned() {
+	if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
 		if !l.DeprecatedDecommissioning {
 			panic(err)
 		}
@@ -99,26 +125,10 @@ func CommissionStatusFromBooleanForm(decommissioning bool) CommissionStatus {
 	return CommissionStatus_COMMISSIONED_
 }
 
-// DecommissioningOrDecommissioned converts the CommissionStatus to the
-// deprecated boolean representation used in the v20.1 liveness proto
-// definition.
-//
-// TODO(irfansharif): Remove this once v20.2 is cut, as we no longer need to be
-// compatible with the deprecated boolean decommissioning representation used by
-// v20.1 nodes.
-func (c CommissionStatus) DecommissioningOrDecommissioned() bool {
-	return c == CommissionStatus_DECOMMISSIONING_ || c == CommissionStatus_DECOMMISSIONED_
-}
-
-// XXX: Export nicer looking symbols for CommissionStatus_XYZ_
-
-// Unknown is the placeholder default value we use for wire compatibility in
-// mixed version clusters, where earlier version nodes may not make use of this
-// commission status enum.
-func (c CommissionStatus) Unknown() bool {
-	return c == CommissionStatus_UNKNOWN_
-}
-
+func (c CommissionStatus) Unknown() bool         { return c == CommissionStatus_UNKNOWN_ }
+func (c CommissionStatus) Decommissioning() bool { return c == CommissionStatus_DECOMMISSIONING_ }
+func (c CommissionStatus) Decommissioned() bool  { return c == CommissionStatus_DECOMMISSIONED_ }
+func (c CommissionStatus) Commissioned() bool    { return c == CommissionStatus_COMMISSIONED_ }
 func (c CommissionStatus) String() string {
 	switch c {
 	case CommissionStatus_UNKNOWN_:

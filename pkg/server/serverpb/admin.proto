@@ -876,9 +876,7 @@ service Admin {
   // authorization. See #42567.
   //
   // The name of this method, Decommission, is a misnomer for legacy
-  // reasons. It should be thought of as Commission instead.
-  //
-  // XXX: Write wrapper method around this, with the right name.
+  // reasons. It should be thought of as `Commission` instead.
   rpc Decommission(CommissionRequest) returns (CommissionStatusResponse) { }
 
   // DecommissionStatus retrieves the commission status of the specified nodes.
@@ -886,9 +884,7 @@ service Admin {
   // authorization. See #42567.
   //
   // The name of this method, DecommissionStatus, is a misnomer for legacy
-  // reasons. It should be thought of as CommissionStatus instead.
-  //
-  // XXX: Write wrapper method around this, with the right name.
+  // reasons. It should be thought of as `CommissionStatus` instead.
   rpc DecommissionStatus(CommissionStatusRequest) returns (CommissionStatusResponse) { }
 
   // URL: /_admin/v1/rangelog

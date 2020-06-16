@@ -330,7 +330,8 @@ func checkExpectedCommissionStatus(
 	s := serverpb.NewStatusClient(conn)
 	// XXX: This NodesResponse API is not quite the same as CommissionStatus,
 	// unfortunately. Can we rework to use CommissionStatus instead? What's the
-	// difference? Need to make sure they're one an the same. It uses a different view of "decommissioned".
+	// difference? Need to make sure they're one an the same. It uses a
+	// different view of "decommissioned".
 	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return err
@@ -356,7 +357,7 @@ func checkExpectedCommissionStatus(
 				err := fmt.Sprintf("unexpected liveness status: %s", liveness.String())
 				panic(err)
 			}
-		} else {
+		} else if targetStatus == kvserverpb.CommissionStatus_COMMISSIONED_ {
 			// We're recommissioning a node.
 			switch liveness {
 			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
@@ -370,6 +371,10 @@ func checkExpectedCommissionStatus(
 			default: // Dead, Unavailable, etc
 				return errors.New(fmt.Sprintf("node %d is in unexpected state: %s", nodeID, liveness.String()))
 			}
+		} else {
+			err := fmt.Sprintf("invalid target state %s, expected one of decommissioned/commissioned",
+				targetStatus.String())
+			panic(err)
 		}
 	}
 	return nil
@@ -413,8 +418,8 @@ func runDecommissionNodeImpl(
 		allDecommissioning := true
 		for _, status := range resp.Status {
 			replicaCount += status.ReplicaCount
-			allDecommissioning = allDecommissioning && status.CommissionStatus.DecommissioningOrDecommissioned()
-			// XXX: Getting false is_decommissioning, and unknown commission_status.
+			allDecommissioning = allDecommissioning && status.CommissionStatus.Decommissioning() ||
+				status.CommissionStatus.Decommissioned()
 			// XXX: Write tests for what we expect partway through
 			// decommissioning. End of decommissioning.
 			// XXX: Write tests for recommissioning only canceling out extant
@@ -426,14 +431,10 @@ func runDecommissionNodeImpl(
 				NodeIDs:          nodeIDs,
 				CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONED_,
 			}
-			resp, err := c.Decommission(ctx, req)
+			_, err := c.Decommission(ctx, req)
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
-			}
-			fmt.Fprintln(stderr)
-			if err := printDecommissionStatus(*resp); err != nil {
-				return err
 			}
 		}
 		if replicaCount == 0 && allDecommissioning {
@@ -472,7 +473,7 @@ func decommissionResponseValueToRows(
 			strconv.FormatInt(int64(node.NodeID), 10),
 			strconv.FormatBool(node.IsLive),
 			strconv.FormatInt(node.ReplicaCount, 10),
-			strconv.FormatBool(node.CommissionStatus.DecommissioningOrDecommissioned()),
+			strconv.FormatBool(node.CommissionStatus.Decommissioning() || node.CommissionStatus.Decommissioned()),
 			node.CommissionStatus.String(),
 			strconv.FormatBool(node.Draining),
 		})

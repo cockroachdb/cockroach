@@ -3025,7 +3025,7 @@ func TestDecommission(t *testing.T) {
 	admin := serverpb.NewAdminClient(cc)
 	// Decommission the first node, which holds most of the leases.
 	_, err = admin.Decommission(
-		ctx, &serverpb.DecommissionRequest{
+		ctx, &serverpb.CommissionRequest{
 			NodeIDs:                   []roachpb.NodeID{1},
 			DeprecatedDecommissioning: true,
 		},
@@ -3062,7 +3062,7 @@ func TestDecommission(t *testing.T) {
 	ts := timeutil.Now()
 
 	_, err = admin.Decommission(
-		ctx, &serverpb.DecommissionRequest{
+		ctx, &serverpb.CommissionRequest{
 			NodeIDs:                   []roachpb.NodeID{2},
 			DeprecatedDecommissioning: true,
 		},
@@ -3090,7 +3090,7 @@ func TestDecommission(t *testing.T) {
 	// Decommission two more nodes. Only n5 is left; getting the replicas there
 	// can't use atomic replica swaps because the leaseholder can't be removed.
 	_, err = admin.Decommission(
-		ctx, &serverpb.DecommissionRequest{
+		ctx, &serverpb.CommissionRequest{
 			NodeIDs:                   []roachpb.NodeID{3, 4},
 			DeprecatedDecommissioning: true,
 		},

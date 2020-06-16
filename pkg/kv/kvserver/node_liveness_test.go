@@ -775,7 +775,7 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 				if !liveness.DeprecatedDecommissioning {
 					return errors.Errorf("unexpected Decommissioning value of %v for node %v", liveness.DeprecatedDecommissioning, liveness.NodeID)
 				}
-				if liveness.CommissionStatus != kvserverpb.CommissionStatus_DECOMMISSIONING_ {
+				if !liveness.CommissionStatus.Decommissioning() {
 					return errors.Errorf("unexpected CommissionStatus value of %v for node %v", liveness.CommissionStatus, liveness.NodeID)
 				}
 			}

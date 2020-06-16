@@ -52,6 +52,8 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // which we do by persisting the appropriate commission status in the liveness
 // record. It then makes no sense to bother with persisting an explicit
 // in-progress state.
+//
+// XXX: Rename to remove the _.
 type CommissionStatus int32
 
 const (
@@ -90,9 +92,14 @@ var CommissionStatus_value = map[string]int32{
 }
 
 func (CommissionStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_4443b60239de12c9, []int{0}
+	return fileDescriptor_liveness_47994417f3add0ac, []int{0}
 }
 
+// XXX: Do we need Dead, Unavailable, Live? Why can't the determination be made
+// at the client. We're only computing time from a given time, and last
+// heartbeated. They're also not completely non-overlapping, which is why this
+// API sucks. A dead node could be decommissioned, a live node could be
+// recommissioned.
 // NodeLivenessStatus describes the status of a node from the perspective of the
 // liveness system.
 //
@@ -137,7 +144,7 @@ func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
 func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_4443b60239de12c9, []int{1}
+	return fileDescriptor_liveness_47994417f3add0ac, []int{1}
 }
 
 // Liveness holds information about a node's latest heartbeat and epoch.
@@ -172,7 +179,7 @@ type Liveness struct {
 func (m *Liveness) Reset()      { *m = Liveness{} }
 func (*Liveness) ProtoMessage() {}
 func (*Liveness) Descriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_4443b60239de12c9, []int{0}
+	return fileDescriptor_liveness_47994417f3add0ac, []int{0}
 }
 func (m *Liveness) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -686,10 +693,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/liveness.proto", fileDescriptor_liveness_4443b60239de12c9)
+	proto.RegisterFile("kv/kvserver/kvserverpb/liveness.proto", fileDescriptor_liveness_47994417f3add0ac)
 }
 
-var fileDescriptor_liveness_4443b60239de12c9 = []byte{
+var fileDescriptor_liveness_47994417f3add0ac = []byte{
 	// 529 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x52, 0x3f, 0x6f, 0xd3, 0x40,
 	0x1c, 0xf5, 0xe5, 0x5f, 0xad, 0x0b, 0xb4, 0xd7, 0x23, 0x43, 0xc8, 0x60, 0x47, 0x20, 0xa4, 0xa8,
