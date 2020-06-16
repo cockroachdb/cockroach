@@ -241,7 +241,8 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				// downloading logs.
 				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure" `+
 				// And sometimes the analysis succeeds and yet we still get an error code for some reason.
-				`-e "Everything looks good"`,
+				`-e "Everything looks good" `+
+				`-e "RuntimeException: Connection to"`, // timeout
 		); err == nil {
 			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
 				"Ignoring it and considering the test successful. " +
