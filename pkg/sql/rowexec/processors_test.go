@@ -607,74 +607,74 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	atomic.StoreInt64(&trapRead, 1)
 
 	// Run with the vectorize off and on.
-	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
-		// We're going to run the test twice in each vectorize configuration. Once
-		// in "dummy" node, which just verifies that the test is not fooling itself
-		// by increasing the limit from 5 to 6 and checking that we get the injected
-		// error in that case.
-		testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
-			// Reset the blocking condition.
-			blockedRead.Lock()
-			blockedRead.shouldUnblock = false
-			blockedRead.Unlock()
-			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
-			// to convince it to distribute a query that uses an index.
-			if _, err := conn.Exec("set distsql='always'"); err != nil {
+	// TODO(yuzefovich): once #50299 is resolved, run with both 'on' and 'off'.
+	vectorize := false
+	// We're going to run the test twice in each vectorize configuration. Once
+	// in "dummy" node, which just verifies that the test is not fooling itself
+	// by increasing the limit from 5 to 6 and checking that we get the injected
+	// error in that case.
+	testutils.RunTrueAndFalse(t, "dummy", func(t *testing.T, dummy bool) {
+		// Reset the blocking condition.
+		blockedRead.Lock()
+		blockedRead.shouldUnblock = false
+		blockedRead.Unlock()
+		// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
+		// to convince it to distribute a query that uses an index.
+		if _, err := conn.Exec("set distsql='always'"); err != nil {
+			t.Fatal(err)
+		}
+		vectorizeMode := "off"
+		if vectorize {
+			vectorizeMode = "on"
+		}
+
+		if _, err := conn.Exec(fmt.Sprintf("set vectorize='%s'; set vectorize_row_count_threshold=0", vectorizeMode)); err != nil {
+			t.Fatal(err)
+		}
+
+		limit := 5
+		if dummy {
+			limit = 6
+		}
+		query := fmt.Sprintf(
+			"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
+			limit)
+		rows, err := conn.Query(query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		i := 6
+		for rows.Next() {
+			var n int
+			if err := rows.Scan(&n); err != nil {
 				t.Fatal(err)
 			}
-			vectorizeMode := "off"
-			if vectorize {
-				vectorizeMode = "on"
+			if n != i {
+				t.Fatalf("expected row: %d but got: %d", i, n)
 			}
-
-			if _, err := conn.Exec(fmt.Sprintf("set vectorize='%s'; set vectorize_row_count_threshold=0", vectorizeMode)); err != nil {
-				t.Fatal(err)
+			i++
+			// After we've gotten all the rows from the second node, let the first node
+			// return an uncertainty error.
+			if n == 10 {
+				blockedRead.Lock()
+				// Set shouldUnblock to true to have any reads that would block return
+				// an uncertainty error. Signal the cond to wake up any reads that have
+				// already been blocked.
+				blockedRead.shouldUnblock = true
+				blockedRead.unblockCond.Signal()
+				blockedRead.Unlock()
 			}
-
-			limit := 5
-			if dummy {
-				limit = 6
-			}
-			query := fmt.Sprintf(
-				"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
-				limit)
-			rows, err := conn.Query(query)
+		}
+		err = rows.Err()
+		if !dummy {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer rows.Close()
-			i := 6
-			for rows.Next() {
-				var n int
-				if err := rows.Scan(&n); err != nil {
-					t.Fatal(err)
-				}
-				if n != i {
-					t.Fatalf("expected row: %d but got: %d", i, n)
-				}
-				i++
-				// After we've gotten all the rows from the second node, let the first node
-				// return an uncertainty error.
-				if n == 10 {
-					blockedRead.Lock()
-					// Set shouldUnblock to true to have any reads that would block return
-					// an uncertainty error. Signal the cond to wake up any reads that have
-					// already been blocked.
-					blockedRead.shouldUnblock = true
-					blockedRead.unblockCond.Signal()
-					blockedRead.Unlock()
-				}
+		} else {
+			if !testutils.IsError(err, "ReadWithinUncertaintyIntervalError") {
+				t.Fatalf("expected injected error, got: %v", err)
 			}
-			err = rows.Err()
-			if !dummy {
-				if err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				if !testutils.IsError(err, "ReadWithinUncertaintyIntervalError") {
-					t.Fatalf("expected injected error, got: %v", err)
-				}
-			}
-		})
+		}
 	})
 }
