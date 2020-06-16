@@ -104,27 +104,6 @@ func registerBinOpOutputTypes() {
 				binOpOutputTypes[binOp][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Int
 			}
 		}
-		// Use an output type of the same width when input widths are the same.
-		// Note: keep output type of binary operations on integers of different
-		// widths in line with planning in colexec/execplan.go.
-		intTypeFromWidth := func(intWidth int32) *types.T {
-			switch intWidth {
-			case 16:
-				return types.Int2
-			case 32:
-				return types.Int4
-			case anyWidth:
-				return types.Int
-			default:
-				colexecerror.InternalError(fmt.Sprintf("unexpected int width: %d", intWidth))
-				// This code is unreachable, but the compiler cannot infer that.
-				return types.Unknown
-			}
-		}
-		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-			intType := intTypeFromWidth(intWidth)
-			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.IntFamily, intWidth}] = intType
-		}
 	}
 
 	// Bit binary operators.
@@ -164,8 +143,10 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[tree.Minus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
 	for _, numberTypeFamily := range numericCanonicalTypeFamilies {
-		binOpOutputTypes[tree.Mult][typePair{numberTypeFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
-		binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, anyWidth, numberTypeFamily, anyWidth}] = types.Interval
+		for _, numberTypeWidth := range supportedWidthsByCanonicalTypeFamily[numberTypeFamily] {
+			binOpOutputTypes[tree.Mult][typePair{numberTypeFamily, numberTypeWidth, types.IntervalFamily, anyWidth}] = types.Interval
+			binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, anyWidth, numberTypeFamily, numberTypeWidth}] = types.Interval
+		}
 	}
 	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.IntFamily, anyWidth}] = types.Interval
 	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Interval
@@ -352,18 +333,14 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
+		// Regardless of the width of the customizer we upcast to int64 because
+		// the result of any binary operation on integers of any width is
+		// currently int64.
 		args := map[string]string{
 			"Op":     op.overloadBase.OpStr,
 			"Target": targetElem,
-			"Left":   leftElem,
-			"Right":  rightElem,
-		}
-		// The int64 customizer handles binOps with integers of different widths (in
-		// addition to handling int64-only arithmetic), so we must cast to int64 in
-		// this case.
-		if c.width == anyWidth {
-			args["Left"] = fmt.Sprintf("int64(%s)", leftElem)
-			args["Right"] = fmt.Sprintf("int64(%s)", rightElem)
+			"Left":   fmt.Sprintf("int64(%s)", leftElem),
+			"Right":  fmt.Sprintf("int64(%s)", rightElem),
 		}
 		buf := strings.Builder{}
 		var t *template.Template
@@ -416,13 +393,14 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			args["LowerBound"] = lowerBound
 			t = template.Must(template.New("").Parse(`
 				{
-					result := {{.Left}} * {{.Right}}
-					if {{.Left}} > {{.UpperBound}} || {{.Left}} < {{.LowerBound}} || {{.Right}} > {{.UpperBound}} || {{.Right}} < {{.LowerBound}} {
-						if {{.Left}} != 0 && {{.Right}} != 0 {
-							sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
+					_left, _right := {{.Left}}, {{.Right}}
+					result := _left * _right
+					if _left > {{.UpperBound}} || _left < {{.LowerBound}} || _right > {{.UpperBound}} || _right < {{.LowerBound}} {
+						if _left != 0 && _right != 0 {
+							sameSign := (_left < 0) == (_right < 0)
 							if (result < 0) == sameSign {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-							} else if result/{{.Right}} != {{.Left}} {
+							} else if result/_right != _left {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 						}
@@ -461,63 +439,6 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.OpStr))
-		}
-
-		if err := t.Execute(&buf, args); err != nil {
-			colexecerror.InternalError(err)
-		}
-		return buf.String()
-	}
-}
-
-// getBinOpAssignFuncWithPromotedReturnType returns assignFunc that performs
-// a binary operation on integers and returns the result of requested
-// returnType. Note that intermediate computations are upcasted to int64
-// regardless of the returnType's width.
-func (c intCustomizer) getBinOpAssignFuncWithPromotedReturnType(returnType *types.T) assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-		// TODO(yuzefovich): it seems like all type binary type customizers
-		// only use BinOp field of lastArgWidthOverload. Consider changing
-		// the signature of assignFunc to take that instead of the whole
-		// struct.
-		if typeconv.TypeFamilyToCanonicalTypeFamily(returnType.Family()) != types.IntFamily {
-			colexecerror.InternalError("non integer return type is not supported")
-		}
-		var conversionStr string
-		switch returnType.Width() {
-		case 16:
-			conversionStr = "int16"
-		case 32:
-			conversionStr = "int32"
-		default:
-			// Both operands are upcasted to int64, so their sum will already
-			// be of the desired type.
-			conversionStr = ""
-		}
-		args := map[string]string{
-			"Target":     targetElem,
-			"Left":       fmt.Sprintf("int64(%s)", leftElem),
-			"Right":      fmt.Sprintf("int64(%s)", rightElem),
-			"Conversion": conversionStr,
-		}
-		buf := strings.Builder{}
-		var t *template.Template
-
-		switch op.overloadBase.BinOp {
-
-		case tree.Plus:
-			t = template.Must(template.New("").Parse(`
-				{
-					result := {{.Conversion}}({{.Left}} + {{.Right}})
-					if (result < {{.Left}}) != ({{.Right}} < 0) {
-						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-					}
-					{{.Target}} = result
-				}
-			`))
-
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp))
 		}
 
 		if err := t.Execute(&buf, args); err != nil {

@@ -106,10 +106,10 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	} else {
 		supportedTypes = []*types.T{types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval}
 	}
-	getAddOverload := func(inputType, retType *types.T) assignFunc {
+	getAddOverload := func(inputType *types.T) assignFunc {
 		if isSumInt {
-			var c intCustomizer
-			return c.getBinOpAssignFuncWithPromotedReturnType(retType)
+			c := intCustomizer{width: anyWidth}
+			return c.getBinOpAssignFunc()
 		}
 		return getSumAddOverload(inputType)
 	}
@@ -137,7 +137,7 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 			InputVecMethod: toVecMethod(inputType.Family(), inputType.Width()),
 			RetGoType:      toPhysicalRepresentation(retType.Family(), retType.Width()),
 			RetVecMethod:   toVecMethod(retType.Family(), retType.Width()),
-			addOverload:    getAddOverload(inputType, retType),
+			addOverload:    getAddOverload(inputType),
 		})
 	}
 	return tmpl.Execute(wr, struct {
