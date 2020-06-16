@@ -14,6 +14,7 @@ package geo
 import (
 	"encoding/binary"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
@@ -307,6 +308,15 @@ func NewGeographyFromGeom(g geom.T) (*Geography, error) {
 	return NewGeography(spatialObject)
 }
 
+// MustNewGeographyFromGeom enforces no error from NewGeographyFromGeom.
+func MustNewGeographyFromGeom(g geom.T) *Geography {
+	ret, err := NewGeographyFromGeom(g)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
 // ParseGeography parses a Geography from a given text.
 func ParseGeography(str string) (*Geography, error) {
 	spatialObject, err := parseAmbiguousText(str, geopb.DefaultGeographySRID)
@@ -426,6 +436,15 @@ func (g *Geography) SRID() geopb.SRID {
 // Shape returns the shape of the Geography.
 func (g *Geography) Shape() geopb.Shape {
 	return g.spatialObject.Shape
+}
+
+// Spheroid returns the spheroid represented by the given Geography.
+func (g *Geography) Spheroid() (*geographiclib.Spheroid, error) {
+	proj, ok := geoprojbase.Projection(g.SRID())
+	if !ok {
+		return nil, errors.Newf("expected spheroid for SRID %d", g.SRID())
+	}
+	return proj.Spheroid, nil
 }
 
 // AsS2 converts a given Geography into it's S2 form.

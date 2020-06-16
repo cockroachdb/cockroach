@@ -55,10 +55,10 @@ func GetProjMetadata(b geoprojbase.Proj4Text) (bool, *geographiclib.Spheroid, er
 	); err != nil {
 		return false, nil, errors.Newf("error from PROJ: %s", string(err))
 	}
-	// flattening = e^2 / 1 + sqrt(1+e^2).
+	// flattening = e^2 / 1 + sqrt(1-e^2).
 	// See: https://en.wikipedia.org/wiki/Eccentricity_(mathematics), derived from
 	// e = sqrt(f(2-f))
-	flattening := float64(eccentricitySquared) / (1 + math.Sqrt(float64(eccentricitySquared)))
+	flattening := float64(eccentricitySquared) / (1 + math.Sqrt(1-float64(eccentricitySquared)))
 	return isLatLng != 0, geographiclib.NewSpheroid(float64(majorAxis), flattening), nil
 }
 

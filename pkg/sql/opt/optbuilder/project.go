@@ -220,6 +220,8 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 func (b *Builder) finishBuildScalar(
 	texpr tree.TypedExpr, scalar opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
+	b.maybeTrackRegclassDependenciesForViews(texpr)
+
 	if outScope == nil {
 		return scalar
 	}
