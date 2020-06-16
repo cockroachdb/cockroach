@@ -539,6 +539,10 @@ func setupTestClusterForClosedTimestampTesting(
 	kvTableDesc roachpb.RangeDescriptor,
 	repls []*kvserver.Replica,
 ) {
+	if util.RaceEnabled {
+		// These tests run into infinite txn restarts under heavy load. See:
+		t.Skip("https://github.com/cockroachdb/cockroach/issues/50091")
+	}
 
 	tc = serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
