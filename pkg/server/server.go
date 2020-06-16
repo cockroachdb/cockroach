@@ -1397,7 +1397,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
 
-	s.refreshSettings()
+	// TODO(tbg): pass an initial slice of settings KVs here.
+	s.refreshSettings(nil)
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{

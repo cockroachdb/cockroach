@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -136,7 +137,8 @@ type initState struct {
 	// bootstrapped is true if a new cluster was initialized. If this is true,
 	// 'joined' above is also true. Usage of this field should follow that of
 	// 'joined' as well.
-	bootstrapped bool
+	bootstrapped      bool
+	initialSettingKVs []roachpb.KeyValue
 }
 
 // NeedsInit returns true if (and only if) none if the engines are initialized.
@@ -144,6 +146,15 @@ type initState struct {
 // is reached via Gossip, or this node itself is bootstrapped.
 func (s *initServer) NeedsInit() bool {
 	return len(s.inspectState.initializedEngines) == 0
+}
+
+func storeSettingsKVs(eng storage.Engine, kvs []roachpb.KeyValue) {
+	// TODO(tbg): write kvs to store-local prefix.
+}
+
+func loadSettingsKVs(eng storage.Engine) []roachpb.KeyValue {
+	// TODO(tbg): load kvs from store-local prefix.
+	return nil
 }
 
 // ServeAndWait waits until the server is ready to bootstrap. In the common case
@@ -164,9 +175,10 @@ func (s *initServer) ServeAndWait(
 	if !s.NeedsInit() {
 		// If already bootstrapped, return early.
 		return &initState{
-			initDiskState: *s.inspectState,
-			joined:        false,
-			bootstrapped:  false,
+			initDiskState:     *s.inspectState,
+			joined:            false,
+			bootstrapped:      false,
+			initialSettingKVs: loadSettingsKVs(s.inspectState.initializedEngines[0]),
 		}, nil
 	}
 
@@ -220,10 +232,19 @@ func (s *initServer) ServeAndWait(
 			return nil, err
 		}
 		s.inspectState.clusterID = clusterID
+
+		var initialSettingsKVs []roachpb.KeyValue
+		select {
+		case <-time.After(5 * time.Second):
+		case <-g.RegisterSystemConfigChannel():
+			initialSettingsKVs = g.GetSystemConfig().Values
+		}
+
 		return &initState{
-			initDiskState: *s.inspectState,
-			joined:        true,
-			bootstrapped:  false,
+			initDiskState:     *s.inspectState,
+			joined:            true,
+			bootstrapped:      false,
+			initialSettingKVs: initialSettingsKVs,
 		}, nil
 	}
 }

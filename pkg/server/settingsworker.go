@@ -21,20 +21,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// RefreshSettings starts a settings-changes listener.
-func (s *Server) refreshSettings() {
-	tbl := sqlbase.SettingsTable.TableDesc()
-
+func processSystemConfigKVs(
+	ctx context.Context, kvs []roachpb.KeyValue, u settings.Updater, eng storage.Engine,
+) {
 	a := &sqlbase.DatumAlloc{}
 	codec := keys.TODOSQLCodec
+
+	tbl := sqlbase.SettingsTable.TableDesc()
 	settingsTablePrefix := codec.TablePrefix(uint32(tbl.ID))
 	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
 
+	var settingsKVs []roachpb.KeyValue
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {
 		if !bytes.HasPrefix(kv.Key, settingsTablePrefix) {
 			return nil
@@ -96,12 +99,31 @@ func (s *Server) refreshSettings() {
 				}
 			}
 		}
+		settingsKVs = append(settingsKVs, kv)
 
 		if err := u.Set(k, v, t); err != nil {
 			log.Warningf(ctx, "setting %q to %q failed: %+v", k, v, err)
 		}
 		return nil
 	}
+	ok := true
+	for _, kv := range kvs {
+		if err := processKV(ctx, kv, u); err != nil {
+			log.Warningf(ctx, `error decoding settings data: %+v
+								this likely indicates the settings table structure or encoding has been altered;
+								skipping settings updates`, err)
+			ok = false
+			break
+		}
+	}
+	if ok {
+		storeSettingsKVs(eng)
+		u.ResetRemaining()
+	}
+}
+
+// RefreshSettings starts a settings-changes listener.
+func (s *Server) refreshSettings(initialSettingKVs []roachpb.KeyValue) {
 
 	ctx := s.AnnotateCtx(context.Background())
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -112,19 +134,9 @@ func (s *Server) refreshSettings() {
 			case <-gossipUpdateC:
 				cfg := s.gossip.GetSystemConfig()
 				u := s.st.MakeUpdater()
-				ok := true
-				for _, kv := range cfg.Values {
-					if err := processKV(ctx, kv, u); err != nil {
-						log.Warningf(ctx, `error decoding settings data: %+v
-								this likely indicates the settings table structure or encoding has been altered;
-								skipping settings updates`, err)
-						ok = false
-						break
-					}
-				}
-				if ok {
-					u.ResetRemaining()
-				}
+				// TODO(tbg): make sure s.engines[0] is initialized. Or rather, allow
+				// picking an initialized engine here.
+				processSystemConfigKVs(ctx, cfg.Values, u, s.engines[0])
 			case <-s.stopper.ShouldStop():
 				return
 			}
