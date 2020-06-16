@@ -453,7 +453,7 @@ func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
 
-func (gj *GeoLookupJoinExpr) initUnexportedFields(mem *Memo) {
+func (gj *InvertedLookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
 

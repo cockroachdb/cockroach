@@ -11,13 +11,13 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -371,13 +371,13 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
-func (e *distSQLSpecExecFactory) ConstructGeoLookupJoin(
+func (e *distSQLSpecExecFactory) ConstructInvertedLookupJoin(
 	joinType sqlbase.JoinType,
-	geoRelationshipType geoindex.RelationshipType,
+	datumToInvertedExpr invertedexpr.DatumToInvertedExpr,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	geoCol exec.NodeColumnOrdinal,
+	inputCol exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,

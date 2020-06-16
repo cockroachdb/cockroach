@@ -54,14 +54,6 @@ const (
 	ijEmittingRows
 )
 
-// DatumToInvertedExpr is constructed by the caller using
-// InvertedJoinerSpec.InvertedExpr -- the invertedJoiner computes the returned
-// expression.
-type DatumToInvertedExpr interface {
-	// Convert uses the lookup column to construct an inverted expression.
-	Convert(sqlbase.EncDatum) (*invertedexpr.SpanExpressionProto, error)
-}
-
 type invertedJoiner struct {
 	execinfra.ProcessorBase
 
@@ -110,7 +102,7 @@ type invertedJoiner struct {
 	input               execinfra.RowSource
 	inputTypes          []*types.T
 	lookupColumnIdx     uint32
-	datumToInvertedExpr DatumToInvertedExpr
+	datumToInvertedExpr invertedexpr.DatumToInvertedExpr
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
 
@@ -158,7 +150,7 @@ func newInvertedJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InvertedJoinerSpec,
-	datumToInvertedExpr DatumToInvertedExpr,
+	datumToInvertedExpr invertedexpr.DatumToInvertedExpr,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -387,7 +379,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 			// result in an empty set as the evaluation result.
 			ij.batchedExprEval.exprs = append(ij.batchedExprEval.exprs, nil)
 		} else {
-			expr, err := ij.datumToInvertedExpr.Convert(row[ij.lookupColumnIdx])
+			expr, err := ij.datumToInvertedExpr.Convert(ij.Ctx, row[ij.lookupColumnIdx])
 			if err != nil {
 				ij.MoveToDraining(err)
 				return ijStateUnknown, ij.DrainHelper()

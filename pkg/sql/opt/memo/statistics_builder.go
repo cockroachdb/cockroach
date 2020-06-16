@@ -210,8 +210,8 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 		ensureLookupJoinInputProps(t, sb)
 		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
 
-	case *GeoLookupJoinExpr:
-		ensureGeoLookupJoinInputProps(t, sb)
+	case *InvertedLookupJoinExpr:
+		ensureInvertedLookupJoinInputProps(t, sb)
 		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
 
 	case *ZigzagJoinExpr:
@@ -240,7 +240,7 @@ func (sb *statisticsBuilder) colStatFromInput(
 	colSet opt.ColSet, e RelExpr,
 ) (*props.ColumnStatistic, *props.Statistics) {
 	var lookupJoin *LookupJoinExpr
-	var geospatialLookupJoin *GeoLookupJoinExpr
+	var invertedLookupJoin *InvertedLookupJoinExpr
 	var zigzagJoin *ZigzagJoinExpr
 
 	switch t := e.(type) {
@@ -254,16 +254,16 @@ func (sb *statisticsBuilder) colStatFromInput(
 		lookupJoin = t
 		ensureLookupJoinInputProps(lookupJoin, sb)
 
-	case *GeoLookupJoinExpr:
-		geospatialLookupJoin = t
-		ensureGeoLookupJoinInputProps(geospatialLookupJoin, sb)
+	case *InvertedLookupJoinExpr:
+		invertedLookupJoin = t
+		ensureInvertedLookupJoinInputProps(invertedLookupJoin, sb)
 
 	case *ZigzagJoinExpr:
 		zigzagJoin = t
 		ensureZigzagJoinInputProps(zigzagJoin, sb)
 	}
 
-	if lookupJoin != nil || geospatialLookupJoin != nil || zigzagJoin != nil ||
+	if lookupJoin != nil || invertedLookupJoin != nil || zigzagJoin != nil ||
 		opt.IsJoinOp(e) || e.Op() == opt.MergeJoinOp {
 		var leftProps *props.Relational
 		if zigzagJoin != nil {
@@ -276,8 +276,8 @@ func (sb *statisticsBuilder) colStatFromInput(
 		var intersectsRight bool
 		if lookupJoin != nil {
 			intersectsRight = lookupJoin.lookupProps.OutputCols.Intersects(colSet)
-		} else if geospatialLookupJoin != nil {
-			intersectsRight = geospatialLookupJoin.lookupProps.OutputCols.Intersects(colSet)
+		} else if invertedLookupJoin != nil {
+			intersectsRight = invertedLookupJoin.lookupProps.OutputCols.Intersects(colSet)
 		} else if zigzagJoin != nil {
 			intersectsRight = zigzagJoin.rightProps.OutputCols.Intersects(colSet)
 		} else {
@@ -300,10 +300,10 @@ func (sb *statisticsBuilder) colStatFromInput(
 				return sb.colStatTable(lookupJoin.Table, colSet),
 					sb.makeTableStatistics(lookupJoin.Table)
 			}
-			if geospatialLookupJoin != nil {
+			if invertedLookupJoin != nil {
 				// TODO(rytaft): use inverted index stats when available.
-				return sb.colStatTable(geospatialLookupJoin.Table, colSet),
-					sb.makeTableStatistics(geospatialLookupJoin.Table)
+				return sb.colStatTable(invertedLookupJoin.Table, colSet),
+					sb.makeTableStatistics(invertedLookupJoin.Table)
 			}
 			if zigzagJoin != nil {
 				return sb.colStatTable(zigzagJoin.RightTable, colSet),
@@ -360,7 +360,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp, opt.MergeJoinOp, opt.LookupJoinOp,
-		opt.GeoLookupJoinOp, opt.ZigzagJoinOp:
+		opt.InvertedLookupJoinOp, opt.ZigzagJoinOp:
 		return sb.colStatJoin(colSet, e)
 
 	case opt.IndexJoinOp:
@@ -948,8 +948,8 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	}
 
-	if join.Op() == opt.GeoLookupJoinOp {
-		s.ApplySelectivity(sb.selectivityFromGeoRelationship(join, s))
+	if join.Op() == opt.InvertedLookupJoinOp {
+		s.ApplySelectivity(sb.selectivityFromInvertedLookupJoinCondition(join, s))
 	}
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
@@ -1093,10 +1093,10 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		ensureLookupJoinInputProps(j, sb)
 		rightProps = &j.lookupProps
 
-	case *GeoLookupJoinExpr:
+	case *InvertedLookupJoinExpr:
 		joinType = j.JoinType
 		leftProps = j.Input.Relational()
-		ensureGeoLookupJoinInputProps(j, sb)
+		ensureInvertedLookupJoinInputProps(j, sb)
 		rightProps = &j.lookupProps
 
 	case *ZigzagJoinExpr:
@@ -2407,13 +2407,13 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		withoutOn := e.Memo().MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
 		return withoutOn.Relational().Stats.RowCount
 
-	case *GeoLookupJoinExpr:
-		var lookupJoinPrivate *GeoLookupJoinPrivate
+	case *InvertedLookupJoinExpr:
+		var lookupJoinPrivate *InvertedLookupJoinPrivate
 		switch t.JoinType {
 		case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 			// The number of rows processed for semi and anti joins is closer to the
 			// number of output rows for an equivalent inner join.
-			copy := t.GeoLookupJoinPrivate
+			copy := t.InvertedLookupJoinPrivate
 			copy.JoinType = semiAntiJoinToInnerJoin(t.JoinType)
 			lookupJoinPrivate = &copy
 
@@ -2423,12 +2423,12 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 				// equals the number of output rows.
 				return e.Relational().Stats.RowCount
 			}
-			lookupJoinPrivate = &t.GeoLookupJoinPrivate
+			lookupJoinPrivate = &t.InvertedLookupJoinPrivate
 		}
 
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
-		withoutOn := e.Memo().MemoizeGeoLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
+		withoutOn := e.Memo().MemoizeInvertedLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
 		return withoutOn.Relational().Stats.RowCount
 
 	case *MergeJoinExpr:
@@ -2568,10 +2568,9 @@ const (
 	// it worth adding the overhead of using a histogram.
 	minCardinalityForHistogram = 100
 
-	// This is the default selectivity estimated for geospatial lookup joins
-	// until we can get better statistics on inverted indexes and geospatial
-	// columns.
-	unknownGeoRelationshipSelectivity = 1.0 / 100.0
+	// This is the default selectivity estimated for inverted lookup joins
+	// until we can get better statistics on inverted indexes.
+	unknownInvertedLookupJoinSelectivity = 1.0 / 100.0
 
 	// multiColWeight is the weight to assign the selectivity calculation using
 	// multi-column statistics versus the calculation using single-column
@@ -3509,10 +3508,10 @@ func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
 	return fraction(minDistinctCountRight, maxDistinctCountLeft)
 }
 
-func (sb *statisticsBuilder) selectivityFromGeoRelationship(
+func (sb *statisticsBuilder) selectivityFromInvertedLookupJoinCondition(
 	e RelExpr, s *props.Statistics,
 ) (selectivity float64) {
-	return unknownGeoRelationshipSelectivity
+	return unknownInvertedLookupJoinSelectivity
 }
 
 func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
