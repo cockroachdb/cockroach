@@ -425,9 +425,9 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 	r.mu.Unlock()
 	// Wait
 	select {
-	case <-r.store.Stopper().ShouldStop():
+	case <-r.store.Stopper().ShouldQuiesce():
 		return ReplicaChecksum{},
-			errors.Errorf("store has stopped while waiting for compute checksum (ID = %s)", id)
+			errors.Errorf("store quiescing while waiting for compute checksum (ID = %s)", id)
 	case <-ctx.Done():
 		return ReplicaChecksum{},
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
