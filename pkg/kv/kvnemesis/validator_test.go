@@ -43,6 +43,15 @@ func withReadResult(op Operation, value string) Operation {
 	return op
 }
 
+func withScanResult(op Operation, kvs ...KeyValue) Operation {
+	scan := op.GetValue().(*ScanOperation)
+	scan.Result = Result{
+		Type:   ResultType_Values,
+		Values: kvs,
+	}
+	return op
+}
+
 func TestValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -57,6 +66,12 @@ func TestValidate(t *testing.T) {
 	}
 	kvs := func(kvs ...storage.MVCCKeyValue) []storage.MVCCKeyValue {
 		return kvs
+	}
+	scanKV := func(key, value string) KeyValue {
+		return KeyValue{
+			Key:   []byte(key),
+			Value: roachpb.MakeValueFromString(value).RawBytes,
+		}
 	}
 
 	tests := []struct {
@@ -280,7 +295,7 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
-				`committed get non-atomic timestamps: [r]"a":[0,0,0,0)->v2`,
+				`committed get non-atomic timestamps: [r]"a":[0,0, 0,0)->v2`,
 			},
 		},
 		{
@@ -300,7 +315,7 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
-				`committed get non-atomic timestamps: [r]"a":[0,0,0,0)->v2`,
+				`committed get non-atomic timestamps: [r]"a":[0,0, 0,0)->v2`,
 			},
 		},
 		{
@@ -340,7 +355,8 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
-				`committed batch non-atomic timestamps: [r]"a":[<min>,0.000000001,0)-><nil> [r]"b":[0,0,0,0)->v1 [r]"c":[0,0,0,0)->v2`,
+				`committed batch non-atomic timestamps: ` +
+					`[r]"a":[<min>, 0.000000001,0)-><nil> [r]"b":[0,0, 0,0)->v1 [r]"c":[0,0, 0,0)->v2`,
 			},
 		},
 		{
@@ -356,7 +372,8 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
-				`committed batch non-atomic timestamps: [r]"a":[<min>,0.000000001,0)-><nil> [r]"b":[0.000000002,0,<max>)->v2 [r]"c":[<min>,<max>)-><nil>`,
+				`committed batch non-atomic timestamps: ` +
+					`[r]"a":[<min>, 0.000000001,0)-><nil> [r]"b":[0.000000002,0, <max>)->v2 [r]"c":[<min>, <max>)-><nil>`,
 			},
 		},
 		{
@@ -391,7 +408,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0,0.000000002,0)->v1 [r]"b":[0.000000002,0,0.000000003,0)->v3`,
+					`[r]"a":[0.000000001,0, 0.000000002,0)->v1 [r]"b":[0.000000002,0, 0.000000003,0)->v3`,
 			},
 		},
 		{
@@ -424,7 +441,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0,0.000000002,0)->v1 [r]"b":[<min>,0.000000001,0)-><nil>`,
+					`[r]"a":[0.000000001,0, 0.000000002,0)->v1 [r]"b":[<min>, 0.000000001,0)-><nil>`,
 			},
 		},
 		{
@@ -455,7 +472,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0.000000001,0,0.000000002,0)->v1 [w]"b":0.000000002,0->v3`,
+					`[r]"a":[0.000000001,0, 0.000000002,0)->v1 [w]"b":0.000000002,0->v3`,
 			},
 		},
 		{
@@ -482,7 +499,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[0,0,0,0)->v1 [w]"a":0.000000001,0->v1 [r]"a":[0.000000001,0,<max>)->v1`,
+					`[r]"a":[0,0, 0,0)->v1 [w]"a":0.000000001,0->v1 [r]"a":[0.000000001,0, <max>)->v1`,
 			},
 		},
 		{
@@ -497,7 +514,7 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
 				`committed txn non-atomic timestamps: ` +
-					`[r]"a":[<min>,<max>)-><nil> [w]"a":0.000000001,0->v1 [r]"a":[<min>,0.000000001,0)-><nil>`,
+					`[r]"a":[<min>, <max>)-><nil> [w]"a":0.000000001,0->v1 [r]"a":[<min>, 0.000000001,0)-><nil>`,
 			},
 		},
 		{
@@ -512,6 +529,333 @@ func TestValidate(t *testing.T) {
 				), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`)),
+			expected: nil,
+		},
+		{
+			name: "one scan before write",
+			steps: []Step{
+				step(withScanResult(scan(`a`, `c`))),
+				step(withResult(put(`a`, `v1`), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`)),
+			expected: nil,
+		},
+		{
+			name: "one scan before write returning wrong value",
+			steps: []Step{
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`))),
+				step(withResult(put(`a`, `v1`), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed scan non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v2]`,
+			},
+		},
+		{
+			name: "one scan after write",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`))),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`)),
+			expected: nil,
+		},
+		{
+			name: "one scan after write returning wrong value",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed scan non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v2]`,
+			},
+		},
+		{
+			name: "one scan after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`))),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: nil,
+		},
+		{
+			name: "one scan after write returning extra key",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`a2`, `v3`), scanKV(`b`, `v2`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed scan non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, 0,0), 2:[0.000000002,0, <max>), gap:[<min>, <max>)}->["a":v1, "a2":v3, "b":v2]`,
+			},
+		},
+		{
+			name: "one scan after write returning missing key",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed scan non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0.000000002,0, <max>), gap:[<min>, 0.000000001,0)}->["b":v2]`,
+			},
+		},
+		{
+			name: "one scan after writes returning results in wrong order",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`), scanKV(`a`, `v1`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`scan result not ordered correctly: ` +
+					`[s]{a-c}:{0:[0.000000002,0, <max>), 1:[0.000000001,0, <max>), gap:[<min>, <max>)}->["b":v2, "a":v1]`,
+			},
+		},
+		{
+			name: "one scan after writes returning results outside scan boundary",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`c`, `v3`))),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`key "c" outside scan bounds: ` +
+					`[s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, 0,0), gap:[<min>, 0.000000002,0)}->["a":v1, "c":v3]`,
+			},
+		},
+		{
+			name: "one scan in between writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`))),
+				step(withResult(put(`a`, `v2`), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`)),
+			expected: nil,
+		},
+		{
+			name: "batch of scans after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(batch(
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`)),
+					withScanResult(scan(`b`, `d`), scanKV(`b`, `v2`)),
+					withScanResult(scan(`c`, `e`)),
+				), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: nil,
+		},
+		{
+			name: "batch of scans after writes returning wrong values",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(batch(
+					withScanResult(scan(`a`, `c`)),
+					withScanResult(scan(`b`, `d`), scanKV(`b`, `v1`)),
+					withScanResult(scan(`c`, `e`), scanKV(`c`, `v2`)),
+				), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed batch non-atomic timestamps: ` +
+					`[s]{a-c}:{gap:[<min>, 0.000000001,0)}->[] ` +
+					`[s]{b-d}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["b":v1] ` +
+					`[s]{c-e}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["c":v2]`,
+			},
+		},
+		{
+			name: "batch of scans after writes with non-empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(batch(
+					withScanResult(scan(`a`, `c`), scanKV(`b`, `v1`)),
+					withScanResult(scan(`b`, `d`), scanKV(`b`, `v1`)),
+					withScanResult(scan(`c`, `e`)),
+				), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed batch non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, 0.000000001,0)}->["b":v1] ` +
+					`[s]{b-d}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["b":v1] ` +
+					`[s]{c-e}:{gap:[<min>, <max>)}->[]`,
+			},
+		},
+		{
+			name: "transactional scans with non-empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`a`, `v2`), nil)),
+				step(withResult(put(`b`, `v3`), nil)),
+				step(withResult(put(`b`, `v4`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v3`)),
+					withScanResult(scan(`b`, `d`), scanKV(`b`, `v3`)),
+				), nil)),
+			},
+			// Reading v1 is valid from 1-3 and v3 is valid from 2-3: overlap 2-3
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
+			expected: nil,
+		},
+		{
+			name: "transactional scans with empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`a`, `v2`), nil)),
+				step(withResult(put(`b`, `v3`), nil)),
+				step(withResult(put(`b`, `v4`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v3`)),
+					withScanResult(scan(`b`, `d`), scanKV(`b`, `v3`)),
+				), nil)),
+			},
+			// Reading v1 is valid from 1-2 and v3 is valid from 2-3: no overlap
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
+			expected: []string{
+				`committed txn non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), 1:[0.000000002,0, 0.000000003,0), gap:[<min>, <max>)}->["a":v1, "b":v3] ` +
+					`[s]{b-d}:{0:[0.000000002,0, 0.000000003,0), gap:[<min>, <max>)}->["b":v3]`,
+			},
+		},
+		{
+			name: "transactional scans one missing with non-empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`a`, `v2`), nil)),
+				step(withResult(put(`b`, `v3`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+					withScanResult(scan(`b`, `d`)),
+				), nil)),
+			},
+			// Reading v1 is valid from 1-2 and v3 is valid from 0-2: overlap 1-2
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
+			expected: nil,
+		},
+		{
+			name: "transactional scans one missing with empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`a`, `v2`), nil)),
+				step(withResult(put(`b`, `v3`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+					withScanResult(scan(`b`, `d`)),
+				), nil)),
+			},
+			// Reading v1 is valid from 1-2 and v3 is valid from 0-1: no overlap
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`)),
+			expected: []string{
+				`committed txn non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), gap:[<min>, 0.000000001,0)}->["a":v1] ` +
+					`[s]{b-d}:{gap:[<min>, 0.000000001,0)}->[]`,
+			},
+		},
+		{
+			name: "transactional scan and write with non-empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`a`, `v2`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+					withResult(put(`b`, `v3`), nil),
+				), nil)),
+			},
+			// Reading v1 is valid from 1-3 and v3 is valid at 2: overlap @2
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`)),
+			expected: nil,
+		},
+		{
+			name: "transactional scan and write with empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`a`, `v2`), nil)),
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+					withResult(put(`b`, `v3`), nil),
+				), nil)),
+			},
+			// Reading v1 is valid from 1-2 and v3 is valid at 2: no overlap
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
+			expected: []string{
+				`committed txn non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0.000000001,0, 0.000000002,0), gap:[<min>, <max>)}->["a":v1] [w]"b":0.000000002,0->v3`,
+			},
+		},
+		{
+			name: "transaction with scan before and after write",
+			steps: []Step{
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`)),
+					withResult(put(`a`, `v1`), nil),
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+				), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`)),
+			expected: nil,
+		},
+		{
+			name: "transaction with incorrect scan before write",
+			steps: []Step{
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+					withResult(put(`a`, `v1`), nil),
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+				), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed txn non-atomic timestamps: ` +
+					`[s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v1] ` +
+					`[w]"a":0.000000001,0->v1 ` +
+					`[s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a":v1]`,
+			},
+		},
+		{
+			name: "transaction with incorrect scan after write",
+			steps: []Step{
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`)),
+					withResult(put(`a`, `v1`), nil),
+					withScanResult(scan(`a`, `c`)),
+				), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed txn non-atomic timestamps: ` +
+					`[s]{a-c}:{gap:[<min>, <max>)}->[] [w]"a":0.000000001,0->v1 [s]{a-c}:{gap:[<min>, 0.000000001,0)}->[]`,
+			},
+		},
+		{
+			name: "two transactionally committed puts of the same key with scans",
+			steps: []Step{
+				step(withResult(closureTxn(ClosureTxnType_Commit,
+					withScanResult(scan(`a`, `c`)),
+					withResult(put(`a`, `v1`), nil),
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
+					withResult(put(`a`, `v2`), nil),
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`)),
+					withResult(put(`b`, `v3`), nil),
+					withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`), scanKV(`b`, `v3`)),
+				), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v2`), kv(`b`, 1, `v3`)),
 			expected: nil,
 		},
 	}

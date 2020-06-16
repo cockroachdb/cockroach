@@ -69,7 +69,7 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 
 func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
-	case *GetOperation, *PutOperation, *BatchOperation:
+	case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation:
 		applyClientOp(ctx, db, op)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
@@ -123,24 +123,39 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 type clientI interface {
 	Get(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
+	Scan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	Run(context.Context, *kv.Batch) error
 }
 
 func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
-		result, err := db.Get(ctx, o.Key)
+		kv, err := db.Get(ctx, o.Key)
 		if err != nil {
 			o.Result = resultError(ctx, err)
 		} else {
 			o.Result.Type = ResultType_Value
-			if result.Value != nil {
-				o.Result.Value = result.Value.RawBytes
+			if kv.Value != nil {
+				o.Result.Value = kv.Value.RawBytes
 			}
 		}
 	case *PutOperation:
 		err := db.Put(ctx, o.Key, o.Value)
 		o.Result = resultError(ctx, err)
+	case *ScanOperation:
+		kvs, err := db.Scan(ctx, o.Key, o.EndKey, 0 /* maxRows */)
+		if err != nil {
+			o.Result = resultError(ctx, err)
+		} else {
+			o.Result.Type = ResultType_Values
+			o.Result.Values = make([]KeyValue, len(kvs))
+			for i, kv := range kvs {
+				o.Result.Values[i] = KeyValue{
+					Key:   []byte(kv.Key),
+					Value: kv.Value.RawBytes,
+				}
+			}
+		}
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -158,6 +173,8 @@ func applyBatchOp(
 			b.Get(subO.Key)
 		case *PutOperation:
 			b.Put(subO.Key, subO.Value)
+		case *ScanOperation:
+			b.Scan(subO.Key, subO.EndKey)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -179,6 +196,20 @@ func applyBatchOp(
 		case *PutOperation:
 			err := b.Results[i].Err
 			subO.Result = resultError(ctx, err)
+		case *ScanOperation:
+			kvs, err := b.Results[i].Rows, b.Results[i].Err
+			if err != nil {
+				subO.Result = resultError(ctx, err)
+			} else {
+				subO.Result.Type = ResultType_Values
+				subO.Result.Values = make([]KeyValue, len(kvs))
+				for j, kv := range kvs {
+					subO.Result.Values[j] = KeyValue{
+						Key:   []byte(kv.Key),
+						Value: kv.Value.RawBytes,
+					}
+				}
+			}
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
