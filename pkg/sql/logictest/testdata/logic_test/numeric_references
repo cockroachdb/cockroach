@@ -215,3 +215,6 @@ DELETE FROM [$num_ref_id AS t]
 
 statement error pq: user testuser does not have UPDATE privilege on relation num_ref
 UPDATE [$num_ref_id AS t] SET d=1
+
+statement error pq: type with ID 15210 does not exist
+SELECT 1::@15210
