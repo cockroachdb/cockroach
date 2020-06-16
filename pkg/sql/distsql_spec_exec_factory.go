@@ -481,7 +481,6 @@ func (e *distSQLSpecExecFactory) ConstructInsert(
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
@@ -506,7 +505,6 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
@@ -521,7 +519,6 @@ func (e *distSQLSpecExecFactory) ConstructUpsert(
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
@@ -532,7 +529,6 @@ func (e *distSQLSpecExecFactory) ConstructDelete(
 	fetchCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
-	skipFKChecks bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }

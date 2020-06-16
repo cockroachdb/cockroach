@@ -1073,7 +1073,7 @@ func TestRowFetcherReset(t *testing.T) {
 
 }
 
-func idLookupKey(tableID TableID, indexID sqlbase.IndexID) uint64 {
+func idLookupKey(tableID sqlbase.ID, indexID sqlbase.IndexID) uint64 {
 	return (uint64(tableID) << 32) | uint64(indexID)
 }
 

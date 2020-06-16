@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/errors"
 )
 
 // KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
@@ -94,4 +95,26 @@ func (f *KVFetcher) NextKV(
 		f.newSpan = true
 		f.bytesRead += int64(len(f.batchResponse))
 	}
+}
+
+// SpanKVFetcher is a kvBatchFetcher that returns a set slice of kvs.
+type SpanKVFetcher struct {
+	KVs []roachpb.KeyValue
+}
+
+// nextBatch implements the kvBatchFetcher interface.
+func (f *SpanKVFetcher) nextBatch(
+	_ context.Context,
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
+	if len(f.KVs) == 0 {
+		return false, nil, nil, roachpb.Span{}, nil
+	}
+	res := f.KVs
+	f.KVs = nil
+	return true, res, nil, roachpb.Span{}, nil
+}
+
+// GetRangesInfo implements the kvBatchFetcher interface.
+func (f *SpanKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
+	panic(errors.AssertionFailedf("GetRangesInfo() called on SpanKVFetcher"))
 }

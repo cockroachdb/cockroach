@@ -46,12 +46,6 @@ type SessionData struct {
 	// ExperimentalDistSQLPlanningMode indicates whether the experimental
 	// DistSQL planning driven by the optimizer is enabled.
 	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
-	// OptimizerFKChecks indicates whether we should use the new paths to plan foreign
-	// key checks in the optimizer.
-	OptimizerFKChecks bool
-	// OptimizerFKCascades indicates whether we should use the new paths to plan foreign
-	// key cascades in the optimizer.
-	OptimizerFKCascades bool
 	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
 	// are run for a single query.
 	OptimizerFKCascadesLimit int

@@ -140,10 +140,6 @@ type mutationBuilder struct {
 	// cascades contains foreign key check cascades; see buildFK* methods.
 	cascades memo.FKCascades
 
-	// fkFallback is true if we need to fall back on the legacy path for
-	// FK checks / cascades. See buildFK* methods.
-	fkFallback bool
-
 	// withID is nonzero if we need to buffer the input for FK checks.
 	withID opt.WithID
 
@@ -793,7 +789,6 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		CheckCols:          makeColList(mb.checkOrds),
 		IndexPredicateCols: makeColList(mb.indexPredicateOrds),
 		FKCascades:         mb.cascades,
-		FKFallback:         mb.fkFallback,
 	}
 
 	// If we didn't actually plan any checks or cascades, don't buffer the input.

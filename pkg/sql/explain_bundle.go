@@ -482,8 +482,6 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
-		{sessionSetting: "optimizer_foreign_keys", clusterSetting: optDrivenFKChecksClusterMode},
-		{sessionSetting: "experimental_optimizer_foreign_key_cascades", clusterSetting: optDrivenFKCascadesClusterMode},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode},
 		// TODO(mgartner): remove this once partial indexes are fully supported.

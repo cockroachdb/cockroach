@@ -1,8 +1,264 @@
 # LogicTest: !3node-tenant(50048)
 
-# The tests in this file target the legacy FK paths.
+# Tests for the experimental opt-driven cascades.
+subtest OptDriven
+
+# Single delete cascade.
 statement ok
-SET optimizer_foreign_keys = false
+CREATE TABLE parent (p INT PRIMARY KEY);
+CREATE TABLE child (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE
+);
+INSERT INTO parent VALUES (1), (2);
+INSERT INTO child VALUES (1, 1), (2, 2), (10, 1), (20, 2);
+
+query II rowsort
+SELECT * FROM child
+----
+1   1
+2   2
+10  1
+20  2
+
+statement ok
+DELETE FROM parent WHERE p >= 2
+
+query II rowsort
+SELECT * FROM child
+----
+1   1
+10  1
+
+statement ok
+DELETE FROM parent WHERE p <= 2
+
+query II
+SELECT * FROM child
+----
+
+# Delete cascade which itself has a check.
+statement ok
+CREATE TABLE grandchild (
+  g INT PRIMARY KEY,
+  c INT REFERENCES child(c)
+);
+INSERT INTO parent VALUES (1), (2);
+INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
+INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11);
+
+statement ok
+DELETE FROM parent WHERE p = 2
+
+statement error delete on table "child" violates foreign key constraint "fk_c_ref_child" on table "grandchild"\nDETAIL: Key \(c\)\=\(1[01]\) is still referenced from table "grandchild"
+DELETE FROM parent WHERE p = 1
+
+statement ok
+DELETE FROM grandchild WHERE c = 10
+
+statement error delete on table "child" violates foreign key constraint "fk_c_ref_child" on table "grandchild"\nDETAIL: Key \(c\)=\(11\) is still referenced from table "grandchild"
+DELETE FROM parent WHERE p = 1
+
+statement ok
+DELETE FROM grandchild WHERE c = 11
+
+statement ok
+DELETE FROM parent WHERE p = 1
+
+statement ok
+DROP TABLE grandchild
+
+# Delete cascade which itself has a cascade.
+statement ok
+CREATE TABLE grandchild (
+  g INT PRIMARY KEY,
+  c INT REFERENCES child(c) ON DELETE CASCADE
+);
+INSERT INTO parent VALUES (1), (2);
+INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
+INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11), (200, 20)
+
+statement ok
+DELETE FROM parent WHERE p = 1
+
+query II rowsort
+SELECT * FROM child
+----
+20  2
+21  2
+
+query II rowsort
+SELECT * FROM grandchild
+----
+200  20
+
+statement ok
+DELETE FROM parent WHERE p = 2
+
+query II
+SELECT * FROM child
+----
+
+query II
+SELECT * FROM grandchild
+----
+
+statement ok
+DROP TABLE grandchild;
+DROP TABLE child;
+DROP TABLE parent
+
+# Delete cascade with multiple columns and multiple child tables.
+statement ok
+CREATE TABLE parent_multi (pa INT, pb INT, pc INT, UNIQUE INDEX (pa,pb,pc));
+CREATE TABLE child_multi_1 (
+  c INT,
+  a INT,
+  b INT,
+  FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
+);
+CREATE TABLE child_multi_2 (
+  b INT,
+  c INT,
+  a INT,
+  FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
+)
+
+statement ok
+INSERT INTO parent_multi VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (NULL, NULL, NULL);
+INSERT INTO child_multi_1(a,b,c) VALUES (1, 10, 100), (2, 20, 200), (1, 10, 100), (2, 20, 200), (NULL, NULL, NULL);
+INSERT INTO child_multi_2(a,b,c) VALUES (2, 20, 200), (3, 30, 300)
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+1     10    100
+2     20    200
+3     30    300
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+1     10    100
+2     20    200
+1     10    100
+2     20    200
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+2  20  200
+3  30  300
+
+statement ok
+DELETE FROM parent_multi WHERE pa = 1
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+2     20    200
+3     30    300
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+2     20    200
+2     20    200
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+2  20  200
+3  30  300
+
+statement ok
+DELETE FROM parent_multi WHERE pb = 20
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+3     30    300
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+3  30  300
+
+# Deleting NULLs should not cause any changes in a child.
+statement ok
+DELETE FROM parent_multi WHERE pa IS NULL
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+3  30  300
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+3  30  300
+
+statement ok
+DROP TABLE child_multi_1;
+DROP TABLE child_multi_2;
+DROP TABLE parent_multi
+
+# Self-referencing cascade.
+statement ok
+CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE)
+
+statement ok
+INSERT INTO self VALUES (1, NULL);
+INSERT INTO self SELECT x, x-1 FROM generate_series(2, 10) AS g(x)
+
+statement ok
+DELETE FROM self WHERE a = 4
+
+query II rowsort
+SELECT * FROM self
+----
+1   NULL
+2   1
+3   2
+
+statement ok
+DELETE FROM self WHERE a = 1
+
+query II
+SELECT * FROM self
+----
+
+# Test cascade limit setting.
+statement ok
+INSERT INTO self VALUES (1, NULL);
+INSERT INTO self SELECT x, x-1 FROM generate_series(2, 20) AS g(x)
+
+statement ok
+SET foreign_key_cascades_limit = 10
+
+statement error cascades limit \(10\) reached
+DELETE FROM self WHERE a = 1
+
+statement ok
+RESET foreign_key_cascades_limit
+
+statement ok
+DROP TABLE self
 
 subtest AllCascadingActions
 ### A test of all cascading actions in their most basic form.
@@ -39,19 +295,19 @@ SELECT * FROM b;
 1 2 3 4 5 6 7 8 9 10
 
 # 1. ON DELETE NO ACTION
-statement error pq: foreign key violation: values \[1\] in columns \[id\] referenced in table "b"
+statement error pq: delete on table "a" violates foreign key constraint "fk_delete_no_action_ref_a" on table "b"\nDETAIL: Key \(id\)=\(1\) is still referenced from table "b"\.
 DELETE FROM a WHERE id = 1;
 
 # 2. ON UPDATE NO ACTION
-statement error pq: foreign key violation: values \[2\] in columns \[id\] referenced in table "b"
+statement error pq: update on table "a" violates foreign key constraint "fk_update_no_action_ref_a" on table "b"\nDETAIL: Key \(id\)=\(2\) is still referenced from table "b"\.
 UPDATE a SET id = 1000 WHERE id = 2;
 
 # 3. ON DELETE RESTRICT
-statement error pq: foreign key violation: values \[3\] in columns \[id\] referenced in table "b"
+statement error pq: delete on table "a" violates foreign key constraint "fk_delete_restrict_ref_a" on table "b"\nDETAIL: Key \(id\)=\(3\) is still referenced from table "b"\.
 DELETE FROM a WHERE id = 3;
 
 # 4. ON UPDATE RESTRICT
-statement error pq: foreign key violation: values \[4\] in columns \[id\] referenced in table "b"
+statement error pq: update on table "a" violates foreign key constraint "fk_update_restrict_ref_a" on table "b"\nDETAIL: Key \(id\)=\(4\) is still referenced from table "b"\.
 UPDATE a SET id = 1000 WHERE id = 4;
 
 # 5. ON DELETE CASCADE
@@ -501,7 +757,7 @@ INSERT INTO c2 VALUES
 INSERT INTO d VALUES ('d-pk1-c2-pk4-b1-pk2', 'c2-pk4-b1-pk2');
 
 # ON DELETE CASCADE
-statement error pq: foreign key violation: values \['c2-pk4-b1-pk2'\] in columns \[id\] referenced in table "d"
+statement error delete on table "c2" violates foreign key constraint "fk_delete_restrict_ref_c2" on table "d"\nDETAIL: Key \(id\)=\('c2-pk4-b1-pk2'\) is still referenced from table "d"\.
 DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
@@ -545,12 +801,6 @@ statement ok
 CREATE TABLE c3 (
   id STRING PRIMARY KEY REFERENCES b2 ON DELETE CASCADE
 ) INTERLEAVE IN PARENT b2 (id);
-
-# Check that telemetry is being collected on creation of interleaved tables.
-query B
-SELECT usage_count >= 5 FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.create_interleaved_table'
-----
-true
 
 statement ok
 INSERT INTO a VALUES ('pk1'), ('pk2');
@@ -678,7 +928,7 @@ SELECT
 2 1 2 1 1 2
 
 # ON DELETE CASCADE
-statement error pq: foreign key violation: values \['pk1'\] in columns \[id\] referenced in table "c3"
+statement error delete on table "b2" violates foreign key constraint "fk_id_ref_b2" on table "c3"\nDETAIL: Key \(id\)=\('pk1'\) is still referenced from table "c3"\.
 DELETE FROM a WHERE id = 'pk1';
 
 # Clean up after the test.
@@ -1417,7 +1667,7 @@ statement ok
 INSERT INTO d1 VALUES ('d1-pk1', 'original');
 
 # ON UPDATE CASCADE
-statement error foreign key violation: values \['original'\] in columns \[update_cascade\] referenced in table "d1"
+statement error pq: update on table "c2" violates foreign key constraint "fk_update_restrict_ref_c2" on table "d1"\nDETAIL: Key \(update_cascade\)=\('original'\) is still referenced from table "d1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 statement ok
@@ -1428,7 +1678,7 @@ statement ok
 INSERT INTO d2 VALUES ('original');
 
 # ON UPDATE CASCADE
-statement error foreign key violation: values \['original'\] in columns \[id\] referenced in table "d2"
+statement error pq: update on table "c3" violates foreign key constraint "fk_id_ref_c3" on table "d2"\nDETAIL: Key \(id\)=\('original'\) is still referenced from table "d2"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -1595,7 +1845,7 @@ SELECT
 updated original updated updated original
 
 # ON UPDATE CASCADE from a downward
-statement error foreign key violation: values \['original'\] in columns \[id\] referenced in table "c3"
+statement error pq: update on table "b2" violates foreign key constraint "fk_id_ref_b2" on table "c3"\nDETAIL: Key \(id\)=\('original'\) is still referenced from table "c3"\.
 UPDATE a SET id = 'updated2' WHERE id = 'original';
 
 # Clean up after the test.
@@ -1976,20 +2226,20 @@ b  20
 c  10
 
 # Perform another cascading update that should fail c.less_than_100.
-statement error pq: failed to satisfy CHECK constraint \(id < 100\)
+statement error pq: failed to satisfy CHECK constraint \(id < 100:::INT8\)
 UPDATE a SET id = id*10;
 
 # Perform another cascading update that should fail b.less_than_1000 or
 # c.less_than_100. The order of which check fails first is not deterministic.
-statement error pq: failed to satisfy CHECK constraint \(id < (100|1000)\)
+statement error pq: failed to satisfy CHECK constraint \(id < (100|1000):::INT8\)
 UPDATE a SET id = id*1000;
 
 # Perform another cascading update that should fail b.less_than_1000.
-statement error pq: failed to satisfy CHECK constraint \(id < 1000\)
+statement error pq: failed to satisfy CHECK constraint \(id < 1000:::INT8\)
 UPDATE a SET id = id*1000 WHERE id > 10;
 
 # And check another direct cascading constraint c.no_99.
-statement error pq: failed to satisfy CHECK constraint \(id != 99\)
+statement error pq: failed to satisfy CHECK constraint \(id != 99:::INT8\)
 UPDATE a SET id = 99 WHERE id = 10;
 
 # But it should still be possible to cascade an update that doesn't hit c.
@@ -2081,18 +2331,18 @@ c  10  20
 c  20  10
 
 # Try to update one value to fail c.less_than_100
-statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100\)
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100:::INT8\)
 UPDATE a SET id = id*10;
 
 # Try to update one value to fail c.less_than_100 or c.less_than_1000
-statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100\)
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100:::INT8\)
 UPDATE a SET id = id*10;
 
 # Try to update one value to fail c.less_than_100
-statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000\)
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000:::INT8\)
 UPDATE a SET id = 1000 WHERE id = 30;
 
-statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000\)
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000:::INT8\)
 UPDATE a SET id = 1000 WHERE id = 40;
 
 # Update a value that would fail the check if it was cascaded, but wasn't.
@@ -2349,7 +2599,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error pq: null value in column "b_a_id" violates not-null constraint
 DELETE FROM a WHERE id = 'delete-me';
 
 # Clean up after the test.
@@ -2594,7 +2844,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error null value in column "b_a_id" violates not-null constraint
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -2702,7 +2952,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
 INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 
 # ON DELETE CASCADE, which should fail since the value 'missing' is not in a.
-statement error pq: foreign key violation: value \['missing'\] not found in a@primary \[id\]
+statement error pq: update on table "b3" violates foreign key constraint "fk_delete_set_default_ref_a"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "a"\.
 DELETE FROM a WHERE id = 'delete_me';
 
 # Clean up after the test.
@@ -2867,7 +3117,7 @@ INSERT INTO c3 VALUES
 # This query expects to cascade the deletion in a into b1 and b2, but not into
 # the c tables which have ON DELETE SET DEFAULT instead. And ultimately fail
 # since the default value 'missing' is not present in b1.
-statement error pq: foreign key violation: value \['missing'\] not found in b1@primary \[id\]
+statement error pq: update on table "c2" violates foreign key constraint "fk_delete_set_default_ref_b1"\nDETAIL: Key \(delete_set_default\)=\('missing'\) is not present in table "b1"\.
 DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
@@ -3019,7 +3269,7 @@ INSERT INTO c VALUES
 
 # Cascade the delete in a to the SET DEFAULT in b to the CASCADE in c which
 # should violate the NOT NULL in c.b_a_id.
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error null value in column "b_a_id" violates not-null constraint
 DELETE FROM a WHERE id = 'delete-me';
 
 # Clean up after the test.
@@ -3150,7 +3400,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
 INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
 
 # ON UPDATE CASCADE, which should fail since the value 'missing' is not in a.
-statement error pq: foreign key violation: value \['missing'\] not found in a@primary \[id\]
+statement error update on table "b3" violates foreign key constraint "fk_update_set_null_ref_a"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "a"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3311,7 +3561,7 @@ INSERT INTO c3 VALUES
 
 # ON UPDATE CASCADE all b tables into the c tables, but fail due to a default
 # value that does not exist.
-statement error pq: foreign key violation: value \['missing'\] not found in b1@b1_update_cascade_key \[update_cascade\]
+statement error update on table "c2" violates foreign key constraint "fk_update_set_null_ref_b1"\nDETAIL: Key \(update_set_null\)=\('missing'\) is not present in table "b1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3402,7 +3652,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
+statement error null value in column "b_a_id" violates not-null constraint
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3639,11 +3889,11 @@ INSERT INTO b VALUES (2,2);
 INSERT INTO c VALUES (2,2);
 
 # C's MATCH FULL should reject this.
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error pq: update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
 DELETE FROM a;
 
 # Again, for the same reason.
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
 UPDATE a SET x = 3 WHERE x = 2;
 
 # Ensure nothing has changed.
@@ -3691,10 +3941,10 @@ statement ok
 DELETE FROM a WHERE x = 2;
 
 # We can't cascade the null value though to c, since it would break MATCH FULL.
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
 UPDATE a SET x = NULL WHERE x = 3;
 
-statement error MATCH FULL does not allow mixing of null and nonnull values
+statement error update on table "c" violates foreign key constraint "fk_x_ref_b"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values\.
 UPDATE a SET y = NULL WHERE y = 3;
 
 # Now update (3,3) to (null, null) which should cascade.
@@ -3730,7 +3980,7 @@ ALTER TABLE self_ab ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES self_ab (a) ON 
 
 # This update would cause the references to 2 to get reset to the default,
 # which violates the check.
-statement error failed to satisfy CHECK constraint \(b != 1\)
+statement error failed to satisfy CHECK constraint \(b != 1:::INT8\)
 UPDATE self_ab SET a = 3 WHERE a = 2
 
 # Make sure the check fails when we apply the same update through a cascade.
@@ -3743,7 +3993,7 @@ INSERT INTO self_ab_parent VALUES (1), (2)
 statement ok
 ALTER TABLE self_ab ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES self_ab_parent (p) ON UPDATE CASCADE
 
-statement error failed to satisfy CHECK constraint \(b != 1\)
+statement error failed to satisfy CHECK constraint \(b != 1:::INT8\)
 UPDATE self_ab_parent SET p = 3 WHERE p = 2
 
 # Clean up.
@@ -3992,7 +4242,7 @@ SELECT * FROM child
 3  1
 4  1
 
-statement error foreign key violation: values \[1\] in columns \[p\] referenced in table "child"
+statement error update on table "child" violates foreign key constraint "fk_p_ref_parent"\nDETAIL: Key \(p\)=\(1\) is not present in table "parent"\.
 INSERT INTO parent VALUES (100, 1) ON CONFLICT(p) DO UPDATE SET p = 50
 
 statement ok

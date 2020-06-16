@@ -282,8 +282,6 @@ func NewDatumRowConverter(
 		evalCtx.Codec,
 		immutDesc,
 		cols,
-		SkipFKs,
-		nil, /* fkTables */
 		&sqlbase.DatumAlloc{},
 	)
 	if err != nil {
@@ -386,8 +384,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		}),
 		insertRow,
 		ignoreIndexes,
-		true, /* ignoreConflicts */
-		SkipFKs,
+		true,  /* ignoreConflicts */
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrap(err, "insert row")

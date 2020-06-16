@@ -303,3 +303,14 @@ F4/L14/10101312000202, F4/L13/1010131200020, F4/L12/101013120002,
 F4/L11/10101312000, F4/L10/1010131200, F4/L9/101013120, F4/L8/10101312, 
 F4/L7/1010131, F4/L6/101013, F4/L5/10101, F4/L4/1010, F4/L3/101, 
 F4/L2/10, F4/L1/1, F4/L0/
+
+init minlevel=0 maxlevel=4 maxcells=1
+----
+
+inner-covering name=point1
+----
+F0/L4/2000
+
+inner-covering name=shortline1
+----
+F4/L4/1010

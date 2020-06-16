@@ -29,7 +29,6 @@ type Inserter struct {
 	Helper                rowHelper
 	InsertCols            []sqlbase.ColumnDescriptor
 	InsertColIDtoRowIndex map[sqlbase.ColumnID]int
-	Fks                   fkExistenceCheckForInsert
 
 	// For allocation avoidance.
 	marshaled []roachpb.Value
@@ -47,8 +46,6 @@ func MakeInserter(
 	codec keys.SQLCodec,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
-	checkFKs checkFKConstraints,
-	fkTables FkTableMetadata,
 	alloc *sqlbase.DatumAlloc,
 ) (Inserter, error) {
 	ri := Inserter{
@@ -64,13 +61,6 @@ func MakeInserter(
 		}
 	}
 
-	if checkFKs == CheckFKs {
-		var err error
-		if ri.Fks, err = makeFkExistenceCheckHelperForInsert(ctx, txn, codec, tableDesc, fkTables,
-			ri.InsertColIDtoRowIndex, alloc); err != nil {
-			return ri, err
-		}
-	}
 	return ri, nil
 }
 
@@ -130,7 +120,6 @@ func (ri *Inserter) InsertRow(
 	values []tree.Datum,
 	ignoreIndexes util.FastIntSet,
 	overwrite bool,
-	checkFKs checkFKConstraints,
 	traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
@@ -149,15 +138,6 @@ func (ri *Inserter) InsertRow(
 		// Make sure the value can be written to the column before proceeding.
 		var err error
 		if ri.marshaled[i], err = sqlbase.MarshalColumnValue(&ri.InsertCols[i], val); err != nil {
-			return err
-		}
-	}
-
-	if ri.Fks.checker != nil && checkFKs == CheckFKs {
-		if err := ri.Fks.addAllIdxChecks(ctx, values, traceKV); err != nil {
-			return err
-		}
-		if err := ri.Fks.checker.runCheck(ctx, nil, values); err != nil {
 			return err
 		}
 	}
