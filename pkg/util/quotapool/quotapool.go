@@ -63,8 +63,13 @@ type Request interface {
 	// wait until the pool is non-empty before proceeding. Those zero-valued
 	// acquisitions will still need to wait to be at the front of the queue. It
 	// may make sense for implementers to special case zero-valued acquisitions
-	// entirely as IntPool does.
-	Acquire(context.Context, Resource) (fulfilled bool, unused Resource)
+	// entirely as IntPool does. Note that if unused is always non-nil, future
+	// additions will always be merged into the returned Resource.
+	//
+	// If tryAgainAfter is positive, acquisition will be attempted again after
+	// the specified duration. This is critical for the implementation of
+	// rate limiters on top of this package.
+	Acquire(context.Context, Resource) (fulfilled bool, unused Resource, tryAgainAfter time.Duration)
 
 	// ShouldWait indicates whether this request should be queued. If this method
 	// returns false and there is insufficient capacity in the pool when the
@@ -190,9 +195,10 @@ func (qp *QuotaPool) Add(v Resource) {
 
 func (qp *QuotaPool) addLocked(r Resource) {
 	if qp.mu.quota != nil {
-		r.Merge(qp.mu.quota)
+		qp.mu.quota.Merge(r)
+	} else {
+		qp.mu.quota = r
 	}
-	qp.mu.quota = r
 	// Notify the head of the queue if there is one waiting.
 	if n := qp.mu.q.peek(); n != nil && n.c != nil {
 		select {
@@ -216,6 +222,7 @@ var chanSyncPool = sync.Pool{
 //
 // Safe for concurrent use.
 func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
+
 	// Set up onAcquisition if we have one.
 	start := qp.timeSource.Now()
 	if qp.config.onAcquisition != nil {
@@ -225,11 +232,13 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 			}
 		}()
 	}
+
 	// Attempt to acquire quota on the fast path.
-	fulfilled, n, err := qp.acquireFastPath(ctx, r)
+	fulfilled, n, tryAgainAfter, err := qp.acquireFastPath(ctx, r)
 	if fulfilled || err != nil {
 		return err
 	}
+
 	// Set up the infrastructure to report slow requests.
 	var slowTimer Timer
 	var slowTimerC <-chan time.Time
@@ -241,6 +250,40 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 		slowTimer.Reset(qp.slowAcquisitionThreshold)
 		slowTimerC = slowTimer.Ch()
 	}
+
+	// Set up the infrastructure to deal with rate-limiter style pools which
+	// retry after the passage of time.
+	var tryAgainTimer Timer
+	var tryAgainTimerC <-chan time.Time
+	stopTryAgainTimer := func() {
+		if tryAgainTimer == nil {
+			return
+		}
+		tryAgainTimer.Stop()
+		tryAgainTimerC = nil
+	}
+	resetTryAgainTimer := func() {
+		if tryAgainAfter <= 0 {
+			return
+		}
+		if tryAgainTimer == nil {
+			tryAgainTimer = qp.timeSource.NewTimer()
+		}
+		tryAgainTimer.Reset(tryAgainAfter)
+		tryAgainTimerC = tryAgainTimer.Ch()
+	}
+	tryAcquire := func() (fulfilled bool) {
+		stopTryAgainTimer()
+		fulfilled, tryAgainAfter = qp.tryAcquireOnNotify(ctx, r, n)
+		if fulfilled {
+			return true
+		}
+		resetTryAgainTimer()
+		return false
+	}
+	resetTryAgainTimer()
+
+	// Loop until the front of the queue is either fulfilled or canceled.
 	for {
 		select {
 		case <-slowTimerC:
@@ -249,7 +292,7 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 			defer qp.onSlowAcquisition(ctx, qp.name, r, start)()
 			continue
 		case <-n.c:
-			if fulfilled := qp.tryAcquireOnNotify(ctx, r, n); fulfilled {
+			if fulfilled := tryAcquire(); fulfilled {
 				return nil
 			}
 		case <-ctx.Done():
@@ -260,6 +303,11 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 			// context is canceled. In fact, we want others waiters to only
 			// receive on qp.done and signaling them would work against that.
 			return qp.closeErr // always non-nil when qp.done is closed
+		case <-tryAgainTimerC:
+			tryAgainTimer.MarkRead()
+			if fulfilled := tryAcquire(); fulfilled {
+				return nil
+			}
 		}
 	}
 }
@@ -268,28 +316,31 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 // notifyee if the request is not immediately fulfilled.
 func (qp *QuotaPool) acquireFastPath(
 	ctx context.Context, r Request,
-) (fulfilled bool, _ *notifyee, _ error) {
+) (fulfilled bool, _ *notifyee, tryAgainAfter time.Duration, _ error) {
+
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
 	if qp.mu.closed {
-		return false, nil, qp.closeErr
+		return false, nil, 0, qp.closeErr
 	}
 	if qp.mu.q.len == 0 {
-		if fulfilled, unused := r.Acquire(ctx, qp.mu.quota); fulfilled {
+		var unused Resource
+		fulfilled, unused, tryAgainAfter = r.Acquire(ctx, qp.mu.quota)
+		if fulfilled {
 			qp.mu.quota = unused
-			return true, nil, nil
+			return true, nil, 0, nil
 		}
 	}
 	if !r.ShouldWait() {
-		return false, nil, ErrNotEnoughQuota
+		return false, nil, 0, ErrNotEnoughQuota
 	}
 	c := chanSyncPool.Get().(chan struct{})
-	return false, qp.mu.q.enqueue(c), nil
+	return false, qp.mu.q.enqueue(c), tryAgainAfter, nil
 }
 
 func (qp *QuotaPool) tryAcquireOnNotify(
 	ctx context.Context, r Request, n *notifyee,
-) (fulfilled bool) {
+) (fulfilled bool, tryAgainAfter time.Duration) {
 	// Release the notify channel back into the sync pool if we're fulfilled.
 	// Capture nc's value because it's not safe to avoid a race accessing n after
 	// it has been released back to the notifyQueue.
@@ -307,12 +358,12 @@ func (qp *QuotaPool) tryAcquireOnNotify(
 		<-n.c
 	}
 	var unused Resource
-	if fulfilled, unused = r.Acquire(ctx, qp.mu.quota); fulfilled {
+	if fulfilled, unused, tryAgainAfter = r.Acquire(ctx, qp.mu.quota); fulfilled {
 		n.c = nil
 		qp.mu.quota = unused
 		qp.notifyNextLocked()
 	}
-	return fulfilled
+	return fulfilled, tryAgainAfter
 }
 
 func (qp *QuotaPool) cleanupOnCancel(n *notifyee) {
