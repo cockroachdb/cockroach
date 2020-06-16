@@ -177,7 +177,7 @@ func backup(
 	job *jobs.Job,
 	backupManifest *BackupManifest,
 	checkpointDesc *BackupManifest,
-	makeExternalStorage cloud.ExternalStorageFactory,
+	externalStorageBuilder *cloud.ExternalStorageBuilder,
 	encryption *roachpb.FileEncryptionOptions,
 ) (RowCount, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
@@ -408,7 +408,7 @@ func backup(
 			}
 
 			if err := func() error {
-				store, err := makeExternalStorage(ctx, *conf)
+				store, err := externalStorageBuilder.MakeExternalStorage(ctx, *conf)
 				if err != nil {
 					return err
 				}
@@ -489,7 +489,8 @@ func (b *backupResumer) Resume(
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
-	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageBuilder.MakeExternalStorage(ctx,
+		defaultConf)
 	if err != nil {
 		return errors.Wrapf(err, "make storage")
 	}
@@ -537,7 +538,7 @@ func (b *backupResumer) Resume(
 		b.job,
 		&backupManifest,
 		checkpointDesc,
-		p.ExecCfg().DistSQLSrv.ExternalStorage,
+		p.ExecCfg().DistSQLSrv.ExternalStorageBuilder,
 		details.Encryption,
 	)
 	if err != nil {
@@ -634,7 +635,7 @@ func (b *backupResumer) deleteCheckpoint(ctx context.Context, cfg *sql.ExecutorC
 		if err != nil {
 			return err
 		}
-		exportStore, err := cfg.DistSQLSrv.ExternalStorage(ctx, conf)
+		exportStore, err := cfg.DistSQLSrv.ExternalStorageBuilder.MakeExternalStorage(ctx, conf)
 		if err != nil {
 			return err
 		}

@@ -120,8 +120,7 @@ type sqlServerOptionalArgs struct {
 	nodeIDContainer *base.SQLIDContainer
 
 	// Used by backup/restore.
-	externalStorage        cloud.ExternalStorageFactory
-	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+	externalStorageBuilder *cloud.ExternalStorageBuilder
 }
 
 type sqlServerArgs struct {
@@ -324,8 +323,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		NodeDialer:   cfg.nodeDialer,
 		LeaseManager: leaseMgr,
 
-		ExternalStorage:        cfg.externalStorage,
-		ExternalStorageFromURI: cfg.externalStorageFromURI,
+		ExternalStorageBuilder: cfg.externalStorageBuilder,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {

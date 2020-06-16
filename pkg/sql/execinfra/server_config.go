@@ -152,8 +152,7 @@ type ServerConfig struct {
 	// required, so that users of ServerConfig don't have to care about them.
 	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 
-	ExternalStorage        cloud.ExternalStorageFactory
-	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
+	ExternalStorageBuilder *cloud.ExternalStorageBuilder
 
 	// ProtectedTimestampProvider maintains the state of the protected timestamp
 	// subsystem. It is queried during the GC process and in the handling of

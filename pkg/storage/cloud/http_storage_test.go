@@ -145,12 +145,18 @@ func TestPutHttp(t *testing.T) {
 		srv, _, cleanup := makeServer()
 		defer cleanup()
 
+		var builder *ExternalStorageBuilder
+		var err error
+		if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+			blobs.TestEmptyBlobClientFactory); err != nil {
+			t.Fatal(err)
+		}
+
 		conf, err := ExternalStorageConfFromURI(srv.String())
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
-			testSettings, blobs.TestEmptyBlobClientFactory)
+		s, err := builder.MakeExternalStorage(ctx, conf)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,14 +294,17 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 }
 
 func TestCanDisableHttp(t *testing.T) {
-	conf := base.ExternalIODirConfig{
+	var builder *ExternalStorageBuilder
+	var err error
+	conf := base.ExternalStorageConfig{
 		DisableHTTP: true,
 	}
-	s, err := MakeExternalStorage(
+	if builder, err = ConstructExternalStorageBuilder(conf, blobs.TestEmptyBlobClientFactory); err != nil {
+		t.Fatal(err)
+	}
+	s, err := builder.MakeExternalStorage(
 		context.Background(),
-		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
-		conf,
-		testSettings, blobs.TestEmptyBlobClientFactory)
+		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http})
 	require.Nil(t, s)
 	require.Error(t, err)
 }
@@ -317,10 +326,15 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		http.DefaultTransport.(*http.Transport).Proxy = nil
 	}()
 
+	var builder *ExternalStorageBuilder
+	var err error
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		nil); err != nil {
+		t.Fatal(err)
+	}
 	conf, err := ExternalStorageConfFromURI("http://my-server")
 	require.NoError(t, err)
-	s, err := MakeExternalStorage(
-		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+	s, err := builder.MakeExternalStorage(context.Background(), conf)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "file")
 	require.NoError(t, err)

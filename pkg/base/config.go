@@ -723,9 +723,9 @@ type TempStorageConfig struct {
 	Spec StoreSpec
 }
 
-// ExternalIODirConfig describes various configuration options pertaining
+// ExternalStorageConfig describes various configuration options pertaining
 // to external storage implementations.
-type ExternalIODirConfig struct {
+type ExternalStorageConfig struct {
 	// Disables the use of external HTTP endpoints.
 	// This turns off http:// external storage as well as any custom
 	// endpoints cloud storage implementations.

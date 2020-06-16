@@ -38,7 +38,6 @@ type Settings struct {
 
 	Tracer        *tracing.Tracer
 	ExternalIODir string
-
 	// Set to 1 if a profile is active (if the profile is being grabbed through
 	// the `pprofui` server as opposed to the raw endpoint).
 	cpuProfiling int32 // atomic

@@ -376,10 +376,10 @@ func init() {
 		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
 
 		// Enable/disable various external storage endpoints.
-		serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
-		BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP,
+		serverCfg.ExternalStorageConfig = base.ExternalStorageConfig{}
+		BoolFlag(f, &serverCfg.ExternalStorageConfig.DisableHTTP,
 			cliflags.ExternalIODisableHTTP, false)
-		BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials,
+		BoolFlag(f, &serverCfg.ExternalStorageConfig.DisableImplicitCredentials,
 			cliflags.ExtenralIODisableImplicitCredentials, false)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment

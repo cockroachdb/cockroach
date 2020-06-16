@@ -310,9 +310,9 @@ type SQLConfig struct {
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
 
-	// ExternalIODirConfig is used to configure external storage
+	// ExternalStorageConfig is used to configure external storage
 	// access (http://, nodelocal://, etc)
-	ExternalIODirConfig base.ExternalIODirConfig
+	ExternalStorageConfig base.ExternalStorageConfig
 
 	// MemoryPoolSize is the amount of memory in bytes that can be
 	// used by SQL clients to store row data in server RAM.

@@ -93,6 +93,11 @@ func TestConverterFlushesBatches(t *testing.T) {
 		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_OCF), "testdata/avro/simple.ocf"),
 	}
 
+	externalStorageBuilder, err := constructExternalStorageBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	const endBatchSize = -1
 
 	for _, testCase := range tests {
@@ -119,7 +124,7 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group := ctxgroup.WithContext(ctx)
 				group.Go(func() error {
 					defer close(kvCh)
-					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format, externalStorageFactory)
+					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format, externalStorageBuilder)
 				})
 
 				lastBatch := 0
@@ -221,11 +226,15 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
+	externalStorageBuilder, err := constructExternalStorageBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:        &cluster.Settings{},
-			ExternalStorage: externalStorageFactory,
+			Settings:               &cluster.Settings{},
+			ExternalStorageBuilder: externalStorageBuilder,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				_ kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -319,11 +328,15 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	pkBulkAdder := &doNothingKeyAdder{}
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
+	externalStorageBuilder, err := constructExternalStorageBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:        &cluster.Settings{},
-			ExternalStorage: externalStorageFactory,
+			Settings:               &cluster.Settings{},
+			ExternalStorageBuilder: externalStorageBuilder,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -445,11 +458,15 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
 	evalCtx := tree.MakeTestingEvalContext(nil)
+	externalStorageBuilder, err := constructExternalStorageBuilder()
+	if err != nil {
+		t.Fatal(err)
+	}
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings:        &cluster.Settings{},
-			ExternalStorage: externalStorageFactory,
+			Settings:               &cluster.Settings{},
+			ExternalStorageBuilder: externalStorageBuilder,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -689,7 +706,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	// Convince distsql to use our "external" storage implementation.
 	storage := newGeneratedStorage(csv1)
-	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorageBuilder.
+		ExternalStorageFactoryImpl = storage.externalStorageFactory()
 
 	// Execute import; ignore any errors returned
 	// (since we're aborting the first import run.).
@@ -793,7 +811,8 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// Convince distsql to use our "external" storage implementation.
 	storage := newGeneratedStorage(csv1, csv2, csv3)
-	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorageBuilder.
+		ExternalStorageFactoryImpl = storage.externalStorageFactory()
 
 	// Execute import; ignore any errors returned
 	// (since we're aborting the first import run).
@@ -834,7 +853,9 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 }
 
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
-	return func(_ context.Context, es roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+	return func(_ context.Context, es roachpb.ExternalStorage,
+		e *cloud.ExternalStorageBuilder) (cloud.ExternalStorage,
+		error) {
 		uri, err := url.Parse(es.HttpPath.BaseUri)
 		if err != nil {
 			return nil, err
@@ -849,16 +870,20 @@ func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFacto
 	}
 }
 
-// External storage factory needed to run converters.
-func externalStorageFactory(
-	ctx context.Context, dest roachpb.ExternalStorage,
-) (cloud.ExternalStorage, error) {
+// Returns an ExternalStorageBuilder that can be used to construct ExternalStorage objects.
+func constructExternalStorageBuilder() (*cloud.ExternalStorageBuilder, error) {
 	workdir, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-		nil, blobs.TestBlobServiceClient(workdir))
+
+	builder := cloud.NewExternalStorageBuilder()
+	err = builder.Init(base.ExternalStorageConfig{}, nil, blobs.TestBlobServiceClient(workdir), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &builder, nil
 }
 
 // Helper to create and initialize testSpec.

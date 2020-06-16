@@ -165,7 +165,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	if ca.sink, err = getSink(
 		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
-		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI,
+		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageBuilder,
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -554,7 +554,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	var nilOracle timestampLowerBoundOracle
 	if cf.sink, err = getSink(
 		ctx, cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
-		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI,
+		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageBuilder,
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)

@@ -392,7 +392,7 @@ func backupPlanHook(
 			return err
 		}
 
-		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+		externalStorageBuilder := p.ExecCfg().DistSQLSrv.ExternalStorageBuilder
 
 		var encryptionPassphrase []byte
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
@@ -403,7 +403,7 @@ func backupPlanHook(
 		if err != nil {
 			return err
 		}
-		defaultStore, err := makeCloudStorage(ctx, defaultURI)
+		defaultStore, err := externalStorageBuilder.MakeExternalStorageFromURI(ctx, defaultURI)
 		if err != nil {
 			return err
 		}
@@ -419,7 +419,7 @@ func backupPlanHook(
 		g := ctxgroup.WithContext(ctx)
 		if len(incrementalFrom) > 0 {
 			if encryptionPassphrase != nil {
-				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0])
+				exportStore, err := externalStorageBuilder.MakeExternalStorageFromURI(ctx, incrementalFrom[0])
 				if err != nil {
 					return err
 				}
@@ -444,7 +444,7 @@ func backupPlanHook(
 					// descriptors around.
 					uri := incrementalFrom[i]
 					desc, err := ReadBackupManifestFromURI(
-						ctx, uri, makeCloudStorage, encryption,
+						ctx, uri, externalStorageBuilder, encryption,
 					)
 					if err != nil {
 						return errors.Wrapf(err, "failed to read backup from %q", uri)
@@ -514,7 +514,7 @@ func backupPlanHook(
 				// Close the old store before overwriting the reference with the new
 				// subdir store.
 				defaultStore.Close()
-				defaultStore, err = makeCloudStorage(ctx, defaultURI)
+				defaultStore, err = externalStorageBuilder.MakeExternalStorageFromURI(ctx, defaultURI)
 				if err != nil {
 					return errors.Wrap(err, "re-opening layer-specific destination location")
 				}
@@ -652,7 +652,7 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			exportStore, err := makeCloudStorage(ctx, defaultURI)
+			exportStore, err := externalStorageBuilder.MakeExternalStorageFromURI(ctx, defaultURI)
 			if err != nil {
 				return err
 			}

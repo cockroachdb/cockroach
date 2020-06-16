@@ -64,7 +64,7 @@ func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 
 func makeGCSStorage(
 	ctx context.Context,
-	ioConf base.ExternalIODirConfig,
+	ioConf base.ExternalStorageConfig,
 	conf *roachpb.ExternalStorage_GCS,
 	settings *cluster.Settings,
 ) (ExternalStorage, error) {

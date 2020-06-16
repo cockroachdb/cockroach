@@ -63,7 +63,12 @@ func storeFromURI(
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, clientFactory)
+	var builder *ExternalStorageBuilder
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		clientFactory); err != nil {
+		t.Fatal(err)
+	}
+	s, err := builder.MakeExternalStorage(ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +76,24 @@ func storeFromURI(
 }
 
 func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
-	testExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, skipSingleFile)
+	testExportStoreWithExternalIOConfig(t, base.ExternalStorageConfig{}, storeURI, skipSingleFile)
+}
+
+// Returns an ExternalStorageBuilder that can be used to construct ExternalStorage objects.
+func ConstructExternalStorageBuilder(
+	ioConf base.ExternalStorageConfig, clientFactory blobs.BlobClientFactory,
+) (*ExternalStorageBuilder, error) {
+	builder := NewExternalStorageBuilder()
+	err := builder.Init(ioConf, testSettings, clientFactory, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &builder, nil
 }
 
 func testExportStoreWithExternalIOConfig(
-	t *testing.T, ioConf base.ExternalIODirConfig, storeURI string, skipSingleFile bool,
+	t *testing.T, ioConf base.ExternalStorageConfig, storeURI string, skipSingleFile bool,
 ) {
 	ctx := context.Background()
 
@@ -86,7 +104,13 @@ func testExportStoreWithExternalIOConfig(
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory)
+
+	var builder *ExternalStorageBuilder
+	if builder, err = ConstructExternalStorageBuilder(ioConf, clientFactory); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := builder.MakeExternalStorage(ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,8 +497,6 @@ func TestPutGoogleCloud(t *testing.T) {
 func TestWorkloadStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	settings := cluster.MakeTestingClusterSettings()
-
 	rows, payloadBytes, ranges := 4, 12, 1
 	gen := bank.FromConfig(rows, rows, payloadBytes, ranges)
 	bankTable := gen.Tables()[0]
@@ -501,11 +523,15 @@ func TestWorkloadStorage(t *testing.T) {
 
 	ctx := context.Background()
 
+	var builder *ExternalStorageBuilder
+	var err error
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		blobs.TestEmptyBlobClientFactory); err != nil {
+		t.Fatal(err)
+	}
+
 	{
-		s, err := ExternalStorageFromURI(
-			ctx, bankURL().String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory,
-		)
+		s, err := builder.MakeExternalStorageFromURI(ctx, bankURL().String())
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -522,10 +548,7 @@ func TestWorkloadStorage(t *testing.T) {
 	{
 		params := map[string]string{
 			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
-		s, err := ExternalStorageFromURI(
-			ctx, bankURL(params).String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory,
-		)
+		s, err := builder.MakeExternalStorageFromURI(ctx, bankURL(params).String())
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -537,34 +560,16 @@ func TestWorkloadStorage(t *testing.T) {
 		`), strings.TrimSpace(string(bytes)))
 	}
 
-	_, err := ExternalStorageFromURI(
-		ctx, `workload:///nope`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = builder.MakeExternalStorageFromURI(ctx, `workload:///nope`)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///fmt/bank/bank?version=`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = builder.MakeExternalStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`)
 	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/nope/nope?version=`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = builder.MakeExternalStorageFromURI(ctx, `workload:///csv/nope/nope?version=`)
 	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = builder.MakeExternalStorageFromURI(ctx, `workload:///csv/bank/bank`)
 	require.EqualError(t, err, `parameter version is required`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank?version=`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = builder.MakeExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=`)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank?version=nope`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = builder.MakeExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }

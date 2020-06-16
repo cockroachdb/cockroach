@@ -78,7 +78,7 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage)
+		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorageBuilder)
 	})
 
 	// Ingest the KVs that the producer group emitted to the chan and the row result
@@ -127,7 +127,7 @@ func readInputFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
-	makeExternalStorage cloud.ExternalStorageFactory,
+	externalStorageBuilder *cloud.ExternalStorageBuilder,
 ) error {
 	done := ctx.Done()
 
@@ -139,7 +139,7 @@ func readInputFiles(
 		if err != nil {
 			return err
 		}
-		es, err := makeExternalStorage(ctx, conf)
+		es, err := externalStorageBuilder.MakeExternalStorage(ctx, conf)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func readInputFiles(
 			if err != nil {
 				return err
 			}
-			es, err := makeExternalStorage(ctx, conf)
+			es, err := externalStorageBuilder.MakeExternalStorage(ctx, conf)
 			if err != nil {
 				return err
 			}
@@ -217,7 +217,7 @@ func readInputFiles(
 					if err != nil {
 						return err
 					}
-					rejectedStorage, err := makeExternalStorage(ctx, conf)
+					rejectedStorage, err := externalStorageBuilder.MakeExternalStorage(ctx, conf)
 					if err != nil {
 						return err
 					}
@@ -324,7 +324,7 @@ type inputConverter interface {
 		dataFiles map[int32]string,
 		resumePos map[int32]int64,
 		format roachpb.IOFileFormat,
-		makeExternalStorage cloud.ExternalStorageFactory,
+		externalStorageBuilder *cloud.ExternalStorageBuilder,
 	) error
 }
 

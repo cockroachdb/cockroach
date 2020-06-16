@@ -473,9 +473,9 @@ func (a *avroInputReader) readFiles(
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
-	makeExternalStorage cloud.ExternalStorageFactory,
+	externalStorageBuilder *cloud.ExternalStorageBuilder,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, externalStorageBuilder)
 }
 
 func (a *avroInputReader) readFile(

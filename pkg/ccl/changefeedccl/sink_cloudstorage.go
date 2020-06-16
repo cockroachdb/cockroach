@@ -304,7 +304,7 @@ func makeCloudStorageSink(
 	settings *cluster.Settings,
 	opts map[string]string,
 	timestampOracle timestampLowerBoundOracle,
-	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	externalStorageBuilder *cloud.ExternalStorageBuilder,
 ) (Sink, error) {
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
@@ -362,7 +362,7 @@ func makeCloudStorageSink(
 	}
 
 	var err error
-	if s.es, err = makeExternalStorageFromURI(ctx, baseURI); err != nil {
+	if s.es, err = externalStorageBuilder.MakeExternalStorageFromURI(ctx, baseURI); err != nil {
 		return nil, err
 	}
 

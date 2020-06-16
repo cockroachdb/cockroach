@@ -126,8 +126,13 @@ func Load(
 	if err != nil {
 		return backupccl.BackupManifest{}, err
 	}
-	dir, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobClientFactory)
+
+	builder := cloud.NewExternalStorageBuilder()
+	if err = builder.Init(base.ExternalStorageConfig{}, cluster.NoSettings, blobClientFactory,
+		nil); err != nil {
+		return backupccl.BackupManifest{}, err
+	}
+	dir, err := builder.MakeExternalStorage(ctx, conf)
 	if err != nil {
 		return backupccl.BackupManifest{}, errors.Wrap(err, "export storage from URI")
 	}

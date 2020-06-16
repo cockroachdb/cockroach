@@ -32,7 +32,7 @@ type LocalStorage struct {
 // an error when we cannot take the absolute path of `externalIODir`.
 func NewLocalStorage(externalIODir string) (*LocalStorage, error) {
 	// An empty externalIODir indicates external IO is completely disabled.
-	// Returning a nil *LocalStorage in this case and then hanldling `nil` in the
+	// Returning a nil *LocalStorage in this case and then handling `nil` in the
 	// prependExternalIODir helper ensures that that is respected throughout the
 	// implementation (as a failure to do so would likely fail loudly with a
 	// nil-pointer dereference).

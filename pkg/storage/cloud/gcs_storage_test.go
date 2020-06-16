@@ -104,8 +104,13 @@ func TestAntagonisticRead(t *testing.T) {
 	conf, err := ExternalStorageConfFromURI(gsFile)
 	require.NoError(t, err)
 
-	s, err := MakeExternalStorage(
-		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+	var builder *ExternalStorageBuilder
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		nil); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := builder.MakeExternalStorage(context.Background(), conf)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "")
 	require.NoError(t, err)
@@ -123,14 +128,20 @@ func TestFileDoesNotExist(t *testing.T) {
 		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
 	}
 
+	var builder *ExternalStorageBuilder
+	var err error
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		nil); err != nil {
+		t.Fatal(err)
+	}
+
 	{
 		// Invalid gsFile.
 		gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
 		conf, err := ExternalStorageConfFromURI(gsFile)
 		require.NoError(t, err)
 
-		s, err := MakeExternalStorage(
-			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+		s, err := builder.MakeExternalStorage(context.Background(), conf)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
@@ -143,8 +154,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		conf, err := ExternalStorageConfFromURI(gsFile)
 		require.NoError(t, err)
 
-		s, err := MakeExternalStorage(
-			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+		s, err := builder.MakeExternalStorage(context.Background(), conf)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")

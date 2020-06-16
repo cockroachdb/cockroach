@@ -763,7 +763,8 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *roachpb.FileEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
-	backupManifests, err := loadBackupManifests(ctx, details.URIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
+	backupManifests, err := loadBackupManifests(ctx, details.URIs, p.ExecCfg().DistSQLSrv.ExternalStorageBuilder,
+		encryption)
 	if err != nil {
 		return nil, BackupManifest{}, nil, err
 	}

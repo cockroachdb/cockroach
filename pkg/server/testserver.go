@@ -563,6 +563,7 @@ func makeSQLServerArgs(
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := rpc.NewServer(rpcContext)
 	noStatusServer := serverpb.MakeOptionalStatusServer(nil)
+	builder := cloud.NewExternalStorageBuilder()
 	return sqlServerArgs{
 		sqlServerOptionalArgs: sqlServerOptionalArgs{
 			rpcContext:   rpcContext,
@@ -577,12 +578,9 @@ func makeSQLServerArgs(
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
 			nodeIDContainer: idContainer,
-			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-				return nil, errors.New("external storage is not available to secondary tenants")
-			},
-			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-				return nil, errors.New("external uri storage is not available to secondary tenants")
-			},
+			// External storage is not available to secondary tenants. builder.Init()
+			// has never been invoked and all methods will return an error.
+			externalStorageBuilder: &builder,
 		},
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,

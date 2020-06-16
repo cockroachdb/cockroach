@@ -94,10 +94,14 @@ var ErrListingUnsupported = errors.New("listing is not supported")
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ExternalStorageFactory describes a factory function for ExternalStorage.
-type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
+type ExternalStorageFactory func(ctx context.Context,
+	dest roachpb.ExternalStorage, e *ExternalStorageBuilder) (ExternalStorage, error)
 
-// ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
-type ExternalStorageFromURIFactory func(ctx context.Context, uri string) (ExternalStorage, error)
+// ExternalStorageFromURIFactory describes a factory function for
+// ExternalStorage given a URI.
+type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
+	e *ExternalStorageBuilder) (ExternalStorage,
+	error)
 
 // ExternalStorage provides functions to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
@@ -233,21 +237,6 @@ func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
 	return conf, nil
 }
 
-// ExternalStorageFromURI returns an ExternalStorage for the given URI.
-func ExternalStorageFromURI(
-	ctx context.Context,
-	uri string,
-	externalConfig base.ExternalIODirConfig,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-) (ExternalStorage, error) {
-	conf, err := ExternalStorageConfFromURI(uri)
-	if err != nil {
-		return nil, err
-	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory)
-}
-
 // SanitizeExternalStorageURI returns the external storage URI with with some
 // secrets redacted, for use when showing these URIs in the UI, to provide some
 // protection from shoulder-surfing. The param is still present -- just
@@ -282,33 +271,99 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 	return uri.String(), nil
 }
 
-// MakeExternalStorage creates an ExternalStorage from the given config.
-func MakeExternalStorage(
-	ctx context.Context,
-	dest roachpb.ExternalStorage,
-	conf base.ExternalIODirConfig,
+// ExternalStorageBuilder is responsible for returning ExternalStorage objects
+// via the factory methods it implements.
+type ExternalStorageBuilder struct {
+	conf              base.ExternalStorageConfig
+	settings          *cluster.Settings
+	blobClientFactory blobs.BlobClientFactory
+	engine           interface{}
+
+	// Factory methods used by the builder to create external storage objects.
+	ExternalStorageFactoryImpl        ExternalStorageFactory
+	ExternalStorageFromURIFactoryImpl ExternalStorageFromURIFactory
+}
+
+// NewExternalStorageBuilder returns a new ExternalStorageBuilder object. Init
+// must be called before its factory methods can be used.
+func NewExternalStorageBuilder() ExternalStorageBuilder {
+	return ExternalStorageBuilder{
+		ExternalStorageFromURIFactoryImpl: func(ctx context.Context, uri string,
+			e *ExternalStorageBuilder) (ExternalStorage, error) {
+			return nil, errors.New("init not called before using ExternalStorageBuilder")
+		},
+		ExternalStorageFactoryImpl: func(ctx context.Context, dest roachpb.ExternalStorage,
+			e *ExternalStorageBuilder) (ExternalStorage, error) {
+			return nil, errors.New("init not called before using ExternalStorageBuilder")
+		},
+	}
+}
+
+// Init initializes an ExternalStorageBuilder with the configuration params.
+// The builder can be used to return ExternalStorage objects after this method
+// has returned.
+func (e *ExternalStorageBuilder) Init(
+	conf base.ExternalStorageConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
+	engine interface{},
+) error {
+	e.conf = conf
+	e.settings = settings
+	e.blobClientFactory = blobClientFactory
+	e.engine = engine
+	e.ExternalStorageFromURIFactoryImpl = makeExternalStorageFromURI
+	e.ExternalStorageFactoryImpl = makeExternalStorage
+
+	return nil
+}
+
+// MakeExternalStorage creates an ExternalStorage from the given config.
+func (e *ExternalStorageBuilder) MakeExternalStorage(
+	ctx context.Context, dest roachpb.ExternalStorage,
+) (ExternalStorage, error) {
+	return e.ExternalStorageFactoryImpl(ctx, dest, e)
+}
+
+// MakeExternalStorageFromURI returns an ExternalStorage for the given URI.
+func (e *ExternalStorageBuilder) MakeExternalStorageFromURI(
+	ctx context.Context, uri string,
+) (ExternalStorage, error) {
+	return e.ExternalStorageFromURIFactoryImpl(ctx, uri, e)
+}
+
+func makeExternalStorageFromURI(
+	ctx context.Context, uri string, e *ExternalStorageBuilder,
+) (ExternalStorage, error) {
+	conf, err := ExternalStorageConfFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	return makeExternalStorage(ctx, conf, e)
+}
+
+func makeExternalStorage(
+	ctx context.Context, dest roachpb.ExternalStorage, e *ExternalStorageBuilder,
 ) (ExternalStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
 		telemetry.Count("external-io.nodelocal")
-		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory)
+		return makeLocalStorage(ctx, dest.LocalFile, e.settings, e.blobClientFactory)
 	case roachpb.ExternalStorageProvider_Http:
-		if conf.DisableHTTP {
+		if e.conf.DisableHTTP {
 			return nil, errors.New("external http access disabled")
 		}
 		telemetry.Count("external-io.http")
-		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
+		return makeHTTPStorage(dest.HttpPath.BaseUri, e.settings)
 	case roachpb.ExternalStorageProvider_S3:
 		telemetry.Count("external-io.s3")
-		return makeS3Storage(ctx, conf, dest.S3Config, settings)
+		return makeS3Storage(ctx, e.conf, dest.S3Config, e.settings)
 	case roachpb.ExternalStorageProvider_GoogleCloud:
 		telemetry.Count("external-io.google_cloud")
-		return makeGCSStorage(ctx, conf, dest.GoogleCloudConfig, settings)
+		return makeGCSStorage(ctx, e.conf, dest.GoogleCloudConfig, e.settings)
 	case roachpb.ExternalStorageProvider_Azure:
 		telemetry.Count("external-io.azure")
-		return makeAzureStorage(dest.AzureConfig, settings)
+		return makeAzureStorage(dest.AzureConfig, e.settings)
 	case roachpb.ExternalStorageProvider_Workload:
 		telemetry.Count("external-io.workload")
 		return makeWorkloadStorage(dest.WorkloadConfig)

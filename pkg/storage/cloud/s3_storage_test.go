@@ -43,11 +43,14 @@ func TestPutS3(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	var builder *ExternalStorageBuilder
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		blobs.TestEmptyBlobClientFactory); err != nil {
+		t.Fatal(err)
+	}
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := ExternalStorageFromURI(
-			ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"),
-			base.ExternalIODirConfig{}, testSettings, blobs.TestEmptyBlobClientFactory,
-		)
+		_, err := builder.MakeExternalStorageFromURI(
+			ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"))
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			AuthParam,
@@ -133,7 +136,7 @@ func TestPutS3Endpoint(t *testing.T) {
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	s3, err := makeS3Storage(context.Background(),
-		base.ExternalIODirConfig{DisableHTTP: true},
+		base.ExternalStorageConfig{DisableHTTP: true},
 		&roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}, nil,
 	)
 	require.Nil(t, s3)
@@ -143,7 +146,7 @@ func TestS3DisallowCustomEndpoints(t *testing.T) {
 func TestS3DisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s3, err := makeS3Storage(context.Background(),
-		base.ExternalIODirConfig{DisableImplicitCredentials: true},
+		base.ExternalStorageConfig{DisableImplicitCredentials: true},
 		&roachpb.ExternalStorage_S3{
 			Endpoint: "http://do-not-go-there",
 			Auth:     authParamImplicit,
@@ -192,7 +195,13 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, clientFactory)
+
+	var builder *ExternalStorageBuilder
+	if builder, err = ConstructExternalStorageBuilder(base.ExternalStorageConfig{},
+		clientFactory); err != nil {
+		t.Fatal(err)
+	}
+	s, err := builder.MakeExternalStorage(ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -444,9 +444,9 @@ func (m *pgDumpReader) readFiles(
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
-	makeExternalStorage cloud.ExternalStorageFactory,
+	externalStorageBuilder *cloud.ExternalStorageBuilder,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, externalStorageBuilder)
 }
 
 func (m *pgDumpReader) readFile(

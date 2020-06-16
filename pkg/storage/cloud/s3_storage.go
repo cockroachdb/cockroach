@@ -58,7 +58,7 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 
 func makeS3Storage(
 	ctx context.Context,
-	ioConf base.ExternalIODirConfig,
+	ioConf base.ExternalStorageConfig,
 	conf *roachpb.ExternalStorage_S3,
 	settings *cluster.Settings,
 ) (ExternalStorage, error) {

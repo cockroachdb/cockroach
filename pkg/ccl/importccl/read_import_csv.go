@@ -60,9 +60,9 @@ func (c *csvInputReader) readFiles(
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
-	makeExternalStorage cloud.ExternalStorageFactory,
+	externalStorageBuilder *cloud.ExternalStorageBuilder,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, c.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, c.readFile, externalStorageBuilder)
 }
 
 func (c *csvInputReader) readFile(

@@ -1600,14 +1600,14 @@ func EnableLeaseHistory(maxEntries int) func() {
 func (r *Replica) GetExternalStorage(
 	ctx context.Context, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorage(ctx, dest)
+	return r.store.cfg.ExternalStorageBuilder.MakeExternalStorage(ctx, dest)
 }
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (r *Replica) GetExternalStorageFromURI(
 	ctx context.Context, uri string,
 ) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorageFromURI(ctx, uri)
+	return r.store.cfg.ExternalStorageBuilder.MakeExternalStorageFromURI(ctx, uri)
 }
 
 func (r *Replica) markSystemConfigGossipSuccess() {

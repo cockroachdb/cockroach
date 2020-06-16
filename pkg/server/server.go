@@ -169,6 +169,9 @@ type Server struct {
 
 	sqlServer *sqlServer
 
+	// Created in NewServer but initialized (made usable) at start time.
+	externalStorageBuilder *cloud.ExternalStorageBuilder
+
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 
 	startTime time.Time
@@ -379,27 +382,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	internalExecutor := &sql.InternalExecutor{}
 	jobRegistry := &jobs.Registry{} // ditto
 
-	// This function defines how ExternalStorage objects are created.
-	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-		return cloud.MakeExternalStorage(
-			ctx, dest, cfg.ExternalIODirConfig, st,
-			blobs.NewBlobClientFactory(
-				nodeIDContainer.Get(),
-				nodeDialer,
-				st.ExternalIODir,
-			),
-		)
-	}
-	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(
-			ctx, uri, cfg.ExternalIODirConfig, st,
-			blobs.NewBlobClientFactory(
-				nodeIDContainer.Get(),
-				nodeDialer,
-				st.ExternalIODir,
-			),
-		)
-	}
+	// Create the builder that will be used to create ExternalStorage objects.
+	// The builder is only usable after builder.Init() is invoked in the
+	// server.Start().
+	externalStorageBuilder := cloud.NewExternalStorageBuilder()
 
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
 		DB:               db,
@@ -458,8 +444,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}),
 
 		EnableEpochRangeLeases:  true,
-		ExternalStorage:         externalStorage,
-		ExternalStorageFromURI:  externalStorageFromURI,
+		ExternalStorageBuilder:  &externalStorageBuilder,
 		ProtectedTimestampCache: protectedtsProvider,
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -540,8 +525,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			grpcServer:             grpcServer.Server,
 			recorder:               recorder,
 			nodeIDContainer:        idContainer,
-			externalStorage:        externalStorage,
-			externalStorageFromURI: externalStorageFromURI,
+			externalStorageBuilder: &externalStorageBuilder,
 			isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,
 		},
 		SQLConfig:                &cfg.SQLConfig,
@@ -565,35 +549,36 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
-		nodeIDContainer:       nodeIDContainer,
-		cfg:                   cfg,
-		st:                    st,
-		clock:                 clock,
-		rpcContext:            rpcContext,
-		grpc:                  grpcServer,
-		gossip:                g,
-		nodeDialer:            nodeDialer,
-		nodeLiveness:          nodeLiveness,
-		storePool:             storePool,
-		tcsFactory:            tcsFactory,
-		distSender:            distSender,
-		db:                    db,
-		node:                  node,
-		registry:              registry,
-		recorder:              recorder,
-		runtime:               runtimeSampler,
-		admin:                 sAdmin,
-		status:                sStatus,
-		authentication:        sAuth,
-		tsDB:                  tsDB,
-		tsServer:              &sTS,
-		raftTransport:         raftTransport,
-		stopper:               stopper,
-		debug:                 debugServer,
-		replicationReporter:   replicationReporter,
-		protectedtsProvider:   protectedtsProvider,
-		protectedtsReconciler: protectedtsReconciler,
-		sqlServer:             sqlServer,
+		nodeIDContainer:        nodeIDContainer,
+		cfg:                    cfg,
+		st:                     st,
+		clock:                  clock,
+		rpcContext:             rpcContext,
+		grpc:                   grpcServer,
+		gossip:                 g,
+		nodeDialer:             nodeDialer,
+		nodeLiveness:           nodeLiveness,
+		storePool:              storePool,
+		tcsFactory:             tcsFactory,
+		distSender:             distSender,
+		db:                     db,
+		node:                   node,
+		registry:               registry,
+		recorder:               recorder,
+		runtime:                runtimeSampler,
+		admin:                  sAdmin,
+		status:                 sStatus,
+		authentication:         sAuth,
+		tsDB:                   tsDB,
+		tsServer:               &sTS,
+		raftTransport:          raftTransport,
+		stopper:                stopper,
+		debug:                  debugServer,
+		replicationReporter:    replicationReporter,
+		protectedtsProvider:    protectedtsProvider,
+		protectedtsReconciler:  protectedtsReconciler,
+		sqlServer:              sqlServer,
+		externalStorageBuilder: &externalStorageBuilder,
 	}
 	return lateBoundServer, err
 }
@@ -993,7 +978,23 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create engines")
 	}
+
 	s.stopper.AddCloser(&s.engines)
+
+	// Initialize the external storage builder now that the engines have been
+	// created.
+	// TODO(adityamaru): Locate and send appropriate engine for user scoped
+	// storage.
+	if err = s.externalStorageBuilder.Init(s.cfg.ExternalStorageConfig, s.st,
+		blobs.NewBlobClientFactory(
+			s.nodeIDContainer.Get(),
+			s.nodeDialer,
+			s.st.ExternalIODir,
+		),
+		nil,
+	); err != nil {
+		return err
+	}
 
 	bootstrapVersion := s.cfg.Settings.Version.BinaryVersion()
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {

@@ -710,9 +710,8 @@ type StoreConfig struct {
 	// gossip immediately without waiting for the periodic gossip interval.
 	GossipWhenCapacityDeltaExceedsFraction float64
 
-	// ExternalStorage creates ExternalStorage objects which allows access to external files
-	ExternalStorage        cloud.ExternalStorageFactory
-	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
+	// ExternalStorageBuilder creates ExternalStorage objects which allows access to external files
+	ExternalStorageBuilder *cloud.ExternalStorageBuilder
 
 	// ProtectedTimestampCache maintains the state of the protected timestamp
 	// subsystem. It is queried during the GC process and in the handling of
