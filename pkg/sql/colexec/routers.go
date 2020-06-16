@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -34,14 +35,15 @@ import (
 // easier test mocking of outputs.
 type routerOutput interface {
 	execinfra.OpNode
+	// initWithHashRouter passes a reference to the HashRouter that will be
+	// pushing batches to this output.
+	initWithHashRouter(*HashRouter)
 	// addBatch adds the elements specified by the selection vector from batch to
 	// the output. It returns whether or not the output changed its state to
 	// blocked (see implementations).
 	addBatch(context.Context, coldata.Batch, []int) bool
 	// cancel tells the output to stop producing batches.
 	cancel(ctx context.Context)
-	// drain drains the output of any metadata.
-	drain() []execinfrapb.ProducerMetadata
 }
 
 // getDefaultRouterOutputBlockedThreshold returns the number of unread values
@@ -66,9 +68,28 @@ const (
 	routerOutputOpDraining
 )
 
+// drainCoordinator is an interface that the HashRouter implements to coordinate
+// cancellation of all of its outputs in the case of an error and draining in
+// the case of graceful termination.
+// WARNING: No locks should be held when calling these methods, as the
+// HashRouter might call routerOutput methods (e.g. cancel) that attempt to
+// reacquire locks.
+type drainCoordinator interface {
+	// encounteredError should be called when a routerOutput encounters an error.
+	// This terminates execution. No locks should be held when calling this
+	// method, since cancellation could occur.
+	encounteredError(context.Context, error)
+	// drainMeta should be called exactly once when the routerOutput moves to
+	// draining.
+	drainMeta() []execinfrapb.ProducerMetadata
+}
+
 type routerOutputOp struct {
 	// input is a reference to our router.
 	input execinfra.OpNode
+	// drainCoordinator is a reference to the HashRouter to be able to notify it
+	// if the output encounters an error or transitions to a draining state.
+	drainCoordinator drainCoordinator
 
 	types []*types.T
 
@@ -119,31 +140,9 @@ type routerOutputOp struct {
 		data      *spillingQueue
 		numUnread int
 		blocked   bool
-
-		drainState struct {
-			// err stores any error (if such occurs) when dequeueing from data
-			// (one possible error could be hitting disk usage limit). Once
-			// such error occurs, the output transitions into draining state.
-			// The error, however, will not be propagated right away - in order to
-			// prevent double reporting of the error by the hash router, it will be
-			// returned either on the next call to addBatch (if such occurs) or
-			// during draining of the router output.
-			err error
-		}
 	}
 
-	testingKnobs struct {
-		// alwaysFlush, if set to true, will always flush o.mu.pendingBatch to
-		// o.mu.data.
-		alwaysFlush bool
-	}
-
-	// These fields default to defaultRouterOutputBlockedThreshold and
-	// coldata.BatchSize() but are modified by tests to test edge cases.
-	// blockedThreshold is the number of buffered values above which we consider
-	// a router output to be blocked.
-	blockedThreshold int
-	outputBatchSize  int
+	testingKnobs routerOutputOpTestingKnobs
 }
 
 func (o *routerOutputOp) ChildCount(verbose bool) int {
@@ -161,48 +160,95 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 
 var _ colexecbase.Operator = &routerOutputOp{}
 
-// newRouterOutputOp creates a new router output. The caller must ensure that
-// unblockedEventsChan is a buffered channel, as the router output will write to
-// it. The provided allocator must not have a hard limit. The passed in
-// memoryLimit will act as a soft limit to allow the router output to use disk
-// when it is exceeded.
-func newRouterOutputOp(
-	unlimitedAllocator *colmem.Allocator,
-	types []*types.T,
-	unblockedEventsChan chan<- struct{},
-	memoryLimit int64,
-	cfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-) *routerOutputOp {
-	return newRouterOutputOpWithBlockedThresholdAndBatchSize(unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, fdSemaphore, getDefaultRouterOutputBlockedThreshold(), coldata.BatchSize(), diskAcc)
+type routerOutputOpTestingKnobs struct {
+	// blockedThreshold is the number of buffered values above which we consider
+	// a router output to be blocked. It defaults to
+	// defaultRouterOutputBlockedThreshold but can be modified by tests to test
+	// edge cases.
+	blockedThreshold int
+	// outputBatchSize defaults to coldata.BatchSize() but can be modified by
+	// tests to test edge cases.
+	outputBatchSize int
+	// alwaysFlush, if set to true, will always flush o.mu.pendingBatch to
+	// o.mu.data.
+	alwaysFlush bool
+	// addBatchTestInducedErrorCb is called after any function call that could
+	// produce an error if that error is nil. If the callback returns an error,
+	// the router output overwrites the nil error with the returned error.
+	// It is guaranteed that this callback will be called at least once during
+	// normal execution.
+	addBatchTestInducedErrorCb func() error
+	// nextTestInducedErrorCb is called after any function call that could
+	// produce an error if that error is nil. If the callback returns an error,
+	// the router output overwrites the nil error with the returned error.
+	// It is guaranteed that this callback will be called at least once during
+	// normal execution.
+	nextTestInducedErrorCb func() error
 }
 
-func newRouterOutputOpWithBlockedThresholdAndBatchSize(
-	unlimitedAllocator *colmem.Allocator,
-	types []*types.T,
-	unblockedEventsChan chan<- struct{},
-	memoryLimit int64,
-	cfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	blockedThreshold int,
-	outputBatchSize int,
-	diskAcc *mon.BoundAccount,
-) *routerOutputOp {
-	o := &routerOutputOp{
-		types:               types,
-		unblockedEventsChan: unblockedEventsChan,
-		blockedThreshold:    blockedThreshold,
-		outputBatchSize:     outputBatchSize,
+// routerOutputOpArgs are the arguments to newRouterOutputOp. All fields apart
+// from the testing knobs are optional.
+type routerOutputOpArgs struct {
+	// All fields are required unless marked optional.
+	types []*types.T
+
+	// unlimitedAllocator should not have a memory limit. Pass in a soft
+	// memoryLimit that will be respected instead.
+	unlimitedAllocator *colmem.Allocator
+	// memoryLimit acts as a soft limit to allow the router output to use disk
+	// when it is exceeded.
+	memoryLimit int64
+	diskAcc     *mon.BoundAccount
+	cfg         colcontainer.DiskQueueCfg
+	fdSemaphore semaphore.Semaphore
+
+	// unblockedEventsChan must be a buffered channel.
+	unblockedEventsChan chan<- struct{}
+
+	testingKnobs routerOutputOpTestingKnobs
+}
+
+// newRouterOutputOp creates a new router output.
+func newRouterOutputOp(args routerOutputOpArgs) *routerOutputOp {
+	if args.testingKnobs.blockedThreshold == 0 {
+		args.testingKnobs.blockedThreshold = getDefaultRouterOutputBlockedThreshold()
 	}
-	o.mu.unlimitedAllocator = unlimitedAllocator
+	if args.testingKnobs.outputBatchSize == 0 {
+		args.testingKnobs.outputBatchSize = coldata.BatchSize()
+	}
+
+	o := &routerOutputOp{
+		types:               args.types,
+		unblockedEventsChan: args.unblockedEventsChan,
+		testingKnobs:        args.testingKnobs,
+	}
+	o.mu.unlimitedAllocator = args.unlimitedAllocator
 	o.mu.cond = sync.NewCond(&o.mu)
-	o.mu.data = newSpillingQueue(unlimitedAllocator, types, memoryLimit, cfg, fdSemaphore, outputBatchSize, diskAcc)
+	o.mu.data = newSpillingQueue(
+		args.unlimitedAllocator,
+		args.types,
+		args.memoryLimit,
+		args.cfg,
+		args.fdSemaphore,
+		args.testingKnobs.outputBatchSize,
+		args.diskAcc,
+	)
 
 	return o
 }
 
 func (o *routerOutputOp) Init() {}
+
+// nextErrorLocked is a helper method that handles an error encountered in Next.
+func (o *routerOutputOp) nextErrorLocked(ctx context.Context, err error) {
+	o.mu.state = routerOutputOpDraining
+	o.maybeUnblockLocked()
+	// Unlock the mutex, since the HashRouter will cancel all outputs.
+	o.mu.Unlock()
+	o.drainCoordinator.encounteredError(ctx, err)
+	o.mu.Lock()
+	colexecerror.InternalError(err)
+}
 
 // Next returns the next coldata.Batch from the routerOutputOp. Note that Next
 // is designed for only one concurrent caller and will block until data is
@@ -226,23 +272,44 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		o.mu.unlimitedAllocator.ReleaseBatch(b)
 		o.mu.pendingBatch = nil
 	} else {
-		b, o.mu.drainState.err = o.mu.data.dequeue(ctx)
-		if o.mu.drainState.err != nil {
-			o.mu.state = routerOutputOpDraining
-			return coldata.ZeroBatch
+		var err error
+		b, err = o.mu.data.dequeue(ctx)
+		if err == nil && o.testingKnobs.nextTestInducedErrorCb != nil {
+			err = o.testingKnobs.nextTestInducedErrorCb()
+		}
+		if err != nil {
+			o.nextErrorLocked(ctx, err)
 		}
 	}
 	o.mu.numUnread -= b.Length()
-	if o.mu.numUnread <= o.blockedThreshold {
+	if o.mu.numUnread <= o.testingKnobs.blockedThreshold {
 		o.maybeUnblockLocked()
 	}
 	if b.Length() == 0 {
+		if o.testingKnobs.nextTestInducedErrorCb != nil {
+			if err := o.testingKnobs.nextTestInducedErrorCb(); err != nil {
+				o.nextErrorLocked(ctx, err)
+			}
+		}
 		// This is the last batch. closeLocked will set done to protect against
 		// further calls to Next since this is allowed by the interface as well as
 		// cleaning up and releasing possible disk infrastructure.
 		o.closeLocked(ctx)
 	}
 	return b
+}
+
+func (o *routerOutputOp) DrainMeta(_ context.Context) []execinfrapb.ProducerMetadata {
+	o.mu.Lock()
+	o.mu.state = routerOutputOpDraining
+	o.maybeUnblockLocked()
+	o.mu.Unlock()
+	return o.drainCoordinator.drainMeta()
+}
+
+func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
+	o.input = r
+	o.drainCoordinator = r
 }
 
 func (o *routerOutputOp) closeLocked(ctx context.Context) {
@@ -288,18 +355,23 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.mu.state == routerOutputOpDraining {
-		// We have encountered an error in Next() but have not yet propagated
-		// it, so we do so now - the error will get to the hash router which
-		// will cancel all of its outputs.
-		err := o.mu.drainState.err
-		// We set the error to nil so that it is not propagated again, during
-		// drain() call.
-		o.mu.drainState.err = nil
-		colexecerror.InternalError(err)
+		// This output is draining, discard any data.
+		return false
 	}
+
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
-			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
+			err := o.mu.data.enqueue(ctx, o.mu.pendingBatch)
+			if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {
+				err = o.testingKnobs.addBatchTestInducedErrorCb()
+			}
+			if err != nil {
+				colexecerror.InternalError(err)
+			}
+		} else if o.testingKnobs.addBatchTestInducedErrorCb != nil {
+			// This is the last chance to run addBatchTestInducedErorCb if it has
+			// been set.
+			if err := o.testingKnobs.addBatchTestInducedErrorCb(); err != nil {
 				colexecerror.InternalError(err)
 			}
 		}
@@ -319,9 +391,9 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.outputBatchSize)
+			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.testingKnobs.outputBatchSize)
 		}
-		available := o.outputBatchSize - o.mu.pendingBatch.Length()
+		available := o.testingKnobs.outputBatchSize - o.mu.pendingBatch.Length()
 		numAppended := toAppend
 		if toAppend > available {
 			numAppended = available
@@ -342,9 +414,13 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 		})
 		newLength := o.mu.pendingBatch.Length() + numAppended
 		o.mu.pendingBatch.SetLength(newLength)
-		if o.testingKnobs.alwaysFlush || newLength >= o.outputBatchSize {
+		if o.testingKnobs.alwaysFlush || newLength >= o.testingKnobs.outputBatchSize {
 			// The capacity in o.mu.pendingBatch has been filled.
-			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
+			err := o.mu.data.enqueue(ctx, o.mu.pendingBatch)
+			if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {
+				err = o.testingKnobs.addBatchTestInducedErrorCb()
+			}
+			if err != nil {
 				colexecerror.InternalError(err)
 			}
 			o.mu.pendingBatch = nil
@@ -354,7 +430,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 	}
 
 	stateChanged := false
-	if o.mu.numUnread > o.blockedThreshold && !o.mu.blocked {
+	if o.mu.numUnread > o.testingKnobs.blockedThreshold && !o.mu.blocked {
 		// The output is now blocked.
 		o.mu.blocked = true
 		stateChanged = true
@@ -373,27 +449,34 @@ func (o *routerOutputOp) maybeUnblockLocked() {
 	}
 }
 
-func (o *routerOutputOp) drain() []execinfrapb.ProducerMetadata {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.mu.drainState.err != nil {
-		err := o.mu.drainState.err
-		o.mu.drainState.err = nil
-		return []execinfrapb.ProducerMetadata{{Err: err}}
-	}
-	return nil
-}
-
 // resetForBenchmarks resets the routerOutputOp for a benchmark run.
 func (o *routerOutputOp) resetForBenchmarks(ctx context.Context) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.mu.state = routerOutputOpRunning
 	o.mu.data.reset(ctx)
-	o.mu.drainState.err = nil
 	o.mu.numUnread = 0
 	o.mu.blocked = false
 }
+
+// hashRouterDrainState is a state that specifically describes the hashRouter's
+// state in the draining process. This differs from its "general" state. For
+// example, a hash router can have drained and exited the Run method but still
+// be in hashRouterDrainStateRunning until somebody calls drainMeta.
+type hashRouterDrainState int
+
+const (
+	// hashRouterDrainStateRunning is the state that a hashRouter is in when
+	// running normally (i.e. pulling and pushing batches).
+	hashRouterDrainStateRunning = iota
+	// hashRouterDrainStateRequested is the state that a hashRouter is in when
+	// either all outputs have called drainMeta or an error was encountered by one
+	// of the outputs.
+	hashRouterDrainStateRequested
+	// hashRouterDrainStateCompleted is the state that a hashRouter is in when
+	// draining has completed.
+	hashRouterDrainStateCompleted
+)
 
 // HashRouter hashes values according to provided hash columns and computes a
 // destination for each row. These destinations are exposed as Operators
@@ -407,6 +490,9 @@ type HashRouter struct {
 
 	// One output for each stream.
 	outputs []routerOutput
+	// metadataSources is a slice of execinfrapb.MetadataSources that need to be
+	// drained when the HashRouter terminates.
+	metadataSources execinfrapb.MetadataSources
 	// closers is a slice of IdempotentClosers that need to be closed when the
 	// hash router terminates.
 	closers []IdempotentCloser
@@ -417,10 +503,20 @@ type HashRouter struct {
 	unblockedEventsChan <-chan struct{}
 	numBlockedOutputs   int
 
-	mu struct {
-		syncutil.Mutex
-		bufferedMeta []execinfrapb.ProducerMetadata
+	bufferedMeta []execinfrapb.ProducerMetadata
+
+	// atomics is shared state between the Run goroutine and any routerOutput
+	// goroutines that call drainMeta.
+	atomics struct {
+		// drainState is the state the hashRouter is in. The Run goroutine should
+		// only ever read these states, never set them.
+		drainState        int32
+		numDrainedOutputs int32
 	}
+
+	// waitForMetadata is a channel that the last output to drain will read from
+	// to pass on any metadata buffered through the Run goroutine.
+	waitForMetadata chan []execinfrapb.ProducerMetadata
 
 	// tupleDistributor is used to decide to which output a particular tuple
 	// should be routed.
@@ -446,13 +542,14 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
+	toDrain []execinfrapb.MetadataSource,
 	toClose []IdempotentCloser,
-) (*HashRouter, []colexecbase.Operator) {
+) (*HashRouter, []colexecbase.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	outputs := make([]routerOutput, len(unlimitedAllocators))
-	outputsAsOps := make([]colexecbase.Operator, len(unlimitedAllocators))
+	outputsAsOps := make([]colexecbase.DrainableOperator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
 	// writing to it to block.
 	// Unblock events only happen after a corresponding block event. Since these
@@ -463,15 +560,21 @@ func NewHashRouter(
 	unblockEventsChan := make(chan struct{}, 2*len(unlimitedAllocators))
 	memoryLimitPerOutput := memoryLimit / int64(len(unlimitedAllocators))
 	for i := range unlimitedAllocators {
-		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, diskQueueCfg, fdSemaphore, diskAccounts[i])
+		op := newRouterOutputOp(
+			routerOutputOpArgs{
+				types:               types,
+				unlimitedAllocator:  unlimitedAllocators[i],
+				memoryLimit:         memoryLimitPerOutput,
+				diskAcc:             diskAccounts[i],
+				cfg:                 diskQueueCfg,
+				fdSemaphore:         fdSemaphore,
+				unblockedEventsChan: unblockEventsChan,
+			},
+		)
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	router := newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs, toClose)
-	for i := range outputs {
-		outputs[i].(*routerOutputOp).input = router
-	}
-	return router, outputsAsOps
+	return newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs, toDrain, toClose), outputsAsOps
 }
 
 func newHashRouterWithOutputs(
@@ -480,6 +583,7 @@ func newHashRouterWithOutputs(
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
+	toDrain []execinfrapb.MetadataSource,
 	toClose []IdempotentCloser,
 ) *HashRouter {
 	r := &HashRouter{
@@ -488,62 +592,77 @@ func newHashRouterWithOutputs(
 		hashCols:            hashCols,
 		outputs:             outputs,
 		closers:             toClose,
+		metadataSources:     toDrain,
 		unblockedEventsChan: unblockEventsChan,
-		tupleDistributor:    newTupleHashDistributor(defaultInitHashValue, len(outputs)),
+		// waitForMetadata is a buffered channel to avoid blocking if nobody will
+		// read the metadata.
+		waitForMetadata:  make(chan []execinfrapb.ProducerMetadata, 1),
+		tupleDistributor: newTupleHashDistributor(defaultInitHashValue, len(outputs)),
+	}
+	for i := range outputs {
+		outputs[i].initWithHashRouter(r)
 	}
 	return r
+}
+
+// bufferErr buffers the given error to be returned by one of the router outputs.
+func (r *HashRouter) bufferErr(err error) {
+	if err == nil {
+		return
+	}
+	r.bufferedMeta = append(r.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+}
+
+func (r *HashRouter) cancelOutputs(ctx context.Context) {
+	for _, o := range r.outputs {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			o.cancel(ctx)
+		}); err != nil {
+			r.bufferErr(err)
+		}
+	}
+}
+
+func (r *HashRouter) setDrainState(drainState hashRouterDrainState) {
+	atomic.StoreInt32(&r.atomics.drainState, int32(drainState))
+}
+
+func (r *HashRouter) getDrainState() hashRouterDrainState {
+	return hashRouterDrainState(atomic.LoadInt32(&r.atomics.drainState))
 }
 
 // Run runs the HashRouter. Batches are read from the input and pushed to an
 // output calculated by hashing columns. Cancel the given context to terminate
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
-	bufferErr := func(err error) {
-		r.mu.Lock()
-		r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
-		r.mu.Unlock()
-	}
-	defer func() {
-		for _, closer := range r.closers {
-			if err := closer.IdempotentClose(ctx); err != nil {
-				if log.V(1) {
-					log.Infof(ctx, "error closing IdempotentCloser: %v", err)
-				}
-			}
-		}
-	}()
 	// Since HashRouter runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
 	// method with a catcher. Note that we also have "internal" catchers as
 	// well for more fine-grained control of error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		r.input.Init()
-		// cancelOutputs buffers non-nil error as metadata, cancels all of the
-		// outputs additionally buffering any error if such occurs during the
+		// bufferErrAndCancelOutputs buffers non-nil error as metadata, cancels all
+		// of the outputs additionally buffering any error if such occurs during the
 		// outputs' cancellation as metadata as well. Note that it attempts to
 		// cancel every output regardless of whether "previous" output's
 		// cancellation succeeds.
-		cancelOutputs := func(err error) {
-			if err != nil {
-				bufferErr(err)
-			}
-			for _, o := range r.outputs {
-				if err := colexecerror.CatchVectorizedRuntimeError(func() {
-					o.cancel(ctx)
-				}); err != nil {
-					bufferErr(err)
-				}
-			}
+		bufferErrAndCancelOutputs := func(err error) {
+			r.bufferErr(err)
+			r.cancelOutputs(ctx)
 		}
 		var done bool
 		processNextBatch := func() {
 			done = r.processNextBatch(ctx)
 		}
 		for {
+			if r.getDrainState() != hashRouterDrainStateRunning {
+				break
+			}
+
 			// Check for cancellation.
 			select {
 			case <-ctx.Done():
-				cancelOutputs(ctx.Err())
+				bufferErrAndCancelOutputs(ctx.Err())
 				return
 			default:
 			}
@@ -566,13 +685,13 @@ func (r *HashRouter) Run(ctx context.Context) {
 				case <-r.unblockedEventsChan:
 					r.numBlockedOutputs--
 				case <-ctx.Done():
-					cancelOutputs(ctx.Err())
+					bufferErrAndCancelOutputs(ctx.Err())
 					return
 				}
 			}
 
 			if err := colexecerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
-				cancelOutputs(err)
+				bufferErrAndCancelOutputs(err)
 				return
 			}
 			if done {
@@ -582,7 +701,21 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 	}); err != nil {
-		bufferErr(err)
+		r.bufferErr(err)
+	}
+
+	// Non-blocking send of metadata so that one of the outputs can return it
+	// in DrainMeta.
+	r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta(ctx)...)
+	r.waitForMetadata <- r.bufferedMeta
+	close(r.waitForMetadata)
+
+	for _, closer := range r.closers {
+		if err := closer.IdempotentClose(ctx); err != nil {
+			if log.V(1) {
+				log.Infof(ctx, "error closing IdempotentCloser: %v", err)
+			}
+		}
 	}
 }
 
@@ -616,6 +749,10 @@ func (r *HashRouter) resetForBenchmarks(ctx context.Context) {
 	if i, ok := r.input.(resetter); ok {
 		i.reset(ctx)
 	}
+	r.setDrainState(hashRouterDrainStateRunning)
+	r.waitForMetadata = make(chan []execinfrapb.ProducerMetadata, 1)
+	r.atomics.numDrainedOutputs = 0
+	r.bufferedMeta = nil
 	r.numBlockedOutputs = 0
 	for moreToRead := true; moreToRead; {
 		select {
@@ -625,18 +762,29 @@ func (r *HashRouter) resetForBenchmarks(ctx context.Context) {
 		}
 	}
 	for _, o := range r.outputs {
-		o.(*routerOutputOp).resetForBenchmarks(ctx)
+		if op, ok := o.(*routerOutputOp); ok {
+			op.resetForBenchmarks(ctx)
+		}
 	}
 }
 
-// DrainMeta is part of the MetadataGenerator interface.
-func (r *HashRouter) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, o := range r.outputs {
-		r.mu.bufferedMeta = append(r.mu.bufferedMeta, o.drain()...)
+func (r *HashRouter) encounteredError(ctx context.Context, err error) {
+	// Once one output returns an error the hash router needs to stop running
+	// and drain its input.
+	r.setDrainState(hashRouterDrainStateRequested)
+	// cancel all outputs. The Run goroutine will eventually realize that the
+	// HashRouter is done and exit without draining.
+	r.cancelOutputs(ctx)
+}
+
+func (r *HashRouter) drainMeta() []execinfrapb.ProducerMetadata {
+	if int(atomic.AddInt32(&r.atomics.numDrainedOutputs, 1)) != len(r.outputs) {
+		return nil
 	}
-	meta := r.mu.bufferedMeta
-	r.mu.bufferedMeta = r.mu.bufferedMeta[:0]
+	// All outputs have been drained, return any buffered metadata to the last
+	// output to call drainMeta.
+	r.setDrainState(hashRouterDrainStateRequested)
+	meta := <-r.waitForMetadata
+	r.setDrainState(hashRouterDrainStateCompleted)
 	return meta
 }

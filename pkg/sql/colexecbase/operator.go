@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -44,6 +45,13 @@ type Operator interface {
 	Next(context.Context) coldata.Batch
 
 	execinfra.OpNode
+}
+
+// DrainableOperator is an operator that also implements DrainMeta. Next and
+// DrainMeta may not be called concurrently.
+type DrainableOperator interface {
+	Operator
+	execinfrapb.MetadataSource
 }
 
 // ZeroInputNode is an execinfra.OpNode with no inputs.
