@@ -69,6 +69,9 @@ var (
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
 	errStringTooLarge = pgerror.Newf(pgcode.ProgramLimitExceeded,
 		"requested length too large, exceeds %s", humanizeutil.IBytes(maxAllocatedStringSize))
+	// SequenceNameArg represents the name of sequence (string) arguments in
+	// builtin functions.
+	SequenceNameArg = "sequence_name"
 )
 
 const maxAllocatedStringSize = 128 * 1024 * 1024
@@ -1734,12 +1737,13 @@ CockroachDB supports the following flags:
 
 	"nextval": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySequences,
-			DistsqlBlocklist: true,
-			Impure:           true,
+			Category:             categorySequences,
+			DistsqlBlocklist:     true,
+			Impure:               true,
+			HasSequenceArguments: true,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"sequence_name", types.String}},
+			Types:      tree.ArgTypes{{SequenceNameArg, types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -1760,12 +1764,13 @@ CockroachDB supports the following flags:
 
 	"currval": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySequences,
-			DistsqlBlocklist: true,
-			Impure:           true,
+			Category:             categorySequences,
+			DistsqlBlocklist:     true,
+			Impure:               true,
+			HasSequenceArguments: true,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"sequence_name", types.String}},
+			Types:      tree.ArgTypes{{SequenceNameArg, types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -1808,12 +1813,13 @@ CockroachDB supports the following flags:
 	// See https://github.com/cockroachdb/cockroach/issues/21564
 	"setval": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySequences,
-			DistsqlBlocklist: true,
-			Impure:           true,
+			Category:             categorySequences,
+			DistsqlBlocklist:     true,
+			Impure:               true,
+			HasSequenceArguments: true,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
+			Types:      tree.ArgTypes{{SequenceNameArg, types.String}, {"value", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -1835,7 +1841,7 @@ CockroachDB supports the following flags:
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{"sequence_name", types.String}, {"value", types.Int}, {"is_called", types.Bool},
+				{SequenceNameArg, types.String}, {"value", types.Int}, {"is_called", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

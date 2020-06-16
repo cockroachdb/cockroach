@@ -1071,3 +1071,13 @@ DROP TABLE b;
 
 statement ok
 DROP TABLE a;
+
+# A dependency on a sequence should be added if the sequence is used in a
+# currval call. (Regression #50033)
+
+statement ok
+CREATE SEQUENCE currval_dep_test;
+CREATE TABLE c(a INT DEFAULT(currval('currval_dep_test')))
+
+statement error pq: cannot drop sequence currval_dep_test because other objects depend on it
+DROP SEQUENCE currval_dep_test
