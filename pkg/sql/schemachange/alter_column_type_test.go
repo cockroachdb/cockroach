@@ -93,10 +93,10 @@ func TestColumnConversions(t *testing.T) {
 
 		"STRING": {
 			"BIT":   ColumnConversionGeneral,
-			"BYTES": ColumnConversionTrivial,
+			"BYTES": ColumnConversionValidate,
 		},
 		"STRING(5)": {
-			"BYTES": ColumnConversionTrivial,
+			"BYTES": ColumnConversionValidate,
 		},
 
 		"TIME": {

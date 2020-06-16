@@ -95,20 +95,8 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 		},
 	},
 	types.StringFamily: {
-		// If we want to convert string -> bytes, we need to know that the
-		// bytes type has an unlimited width or that we have at least
-		// 4x the number of bytes as known-maximum characters.
 		types.BytesFamily: func(s *types.T, b *types.T) ColumnConversionKind {
-			switch {
-			case b.Width() == 0:
-				return ColumnConversionTrivial
-			case s.Width() == 0:
-				return ColumnConversionValidate
-			case b.Width() >= s.Width()*4:
-				return ColumnConversionTrivial
-			default:
-				return ColumnConversionValidate
-			}
+			return ColumnConversionValidate
 		},
 		types.StringFamily: classifierWidth,
 	},

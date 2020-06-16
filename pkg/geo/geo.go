@@ -457,6 +457,12 @@ func (g *Geography) AsS2(emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 	return S2RegionsFromGeom(geomRepr, emptyBehavior)
 }
 
+// BoundingBoxIntersects returns whether the bounding box of the given geography
+// intersects with the other.
+func (g *Geography) BoundingBoxIntersects(o *Geography) bool {
+	return g.spatialObject.BoundingBox.Intersects(o.spatialObject.BoundingBox)
+}
+
 // isLinearRingCCW returns whether a given linear ring is counter clock wise.
 // See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
 // "Find the lowest vertex (or, if  there is more than one vertex with the same lowest coordinate,

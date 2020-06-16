@@ -45,11 +45,9 @@ limit
  ├── columns: k:1!null v:2
  ├── project
  │    ├── columns: k:1!null v:2
- │    ├── limit hint: 3.00
  │    └── scan t
- │         ├── columns: k:1!null v:2 w:3
- │         └── limit hint: 3.00
- └── 3
+ │         └── columns: k:1!null v:2 w:3
+ └── 1 + 2
 
 build
 SELECT k FROM t ORDER BY k FETCH FIRST ROW ONLY
@@ -116,12 +114,10 @@ limit
  ├── project
  │    ├── columns: k:1!null
  │    ├── ordering: +1
- │    ├── limit hint: 2.00
  │    └── scan t
  │         ├── columns: k:1!null v:2 w:3
- │         ├── ordering: +1
- │         └── limit hint: 2.00
- └── 2
+ │         └── ordering: +1
+ └── 1 + 1
 
 build
 SELECT k FROM T LIMIT k
