@@ -1970,7 +1970,17 @@ func (m *Manager) watchForRangefeedUpdates(
 	eventCh := make(chan *roachpb.RangeFeedEvent)
 	ctx, _ = s.WithCancelOnQuiesce(ctx)
 	if err := s.RunAsyncTask(ctx, "lease rangefeed", func(ctx context.Context) {
-		for {
+
+		// Run the rangefeed in a loop in the case of failure, likely due to node
+		// failures or general unavailability. We'll reset the retrier if the
+		// rangefeed runs for longer than the resetThreshold.
+		const resetThreshold = 30 * time.Second
+		restartLogEvery := log.Every(10 * time.Second)
+		for i, r := 1, retry.StartWithCtx(ctx, retry.Options{
+			InitialBackoff: 100 * time.Millisecond,
+			MaxBackoff:     2 * time.Second,
+			Closer:         s.ShouldQuiesce(),
+		}); r.Next(); i++ {
 			ts := m.getResolvedTimestamp()
 			descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 			span := roachpb.Span{
@@ -1981,13 +1991,22 @@ func (m *Manager) watchForRangefeedUpdates(
 			// the Manager already stores the relevant version information.
 			const withDiff = false
 			log.VEventf(ctx, 1, "starting rangefeed from %v on %v", ts, span)
+			start := timeutil.Now()
 			err := distSender.RangeFeed(ctx, span, ts, withDiff, eventCh)
-			if err != nil && ctx.Err() == nil {
-				log.Warningf(ctx, "lease rangefeed failed, restarting: %v", err)
+			if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {
+				log.Warningf(ctx, "lease rangefeed failed %d times, restarting: %v",
+					log.Safe(i), log.Safe(err))
 			}
 			if ctx.Err() != nil {
 				log.VEventf(ctx, 1, "exiting rangefeed")
 				return
+			}
+			ranFor := timeutil.Since(start)
+			log.VEventf(ctx, 1, "restarting rangefeed for %v after %v",
+				log.Safe(span), ranFor)
+			if ranFor > resetThreshold {
+				i = 1
+				r.Reset()
 			}
 		}
 	}); err != nil {
