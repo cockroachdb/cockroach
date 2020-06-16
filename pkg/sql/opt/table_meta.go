@@ -32,9 +32,7 @@ const (
 )
 
 // ColumnID returns the metadata id of the column at the given ordinal position
-// in the table. This is equivalent to calling:
-//
-//   md.TableMeta(t).ColumnMeta(ord).MetaID
+// in the table.
 //
 // NOTE: This method cannot do bounds checking, so it's up to the caller to
 //       ensure that a column really does exist at this ordinal position.
@@ -43,9 +41,7 @@ func (t TableID) ColumnID(ord int) ColumnID {
 }
 
 // ColumnOrdinal returns the ordinal position of the given column in its base
-// table. This is equivalent to calling:
-//
-//   md.ColumnMeta(id).Ordinal()
+// table.
 //
 // NOTE: This method cannot do complete bounds checking, so it's up to the
 //       caller to ensure that this column is really in the given base table.
