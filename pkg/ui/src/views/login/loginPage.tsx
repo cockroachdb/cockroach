@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import classNames from "classnames";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -17,25 +16,26 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 import * as docsURL from "src/util/docs";
-import { trustIcon } from "src/util/trust";
-import InfoBox from "src/views/shared/components/infoBox";
 
-import logo from "assets/crdb.png";
-import docsIcon from "!!raw-loader!assets/docs.svg";
 import "./loginPage.styl";
+import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "src/components";
+import { Text, TextTypes } from "src/components";
+import ErrorCircle from "assets/error-circle.svg";
 
-interface LoginPageProps {
+export interface LoginPageProps {
   loginState: LoginAPIState;
-  handleLogin: (username: string, password: string) => Promise<void>;
+  handleLogin: (username: string, password: string) => Promise<any>;
 }
 
 interface LoginPageState {
-  username: string;
-  password: string;
+  username?: string;
+  password?: string;
 }
 
-class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
-  constructor(props: LoginPageProps & RouteComponentProps) {
+type Props = LoginPageProps & RouteComponentProps;
+
+export class LoginPage extends React.Component<Props, LoginPageState> {
+  constructor(props: Props) {
     super(props);
     this.state = {
       username: "",
@@ -44,32 +44,37 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
     // TODO(vilterp): focus username field on mount
   }
 
-  handleUpdateUsername = (evt: React.FormEvent<{ value: string }>) => {
+  handleUpdateUsername = (value: string) => {
     this.setState({
-      username: evt.currentTarget.value,
+      username: value,
     });
   }
 
-  handleUpdatePassword = (evt: React.FormEvent<{ value: string }>) => {
+  handleUpdatePassword = (value: string) => {
     this.setState({
-      password: evt.currentTarget.value,
+      password: value,
     });
+  }
+
+  componentDidUpdate() {
+    const { loginState: { loggedInUser } } = this.props;
+    if (loggedInUser !== null) {
+      const { location, history } = this.props;
+      const params = new URLSearchParams(location.search);
+      if (params.has("redirectTo")) {
+        history.push(params.get("redirectTo"));
+      } else {
+        history.push("/");
+      }
+    }
   }
 
   handleSubmit = (evt: React.FormEvent<any>) => {
-    const { location, history, handleLogin} = this.props;
+    const { handleLogin} = this.props;
     const { username, password } = this.state;
     evt.preventDefault();
 
-    handleLogin(username, password)
-      .then(() => {
-        const params = new URLSearchParams(location.search);
-        if (params.has("redirectTo")) {
-          history.push(params.get("redirectTo"));
-        } else {
-          history.push("/");
-        }
-      });
+    handleLogin(username, password);
   }
 
   renderError() {
@@ -84,30 +89,51 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
         message = error.message;
     }
     return (
-      <div className="login-page__error">Unable to log in: { message }</div>
+      <div className="login-page__error">
+        <img src={ErrorCircle} alt={message} />
+        { message }
+      </div>
     );
   }
 
   render() {
-    const inputClasses = classNames("input-text", {
-      "input-text--error": !!this.props.loginState.error,
-    });
+    const { username, password } = this.state;
+    const { loginState } = this.props;
 
     return (
       <div className="login-page">
         <Helmet title="Login" />
-        <div className="content">
-          <section className="section login-page__info">
-            <img className="logo" alt="CockroachDB" src={logo} />
-            <InfoBox>
-              <h4 className="login-note-box__heading">Note:</h4>
-              <p>
-                A user with a password is required to log in to the UI
-                on secure clusters.
-              </p>
-              <p className="login-note-box__blurb">
-                Create a user with this SQL command:
-              </p>
+        <div className="login-page__container">
+          <CockroachLabsLockupIcon height={37} />
+          <div className="content">
+            <section className="section login-page__form">
+              <div className="form-container">
+                <Text textType={TextTypes.Heading2}>Log in to the Admin UI</Text>
+                {this.renderError()}
+                <form id="loginForm" onSubmit={this.handleSubmit} className="form-internal" method="post">
+                  <TextInput
+                    name="username"
+                    onChange={this.handleUpdateUsername}
+                    placeholder="Username"
+                    label="Username"
+                    value={username}
+                  />
+                  <PasswordInput
+                    name="password"
+                    onChange={this.handleUpdatePassword}
+                    placeholder="Password"
+                    label="Password"
+                    value={password}
+                  />
+                  <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress} textAlign={"center"}>
+                    {loginState.inProgress ? "Logging in..." : "Log in"}
+                  </Button>
+                </form>
+              </div>
+            </section>
+            <section className="section login-page__info">
+              <Text textType={TextTypes.Heading3}>A user with a password is required to log in to the Admin UI on secure clusters.</Text>
+              <Text textType={TextTypes.Heading5}>Create a user with this SQL command:</Text>
               <pre className="login-note-box__sql-command">
                 <span className="sql-keyword">CREATE USER</span>
                 {" "}craig{" "}
@@ -118,42 +144,11 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
               </pre>
               <p className="aside">
                 <a href={docsURL.adminUILoginNoVersion} className="login-docs-link" target="_blank">
-                  <span className="login-docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
                   <span className="login-docs-link__text">Read more about configuring login</span>
                 </a>
               </p>
-            </InfoBox>
-          </section>
-          <section className="section login-page__form">
-            <div className="form-container">
-              <h1 className="base-heading heading">Log in to the Web UI</h1>
-              {this.renderError()}
-              <form onSubmit={this.handleSubmit} className="form-internal" method="post">
-                <input
-                  type="text"
-                  name="username"
-                  className={inputClasses}
-                  onChange={this.handleUpdateUsername}
-                  value={this.state.username}
-                  placeholder="Username"
-                />
-                <input
-                  type="password"
-                  name="password"
-                  className={inputClasses}
-                  onChange={this.handleUpdatePassword}
-                  value={this.state.password}
-                  placeholder="Password"
-                />
-                <input
-                  type="submit"
-                  className="submit-button"
-                  disabled={this.props.loginState.inProgress}
-                  value={this.props.loginState.inProgress ? "Logging in..." : "Log In"}
-                />
-              </form>
-            </div>
-          </section>
+            </section>
+          </div>
         </div>
       </div>
     );

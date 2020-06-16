@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { configure, addDecorator } from "@storybook/react";
+import { configure } from "@storybook/react";
 
 // Import global styles here
 import "nvd3/build/nv.d3.min.css";
@@ -23,11 +22,5 @@ const req = require.context("../src/", true, /.stories.tsx$/);
 function loadStories() {
   req.keys().forEach(filename => req(filename));
 }
-
-addDecorator(storyFn => (
-  <div style={{padding: "24px"}}>
-    {storyFn()}
-  </div>
-));
 
 configure(loadStories, module);

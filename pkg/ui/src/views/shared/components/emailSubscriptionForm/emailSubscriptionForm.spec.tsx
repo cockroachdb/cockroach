@@ -34,7 +34,7 @@ describe("EmailSubscriptionForm", () => {
   describe("when correct email", () => {
     it("provides entered email on submit callback", () => {
       const emailAddress = "foo@bar.com";
-      const inputComponent = wrapper.find("input.crl-text-input").first();
+      const inputComponent = wrapper.find("input.crl-input__text").first();
       inputComponent.simulate("change", { target: { value: emailAddress } });
       const buttonComponent = wrapper.find(`button.${cx("crl-button")}`).first();
       buttonComponent.simulate("click");
@@ -46,7 +46,7 @@ describe("EmailSubscriptionForm", () => {
   describe("when invalid email", () => {
     beforeEach(() => {
       const emailAddress = "foo";
-      const inputComponent = wrapper.find("input.crl-text-input").first();
+      const inputComponent = wrapper.find("input.crl-input__text").first();
       inputComponent.simulate("change", { target: { value: emailAddress } });
       inputComponent.simulate("blur");
     });
@@ -63,7 +63,7 @@ describe("EmailSubscriptionForm", () => {
     });
 
     it("validation message is shown", () => {
-      const validationMessageWrapper = wrapper.find(".crl-text-input__error-message").first();
+      const validationMessageWrapper = wrapper.find(".crl-input__text--error-message").first();
       assert.isTrue(validationMessageWrapper.exists());
       assert.equal(validationMessageWrapper.text(), "Invalid email address.");
     });

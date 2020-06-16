@@ -38,7 +38,6 @@
 .crl-button--type-unstyled-link
   @extends .crl-button--type-flat
   margin-bottom 17px
-  .crl-button__content
     font-family $font-family--base
     font-size $font-size--medium
     line-height 22px
@@ -108,6 +107,9 @@
   display flex
   flex-direction row
   flex-wrap nowrap
+
+.crl-button__content  
+  flex: 1
 
 .crl-button__icon--push-left
   order -1
