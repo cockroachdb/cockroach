@@ -210,13 +210,13 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
-		lhErr := roachpb.NewError(newNotLeaseHolderError(
+		err := newNotLeaseHolderError(
 			r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
-		))
-
-		return lhErr
+		)
+		err.CustomMsg = "reproposal failed due to closed timestamp"
+		return roachpb.NewError(err)
 	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
