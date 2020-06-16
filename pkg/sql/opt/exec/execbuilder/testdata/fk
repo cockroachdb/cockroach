@@ -1,8 +1,921 @@
 # LogicTest: local
 
-# To get an unvalidated foreign key for testing, use the loophole that we
-# currently don't support adding a validated FK in the same transaction as
-# CREATE TABLE
+# We will test the fast path later.
+statement ok
+SET enable_insert_fast_path = false
+
+# -- Tests with INSERT --
+
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY, other INT UNIQUE, FAMILY (p, other))
+
+statement ok
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p), FAMILY (c, p))
+
+query TTT
+EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
+----
+·                                          distribution           local
+·                                          vectorized             false
+root                                       ·                      ·
+ ├── count                                 ·                      ·
+ │    └── insert                           ·                      ·
+ │         │                               into                   child(c, p)
+ │         │                               strategy               inserter
+ │         └── buffer node                 ·                      ·
+ │              │                          label                  buffer 1
+ │              └── values                 ·                      ·
+ │                                         size                   2 columns, 2 rows
+ └── fk-check                              ·                      ·
+      └── error if rows                    ·                      ·
+           └── lookup-join                 ·                      ·
+                │                          table                  parent@primary
+                │                          type                   anti
+                │                          equality               (column2) = (p)
+                │                          equality cols are key  ·
+                │                          parallel               ·
+                └── render                 ·                      ·
+                     └── scan buffer node  ·                      ·
+·                                          label                  buffer 1
+
+# Use data from a different table as input.
+statement ok
+CREATE TABLE xy (x INT, y INT)
+
+query TTT
+EXPLAIN INSERT INTO child SELECT x,y FROM xy
+----
+·                                          distribution        local
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── insert                           ·                   ·
+ │         │                               into                child(c, p)
+ │         │                               strategy            inserter
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── scan                   ·                   ·
+ │                                         table               xy@primary
+ │                                         spans               FULL SCAN
+ └── fk-check                              ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (y) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               FULL SCAN
+
+statement ok
+CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
+
+# Because the input column can be NULL (in which case it requires no FK match),
+# we have to add an extra filter.
+query TTT
+EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
+----
+·                                               distribution           local
+·                                               vectorized             false
+root                                            ·                      ·
+ ├── count                                      ·                      ·
+ │    └── insert                                ·                      ·
+ │         │                                    into                   child_nullable(c, p)
+ │         │                                    strategy               inserter
+ │         └── buffer node                      ·                      ·
+ │              │                               label                  buffer 1
+ │              └── values                      ·                      ·
+ │                                              size                   2 columns, 2 rows
+ └── fk-check                                   ·                      ·
+      └── error if rows                         ·                      ·
+           └── lookup-join                      ·                      ·
+                │                               table                  parent@primary
+                │                               type                   anti
+                │                               equality               (column2) = (p)
+                │                               equality cols are key  ·
+                │                               parallel               ·
+                └── filter                      ·                      ·
+                     │                          filter                 column2 IS NOT NULL
+                     └── render                 ·                      ·
+                          └── scan buffer node  ·                      ·
+·                                               label                  buffer 1
+
+# Tests with multicolumn FKs.
+statement ok
+CREATE TABLE multi_col_parent (p INT, q INT, r INT, other INT, PRIMARY KEY (p, q, r))
+
+statement ok
+CREATE TABLE multi_col_child  (
+  c INT PRIMARY KEY,
+  p INT, q INT, r INT,
+  CONSTRAINT fk FOREIGN KEY (p,q,r) REFERENCES multi_col_parent(p,q,r) MATCH SIMPLE
+)
+
+# Only p and q are nullable.
+query TTT
+EXPLAIN INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
+----
+·                                               distribution           local
+·                                               vectorized             false
+root                                            ·                      ·
+ ├── count                                      ·                      ·
+ │    └── insert                                ·                      ·
+ │         │                                    into                   multi_col_child(c, p, q, r)
+ │         │                                    strategy               inserter
+ │         └── buffer node                      ·                      ·
+ │              │                               label                  buffer 1
+ │              └── values                      ·                      ·
+ │                                              size                   4 columns, 2 rows
+ └── fk-check                                   ·                      ·
+      └── error if rows                         ·                      ·
+           └── lookup-join                      ·                      ·
+                │                               table                  multi_col_parent@primary
+                │                               type                   anti
+                │                               equality               (column2, column3, column4) = (p, q, r)
+                │                               equality cols are key  ·
+                │                               parallel               ·
+                └── filter                      ·                      ·
+                     │                          filter                 (column2 IS NOT NULL) AND (column3 IS NOT NULL)
+                     └── render                 ·                      ·
+                          └── scan buffer node  ·                      ·
+·                                               label                  buffer 1
+
+statement ok
+CREATE TABLE multi_ref_parent_a (a INT PRIMARY KEY, other INT)
+
+statement ok
+CREATE TABLE multi_ref_parent_bc (b INT, c INT, PRIMARY KEY (b,c), other INT)
+
+statement ok
+CREATE TABLE multi_ref_child (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES multi_ref_parent_a(a),
+  CONSTRAINT fk2 FOREIGN KEY (b,c) REFERENCES multi_ref_parent_bc(b,c)
+)
+
+query TTT
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL), (2, 3, 4, 5)
+----
+·                                               distribution           local
+·                                               vectorized             false
+root                                            ·                      ·
+ ├── count                                      ·                      ·
+ │    └── insert                                ·                      ·
+ │         │                                    into                   multi_ref_child(k, a, b, c)
+ │         │                                    strategy               inserter
+ │         └── buffer node                      ·                      ·
+ │              │                               label                  buffer 1
+ │              └── values                      ·                      ·
+ │                                              size                   4 columns, 2 rows
+ ├── fk-check                                   ·                      ·
+ │    └── error if rows                         ·                      ·
+ │         └── lookup-join                      ·                      ·
+ │              │                               table                  multi_ref_parent_a@primary
+ │              │                               type                   anti
+ │              │                               equality               (column2) = (a)
+ │              │                               equality cols are key  ·
+ │              │                               parallel               ·
+ │              └── filter                      ·                      ·
+ │                   │                          filter                 column2 IS NOT NULL
+ │                   └── render                 ·                      ·
+ │                        └── scan buffer node  ·                      ·
+ │                                              label                  buffer 1
+ └── fk-check                                   ·                      ·
+      └── error if rows                         ·                      ·
+           └── lookup-join                      ·                      ·
+                │                               table                  multi_ref_parent_bc@primary
+                │                               type                   anti
+                │                               equality               (column3, column4) = (b, c)
+                │                               equality cols are key  ·
+                │                               parallel               ·
+                └── filter                      ·                      ·
+                     │                          filter                 (column3 IS NOT NULL) AND (column4 IS NOT NULL)
+                     └── render                 ·                      ·
+                          └── scan buffer node  ·                      ·
+·                                               label                  buffer 1
+
+# FK check can be omitted when we are inserting only NULLs.
+query TTT
+EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
+----
+·                 distribution  local
+·                 vectorized    false
+count             ·             ·
+ └── insert       ·             ·
+      │           into          multi_ref_child(k, a, b, c)
+      │           strategy      inserter
+      │           auto commit   ·
+      └── values  ·             ·
+·                 size          4 columns, 1 row
+
+# -- Tests with DELETE --
+
+query TTT
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+·                                          distribution  local
+·                                          vectorized    false
+root                                       ·             ·
+ ├── count                                 ·             ·
+ │    └── delete                           ·             ·
+ │         │                               from          parent
+ │         │                               strategy      deleter
+ │         └── buffer node                 ·             ·
+ │              │                          label         buffer 1
+ │              └── scan                   ·             ·
+ │                                         table         parent@primary
+ │                                         spans         /3-/3/#
+ ├── fk-check                              ·             ·
+ │    └── error if rows                    ·             ·
+ │         └── lookup-join                 ·             ·
+ │              │                          table         child@child_auto_index_fk_p_ref_parent
+ │              │                          type          semi
+ │              │                          equality      (p) = (p)
+ │              └── render                 ·             ·
+ │                   └── scan buffer node  ·             ·
+ │                                         label         buffer 1
+ └── fk-check                              ·             ·
+      └── error if rows                    ·             ·
+           └── lookup-join                 ·             ·
+                │                          table         child_nullable@child_nullable_auto_index_fk_p_ref_parent
+                │                          type          semi
+                │                          equality      (p) = (p)
+                └── render                 ·             ·
+                     └── scan buffer node  ·             ·
+·                                          label         buffer 1
+
+statement ok
+CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
+
+query TTT
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+·                                          distribution  local
+·                                          vectorized    false
+root                                       ·             ·
+ ├── count                                 ·             ·
+ │    └── delete                           ·             ·
+ │         │                               from          parent
+ │         │                               strategy      deleter
+ │         └── buffer node                 ·             ·
+ │              │                          label         buffer 1
+ │              └── scan                   ·             ·
+ │                                         table         parent@primary
+ │                                         spans         /3-/3/#
+ ├── fk-check                              ·             ·
+ │    └── error if rows                    ·             ·
+ │         └── lookup-join                 ·             ·
+ │              │                          table         child@child_auto_index_fk_p_ref_parent
+ │              │                          type          semi
+ │              │                          equality      (p) = (p)
+ │              └── render                 ·             ·
+ │                   └── scan buffer node  ·             ·
+ │                                         label         buffer 1
+ ├── fk-check                              ·             ·
+ │    └── error if rows                    ·             ·
+ │         └── lookup-join                 ·             ·
+ │              │                          table         child_nullable@child_nullable_auto_index_fk_p_ref_parent
+ │              │                          type          semi
+ │              │                          equality      (p) = (p)
+ │              └── render                 ·             ·
+ │                   └── scan buffer node  ·             ·
+ │                                         label         buffer 1
+ └── fk-check                              ·             ·
+      └── error if rows                    ·             ·
+           └── lookup-join                 ·             ·
+                │                          table         child2@child2_auto_index_fk_p_ref_parent
+                │                          type          semi
+                │                          equality      (other) = (p)
+                └── render                 ·             ·
+                     └── scan buffer node  ·             ·
+·                                          label         buffer 1
+
+statement ok
+CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
+
+statement ok
+CREATE TABLE doublechild (
+  c INT8 PRIMARY KEY,
+  p1 INT8,
+  p2 INT8,
+  FOREIGN KEY (p1, p2) REFERENCES doubleparent (p1, p2)
+)
+
+query TTT
+EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
+----
+·                                     distribution  local
+·                                     vectorized    false
+root                                  ·             ·
+ ├── count                            ·             ·
+ │    └── delete                      ·             ·
+ │         │                          from          doubleparent
+ │         │                          strategy      deleter
+ │         └── buffer node            ·             ·
+ │              │                     label         buffer 1
+ │              └── scan              ·             ·
+ │                                    table         doubleparent@primary
+ │                                    spans         /10-/11
+ └── fk-check                         ·             ·
+      └── error if rows               ·             ·
+           └── lookup-join            ·             ·
+                │                     table         doublechild@doublechild_auto_index_fk_p1_ref_doubleparent
+                │                     type          semi
+                │                     equality      (p1, p2) = (p1, p2)
+                └── scan buffer node  ·             ·
+·                                     label         buffer 1
+
+# -- Tests with UPDATE --
+
+query TTT
+EXPLAIN UPDATE child SET p = 4
+----
+·                                          distribution        local
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               FULL SCAN
+ │                                         locking strength    for update
+ └── fk-check                              ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (p_new) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               FULL SCAN
+
+query TTT
+EXPLAIN UPDATE child SET p = 4 WHERE c = 10
+----
+·                                          distribution           local
+·                                          vectorized             false
+root                                       ·                      ·
+ ├── count                                 ·                      ·
+ │    └── update                           ·                      ·
+ │         │                               table                  child
+ │         │                               set                    p
+ │         │                               strategy               updater
+ │         └── buffer node                 ·                      ·
+ │              │                          label                  buffer 1
+ │              └── render                 ·                      ·
+ │                   └── scan              ·                      ·
+ │                                         table                  child@primary
+ │                                         spans                  /10-/10/#
+ │                                         locking strength       for update
+ └── fk-check                              ·                      ·
+      └── error if rows                    ·                      ·
+           └── lookup-join                 ·                      ·
+                │                          table                  parent@primary
+                │                          type                   anti
+                │                          equality               (p_new) = (p)
+                │                          equality cols are key  ·
+                │                          parallel               ·
+                └── render                 ·                      ·
+                     └── scan buffer node  ·                      ·
+·                                          label                  buffer 1
+
+query TTT
+EXPLAIN UPDATE parent SET p = p+1
+----
+·                                                    distribution        local
+·                                                    vectorized          false
+root                                                 ·                   ·
+ ├── count                                           ·                   ·
+ │    └── update                                     ·                   ·
+ │         │                                         table               parent
+ │         │                                         set                 p
+ │         │                                         strategy            updater
+ │         └── buffer node                           ·                   ·
+ │              │                                    label               buffer 1
+ │              └── render                           ·                   ·
+ │                   └── scan                        ·                   ·
+ │                                                   table               parent@primary
+ │                                                   spans               FULL SCAN
+ │                                                   locking strength    for update
+ ├── fk-check                                        ·                   ·
+ │    └── error if rows                              ·                   ·
+ │         └── render                                ·                   ·
+ │              └── hash-join                        ·                   ·
+ │                   │                               type                inner
+ │                   │                               equality            (p) = (p)
+ │                   │                               left cols are key   ·
+ │                   │                               right cols are key  ·
+ │                   ├── union                       ·                   ·
+ │                   │    ├── render                 ·                   ·
+ │                   │    │    └── scan buffer node  ·                   ·
+ │                   │    │                          label               buffer 1
+ │                   │    └── render                 ·                   ·
+ │                   │         └── scan buffer node  ·                   ·
+ │                   │                               label               buffer 1
+ │                   └── distinct                    ·                   ·
+ │                        │                          distinct on         p
+ │                        │                          order key           p
+ │                        └── scan                   ·                   ·
+ │                                                   table               child@child_auto_index_fk_p_ref_parent
+ │                                                   spans               FULL SCAN
+ └── fk-check                                        ·                   ·
+      └── error if rows                              ·                   ·
+           └── render                                ·                   ·
+                └── hash-join                        ·                   ·
+                     │                               type                inner
+                     │                               equality            (p) = (p)
+                     │                               left cols are key   ·
+                     │                               right cols are key  ·
+                     ├── union                       ·                   ·
+                     │    ├── render                 ·                   ·
+                     │    │    └── scan buffer node  ·                   ·
+                     │    │                          label               buffer 1
+                     │    └── render                 ·                   ·
+                     │         └── scan buffer node  ·                   ·
+                     │                               label               buffer 1
+                     └── distinct                    ·                   ·
+                          │                          distinct on         p
+                          │                          order key           p
+                          └── scan                   ·                   ·
+·                                                    table               child_nullable@child_nullable_auto_index_fk_p_ref_parent
+·                                                    spans               FULL SCAN
+
+query TTT
+EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
+----
+·                                               distribution      local
+·                                               vectorized        false
+root                                            ·                 ·
+ ├── count                                      ·                 ·
+ │    └── update                                ·                 ·
+ │         │                                    table             parent
+ │         │                                    set               p
+ │         │                                    strategy          updater
+ │         └── buffer node                      ·                 ·
+ │              │                               label             buffer 1
+ │              └── render                      ·                 ·
+ │                   └── scan                   ·                 ·
+ │                                              table             parent@parent_other_key
+ │                                              spans             /10-/11
+ │                                              locking strength  for update
+ ├── fk-check                                   ·                 ·
+ │    └── error if rows                         ·                 ·
+ │         └── lookup-join                      ·                 ·
+ │              │                               table             child@child_auto_index_fk_p_ref_parent
+ │              │                               type              semi
+ │              │                               equality          (p) = (p)
+ │              └── union                       ·                 ·
+ │                   ├── render                 ·                 ·
+ │                   │    └── scan buffer node  ·                 ·
+ │                   │                          label             buffer 1
+ │                   └── render                 ·                 ·
+ │                        └── scan buffer node  ·                 ·
+ │                                              label             buffer 1
+ └── fk-check                                   ·                 ·
+      └── error if rows                         ·                 ·
+           └── lookup-join                      ·                 ·
+                │                               table             child_nullable@child_nullable_auto_index_fk_p_ref_parent
+                │                               type              semi
+                │                               equality          (p) = (p)
+                └── union                       ·                 ·
+                     ├── render                 ·                 ·
+                     │    └── scan buffer node  ·                 ·
+                     │                          label             buffer 1
+                     └── render                 ·                 ·
+                          └── scan buffer node  ·                 ·
+·                                               label             buffer 1
+
+statement ok
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+
+query TTT
+EXPLAIN UPDATE child SET c = 4
+----
+·                                                    distribution        local
+·                                                    vectorized          false
+root                                                 ·                   ·
+ ├── count                                           ·                   ·
+ │    └── update                                     ·                   ·
+ │         │                                         table               child
+ │         │                                         set                 c
+ │         │                                         strategy            updater
+ │         └── buffer node                           ·                   ·
+ │              │                                    label               buffer 1
+ │              └── render                           ·                   ·
+ │                   └── scan                        ·                   ·
+ │                                                   table               child@primary
+ │                                                   spans               FULL SCAN
+ │                                                   locking strength    for update
+ └── fk-check                                        ·                   ·
+      └── error if rows                              ·                   ·
+           └── render                                ·                   ·
+                └── hash-join                        ·                   ·
+                     │                               type                inner
+                     │                               equality            (c) = (c)
+                     │                               left cols are key   ·
+                     │                               right cols are key  ·
+                     ├── union                       ·                   ·
+                     │    ├── render                 ·                   ·
+                     │    │    └── scan buffer node  ·                   ·
+                     │    │                          label               buffer 1
+                     │    └── render                 ·                   ·
+                     │         └── scan buffer node  ·                   ·
+                     │                               label               buffer 1
+                     └── distinct                    ·                   ·
+                          │                          distinct on         c
+                          │                          order key           c
+                          └── scan                   ·                   ·
+·                                                    table               grandchild@grandchild_auto_index_fk_c_ref_child
+·                                                    spans               FULL SCAN
+
+# This update shouldn't emit checks for c, since it's unchanged.
+query TTT
+EXPLAIN UPDATE child SET p = 4
+----
+·                                          distribution        local
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               FULL SCAN
+ │                                         locking strength    for update
+ └── fk-check                              ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (p_new) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               FULL SCAN
+
+query TTT
+EXPLAIN UPDATE child SET p = p
+----
+·                                          distribution        local
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               FULL SCAN
+ │                                         locking strength    for update
+ └── fk-check                              ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (p) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               FULL SCAN
+
+query TTT
+EXPLAIN UPDATE child SET p = p+1, c = c+1
+----
+·                                                    distribution        local
+·                                                    vectorized          false
+root                                                 ·                   ·
+ ├── count                                           ·                   ·
+ │    └── update                                     ·                   ·
+ │         │                                         table               child
+ │         │                                         set                 c, p
+ │         │                                         strategy            updater
+ │         └── buffer node                           ·                   ·
+ │              │                                    label               buffer 1
+ │              └── render                           ·                   ·
+ │                   └── scan                        ·                   ·
+ │                                                   table               child@primary
+ │                                                   spans               FULL SCAN
+ │                                                   locking strength    for update
+ ├── fk-check                                        ·                   ·
+ │    └── error if rows                              ·                   ·
+ │         └── hash-join                             ·                   ·
+ │              │                                    type                anti
+ │              │                                    equality            (p_new) = (p)
+ │              │                                    right cols are key  ·
+ │              ├── render                           ·                   ·
+ │              │    └── scan buffer node            ·                   ·
+ │              │                                    label               buffer 1
+ │              └── scan                             ·                   ·
+ │                                                   table               parent@primary
+ │                                                   spans               FULL SCAN
+ └── fk-check                                        ·                   ·
+      └── error if rows                              ·                   ·
+           └── render                                ·                   ·
+                └── hash-join                        ·                   ·
+                     │                               type                inner
+                     │                               equality            (c) = (c)
+                     │                               left cols are key   ·
+                     │                               right cols are key  ·
+                     ├── union                       ·                   ·
+                     │    ├── render                 ·                   ·
+                     │    │    └── scan buffer node  ·                   ·
+                     │    │                          label               buffer 1
+                     │    └── render                 ·                   ·
+                     │         └── scan buffer node  ·                   ·
+                     │                               label               buffer 1
+                     └── distinct                    ·                   ·
+                          │                          distinct on         c
+                          │                          order key           c
+                          └── scan                   ·                   ·
+·                                                    table               grandchild@grandchild_auto_index_fk_c_ref_child
+·                                                    spans               FULL SCAN
+
+# Multiple grandchild tables
+statement ok
+CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
+
+query TTT
+EXPLAIN UPDATE child SET p = 4
+----
+·                                          distribution        local
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               child
+ │         │                               set                 p
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               child@primary
+ │                                         spans               FULL SCAN
+ │                                         locking strength    for update
+ └── fk-check                              ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (p_new) = (p)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               parent@primary
+·                                          spans               FULL SCAN
+
+statement ok
+CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
+
+query TTT
+EXPLAIN UPDATE self SET y = 3
+----
+·                                          distribution        local
+·                                          vectorized          false
+root                                       ·                   ·
+ ├── count                                 ·                   ·
+ │    └── update                           ·                   ·
+ │         │                               table               self
+ │         │                               set                 y
+ │         │                               strategy            updater
+ │         └── buffer node                 ·                   ·
+ │              │                          label               buffer 1
+ │              └── render                 ·                   ·
+ │                   └── scan              ·                   ·
+ │                                         table               self@primary
+ │                                         spans               FULL SCAN
+ │                                         locking strength    for update
+ └── fk-check                              ·                   ·
+      └── error if rows                    ·                   ·
+           └── hash-join                   ·                   ·
+                │                          type                anti
+                │                          equality            (y_new) = (x)
+                │                          right cols are key  ·
+                ├── render                 ·                   ·
+                │    └── scan buffer node  ·                   ·
+                │                          label               buffer 1
+                └── scan                   ·                   ·
+·                                          table               self@primary
+·                                          spans               FULL SCAN
+
+query TTT
+EXPLAIN UPDATE self SET x = 3
+----
+·                                                    distribution        local
+·                                                    vectorized          false
+root                                                 ·                   ·
+ ├── count                                           ·                   ·
+ │    └── update                                     ·                   ·
+ │         │                                         table               self
+ │         │                                         set                 x
+ │         │                                         strategy            updater
+ │         └── buffer node                           ·                   ·
+ │              │                                    label               buffer 1
+ │              └── render                           ·                   ·
+ │                   └── scan                        ·                   ·
+ │                                                   table               self@primary
+ │                                                   spans               FULL SCAN
+ │                                                   locking strength    for update
+ └── fk-check                                        ·                   ·
+      └── error if rows                              ·                   ·
+           └── render                                ·                   ·
+                └── hash-join                        ·                   ·
+                     │                               type                inner
+                     │                               equality            (x) = (y)
+                     │                               left cols are key   ·
+                     │                               right cols are key  ·
+                     ├── union                       ·                   ·
+                     │    ├── render                 ·                   ·
+                     │    │    └── scan buffer node  ·                   ·
+                     │    │                          label               buffer 1
+                     │    └── render                 ·                   ·
+                     │         └── scan buffer node  ·                   ·
+                     │                               label               buffer 1
+                     └── distinct                    ·                   ·
+                          │                          distinct on         y
+                          │                          order key           y
+                          └── scan                   ·                   ·
+·                                                    table               self@self_auto_index_fk_y_ref_self
+·                                                    spans               FULL SCAN
+
+# Tests for the insert fast path.
+statement ok
+SET enable_insert_fast_path = true
+
+# Simple insert with VALUES should use the fast path.
+query TTTTT
+EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
+----
+·                      distribution   local              ·   ·
+·                      vectorized     false              ·   ·
+count                  ·              ·                  ()  ·
+ └── insert-fast-path  ·              ·                  ()  ·
+·                      into           child(c, p)        ·   ·
+·                      strategy       inserter           ·   ·
+·                      auto commit    ·                  ·   ·
+·                      FK check       parent@primary     ·   ·
+·                      size           2 columns, 2 rows  ·   ·
+·                      row 0, expr 0  1                  ·   ·
+·                      row 0, expr 1  1                  ·   ·
+·                      row 1, expr 0  2                  ·   ·
+·                      row 1, expr 1  2                  ·   ·
+
+# We shouldn't use the fast path if the VALUES columns are not in order.
+query B 
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO child (SELECT b, a FROM (VALUES (1,2)) AS v(a,b))
+] WHERE tree LIKE '%insert-fast-path'
+----
+false
+
+# Multiple mutations shouldn't use the fast-path.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN WITH cte AS (INSERT INTO child VALUES (1, 1) RETURNING p)
+  INSERT INTO parent VALUES (2, 3)
+] WHERE tree LIKE '%insert-fast-path'
+----
+false
+
+# Self-referencing FKs should not use the fast-path.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN INSERT INTO self VALUES (1, 1)
+] WHERE tree LIKE '%insert-fast-path'
+----
+false
+
+# We should not use the fast path If the best FK check plan is not a lookup
+# join. We do this by adding statistics that make a hash join more desirable.
+statement ok
+ALTER TABLE parent INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2), (3,3), (4,4)
+] WHERE tree LIKE '%insert-fast-path'
+----
+false
+
+# Test FK check that is using a non-unique index (#43969). In this case the
+# index on k2 is preferred because it doesn't contain unnecessary column v.
+statement ok
+CREATE TABLE nonunique_idx_parent (
+  k1 INT,
+  k2 INT,
+  v INT,
+  CONSTRAINT "primary" PRIMARY KEY (k1, k2),
+  INDEX (k2)
+)
+
+statement ok
+CREATE TABLE nonunique_idx_child (
+  k INT PRIMARY KEY,
+  ref1 INT,
+  ref2 INT,
+  CONSTRAINT "fk" FOREIGN KEY (ref1, ref2) REFERENCES nonunique_idx_parent (k1, k2)
+)
+
+query TTT
+EXPLAIN INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
+----
+·                      distribution  local
+·                      vectorized    false
+count                  ·             ·
+ └── insert-fast-path  ·             ·
+·                      into          nonunique_idx_child(k, ref1, ref2)
+·                      strategy      inserter
+·                      auto commit   ·
+·                      FK check      nonunique_idx_parent@nonunique_idx_parent_k2_idx
+·                      size          3 columns, 1 row
+
+# Regression test for #46397: upserter was looking at the incorrect ordinal for
+# the check because of an extra input column used by the FK check.
+statement ok
+CREATE TABLE t46397_parent(p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE t46397_child (
+  c INT PRIMARY KEY,
+  p INT DEFAULT 0 REFERENCES t46397_parent (p),
+  CONSTRAINT foo CHECK (c != 1)
+)
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t46397_child(c) VALUES (1)
+
+statement error upsert on table "t46397_child" violates foreign key constraint "fk_p_ref_t46397_parent"
+UPSERT INTO t46397_child(c) VALUES (2)
+
+statement ok
+INSERT INTO t46397_parent VALUES (0)
+
+statement ok
+UPSERT INTO t46397_child(c) VALUES (2)
+
+
+# Verify that cascade information shows up in EXPLAIN.
+statement ok
+CREATE TABLE cascadeparent (p INT PRIMARY KEY);
+CREATE TABLE cascadechild (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES cascadeparent(p) ON DELETE CASCADE
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
+----
+·                           distribution  local                   ·    ·
+·                           vectorized    false                   ·    ·
+root                        ·             ·                       ()   ·
+ ├── count                  ·             ·                       ()   ·
+ │    └── delete            ·             ·                       ()   ·
+ │         │                from          cascadeparent           ·    ·
+ │         │                strategy      deleter                 ·    ·
+ │         └── buffer node  ·             ·                       (p)  ·
+ │              │           label         buffer 1                ·    ·
+ │              └── scan    ·             ·                       (p)  ·
+ │                          table         cascadeparent@primary   ·    ·
+ │                          spans         /2-                     ·    ·
+ └── fk-cascade             ·             ·                       ·    ·
+·                           fk            fk_p_ref_cascadeparent  ·    ·
+·                           input         buffer 1                ·    ·
 
 statement ok
 CREATE TABLE a (

@@ -51,7 +51,7 @@ func (tu *tableUpdater) rowForUpdate(
 	ctx context.Context, oldValues, updateValues tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	tu.batchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, row.CheckFKs, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
 }
 
 // atBatchEnd is part of the tableWriter interface.

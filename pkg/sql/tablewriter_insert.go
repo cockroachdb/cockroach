@@ -43,7 +43,7 @@ func (ti *tableInserter) row(
 	ctx context.Context, values tree.Datums, ignoreIndexes util.FastIntSet, traceKV bool,
 ) error {
 	ti.batchSize++
-	return ti.ri.InsertRow(ctx, ti.b, values, ignoreIndexes, false /* overwrite */, row.CheckFKs, traceKV)
+	return ti.ri.InsertRow(ctx, ti.b, values, ignoreIndexes, false /* overwrite */, traceKV)
 }
 
 // atBatchEnd is part of the tableWriter interface.

@@ -68,10 +68,6 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		// No relevant FKs.
 		return
 	}
-	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.setFKFallback()
-		return
-	}
 
 	// TODO(radu): if the input is a VALUES with constant expressions, we don't
 	// need to buffer it. This could be a normalization rule, but it's probably
@@ -125,10 +121,6 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		// No relevant FKs.
 		return
 	}
-	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.setFKFallback()
-		return
-	}
 
 	mb.withID = mb.b.factory.Memo().NextWithID()
 
@@ -143,13 +135,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		//  - with Restrict/NoAction, we create a check that causes an error if
 		//    there are any "orhpaned" rows in the child table.
 		if a := h.fk.DeleteReferenceAction(); a != tree.Restrict && a != tree.NoAction {
-			if !mb.b.evalCtx.SessionData.OptimizerFKCascades {
-				// Bail, so that exec FK checks pick up on FK checks and perform them.
-				mb.setFKFallback()
-				telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-				return
-			}
-
+			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
 			var builder memo.CascadeBuilder
 			switch a {
 			case tree.Cascade:
@@ -241,10 +227,6 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
 		return
 	}
-	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.setFKFallback()
-		return
-	}
 
 	mb.withID = mb.b.factory.Memo().NextWithID()
 
@@ -294,12 +276,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		}
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
-			if !mb.b.evalCtx.SessionData.OptimizerFKCascades {
-				// Bail, so that exec FK checks pick up on FK checks and perform them.
-				mb.setFKFallback()
-				telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-				return
-			}
+			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
 			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
 
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
@@ -394,11 +371,6 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		return
 	}
 
-	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.setFKFallback()
-		return
-	}
-
 	mb.withID = mb.b.factory.Memo().NextWithID()
 
 	h := &mb.fkCheckHelper
@@ -421,12 +393,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		}
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
-			if !mb.b.evalCtx.SessionData.OptimizerFKCascades {
-				// Bail, so that exec FK checks pick up on FK checks and perform them.
-				mb.setFKFallback()
-				telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-				return
-			}
+			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
 			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
 
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
@@ -837,14 +804,4 @@ func (h *fkCheckHelper) buildDeletionCheck(
 		KeyCols:         deleteCols,
 		OpName:          h.mb.opName,
 	})
-}
-
-// setFKFallback enables fallback to the legacy foreign key checks and
-// cascade path.
-func (mb *mutationBuilder) setFKFallback() {
-	// Clear out any checks or cascades that may have been built already.
-	mb.checks = nil
-	mb.cascades = nil
-	mb.fkFallback = true
-	telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 }
