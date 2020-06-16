@@ -1502,7 +1502,7 @@ build
 SELECT avg(1::int)::float, avg(2::float)::float, avg(3::decimal)::float
 ----
 project
- ├── columns: avg:7 avg:8 avg:9
+ ├── columns: avg:7 avg:4 avg:8
  ├── scalar-group-by
  │    ├── columns: avg:2 avg:4 avg:6
  │    ├── project
@@ -1510,9 +1510,9 @@ project
  │    │    ├── values
  │    │    │    └── ()
  │    │    └── projections
- │    │         ├── 1::INT8 [as=column1:1]
- │    │         ├── 2.0::FLOAT8 [as=column3:3]
- │    │         └── 3::DECIMAL [as=column5:5]
+ │    │         ├── 1 [as=column1:1]
+ │    │         ├── 2.0 [as=column3:3]
+ │    │         └── 3 [as=column5:5]
  │    └── aggregations
  │         ├── avg [as=avg:2]
  │         │    └── column1:1
@@ -1522,8 +1522,7 @@ project
  │              └── column5:5
  └── projections
       ├── avg:2::FLOAT8 [as=avg:7]
-      ├── avg:4::FLOAT8 [as=avg:8]
-      └── avg:6::FLOAT8 [as=avg:9]
+      └── avg:6::FLOAT8 [as=avg:8]
 
 build
 SELECT count(2::int), count(3::float), count(4::decimal)
@@ -1535,9 +1534,9 @@ scalar-group-by
  │    ├── values
  │    │    └── ()
  │    └── projections
- │         ├── 2::INT8 [as=column1:1]
- │         ├── 3.0::FLOAT8 [as=column3:3]
- │         └── 4::DECIMAL [as=column5:5]
+ │         ├── 2 [as=column1:1]
+ │         ├── 3.0 [as=column3:3]
+ │         └── 4 [as=column5:5]
  └── aggregations
       ├── count [as=count:2]
       │    └── column1:1
@@ -1556,9 +1555,9 @@ scalar-group-by
  │    ├── values
  │    │    └── ()
  │    └── projections
- │         ├── 1::INT8 [as=column1:1]
- │         ├── 2.0::FLOAT8 [as=column3:3]
- │         └── 3::DECIMAL [as=column5:5]
+ │         ├── 1 [as=column1:1]
+ │         ├── 2.0 [as=column3:3]
+ │         └── 3 [as=column5:5]
  └── aggregations
       ├── sum [as=sum:2]
       │    └── column1:1
@@ -1577,9 +1576,9 @@ scalar-group-by
  │    ├── values
  │    │    └── ()
  │    └── projections
- │         ├── 1::INT8 [as=column1:1]
- │         ├── 1.0::FLOAT8 [as=column3:3]
- │         └── 1::DECIMAL [as=column5:5]
+ │         ├── 1 [as=column1:1]
+ │         ├── 1.0 [as=column3:3]
+ │         └── 1 [as=column5:5]
  └── aggregations
       ├── variance [as=variance:2]
       │    └── column1:1
@@ -1598,9 +1597,9 @@ scalar-group-by
  │    ├── values
  │    │    └── ()
  │    └── projections
- │         ├── 1::INT8 [as=column1:1]
- │         ├── 1.0::FLOAT8 [as=column3:3]
- │         └── 1::DECIMAL [as=column5:5]
+ │         ├── 1 [as=column1:1]
+ │         ├── 1.0 [as=column3:3]
+ │         └── 1 [as=column5:5]
  └── aggregations
       ├── std-dev [as=stddev:2]
       │    └── column1:1

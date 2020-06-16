@@ -937,7 +937,7 @@ select
  ├── scan a
  │    └── columns: x:1!null y:2
  └── filters
-      └── (x:1 > 10)::BOOL
+      └── x:1 > 10
 
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
