@@ -12,7 +12,7 @@ import React from "react";
 import cn from "classnames";
 
 import { Text, TextTypes } from "src/components";
-import "./textInput.styl";
+import "./input.styl";
 
 interface TextInputProps {
   onChange: (value: string) => void;
@@ -21,6 +21,7 @@ interface TextInputProps {
   placeholder?: string;
   className?: string;
   name?: string;
+  label?: string;
   // validate function returns validation message
   // in case validation failed or undefined if successful.
   validate?: (value: string) => string | undefined;
@@ -37,7 +38,7 @@ interface TextInputState {
 export class TextInput extends React.Component<TextInputProps, TextInputState> {
   static defaultProps = {
     initialValue: "",
-    validate: () => true,
+    validate: () => false,
   };
 
   constructor(props: TextInputProps) {
@@ -83,19 +84,21 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
   }
 
   render() {
-    const { initialValue, placeholder, className, name, value } = this.props;
+    const { initialValue, placeholder, className, name, value, label } = this.props;
     const { isDirty, isValid, validationMessage } = this.state;
     const textValue = isDirty ? value : initialValue;
 
     const classes = cn(
       className,
-      "crl-text-input",
+      "crl-input",
+      "crl-input__text",
       {
-        "crl-text-input--invalid": !isValid,
+        "crl-input__text--invalid": !isValid,
       },
     );
     return (
-      <div className="crl-text-input__wrapper">
+      <div className="crl-input__wrapper">
+        {label && <label htmlFor={name} className="crl-input__label">{label}</label>}
         <input
           name={name}
           type="text"
@@ -108,10 +111,10 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
         />
         {
           !isValid && (
-            <div className="crl-text-input__validation-container">
+            <div className="crl-input__text--validation-container">
               <Text
                 textType={TextTypes.Caption}
-                className="crl-text-input__error-message"
+                className="crl-input__text--error-message"
               >
                 {validationMessage}
               </Text>

@@ -152,7 +152,7 @@ export interface LoginAPIState {
   inProgress: boolean;
 }
 
-const emptyLoginState: LoginAPIState = {
+export const emptyLoginState: LoginAPIState = {
   loggedInUser: dataFromServer.LoggedInUser,
   error: null,
   inProgress: false,
@@ -208,8 +208,12 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
     });
     return userLogin(loginReq)
       .then(
-        () => { dispatch(loginSuccess(username)); },
-        (err) => { dispatch(loginFailure(err)); },
+        () => {
+          dispatch(loginSuccess(username));
+        },
+        (err) => {
+          dispatch(loginFailure(err));
+        },
       );
   };
 }

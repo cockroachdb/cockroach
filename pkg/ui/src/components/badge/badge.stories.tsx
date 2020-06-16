@@ -12,8 +12,10 @@ import React from "react";
 import { storiesOf } from "@storybook/react";
 
 import { Badge } from "./index";
+import { styledWrapper } from "src/util/decorators";
 
 storiesOf("Badge", module)
+  .addDecorator(styledWrapper({padding: "24px"}))
   .add("with small size", () => (
     <Badge size="small" text="Small size badge" />
   ))
