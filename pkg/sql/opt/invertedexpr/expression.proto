@@ -46,3 +46,11 @@ message SpanExpressionProto {
   repeated Span spans_to_read = 1 [(gogoproto.nullable) = false];
   Node node = 2 [(gogoproto.nullable) = false];
 }
+
+// TwoVariableExpressionProto is a proto representation of an InvertedExpression
+// consisting of an expression containing two variables and an optional
+// SpanExpression. It is intended for use in expression execution.
+message TwoVariableExpressionProto {
+  string expression = 1;
+  SpanExpressionProto span_expression = 2;
+}

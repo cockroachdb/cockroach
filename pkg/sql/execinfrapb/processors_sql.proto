@@ -25,7 +25,7 @@ import "sql/sqlbase/locking.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
-import "sql/opt/invertedexpr/span_expression.proto";
+import "sql/opt/invertedexpr/expression.proto";
 import "gogoproto/gogo.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
