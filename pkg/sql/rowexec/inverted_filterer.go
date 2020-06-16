@@ -190,7 +190,11 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 	// Add the primary key in the row to the row container. The first column in
 	// the inverted index is the value that was indexed, and the remaining are
 	// the primary key columns.
+	if len(row) == 2 {
+		log.Errorf(context.Background(), "row: %x, %x", row[0].EncodedBytes(), row[1].EncodedBytes())
+	}
 	keyIndex, err := ifr.rc.AddRow(ifr.Ctx, row[1:])
+	log.Errorf(context.Background(), "AddRow: keyIndex: %d, row len: %d", keyIndex, len(row))
 	if err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()

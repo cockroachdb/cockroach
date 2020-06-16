@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -240,6 +241,8 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			inputCols := planColumns(n.input)
 			cols := make([]string, len(n.keyCols))
 			for i, c := range n.keyCols {
+				log.Errorf(context.Background(), "i: %d, c: %d, len(n.keyCols): %d, len(inputCols): %d",
+					i, c, len(n.keyCols), len(inputCols))
 				cols[i] = inputCols[c].Name
 			}
 			v.observer.attr(name, "key columns", strings.Join(cols, ", "))

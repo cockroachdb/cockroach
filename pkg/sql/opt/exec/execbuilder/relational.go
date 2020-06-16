@@ -463,7 +463,35 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	needed, output := b.getColumns(scan.Cols, scan.Table)
+	var needed exec.TableColumnOrdinalSet
+	var output opt.ColMap
+	if scan.InvertedConstraint != nil {
+		// The following causes the scan to output rows where the columns
+		// are in ColumnID order. The invertedFilterer wants rows where the
+		// first column is the inverted column so it can use a sub-slice for
+		// the primary key.
+		// needed, output = b.getColumns(scan.InvertedInputCols, scan.Table)
+		//
+		// HACK: this does not use InvertedInputCols and just uses the knowledge
+		// that we also need the inverted column.
+		invertedColOrdinal := b.mem.Metadata().Table(scan.Table).Index(scan.Index).Column(0).Ordinal
+		invertedColID := scan.Table.ColumnID(invertedColOrdinal)
+		needed.Add(invertedColOrdinal)
+		output.Set(int(invertedColID), 0) // 0th position
+		n := 1
+		tableColumnCount := b.mem.Metadata().Table(scan.Table).DeletableColumnCount()
+		// NB: we are assuming that the inverted column is not part of the primary key.
+		for i := 0; i < tableColumnCount; i++ {
+			colID := scan.Table.ColumnID(i)
+			if scan.Cols.Contains(colID) {
+				needed.Add(i)
+				output.Set(int(colID), n)
+				n++
+			}
+		}
+	} else {
+		needed, output = b.getColumns(scan.Cols, scan.Table)
+	}
 	res := execPlan{outputCols: output}
 
 	// Get the estimated row count from the statistics.

@@ -59,12 +59,19 @@ func (b *indexScanBuilder) init(c *CustomFuncs, tabID opt.TableID) {
 func (b *indexScanBuilder) primaryKeyCols() opt.ColSet {
 	// Ensure that pkCols set is initialized with the primary index columns.
 	if b.pkCols.Empty() {
-		primaryIndex := b.c.e.mem.Metadata().Table(b.tabID).Index(cat.PrimaryIndex)
-		for i, cnt := 0, primaryIndex.KeyColumnCount(); i < cnt; i++ {
-			b.pkCols.Add(b.tabID.ColumnID(primaryIndex.Column(i).Ordinal))
-		}
+		b.pkCols = b.indexCols(cat.PrimaryIndex)
 	}
 	return b.pkCols
+}
+
+// indexCols returns the key columns from the given index.
+func (b *indexScanBuilder) indexCols(idx cat.IndexOrdinal) opt.ColSet {
+	var indexCols opt.ColSet
+	index := b.c.e.mem.Metadata().Table(b.tabID).Index(idx)
+	for i, cnt := 0, index.KeyColumnCount(); i < cnt; i++ {
+		indexCols.Add(b.tabID.ColumnID(index.Column(i).Ordinal))
+	}
+	return indexCols
 }
 
 // setScan constructs a standalone Scan expression. As a side effect, it clears

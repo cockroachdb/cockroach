@@ -49,6 +49,11 @@ define ScanPrivate {
     # may be a subset of the columns that the table/index contains.
     Cols ColSet
 
+    # InvertedInputCols specifies the set of columns that the scan operator
+    # scans from the inverted index. This is populated iff InvertedConstraint
+    # is non-nil. When populated, Cols is a subset of InvertedInputCols.
+    InvertedInputCols ColSet
+
     # If set, the scan is a constrained scan; the constraint contains the spans
     # that need to be scanned.
     Constraint Constraint
