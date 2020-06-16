@@ -101,11 +101,11 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 		types.BytesFamily: func(s *types.T, b *types.T) ColumnConversionKind {
 			switch {
 			case b.Width() == 0:
-				return ColumnConversionTrivial
+				return ColumnConversionValidate
 			case s.Width() == 0:
 				return ColumnConversionValidate
 			case b.Width() >= s.Width()*4:
-				return ColumnConversionTrivial
+				return ColumnConversionValidate
 			default:
 				return ColumnConversionValidate
 			}
