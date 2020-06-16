@@ -1690,3 +1690,11 @@ select count(1) from date_test where date_test.date_val = '2019-01-15'::date
 
 statement ok
 SET TIME ZONE 0
+
+subtest infinity_time
+
+# TODO(#41564): this should display "infinity", "-infinity".
+query TT
+SELECT 'infinity'::timestamp, '-infinity'::timestamptz
+----
+294276-12-31 23:59:59.999999 +0000 +0000  -4713-11-24 00:00:00 +0000 +0000
