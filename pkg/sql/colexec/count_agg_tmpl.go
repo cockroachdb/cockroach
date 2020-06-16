@@ -63,10 +63,7 @@ func (a *count_KINDAgg) CurrentOutputIndex() int {
 }
 
 func (a *count_KINDAgg) SetOutputIndex(idx int) {
-	if a.curIdx != -1 {
-		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(idx + 1)
-	}
+	a.curIdx = idx
 }
 
 func (a *count_KINDAgg) Compute(b coldata.Batch, inputIdxs []uint32) {

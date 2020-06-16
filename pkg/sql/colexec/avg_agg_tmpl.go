@@ -99,10 +99,7 @@ func (a *avg_TYPEAgg) CurrentOutputIndex() int {
 }
 
 func (a *avg_TYPEAgg) SetOutputIndex(idx int) {
-	if a.scratch.curIdx != -1 {
-		a.scratch.curIdx = idx
-		a.scratch.nulls.UnsetNullsAfter(idx + 1)
-	}
+	a.scratch.curIdx = idx
 }
 
 func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
