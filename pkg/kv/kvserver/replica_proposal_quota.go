@@ -101,7 +101,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// through the code paths where we acquire quota from the pool. To
 			// offset this we reset the quota pool whenever leadership changes
 			// hands.
-			r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), uint64(r.store.cfg.RaftProposalQuota))
+			r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), uint64(r.store.Cfg.RaftProposalQuota))
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().All(), timeutil.Now())
 		} else if r.mu.proposalQuota != nil {
@@ -150,13 +150,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// will stall), whereas for quiescing the downside is lower.
 
 		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
-			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseActiveDuration(),
+			ctx, rep.ReplicaID, now, r.store.Cfg.RangeLeaseActiveDuration(),
 		) {
 			return
 		}
 
 		// Only consider followers that that have "healthy" RPC connections.
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
+		if err := r.store.Cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
 			return
 		}
 

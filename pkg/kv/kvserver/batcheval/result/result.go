@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,6 +66,10 @@ type LocalResult struct {
 	MaybeGossipNodeLiveness *roachpb.Span
 	// Call maybeWatchForMerge.
 	MaybeWatchForMerge bool
+	// ReleaseFunc, when it's not the empty function, stores the callback returned
+	// by minprop.Tracker.Track(). It is used to record the LeaseAppliedIndex for
+	// a SubsumeRequest.
+	ReleaseFunc closedts.ReleaseFunc
 
 	// Metrics contains counters which are to be passed to the
 	// metrics subsystem.

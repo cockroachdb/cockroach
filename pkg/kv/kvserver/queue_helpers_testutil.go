@@ -35,7 +35,7 @@ func forceScanAndProcess(s *Store, q *baseQueue) error {
 	}
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		q.maybeAdd(context.Background(), repl, s.cfg.Clock.Now())
+		q.maybeAdd(context.Background(), repl, s.Cfg.Clock.Now())
 		return true
 	})
 

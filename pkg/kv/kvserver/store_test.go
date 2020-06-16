@@ -1090,7 +1090,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
-			txn := newTransaction("test", test.key, 1, store.cfg.Clock)
+			txn := newTransaction("test", test.key, 1, store.Cfg.Clock)
 			txn.MaxTimestamp = hlc.MaxTimestamp
 			pArgs := putArgs(test.key, []byte("value"))
 			h := roachpb.Header{
@@ -1158,7 +1158,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				var txn *roachpb.Transaction
 				pArgs := putArgs(test.key, []byte("value"))
 				if useTxn {
-					txn = newTransaction("test", test.key, 1, store.cfg.Clock)
+					txn = newTransaction("test", test.key, 1, store.Cfg.Clock)
 					txn.MaxTimestamp = hlc.MaxTimestamp
 					assignSeqNumsForReqs(txn, &pArgs)
 				}
@@ -1242,12 +1242,12 @@ func TestStoreSendUpdateTime(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
-	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds(), 0)
+	reqTS := store.Cfg.Clock.Now().Add(store.Cfg.Clock.MaxOffset().Nanoseconds(), 0)
 	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: reqTS}, &args)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	ts := store.cfg.Clock.Now()
+	ts := store.Cfg.Clock.Now()
 	if ts.WallTime != reqTS.WallTime || ts.Logical <= reqTS.Logical {
 		t.Errorf("expected store clock to advance to %s; got %s", reqTS, ts)
 	}
@@ -1270,9 +1270,9 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 	}
 	// The Logical time will increase over the course of the command
 	// execution so we can only rely on comparing the WallTime.
-	if br.Timestamp.WallTime != store.cfg.Clock.Now().WallTime {
+	if br.Timestamp.WallTime != store.Cfg.Clock.Now().WallTime {
 		t.Errorf("expected reply to have store clock time %s; got %s",
-			store.cfg.Clock.Now(), br.Timestamp)
+			store.Cfg.Clock.Now(), br.Timestamp)
 	}
 }
 
@@ -1286,7 +1286,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
-	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0)
+	reqTS := store.Cfg.Clock.Now().Add(store.Cfg.Clock.MaxOffset().Nanoseconds()+1, 0)
 	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: reqTS}, &args)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Errorf("unexpected error: %v", pErr)
@@ -1466,13 +1466,13 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin),
-			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
+			*store.Cfg.DefaultZoneConfig.RangeMaxBytes},
 		{splitTestRange(
 			store, roachpb.RKeyMin, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
 			1 << 20},
 		{splitTestRange(
 			store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
-			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
+			*store.Cfg.DefaultZoneConfig.RangeMaxBytes},
 		{splitTestRange(
 			store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
 			2 << 20},
@@ -1532,8 +1532,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 	for i, resolvable := range []bool{true, false} {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, store.cfg.Clock)
-		pushee := newTransaction("test", key, 1, store.cfg.Clock)
+		pusher := newTransaction("test", key, 1, store.Cfg.Clock)
+		pushee := newTransaction("test", key, 1, store.Cfg.Clock)
 		if resolvable {
 			pushee.Priority = enginepb.MinTxnPriority
 			pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
@@ -1600,8 +1600,8 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	key := roachpb.Key("a")
-	pusher := newTransaction("test", key, 1, store.cfg.Clock)
-	pushee := newTransaction("test", key, 1, store.cfg.Clock)
+	pusher := newTransaction("test", key, 1, store.Cfg.Clock)
+	pushee := newTransaction("test", key, 1, store.Cfg.Clock)
 	pushee.Priority = enginepb.MinTxnPriority
 	pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
 
@@ -1726,8 +1726,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 				}
 			}
 
-			pusher := newTransaction("pusher", key, 1, store.cfg.Clock)
-			pushee := newTransaction("pushee", key, 1, store.cfg.Clock)
+			pusher := newTransaction("pusher", key, 1, store.Cfg.Clock)
+			pushee := newTransaction("pushee", key, 1, store.Cfg.Clock)
 
 			// Set transaction priorities.
 			if tc.pusherWillWin {
@@ -1749,7 +1749,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			}
 
 			// Determine the timestamp to read at.
-			readTs := store.cfg.Clock.Now()
+			readTs := store.Cfg.Clock.Now()
 			// Give the pusher a previous observed timestamp equal to this read
 			// timestamp. This ensures that the pusher doesn't need to push the
 			// intent any higher just to push it out of its uncertainty window.
@@ -1757,10 +1757,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 			// If the pushee is already pushed, update the transaction record.
 			if tc.pusheeAlreadyPushed {
-				pushedTs := store.cfg.Clock.Now()
+				pushedTs := store.Cfg.Clock.Now()
 				pushee.WriteTimestamp.Forward(pushedTs)
 				pushee.ReadTimestamp.Forward(pushedTs)
-				hb, hbH := heartbeatArgs(pushee, store.cfg.Clock.Now())
+				hb, hbH := heartbeatArgs(pushee, store.Cfg.Clock.Now())
 				if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), hbH, &hb); pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -1826,7 +1826,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	key := roachpb.Key("a")
-	pushee := newTransaction("test", key, 1, store.cfg.Clock)
+	pushee := newTransaction("test", key, 1, store.Cfg.Clock)
 
 	// First, write the pushee's txn via HeartbeatTxn request.
 	hb, hbH := heartbeatArgs(pushee, pushee.WriteTimestamp)
@@ -1842,7 +1842,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Now, try to read outside a transaction.
-	getTS := store.cfg.Clock.Now() // accessed later
+	getTS := store.Cfg.Clock.Now() // accessed later
 	{
 		gArgs := getArgs(key)
 		if reply, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
@@ -1857,7 +1857,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	{
 		// Next, try to write outside of a transaction. We will succeed in pushing txn.
-		putTS := store.cfg.Clock.Now()
+		putTS := store.Cfg.Clock.Now()
 		args.Value.SetBytes([]byte("value2"))
 		if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 			Timestamp:    putTS,
@@ -1946,8 +1946,8 @@ func TestStoreReadInconsistent(t *testing.T) {
 					priority = -1
 				}
 				args.Value.SetBytes([]byte("value2"))
-				txnA := newTransaction("testA", keyA, priority, store.cfg.Clock)
-				txnB := newTransaction("testB", keyB, priority, store.cfg.Clock)
+				txnA := newTransaction("testA", keyA, priority, store.Cfg.Clock)
+				txnB := newTransaction("testB", keyB, priority, store.Cfg.Clock)
 				for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 					args.Key = txn.Key
 					assignSeqNumsForReqs(txn, &args)
@@ -2248,7 +2248,7 @@ func TestStoreScanIntents(t *testing.T) {
 				if test.canPush {
 					priority = roachpb.MinUserPriority
 				}
-				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, store.cfg.Clock)
+				txn = newTransaction(fmt.Sprintf("test-%d", i), key, priority, store.Cfg.Clock)
 			}
 			args := putArgs(key, []byte(fmt.Sprintf("value%02d", j)))
 			assignSeqNumsForReqs(txn, &args)
@@ -2338,7 +2338,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 	// Lay down 10 intents to scan over.
-	txn := newTransaction("test", roachpb.Key("foo"), 1, store.cfg.Clock)
+	txn := newTransaction("test", roachpb.Key("foo"), 1, store.Cfg.Clock)
 	keys := []roachpb.Key{}
 	for j := 0; j < 10; j++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", j))
@@ -2388,7 +2388,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 
 	// Lay down two intents from two txns to scan over.
 	key1 := roachpb.Key("bar")
-	txn1 := newTransaction("test1", key1, 1, store.cfg.Clock)
+	txn1 := newTransaction("test1", key1, 1, store.Cfg.Clock)
 	args := putArgs(key1, []byte("value1"))
 	assignSeqNumsForReqs(txn1, &args)
 	if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn1}, &args); pErr != nil {
@@ -2396,7 +2396,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	}
 
 	key2 := roachpb.Key("foo")
-	txn2 := newTransaction("test2", key2, 1, store.cfg.Clock)
+	txn2 := newTransaction("test2", key2, 1, store.Cfg.Clock)
 	args = putArgs(key2, []byte("value2"))
 	assignSeqNumsForReqs(txn2, &args)
 	if _, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: txn2}, &args); pErr != nil {
@@ -2442,7 +2442,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Lay down ten intents from a single txn.
 	key1 := roachpb.Key("key00")
 	key10 := roachpb.Key("key09")
-	txn := newTransaction("test", key1, 1, store.cfg.Clock)
+	txn := newTransaction("test", key1, 1, store.Cfg.Clock)
 	ba := roachpb.BatchRequest{}
 	for i := 0; i < 10; i++ {
 		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
@@ -2483,7 +2483,7 @@ func TestStoreBadRequests(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
-	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, store.cfg.Clock)
+	txn := newTransaction("test", roachpb.Key("a"), 1 /* priority */, store.Cfg.Clock)
 
 	args1 := getArgs(roachpb.Key("a"))
 	args1.EndKey = roachpb.Key("b")
@@ -3105,9 +3105,9 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	desc.Capacity.Available = 1
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
 
-	s.cfg.StorePool.detailsMu.Lock()
-	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
-	s.cfg.StorePool.detailsMu.Unlock()
+	s.Cfg.StorePool.detailsMu.Lock()
+	s.Cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
+	s.Cfg.StorePool.detailsMu.Unlock()
 
 	// A declinable snapshot to a nearly full store should be rejected.
 	cleanupRejected, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
@@ -3147,9 +3147,9 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	// available disk space should be rejected.
 	desc.Capacity.Available = desc.Capacity.Capacity / 2
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
-	s.cfg.StorePool.detailsMu.Lock()
-	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
-	s.cfg.StorePool.detailsMu.Unlock()
+	s.Cfg.StorePool.detailsMu.Lock()
+	s.Cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
+	s.Cfg.StorePool.detailsMu.Unlock()
 
 	// A declinable snapshot to a nearly full store should be rejected.
 	cleanupRejected2, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{

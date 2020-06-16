@@ -81,7 +81,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 	for _, r := range ranges {
 		repl := &Replica{store: s}
 		repl.mu.state.Desc = &roachpb.RangeDescriptor{}
-		repl.mu.zone = s.cfg.DefaultZoneConfig
+		repl.mu.zone = s.Cfg.DefaultZoneConfig
 		for _, storeID := range r.storeIDs {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -262,7 +262,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			s.cfg.DefaultZoneConfig.NumReplicas = proto.Int32(int32(len(tc.storeIDs)))
+			s.Cfg.DefaultZoneConfig.NumReplicas = proto.Int32(int32(len(tc.storeIDs)))
 			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 			hottestRanges := rr.topQPS()
 			_, targets := sr.chooseReplicaToRebalance(

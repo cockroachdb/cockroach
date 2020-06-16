@@ -133,7 +133,7 @@ func (r *Replica) shouldApplyCommand(
 	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
-	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
+	if filter := r.store.Cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
 		var newPropRetry int
 		newPropRetry, cmd.forcedErr = filter(kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
@@ -588,7 +588,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	if res.AddSSTable != nil {
 		copied := addSSTablePreApply(
 			ctx,
-			b.r.store.cfg.Settings,
+			b.r.store.Cfg.Settings,
 			b.r.store.engine,
 			b.r.raftMu.sideloaded,
 			cmd.ent.Term,

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	ctpb2 "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -283,7 +284,7 @@ A file preventing this node from restarting was placed at:
 				log.Warningf(ctx, "%v", err)
 			}
 
-			if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
+			if p := r.store.Cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
 				p(*r.store.Ident)
 			} else {
 				time.Sleep(10 * time.Second)
@@ -338,7 +339,8 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// progress, as only the old leaseholder would have been explicitly notified
 		// of the merge. If there is a merge in progress, maybeWatchForMerge will
 		// arrange to block all traffic to this replica unless the merge aborts.
-		if err := r.maybeWatchForMerge(ctx); err != nil {
+		noopReleaseFunc := func(_ context.Context, _ ctpb2.Epoch, _ roachpb.RangeID, _ ctpb2.LAI) {}
+		if err := r.maybeWatchForMerge(ctx, noopReleaseFunc); err != nil {
 			// We were unable to determine whether a merge was in progress. We cannot
 			// safely proceed.
 			log.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",

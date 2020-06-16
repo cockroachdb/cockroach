@@ -163,8 +163,8 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		// has probably already been removed from its raft group but doesn't know it.
 		// Without this, node decommissioning can stall on such dormant ranges.
 		// Make sure NodeLiveness isn't nil because it can be in tests/benchmarks.
-		if repl.store.cfg.NodeLiveness != nil {
-			if liveness, err := repl.store.cfg.NodeLiveness.Self(); err == nil && liveness.Decommissioning {
+		if repl.store.Cfg.NodeLiveness != nil {
+			if liveness, err := repl.store.Cfg.NodeLiveness.Self(); err == nil && liveness.Decommissioning {
 				return true, replicaGCPriorityDefault
 			}
 		}

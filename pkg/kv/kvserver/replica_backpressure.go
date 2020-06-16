@@ -113,7 +113,7 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 // larger than that by more than backpressureByteTolerance (see that comment for
 // further explanation).
 func (r *Replica) shouldBackpressureWrites() bool {
-	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
+	mult := backpressureRangeSizeMultiplier.Get(&r.store.Cfg.Settings.SV)
 	if mult == 0 {
 		// Disabled.
 		return false
@@ -125,7 +125,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 	if !exceeded {
 		return false
 	}
-	if bytesOver > backpressureByteTolerance.Get(&r.store.cfg.Settings.SV) {
+	if bytesOver > backpressureByteTolerance.Get(&r.store.Cfg.Settings.SV) {
 		return false
 	}
 	return true

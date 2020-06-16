@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -122,12 +124,12 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
+	untrack := r.maybeTrackProposal(ctx, ba)
 	for retries := 0; ; retries++ {
 		if retries > 0 {
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
-
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
@@ -142,9 +144,25 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			EncounteredIntents: res.Local.DetachEncounteredIntents(),
 			Metrics:            res.Local.Metrics,
 		}
+		untrack(ctx, 0, 0, 0)
 		return nil, res, pErr
 	}
+	res.Local.ReleaseFunc = untrack
 	return br, res, nil
+}
+
+func (r *Replica) maybeTrackProposal(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) closedts.ReleaseFunc {
+	if ba.IsSingleSubsumeRequest() {
+		// We start tracking SubsumeRequests as part of our guarantee to never
+		// broadcast a closed timestamp entry between when we evaluate the Subsume
+		// request and the time that we run maybeWatchForMerge for the first time.
+		// See comment in maybeWatchForMerge() for details.
+		_, untrack := r.store.Cfg.ClosedTimestamp.Tracker.Track(ctx)
+		return untrack
+	}
+	return func(_ context.Context, _ ctpb.Epoch, _ roachpb.RangeID, _ ctpb.LAI) {}
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
@@ -169,7 +187,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		// A merge is (likely) about to be carried out, and this replica needs
 		// to block all traffic until the merge either commits or aborts. See
 		// docs/tech-notes/range-merges.md.
-		if err := r.maybeWatchForMerge(ctx); err != nil {
+		if err := r.maybeWatchForMerge(ctx, lResult.ReleaseFunc); err != nil {
 			return roachpb.NewError(err)
 		}
 		lResult.MaybeWatchForMerge = false

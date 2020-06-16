@@ -199,7 +199,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 			updateFn()
 		})
 	}
-	if nl := store.cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
+	if nl := store.Cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
 		nl.RegisterCallback(func(_ roachpb.NodeID) {
 			updateFn()
 		})
@@ -443,7 +443,7 @@ func (rq *replicateQueue) addOrReplace(
 		// a replica.
 		removeIdx = -1
 	}
-	st := rq.store.cfg.Settings
+	st := rq.store.Cfg.Settings
 	if !st.Version.IsActive(ctx, clusterversion.VersionAtomicChangeReplicas) {
 		// If we can't swap yet, don't.
 		removeIdx = -1
@@ -1009,7 +1009,7 @@ func (rq *replicateQueue) changeReplicas(
 
 func (rq *replicateQueue) canTransferLease() bool {
 	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
-		minInterval := minLeaseTransferInterval.Get(&rq.store.cfg.Settings.SV)
+		minInterval := minLeaseTransferInterval.Get(&rq.store.Cfg.Settings.SV)
 		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
 	}
 	return true

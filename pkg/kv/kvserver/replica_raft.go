@@ -152,7 +152,7 @@ func (r *Replica) evalAndPropose(
 	// commands can evaluate but then be blocked on quota, which has worse memory
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
-	if maxSize := uint64(MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
+	if maxSize := uint64(MaxCommandSize.Get(&r.store.Cfg.Settings.SV)); quotaSize > maxSize {
 		return nil, nil, 0, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
@@ -702,7 +702,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	commitStart := timeutil.Now()
-	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
+	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.Cfg.Settings.SV)); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
@@ -918,7 +918,7 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
 
-	refreshAtDelta := r.store.cfg.RaftElectionTimeoutTicks
+	refreshAtDelta := r.store.Cfg.RaftElectionTimeoutTicks
 	if knob := r.store.TestingKnobs().RefreshReasonTicksPeriod; knob > 0 {
 		refreshAtDelta = knob
 	}
@@ -1214,10 +1214,10 @@ func (r *Replica) sendRaftMessageRequest(ctx context.Context, req *RaftMessageRe
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
-	ok := r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
+	ok := r.store.Cfg.Transport.SendAsync(req, r.connectionClass.get())
 	// TODO(peter): Looping over all of the outgoing Raft message queues to
 	// update this stat on every send is a bit expensive.
-	r.store.metrics.RaftEnqueuedPending.Update(r.store.cfg.Transport.queuedMessageCount())
+	r.store.metrics.RaftEnqueuedPending.Update(r.store.Cfg.Transport.queuedMessageCount())
 	return ok
 }
 
@@ -1372,7 +1372,7 @@ func (r *Replica) withRaftGroupLocked(
 			raft.Storage((*replicaRaftStorage)(r)),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
-			r.store.cfg,
+			r.store.Cfg,
 			&raftLogger{ctx: ctx},
 		))
 		if err != nil {

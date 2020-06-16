@@ -137,14 +137,14 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		tcsf := kvcoord.NewTxnCoordSenderFactory(
 			kvcoord.TxnCoordSenderFactoryConfig{
 				AmbientCtx: actx,
-				Settings:   store.cfg.Settings,
-				Clock:      store.cfg.Clock,
+				Settings:   store.Cfg.Settings,
+				Clock:      store.Cfg.Clock,
 				Stopper:    stopper,
 				Metrics:    kvcoord.MakeTxnMetrics(time.Second),
 			},
 			store.TestSender(),
 		)
-		db := kv.NewDB(actx, tcsf, store.cfg.Clock)
+		db := kv.NewDB(actx, tcsf, store.Cfg.Clock)
 		ctx := context.Background()
 		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		if err := txn.Run(ctx, b); err != nil {

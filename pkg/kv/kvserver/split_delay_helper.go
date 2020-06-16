@@ -39,7 +39,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 			ctx, raftStatus.Progress, r.descRLocked().Replicas().All(),
 			func(replicaID roachpb.ReplicaID) bool {
 				return r.mu.lastUpdateTimes.isFollowerActiveSince(
-					ctx, replicaID, timeutil.Now(), r.store.cfg.RangeLeaseActiveDuration())
+					ctx, replicaID, timeutil.Now(), r.store.Cfg.RangeLeaseActiveDuration())
 			},
 		)
 	}
@@ -75,7 +75,7 @@ func (sdh *splitDelayHelper) NumAttempts() int {
 	// delay introduced here needs to make sure that the snapshot queue
 	// processes at a higher rate than splits happen, so the number of attempts
 	// will typically be much higher than what's suggested by maybeDropMsgApp.
-	return (*Replica)(sdh).store.cfg.RaftDelaySplitToSuppressSnapshotTicks
+	return (*Replica)(sdh).store.Cfg.RaftDelaySplitToSuppressSnapshotTicks
 }
 
 func (sdh *splitDelayHelper) Sleep(ctx context.Context) time.Duration {
@@ -83,7 +83,7 @@ func (sdh *splitDelayHelper) Sleep(ctx context.Context) time.Duration {
 
 	r := (*Replica)(sdh)
 	select {
-	case <-time.After(r.store.cfg.RaftTickInterval):
+	case <-time.After(r.store.Cfg.RaftTickInterval):
 	case <-ctx.Done():
 	}
 

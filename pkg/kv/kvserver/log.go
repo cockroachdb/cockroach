@@ -79,7 +79,7 @@ func (s *Store) insertRangeLogEvent(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
-	rows, err := s.cfg.SQLExecutor.ExecEx(ctx, "log-range-event", txn,
+	rows, err := s.Cfg.SQLExecutor.ExecEx(ctx, "log-range-event", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		insertEventTableStmt, args...)
 	if err != nil {
@@ -100,7 +100,7 @@ func (s *Store) insertRangeLogEvent(
 func (s *Store) logSplit(
 	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
 ) error {
-	if !s.cfg.LogRangeEvents {
+	if !s.Cfg.LogRangeEvents {
 		return nil
 	}
 	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
@@ -124,7 +124,7 @@ func (s *Store) logSplit(
 func (s *Store) logMerge(
 	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
 ) error {
-	if !s.cfg.LogRangeEvents {
+	if !s.Cfg.LogRangeEvents {
 		return nil
 	}
 	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
@@ -153,7 +153,7 @@ func (s *Store) logChange(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
-	if !s.cfg.LogRangeEvents {
+	if !s.Cfg.LogRangeEvents {
 		return nil
 	}
 

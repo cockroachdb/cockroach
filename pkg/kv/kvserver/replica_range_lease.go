@@ -221,10 +221,10 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if p.repl.requiresExpiringLeaseRLocked() {
 		reqLease.Expiration = &hlc.Timestamp{}
-		*reqLease.Expiration = status.Timestamp.Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
+		*reqLease.Expiration = status.Timestamp.Add(int64(p.repl.store.Cfg.RangeLeaseActiveDuration()), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
-		liveness, err := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
+		liveness, err := p.repl.store.Cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if err != nil {
 			llHandle.resolve(roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  status.Lease,
@@ -335,7 +335,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				// If this replica is previous & next lease holder, manually heartbeat to become live.
 				if status.Lease.OwnedBy(nextLeaseHolder.StoreID) &&
 					p.repl.store.StoreID() == nextLeaseHolder.StoreID {
-					if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
+					if err = p.repl.store.Cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
 						log.Errorf(ctx, "%v", err)
 					}
 				} else if status.Liveness.Epoch == status.Lease.Epoch {
@@ -343,13 +343,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 					// However, we only do so in the event that the next leaseholder is
 					// considered live at this time. If not, there's no sense in
 					// incrementing the expired leaseholder's epoch.
-					if live, liveErr := p.repl.store.cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
+					if live, liveErr := p.repl.store.Cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
 						err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = %v)",
 							status.Liveness.NodeID, nextLeaseHolder.NodeID, liveErr)
 						if log.V(1) {
 							log.Infof(ctx, "%v", err)
 						}
-					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
+					} else if err = p.repl.store.Cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						// If we get ErrEpochAlreadyIncremented, someone else beat
 						// us to it. This proves that the target node is truly
 						// dead *now*, but it doesn't prove that it was dead at
@@ -544,7 +544,7 @@ func (r *Replica) leaseStatus(
 		expiration = lease.GetExpiration()
 	} else {
 		var err error
-		status.Liveness, err = r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
+		status.Liveness, err = r.store.Cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
 		if err != nil || status.Liveness.Epoch < lease.Epoch {
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither
@@ -586,7 +586,7 @@ func (r *Replica) leaseStatus(
 // including the node liveness table must use expiration leases to avoid
 // circular dependencies on the node liveness table.
 func (r *Replica) requiresExpiringLeaseRLocked() bool {
-	return r.store.cfg.NodeLiveness == nil || !r.store.cfg.EnableEpochRangeLeases ||
+	return r.store.Cfg.NodeLiveness == nil || !r.store.Cfg.EnableEpochRangeLeases ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
@@ -943,7 +943,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				// already an extension pending.
 				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
 				if !requestPending && r.requiresExpiringLeaseRLocked() {
-					renewal := status.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+					renewal := status.Lease.Expiration.Add(-r.store.Cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
 					if renewal.LessEq(timestamp) {
 						if log.V(2) {
 							log.Infof(ctx, "extending lease %s at %s", status.Lease, timestamp)

@@ -915,7 +915,7 @@ func (r *Replica) applySnapshot(
 	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
-	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
+	if fn := r.store.Cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
 		if err := fn(inSnap, snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}

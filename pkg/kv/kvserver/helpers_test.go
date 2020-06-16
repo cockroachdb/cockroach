@@ -46,7 +46,7 @@ import (
 )
 
 func (s *Store) Transport() *RaftTransport {
-	return s.cfg.Transport
+	return s.Cfg.Transport
 }
 
 func (s *Store) FindTargetAndTransferLease(
@@ -192,13 +192,13 @@ func (s *Store) ReservationCount() int {
 // ClearClosedTimestampStorage clears the closed timestamp storage of all
 // knowledge about closed timestamps.
 func (s *Store) ClearClosedTimestampStorage() {
-	s.cfg.ClosedTimestamp.Storage.Clear()
+	s.Cfg.ClosedTimestamp.Storage.Clear()
 }
 
 // RequestClosedTimestamp instructs the closed timestamp client to request the
 // relevant node to publish its MLAI for the provided range.
 func (s *Store) RequestClosedTimestamp(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
-	s.cfg.ClosedTimestamp.Clients.Request(nodeID, rangeID)
+	s.Cfg.ClosedTimestamp.Clients.Request(nodeID, rangeID)
 }
 
 // AssertInvariants verifies that the store's bookkeping is self-consistent. It
@@ -208,7 +208,7 @@ func (s *Store) AssertInvariants() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.mu.replicas.Range(func(_ int64, p unsafe.Pointer) bool {
-		ctx := s.cfg.AmbientCtx.AnnotateCtx(context.Background())
+		ctx := s.Cfg.AmbientCtx.AnnotateCtx(context.Background())
 		repl := (*Replica)(p)
 		// We would normally need to hold repl.raftMu. Otherwise we can observe an
 		// initialized replica that is not in s.replicasByKey, e.g., if we race with

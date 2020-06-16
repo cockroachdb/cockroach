@@ -443,7 +443,7 @@ func newBaseQueue(
 		cfg.addOrMaybeAddSemSize = 20
 	}
 
-	ambient := store.cfg.AmbientCtx
+	ambient := store.Cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
 
 	if !cfg.acceptsUnsplitRanges && !cfg.needsSystemConfig {

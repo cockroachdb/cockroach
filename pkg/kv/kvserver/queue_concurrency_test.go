@@ -68,7 +68,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	// we'd set up an interface against the *Store as well, similar to
 	// replicaInQueue, but this isn't an ideal world. Deal with it.
 	store := &Store{
-		cfg: StoreConfig{
+		Cfg: StoreConfig{
 			Clock:             hlc.NewClock(hlc.UnixNano, time.Second),
 			AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
 			DefaultZoneConfig: zonepb.DefaultZoneConfigRef(),

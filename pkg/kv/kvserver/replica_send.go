@@ -80,7 +80,7 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
-	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
+	if filter := r.store.Cfg.TestingKnobs.TestingRequestFilter; filter != nil {
 		if pErr := filter(ctx, *ba); pErr != nil {
 			return nil, pErr
 		}
@@ -110,7 +110,7 @@ func (r *Replica) sendWithRangeID(
 	if pErr != nil {
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
-		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
+		if filter := r.store.Cfg.TestingKnobs.TestingResponseFilter; filter != nil {
 			pErr = filter(ctx, *ba, br)
 		}
 	}
@@ -238,7 +238,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			return br, nil
 		}
 
-		if filter := r.store.cfg.TestingKnobs.TestingLatchFilter; filter != nil {
+		if filter := r.store.Cfg.TestingKnobs.TestingLatchFilter; filter != nil {
 			if pErr := filter(ctx, *ba); pErr != nil {
 				return nil, pErr
 			}
@@ -334,7 +334,7 @@ func (r *Replica) handleWriteIntentError(
 	pErr *roachpb.Error,
 	t *roachpb.WriteIntentError,
 ) (*concurrency.Guard, *roachpb.Error) {
-	if r.store.cfg.TestingKnobs.DontPushOnWriteIntentError {
+	if r.store.Cfg.TestingKnobs.DontPushOnWriteIntentError {
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.
@@ -352,7 +352,7 @@ func (r *Replica) handleTransactionPushError(
 	// into the txnWaitQueue in order to await further updates to the unpushed
 	// txn's status. We check ShouldPushImmediately to avoid retrying
 	// non-queueable PushTxnRequests (see #18191).
-	dontRetry := r.store.cfg.TestingKnobs.DontRetryPushTxnFailures
+	dontRetry := r.store.Cfg.TestingKnobs.DontRetryPushTxnFailures
 	if !dontRetry && ba.IsSinglePushTxnRequest() {
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
 		dontRetry = txnwait.ShouldPushImmediately(pushReq)
@@ -371,7 +371,7 @@ func (r *Replica) handleIndeterminateCommitError(
 	pErr *roachpb.Error,
 	t *roachpb.IndeterminateCommitError,
 ) *roachpb.Error {
-	if r.store.cfg.TestingKnobs.DontRecoverIndeterminateCommits {
+	if r.store.Cfg.TestingKnobs.DontRecoverIndeterminateCommits {
 		return pErr
 	}
 	// On an indeterminate commit error, attempt to recover and finalize the

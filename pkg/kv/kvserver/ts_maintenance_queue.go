@@ -103,7 +103,7 @@ func newTimeSeriesMaintenanceQueue(
 			// Begin logging messages if we exceed our planned memory usage by
 			// more than triple.
 			TimeSeriesMaintenanceMemoryBudget*3,
-			store.cfg.Settings,
+			store.Cfg.Settings,
 		),
 	}
 	q.baseQueue = newBaseQueue(
@@ -126,7 +126,7 @@ func newTimeSeriesMaintenanceQueue(
 func (q *timeSeriesMaintenanceQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+	if !repl.store.Cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
 			return false, 0

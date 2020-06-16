@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -654,8 +655,8 @@ func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
 			// larger than the default value. When the store starts up it sets the
 			// zone for the replica to this default value; later on it overwrites it
 			// with a new instance even if the value is the same as the default.
-			r.mu.zone != r.store.cfg.DefaultZoneConfig &&
-			r.mu.zone != r.store.cfg.DefaultSystemZoneConfig {
+			r.mu.zone != r.store.Cfg.DefaultZoneConfig &&
+			r.mu.zone != r.store.Cfg.DefaultSystemZoneConfig {
 
 			r.mu.largestPreviousMaxRangeSizeBytes = *r.mu.zone.RangeMaxBytes
 		} else if r.mu.largestPreviousMaxRangeSizeBytes > 0 &&
@@ -717,7 +718,7 @@ func (r *Replica) GetNodeLocality() roachpb.Locality {
 
 // ClusterSettings returns the node's ClusterSettings.
 func (r *Replica) ClusterSettings() *cluster.Settings {
-	return r.store.cfg.Settings
+	return r.store.Cfg.Settings
 }
 
 // StoreID returns the Replica's StoreID.
@@ -727,7 +728,7 @@ func (r *Replica) StoreID() roachpb.StoreID {
 
 // EvalKnobs returns the EvalContext's Knobs.
 func (r *Replica) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
-	return r.store.cfg.TestingKnobs.EvalKnobs
+	return r.store.Cfg.TestingKnobs.EvalKnobs
 }
 
 // Clock returns the hlc clock shared by this replica.
@@ -1037,7 +1038,7 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 		allReplicas := desc.Replicas().All()
 		for i := range allReplicas {
 			replDesc := &allReplicas[i]
-			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
+			r.store.Cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
 				mlai, found := e.MLAI[r.RangeID]
 				if !found {
 					return false // not done
@@ -1326,9 +1327,10 @@ func (ec *endCmds) done(
 // maybeWatchForMerge checks whether a merge of this replica into its left
 // neighbor is in its critical phase and, if so, arranges to block all requests
 // until the merge completes.
-func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
+func (r *Replica) maybeWatchForMerge(ctx context.Context, untrack closedts.ReleaseFunc) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
@@ -1365,6 +1367,20 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
 	r.unquiesceLocked()
+	// We prevent replicas from being able to serve follower reads on timestamps
+	// that fall between the subsumption time (FreezeStart) and the timestamp at
+	// which the merge transaction commits or aborts (i.e. when a merge is in its
+	// critical state), by requiring follower replicas to catch up to the
+	// *succeeding* LeaseAppliedIndex.
+	//
+	// NB: The above statement relies on the invariant that the LAI that
+	// follows a Subsume request will be applied only after the merge aborts, as
+	// the RHS replicas will get destroyed if the merge successfully commits. This
+	// invariant is upheld because the only Raft proposals allowed after a range
+	// has been subsumed are lease requests, which do not bump the LAI.
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/44878 for discussion.
+	untrack(ctx, ctpb.Epoch(r.mu.state.Lease.Epoch), r.RangeID, ctpb.LAI(r.mu.state.LeaseAppliedIndex+1))
 	r.mu.Unlock()
 
 	taskCtx := r.AnnotateCtx(context.Background())
@@ -1605,14 +1621,14 @@ func EnableLeaseHistory(maxEntries int) func() {
 func (r *Replica) GetExternalStorage(
 	ctx context.Context, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorage(ctx, dest)
+	return r.store.Cfg.ExternalStorage(ctx, dest)
 }
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (r *Replica) GetExternalStorageFromURI(
 	ctx context.Context, uri string,
 ) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorageFromURI(ctx, uri)
+	return r.store.Cfg.ExternalStorageFromURI(ctx, uri)
 }
 
 func (r *Replica) markSystemConfigGossipSuccess() {

@@ -114,7 +114,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	// the replicate queue. Either way, no point in also sending it a snapshot of
 	// type RAFT.
 	if repDesc.GetType() == roachpb.LEARNER {
-		if fn := repl.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
+		if fn := repl.store.Cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
 			return nil
 		}
 		snapType = SnapshotRequest_LEARNER

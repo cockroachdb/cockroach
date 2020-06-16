@@ -566,7 +566,7 @@ func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
 }
 
 func (s *Store) processRaft(ctx context.Context) {
-	if s.cfg.TestingKnobs.DisableProcessRaft {
+	if s.Cfg.TestingKnobs.DisableProcessRaft {
 		return
 	}
 
@@ -577,12 +577,12 @@ func (s *Store) processRaft(ctx context.Context) {
 	s.stopper.RunWorker(ctx, s.raftTickLoop)
 	s.stopper.RunWorker(ctx, s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.Transport.Stop(s.StoreID())
+		s.Cfg.Transport.Stop(s.StoreID())
 	}))
 }
 
 func (s *Store) raftTickLoop(ctx context.Context) {
-	ticker := time.NewTicker(s.cfg.RaftTickInterval)
+	ticker := time.NewTicker(s.Cfg.RaftTickInterval)
 	defer ticker.Stop()
 
 	var rangeIDs []roachpb.RangeID
@@ -592,7 +592,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		case <-ticker.C:
 			rangeIDs = rangeIDs[:0]
 			// Update the liveness map.
-			if s.cfg.NodeLiveness != nil {
+			if s.Cfg.NodeLiveness != nil {
 				s.updateLivenessMap()
 			}
 
@@ -617,11 +617,11 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 }
 
 func (s *Store) updateLivenessMap() {
-	nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
+	nextMap := s.Cfg.NodeLiveness.GetIsLiveMap()
 	for nodeID, entry := range nextMap {
 		if entry.IsLive {
 			// Make sure we ask all live nodes for closed timestamp updates.
-			s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
+			s.Cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
 			continue
 		}
 		// Liveness claims that this node is down, but ConnHealth gets the last say
@@ -636,7 +636,7 @@ func (s *Store) updateLivenessMap() {
 		// Raft transport, so ConnHealth should usually indicate a real problem if
 		// it gives us an error back. The check can also have false positives if the
 		// node goes down after populating the map, but that matters even less.
-		entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
+		entry.IsLive = (s.Cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
 		nextMap[nodeID] = entry
 	}
 	s.livenessMap.Store(nextMap)
@@ -646,7 +646,7 @@ func (s *Store) updateLivenessMap() {
 // beneficial to have it run on a faster cycle than once per tick, so that
 // the delay does not impact latency-sensitive features such as quiescence.
 func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
-	ticker := time.NewTicker(s.cfg.CoalescedHeartbeatsInterval)
+	ticker := time.NewTicker(s.Cfg.CoalescedHeartbeatsInterval)
 	defer ticker.Stop()
 
 	for {
@@ -699,7 +699,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
-	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
+	if !s.Cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
 		for _, beat := range beats {
 			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
 				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)

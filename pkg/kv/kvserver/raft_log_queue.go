@@ -167,7 +167,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// RangeMaxBytes). This captures the heuristic that at some point, it's more
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
-	targetSize := r.store.cfg.RaftLogTruncationThreshold
+	targetSize := r.store.Cfg.RaftLogTruncationThreshold
 	if targetSize > *r.mu.zone.RangeMaxBytes {
 		targetSize = *r.mu.zone.RangeMaxBytes
 	}
@@ -206,7 +206,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		ctx, raftStatus.Progress, r.descRLocked().Replicas().All(),
 		func(replicaID roachpb.ReplicaID) bool {
 			return r.mu.lastUpdateTimes.isFollowerActiveSince(
-				ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
+				ctx, replicaID, now, r.store.Cfg.RangeLeaseActiveDuration())
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)

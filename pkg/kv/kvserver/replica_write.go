@@ -82,7 +82,7 @@ func (r *Replica) executeWriteBatch(
 		return nil, g, roachpb.NewError(err)
 	}
 
-	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	minTS, untrack := r.store.Cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 
 	// Examine the timestamp cache for preceding commands which require this
@@ -206,7 +206,7 @@ func (r *Replica) executeWriteBatch(
 			r.store.metrics.SlowRaftRequests.Inc(1)
 
 			log.Errorf(ctx, "range unavailable: %v",
-				rangeUnavailableMessage(r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
+				rangeUnavailableMessage(r.Desc(), r.store.Cfg.NodeLiveness.GetIsLiveMap(),
 					r.RaftStatus(), ba, timeutil.Since(startPropTime)))
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
@@ -572,7 +572,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
 	var opLogger *storage.OpLoggerBatch
-	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.Cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
 		// cluster setting we'll need a way to turn this on when any
 		// replica (not just the leaseholder) wants it and off when no

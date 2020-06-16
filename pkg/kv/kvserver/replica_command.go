@@ -227,7 +227,6 @@ func splitTxnAttempt(
 	}
 
 	b := txn.NewBatch()
-
 	// Write range descriptor for right hand side of the split.
 	rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
 	if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
@@ -611,7 +610,7 @@ func (r *Replica) AdminMerge(
 		// replica of the RHS too early. The comment on
 		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
 		if err := waitForReplicasInit(
-			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
+			ctx, r.store.Cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
 		); err != nil {
 			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
 		}
@@ -734,7 +733,7 @@ func (r *Replica) AdminMerge(
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
 		err = waitForApplication(
-			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
+			ctx, r.store.Cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
 			rhsSnapshotRes.LeaseAppliedIndex)
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
@@ -1033,7 +1032,7 @@ func (r *Replica) changeReplicasImpl(
 		if _, err := maybeLeaveAtomicChangeReplicas(ctx, r.store, r.Desc()); err != nil {
 			return nil, err
 		}
-		if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
+		if fn := r.store.Cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
 			return nil, err
 		}
 		// Don't leave a learner replica lying around if we didn't succeed in
@@ -1274,7 +1273,7 @@ func (r *Replica) atomicReplicationChange(
 			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
 		}
 
-		if fn := r.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
+		if fn := r.store.Cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
 			continue
 		}
 
@@ -1299,7 +1298,7 @@ func (r *Replica) atomicReplicationChange(
 	}
 
 	if adds := chgs.Additions(); len(adds) > 0 {
-		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
+		if fn := r.store.Cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
 			return desc, nil
 		}
 	}
@@ -1319,7 +1318,7 @@ func (r *Replica) atomicReplicationChange(
 		return nil, err
 	}
 
-	if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterJointConfig; fn != nil && fn() {
+	if fn := r.store.Cfg.TestingKnobs.ReplicaAddStopAfterJointConfig; fn != nil && fn() {
 		return desc, nil
 	}
 
@@ -1877,9 +1876,9 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	if err := r.store.cfg.Transport.SendSnapshot(
+	if err := r.store.Cfg.Transport.SendSnapshot(
 		ctx,
-		&r.store.cfg.RaftConfig,
+		&r.store.Cfg.RaftConfig,
 		r.store.allocator.storePool,
 		req,
 		snap,
@@ -2106,7 +2105,7 @@ func (s *Store) AdminRelocateRange(
 				// Done.
 				return ctx.Err()
 			}
-			if fn := s.cfg.TestingKnobs.BeforeRelocateOne; fn != nil {
+			if fn := s.Cfg.TestingKnobs.BeforeRelocateOne; fn != nil {
 				fn(ops, leaseTarget, err)
 			}
 
@@ -2151,7 +2150,7 @@ func (s *Store) relocateOne(
 			`range %s had non-voter replicas: %v`, desc, desc.Replicas())
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	sysCfg := s.Cfg.Gossip.GetSystemConfig()
 	if sysCfg == nil {
 		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
 	}

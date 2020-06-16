@@ -511,9 +511,9 @@ func TestNeedsSystemConfig(t *testing.T) {
 	// Use a gossip instance that won't have the system config available in it.
 	// bqNeedsSysCfg will not add the replica or process it without a system config.
 	rpcContext := rpc.NewContext(rpc.ContextOptions{
-		AmbientCtx: tc.store.cfg.AmbientCtx,
+		AmbientCtx: tc.store.Cfg.AmbientCtx,
 		Config:     &base.Config{Insecure: true},
-		Clock:      tc.store.cfg.Clock,
+		Clock:      tc.store.Cfg.Clock,
 		Stopper:    stopper,
 		Settings:   cluster.MakeTestingClusterSettings(),
 	})
@@ -620,13 +620,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeTestBaseQueue("test", testQueue, s, s.cfg.Gossip, queueConfig{maxSize: 2})
+	bq := makeTestBaseQueue("test", testQueue, s, s.Cfg.Gossip, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
 	// Check our config.
 	var sysCfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		sysCfg = s.cfg.Gossip.GetSystemConfig()
+		sysCfg = s.Cfg.Gossip.GetSystemConfig()
 		if sysCfg == nil {
 			return errors.New("system config not yet present")
 		}

@@ -33,7 +33,7 @@ func (r *Replica) EmitMLAI() {
 	// of the current LAI to trigger a re-broadcast of this range's LAI.
 	if isLeaseholder && epoch > 0 {
 		ctx := r.AnnotateCtx(context.Background())
-		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+		_, untrack := r.store.Cfg.ClosedTimestamp.Tracker.Track(ctx)
 		untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
 	}
 }

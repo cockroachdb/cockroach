@@ -190,7 +190,7 @@ type testContext struct {
 }
 
 func (tc *testContext) Clock() *hlc.Clock {
-	return tc.store.cfg.Clock
+	return tc.store.Cfg.Clock
 }
 
 // Start initializes the test context with a single range covering the
@@ -985,7 +985,7 @@ func TestReplicaLease(t *testing.T) {
 
 	// Test that leases with invalid times are rejected.
 	// Start leases at a point that avoids overlapping with the existing lease.
-	leaseDuration := tc.store.cfg.RangeLeaseActiveDuration()
+	leaseDuration := tc.store.Cfg.RangeLeaseActiveDuration()
 	start := hlc.Timestamp{WallTime: (time.Second + leaseDuration).Nanoseconds(), Logical: 0}
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
@@ -7792,7 +7792,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 
 	r := tc.repl
-	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
+	electionTicks := tc.store.Cfg.RaftElectionTimeoutTicks
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
 		// starting with a value of 0 (modulo electionTicks). Move the replica into
@@ -8960,7 +8960,7 @@ func TestCommandTooLarge(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
-	st := tc.store.cfg.Settings
+	st := tc.store.Cfg.Settings
 	st.Manual.Store(true)
 	MaxCommandSize.Override(&st.SV, 1024)
 
@@ -10198,7 +10198,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Disable txn liveness pushes. See below for why.
-	st := tc.store.cfg.Settings
+	st := tc.store.Cfg.Settings
 	st.Manual.Store(true)
 	concurrency.LockTableLivenessPushDelay.Override(&st.SV, 24*time.Hour)
 

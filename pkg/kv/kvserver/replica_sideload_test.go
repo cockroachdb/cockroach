@@ -819,8 +819,8 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		mockSender := &mockSender{}
 		if err := sendSnapshot(
 			ctx,
-			&tc.store.cfg.RaftConfig,
-			tc.store.cfg.Settings,
+			&tc.store.Cfg.RaftConfig,
+			tc.store.Cfg.Settings,
 			mockSender,
 			&fakeStorePool{},
 			SnapshotRequest_Header{State: os.State, Priority: SnapshotRequest_RECOVERY},
@@ -941,8 +941,8 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		mockSender := &mockSender{}
 		err = sendSnapshot(
 			ctx,
-			&tc.store.cfg.RaftConfig,
-			tc.store.cfg.Settings,
+			&tc.store.Cfg.RaftConfig,
+			tc.store.Cfg.Settings,
 			mockSender,
 			&fakeStorePool{},
 			SnapshotRequest_Header{State: failingOS.State, Priority: SnapshotRequest_RECOVERY},

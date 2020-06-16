@@ -43,14 +43,14 @@ var SplitByLoadMergeDelay = settings.RegisterNonNegativeDurationSetting(
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
 func (r *Replica) SplitByLoadQPSThreshold() float64 {
-	return float64(SplitByLoadQPSThreshold.Get(&r.store.cfg.Settings.SV))
+	return float64(SplitByLoadQPSThreshold.Get(&r.store.Cfg.Settings.SV))
 }
 
 // SplitByLoadEnabled returns whether load based splitting is enabled.
 // Although this is a method of *Replica, the configuration is really global,
 // shared across all stores.
 func (r *Replica) SplitByLoadEnabled() bool {
-	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
+	return SplitByLoadEnabled.Get(&r.store.Cfg.Settings.SV) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
 }
 

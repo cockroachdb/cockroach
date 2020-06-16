@@ -83,7 +83,7 @@ func (q *consistencyQueue) shouldQueue(
 	}
 
 	shouldQ, priority := true, float64(0)
-	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
+	if !repl.store.Cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
 			return false, 0
@@ -93,9 +93,9 @@ func (q *consistencyQueue) shouldQueue(
 		}
 	}
 	// Check if all replicas are live. Some tests run without a NodeLiveness configured.
-	if repl.store.cfg.NodeLiveness != nil {
+	if repl.store.Cfg.NodeLiveness != nil {
 		for _, rep := range repl.Desc().Replicas().All() {
-			if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
+			if live, err := repl.store.Cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
 				log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
 				return false, 0
 			} else if !live {
@@ -149,7 +149,7 @@ func (q *consistencyQueue) process(
 		}
 		return nil
 	}
-	if fn := repl.store.cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {
+	if fn := repl.store.Cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {
 		fn(resp)
 	}
 	return nil

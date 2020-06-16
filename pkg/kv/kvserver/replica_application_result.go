@@ -111,7 +111,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 
 	var pErr *roachpb.Error
-	if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; filter != nil {
+	if filter := r.store.Cfg.TestingKnobs.TestingPostApplyFilter; filter != nil {
 		var newPropRetry int
 		newPropRetry, pErr = filter(kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
@@ -203,7 +203,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		return nil
 	}
 
-	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	minTS, untrack := r.store.Cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error paths below
 	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
 	if p.Request.Timestamp.Less(minTS) {

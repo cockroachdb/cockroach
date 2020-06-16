@@ -65,7 +65,7 @@ func newUnloadedReplica(
 		log.Fatalf(context.TODO(), "cannot construct a replica for range %d with a 0 replica ID", desc.RangeID)
 	}
 	r := &Replica{
-		AmbientContext: store.cfg.AmbientCtx,
+		AmbientContext: store.Cfg.AmbientCtx,
 		RangeID:        desc.RangeID,
 		store:          store,
 		abortSpan:      abortspan.New(desc.RangeID),
@@ -86,10 +86,10 @@ func newUnloadedReplica(
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
-	r.mu.zone = store.cfg.DefaultZoneConfig
+	r.mu.zone = store.Cfg.DefaultZoneConfig
 	r.mu.replicaID = replicaID
 	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
-		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
+		return float64(SplitByLoadQPSThreshold.Get(&store.Cfg.Settings.SV))
 	})
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
@@ -98,8 +98,8 @@ func newUnloadedReplica(
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
-	if store.cfg.StorePool != nil {
-		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+	if store.Cfg.StorePool != nil {
+		r.leaseholderStats = newReplicaStats(store.Clock(), store.Cfg.StorePool.getNodeLocalityString)
 	}
 	// Pass nil for the localityOracle because we intentionally don't track the
 	// origin locality of write load.
@@ -174,7 +174,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	// any). This is so that, after a restart, we don't propose under old leases.
 	// If the replica is being created through a split, this value will be
 	// overridden.
-	if !r.store.cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
+	if !r.store.Cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
 		// Only do this if there was a previous lease. This shouldn't be important
 		// to do but consider that the first lease which is obtained is back-dated
 		// to a zero start timestamp (and this de-flakes some tests). If we set the
@@ -190,7 +190,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 
 	ssBase := r.Engine().GetAuxiliaryDir()
 	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-		r.store.cfg.Settings,
+		r.store.Cfg.Settings,
 		desc.RangeID,
 		replicaID,
 		ssBase,

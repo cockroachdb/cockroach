@@ -44,7 +44,7 @@ func (r *Replica) canServeFollowerRead(
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
 		(!ba.IsLocking() && ba.IsAllTransactional()) && // followerreadsccl.batchCanBeEvaluatedOnFollower
 		(ba.Txn == nil || !ba.Txn.IsLocking()) && // followerreadsccl.txnCanPerformFollowerRead
-		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) {
+		FollowerReadsEnabled.Get(&r.store.Cfg.Settings.SV) {
 
 		// There's no known reason that a non-VOTER_FULL replica couldn't serve follower
 		// reads (or RangeFeed), but as of the time of writing, these are expected
@@ -70,7 +70,7 @@ func (r *Replica) canServeFollowerRead(
 		if !canServeFollowerRead {
 			// We can't actually serve the read based on the closed timestamp.
 			// Signal the clients that we want an update so that future requests can succeed.
-			r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
+			r.store.Cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
 
 			if false {
 				// NB: this can't go behind V(x) because the log message created by the
@@ -78,7 +78,7 @@ func (r *Replica) canServeFollowerRead(
 				// using logspy.
 				log.Warningf(ctx, "can't serve follower read for %s at epo %d, storage is %s",
 					ba.Timestamp, lErr.Lease.Epoch,
-					r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
+					r.store.Cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
 				)
 			}
 		}
@@ -118,7 +118,7 @@ func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	if lease.Expiration != nil {
 		return hlc.Timestamp{}, false
 	}
-	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
+	maxClosed := r.store.Cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
 	maxClosed.Forward(lease.Start)
 	maxClosed.Forward(initialMaxClosed)

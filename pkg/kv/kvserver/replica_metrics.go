@@ -70,7 +70,7 @@ func (r *Replica) Metrics(
 	return calcReplicaMetrics(
 		ctx,
 		now,
-		&r.store.cfg.RaftConfig,
+		&r.store.Cfg.RaftConfig,
 		zone,
 		livenessMap,
 		clusterNodes,

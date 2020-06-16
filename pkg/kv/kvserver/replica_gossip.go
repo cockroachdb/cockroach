@@ -38,7 +38,7 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	}
 	if err := r.store.Gossip().AddInfo(
 		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
-		r.store.cfg.SentinelGossipTTL()); err != nil {
+		r.store.Cfg.SentinelGossipTTL()); err != nil {
 		log.Errorf(ctx, "failed to gossip sentinel: %+v", err)
 	}
 	if log.V(1) {
@@ -284,7 +284,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 		log.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
 	}
 
-	if r.store.cfg.TestingKnobs.DisablePeriodicGossips {
+	if r.store.Cfg.TestingKnobs.DisablePeriodicGossips {
 		return nil
 	}
 

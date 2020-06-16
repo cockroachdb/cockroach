@@ -149,7 +149,7 @@ func (r *Replica) CheckConsistency(
 			curSnap := results[shaToIdxs[sha][0]].Response.Snapshot
 			if sha != minoritySHA && minoritySnap != nil && curSnap != nil {
 				diff := diffRange(curSnap, minoritySnap)
-				if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
+				if report := r.store.Cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
 					report(*r.store.Ident, diff)
 				}
 				_, _ = fmt.Fprintf(&buf, "====== diff(%x, [minority]) ======\n", sha)
@@ -228,7 +228,7 @@ func (r *Replica) CheckConsistency(
 			}); err != nil {
 				log.Infof(ctx, "while retrieving cluster bootstrap version: %s", err)
 				// Intentionally continue with the assumption that it's the current version.
-				v = r.store.cfg.Settings.Version.ActiveVersion(ctx).Version
+				v = r.store.Cfg.Settings.Version.ActiveVersion(ctx).Version
 			}
 			// For clusters that ever ran <19.1, we're not so sure that the stats are
 			// consistent. Verify this only for clusters that started out on 19.1 or
@@ -301,7 +301,7 @@ type ConsistencyCheckResult struct {
 func (r *Replica) collectChecksumFromReplica(
 	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, checksum []byte,
 ) (CollectChecksumResponse, error) {
-	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
+	conn, err := r.store.Cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
 		return CollectChecksumResponse{},
 			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)

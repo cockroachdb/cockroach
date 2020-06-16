@@ -720,7 +720,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc, db, _, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
+	tc, db, _, repls := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -831,7 +831,7 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc, db, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
+	tc, db, desc, repls := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)

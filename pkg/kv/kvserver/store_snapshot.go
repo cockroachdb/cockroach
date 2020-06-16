@@ -509,7 +509,7 @@ func (s *Store) reserveSnapshot(
 		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
-		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
+		storeDesc, ok := s.Cfg.StorePool.getStoreDescriptor(s.StoreID())
 		if ok && (!maxCapacityCheck(storeDesc) || header.RangeSize > storeDesc.Capacity.Available) {
 			return nil, snapshotStoreTooFullMsg, nil
 		}
@@ -726,7 +726,7 @@ func (s *Store) shouldAcceptSnapshotData(
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
-	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
+	if fn := s.Cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
 		if err := fn(header); err != nil {
 			return sendSnapshotError(stream, err)
 		}
@@ -780,9 +780,9 @@ func (s *Store) receiveSnapshot(
 		}
 
 		ss = &kvBatchSnapshotStrategy{
-			raftCfg:      &s.cfg.RaftConfig,
+			raftCfg:      &s.Cfg.RaftConfig,
 			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
-			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
+			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.Cfg.Settings.SV),
 		}
 		defer ss.Close(ctx)
 	default:

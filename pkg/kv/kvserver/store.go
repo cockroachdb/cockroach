@@ -383,7 +383,7 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 // to one physical device.
 type Store struct {
 	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
-	cfg                StoreConfig
+	Cfg                StoreConfig
 	db                 *kv.DB
 	engine             storage.Engine       // The underlying key-value store
 	compactor          *compactor.Compactor // Schedules compaction of the engine
@@ -790,7 +790,7 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
+		Cfg:      cfg,
 		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
 		engine:   eng,
 		nodeDesc: nodeDesc,
@@ -837,7 +837,7 @@ func NewStore(
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 
 	s.compactor = compactor.NewCompactor(
-		s.cfg.Settings,
+		s.Cfg.Settings,
 		s.engine,
 		func() (roachpb.StoreCapacity, error) {
 			return s.Capacity(false /* useCached */)
@@ -903,20 +903,20 @@ func NewStore(
 			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
 
-	if s.cfg.Gossip != nil {
+	if s.Cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
-			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
+			s.Cfg.AmbientCtx, s.Cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
-		s.mergeQueue = newMergeQueue(s, s.db, s.cfg.Gossip)
-		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator)
-		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
-		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
-		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip)
-		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
+		s.gcQueue = newGCQueue(s, s.Cfg.Gossip)
+		s.mergeQueue = newMergeQueue(s, s.db, s.Cfg.Gossip)
+		s.splitQueue = newSplitQueue(s, s.db, s.Cfg.Gossip)
+		s.replicateQueue = newReplicateQueue(s, s.Cfg.Gossip, s.allocator)
+		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.Cfg.Gossip)
+		s.raftLogQueue = newRaftLogQueue(s, s.db, s.Cfg.Gossip)
+		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.Cfg.Gossip)
+		s.consistencyQueue = newConsistencyQueue(s, s.Cfg.Gossip)
 		// NOTE: If more queue types are added, please also add them to the list of
 		// queues on the EnqueueRange debug page as defined in
 		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
@@ -924,9 +924,9 @@ func NewStore(
 			s.gcQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
 			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
 
-		if s.cfg.TimeSeriesDataStore != nil {
+		if s.Cfg.TimeSeriesDataStore != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
-				s, s.db, s.cfg.Gossip, s.cfg.TimeSeriesDataStore,
+				s, s.db, s.Cfg.Gossip, s.Cfg.TimeSeriesDataStore,
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
@@ -973,12 +973,12 @@ func (s *Store) String() string {
 
 // ClusterSettings returns the node's ClusterSettings.
 func (s *Store) ClusterSettings() *cluster.Settings {
-	return s.cfg.Settings
+	return s.Cfg.Settings
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
 func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
-	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
+	return s.Cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
 // SetDraining (when called with 'true') causes incoming lease transfers to be
@@ -1180,7 +1180,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 
 	// We've seen all the replicas once. Now we're going to iterate
 	// until they're all gone, up to the configured timeout.
-	transferTimeout := raftLeadershipTransferWait.Get(&s.cfg.Settings.SV)
+	transferTimeout := raftLeadershipTransferWait.Get(&s.Cfg.Settings.SV)
 
 	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", transferTimeout,
 		func(ctx context.Context) error {
@@ -1371,7 +1371,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.Ident = &ident
 
 	// Set the store ID for logging.
-	s.cfg.AmbientCtx.AddLogTag("s", s.StoreID())
+	s.Cfg.AmbientCtx.AddLogTag("s", s.StoreID())
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
@@ -1389,13 +1389,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return errors.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
 	// Always set gossip NodeID before gossiping any info.
-	if s.cfg.Gossip != nil {
-		s.cfg.Gossip.NodeID.Set(ctx, s.Ident.NodeID)
+	if s.Cfg.Gossip != nil {
+		s.Cfg.Gossip.NodeID.Set(ctx, s.Ident.NodeID)
 	}
 
 	// Create ID allocators.
 	idAlloc, err := idalloc.NewAllocator(idalloc.Options{
-		AmbientCtx:  s.cfg.AmbientCtx,
+		AmbientCtx:  s.Cfg.AmbientCtx,
 		Key:         keys.RangeIDGenerator,
 		Incrementer: idalloc.DBIncrementer(s.db),
 		BlockSize:   rangeIDAllocCount,
@@ -1407,25 +1407,25 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Create the intent resolver.
 	s.intentResolver = intentresolver.New(intentresolver.Config{
-		Clock:                s.cfg.Clock,
+		Clock:                s.Cfg.Clock,
 		DB:                   s.db,
 		Stopper:              stopper,
-		TaskLimit:            s.cfg.IntentResolverTaskLimit,
-		AmbientCtx:           s.cfg.AmbientCtx,
-		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
-		RangeDescriptorCache: s.cfg.RangeDescriptorCache,
+		TaskLimit:            s.Cfg.IntentResolverTaskLimit,
+		AmbientCtx:           s.Cfg.AmbientCtx,
+		TestingKnobs:         s.Cfg.TestingKnobs.IntentResolverKnobs,
+		RangeDescriptorCache: s.Cfg.RangeDescriptorCache,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
 	// Create the recovery manager.
 	s.recoveryMgr = txnrecovery.NewManager(
-		s.cfg.AmbientCtx, s.cfg.Clock, s.db, stopper,
+		s.Cfg.AmbientCtx, s.Cfg.Clock, s.db, stopper,
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
 	s.rangeIDAlloc = idAlloc
 
-	now := s.cfg.Clock.Now()
+	now := s.Cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
@@ -1501,27 +1501,27 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.cfg.Transport.Listen(s.StoreID(), s)
+	s.Cfg.Transport.Listen(s.StoreID(), s)
 	s.processRaft(ctx)
 
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
-	if s.cfg.NodeLiveness != nil {
-		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
+	if s.Cfg.NodeLiveness != nil {
+		s.Cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 	}
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
-	if s.cfg.Gossip != nil {
+	if s.Cfg.Gossip != nil {
 		// Register update channel for any changes to the system config.
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
-		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
+		gossipUpdateC := s.Cfg.Gossip.RegisterSystemConfigChannel()
 		s.stopper.RunWorker(ctx, func(context.Context) {
 			for {
 				select {
 				case <-gossipUpdateC:
-					cfg := s.cfg.Gossip.GetSystemConfig()
+					cfg := s.Cfg.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
 				case <-s.stopper.ShouldStop():
 					return
@@ -1540,7 +1540,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// from returning (as doing so might prevent Gossip from ever connecting).
 		s.stopper.RunWorker(ctx, func(context.Context) {
 			select {
-			case <-s.cfg.Gossip.Connected:
+			case <-s.Cfg.Gossip.Connected:
 				s.scanner.Start(s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
@@ -1548,7 +1548,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
+	if !s.Cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
 	}
 
@@ -1557,7 +1557,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
-			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
+			s.Cfg.AmbientCtx, s.Cfg.Settings, s.replicateQueue, s.replRankings)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
@@ -1593,7 +1593,7 @@ func (s *Store) startGossip() {
 		return pErr.GoError()
 	}
 
-	if s.cfg.TestingKnobs.DisablePeriodicGossips {
+	if s.Cfg.TestingKnobs.DisablePeriodicGossips {
 		wakeReplica = func(context.Context, *Replica) error {
 			return errPeriodicGossipsDisabled
 		}
@@ -1613,7 +1613,7 @@ func (s *Store) startGossip() {
 				return repl.maybeGossipFirstRange(ctx).GoError()
 			},
 			description: "first range descriptor",
-			interval:    s.cfg.SentinelGossipTTL() / 2,
+			interval:    s.Cfg.SentinelGossipTTL() / 2,
 		},
 		{
 			key:         keys.SystemConfigSpan.Key,
@@ -1692,7 +1692,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		// up more often that strictly necessary, but it's more maintainable than
 		// attempting to accurately determine exactly when each iteration of a
 		// lease expires and when we should attempt to renew it as a result.
-		renewalDuration := s.cfg.RangeLeaseActiveDuration() / 5
+		renewalDuration := s.Cfg.RangeLeaseActiveDuration() / 5
 		for {
 			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
 				repl := (*Replica)(v)
@@ -1730,7 +1730,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 	ch := make(chan ctpb.Entry, 8)
 	const name = "closedts-rangefeed-subscriber"
 	if err := s.stopper.RunAsyncTask(ctx, name, func(ctx context.Context) {
-		s.cfg.ClosedTimestamp.Provider.Subscribe(ctx, ch)
+		s.Cfg.ClosedTimestamp.Provider.Subscribe(ctx, ch)
 	}); err != nil {
 		return
 	}
@@ -1808,7 +1808,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 
 	// For every range, update its zone config and check if it needs to
 	// be split or merged.
-	now := s.cfg.Clock.Now()
+	now := s.Cfg.Clock.Now()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
 		zone, err := sysCfg.GetZoneConfigForKey(key)
@@ -1816,7 +1816,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			if log.V(1) {
 				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
 			}
-			zone = s.cfg.DefaultZoneConfig
+			zone = s.Cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
 		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
@@ -1857,9 +1857,9 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// the usual periodic interval. Re-gossip more rapidly for RangeCount
 	// changes because allocators with stale information are much more
 	// likely to make bad decisions.
-	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.Cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
-	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
+	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.Cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, storeDesc.Capacity.QueriesPerSecond)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
@@ -1867,7 +1867,7 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	return s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, gossip.StoreTTL)
+	return s.Cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, gossip.StoreTTL)
 }
 
 type capacityChangeEvent int
@@ -1884,7 +1884,7 @@ const (
 // immediate gossip of this store's descriptor, to include updated
 // capacity information.
 func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityChangeEvent) {
-	if s.cfg.TestingKnobs.DisableLeaseCapacityGossip && (cce == leaseAddEvent || cce == leaseRemoveEvent) {
+	if s.Cfg.TestingKnobs.DisableLeaseCapacityGossip && (cce == leaseAddEvent || cce == leaseRemoveEvent) {
 		return
 	}
 
@@ -2161,16 +2161,16 @@ func (s *Store) ClusterID() uuid.UUID { return s.Ident.ClusterID }
 func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 
 // Clock accessor.
-func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
+func (s *Store) Clock() *hlc.Clock { return s.Cfg.Clock }
 
 // Engine accessor.
 func (s *Store) Engine() storage.Engine { return s.engine }
 
 // DB accessor.
-func (s *Store) DB() *kv.DB { return s.cfg.DB }
+func (s *Store) DB() *kv.DB { return s.Cfg.DB }
 
 // Gossip accessor.
-func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
+func (s *Store) Gossip() *gossip.Gossip { return s.Cfg.Gossip }
 
 // Compactor accessor.
 func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
@@ -2179,7 +2179,7 @@ func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
 // TestingKnobs accessor.
-func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
+func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.Cfg.TestingKnobs }
 
 // IsDraining accessor.
 func (s *Store) IsDraining() bool {
@@ -2219,7 +2219,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 		return capacity, err
 	}
 
-	now := s.cfg.Clock.Now()
+	now := s.Cfg.Clock.Now()
 	var leaseCount int32
 	var rangeCount int32
 	var logicalBytes int64
@@ -2375,10 +2375,10 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		behindCount               int64
 	)
 
-	timestamp := s.cfg.Clock.Now()
+	timestamp := s.Cfg.Clock.Now()
 	var livenessMap IsLiveMap
-	if s.cfg.NodeLiveness != nil {
-		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
+	if s.Cfg.NodeLiveness != nil {
+		livenessMap = s.Cfg.NodeLiveness.GetIsLiveMap()
 	}
 	clusterNodes := s.ClusterNodeCount()
 
@@ -2521,7 +2521,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 // expected ClusterNodeCount to avoid catching the cluster while the first node
 // is initialized but the other nodes are not.
 func (s *Store) ClusterNodeCount() int {
-	return s.cfg.StorePool.ClusterNodeCount()
+	return s.Cfg.StorePool.ClusterNodeCount()
 }
 
 // HotReplicaInfo contains a range descriptor and its QPS.
@@ -2608,7 +2608,7 @@ func (s *Store) ManuallyEnqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	sysCfg := s.Cfg.Gossip.GetSystemConfig()
 	if sysCfg == nil {
 		return nil, nil, errors.New("cannot run queue without a valid system config; make sure the cluster " +
 			"has been initialized and all nodes connected to it")
@@ -2632,7 +2632,7 @@ func (s *Store) ManuallyEnqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.Now(), repl, sysCfg)
+		shouldQueue, priority := queue.shouldQueue(ctx, s.Cfg.Clock.Now(), repl, sysCfg)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collect(), nil, nil
