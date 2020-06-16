@@ -144,7 +144,7 @@ func TestOrderedSync(t *testing.T) {
 			typs[i] = types.Int
 		}
 		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, inputs, typs, tc.ordering)
+			return NewOrderedSynchronizer(testAllocator, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
 		})
 	}
 }
@@ -179,9 +179,9 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		}
 		sources[sourceIdx] = append(sources[sourceIdx], t)
 	}
-	inputs := make([]colexecbase.Operator, numInputs)
+	inputs := make([]SynchronizerInput, numInputs)
 	for i := range inputs {
-		inputs[i] = newOpTestInput(batchSize, sources[i], typs)
+		inputs[i].Op = newOpTestInput(batchSize, sources[i], typs)
 	}
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
@@ -208,9 +208,9 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		batch.ColVec(0).Int64()[i/numInputs] = i
 	}
 
-	inputs := make([]colexecbase.Operator, len(batches))
+	inputs := make([]SynchronizerInput, len(batches))
 	for i := range batches {
-		inputs[i] = colexecbase.NewRepeatableBatchSource(testAllocator, batches[i], typs)
+		inputs[i].Op = colexecbase.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}
 
 	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}

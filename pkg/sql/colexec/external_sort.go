@@ -416,9 +416,9 @@ func (s *externalSorter) IdempotentClose(ctx context.Context) error {
 func (s *externalSorter) createMergerForPartitions(
 	firstIdx, numPartitions int,
 ) (colexecbase.Operator, error) {
-	syncInputs := make([]colexecbase.Operator, numPartitions)
+	syncInputs := make([]SynchronizerInput, numPartitions)
 	for i := range syncInputs {
-		syncInputs[i] = newPartitionerToOperator(
+		syncInputs[i].Op = newPartitionerToOperator(
 			s.unlimitedAllocator, s.inputTypes, s.partitioner, firstIdx+i,
 		)
 	}

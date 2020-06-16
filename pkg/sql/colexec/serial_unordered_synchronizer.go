@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // SerialUnorderedSynchronizer is an Operator that combines multiple Operator
@@ -26,7 +26,7 @@ import (
 // undesirable - for example when the whole query is planned on the gateway and
 // we want to run it in the RootTxn.
 type SerialUnorderedSynchronizer struct {
-	inputs []colexecbase.Operator
+	inputs []SynchronizerInput
 	// curSerialInputIdx indicates the index of the current input being consumed.
 	curSerialInputIdx int
 }
@@ -41,13 +41,11 @@ func (s *SerialUnorderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return s.inputs[nth]
+	return s.inputs[nth].Op
 }
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
-func NewSerialUnorderedSynchronizer(
-	inputs []colexecbase.Operator, typs []*types.T,
-) *SerialUnorderedSynchronizer {
+func NewSerialUnorderedSynchronizer(inputs []SynchronizerInput) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
 		inputs:            inputs,
 		curSerialInputIdx: 0,
@@ -57,7 +55,7 @@ func NewSerialUnorderedSynchronizer(
 // Init is part of the Operator interface.
 func (s *SerialUnorderedSynchronizer) Init() {
 	for _, input := range s.inputs {
-		input.Init()
+		input.Op.Init()
 	}
 }
 
@@ -67,11 +65,22 @@ func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		if s.curSerialInputIdx == len(s.inputs) {
 			return coldata.ZeroBatch
 		}
-		b := s.inputs[s.curSerialInputIdx].Next(ctx)
+		b := s.inputs[s.curSerialInputIdx].Op.Next(ctx)
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 		} else {
 			return b
 		}
 	}
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (s *SerialUnorderedSynchronizer) DrainMeta(
+	ctx context.Context,
+) []execinfrapb.ProducerMetadata {
+	var bufferedMeta []execinfrapb.ProducerMetadata
+	for _, input := range s.inputs {
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
+	}
+	return bufferedMeta
 }
