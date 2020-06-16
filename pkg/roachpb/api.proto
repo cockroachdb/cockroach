@@ -2235,7 +2235,18 @@ message JoinNodeResponse {
 }
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.
+message UnsafeHealRangeRequest {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+}
+
+message UnsafeHealRangeResponse {}
+
+// Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
+  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
+  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+
+  rpc UnsafeHealRange (UnsafeHealRangeRequest) returns (UnsafeHealRangeResponse) {}
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}

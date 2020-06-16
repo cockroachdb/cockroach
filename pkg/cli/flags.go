@@ -540,6 +540,7 @@ func init() {
 	clientCmds := []*cobra.Command{
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
+		debugUnsafeHealMissingRangeCmd,
 		debugZipCmd,
 		doctorClusterCmd,
 		dumpCmd,
