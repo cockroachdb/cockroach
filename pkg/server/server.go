@@ -169,10 +169,57 @@ type Server struct {
 
 	sqlServer *sqlServer
 
+	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
+	externalStorageBuilder *externalStorageBuilder
+
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 
 	startTime time.Time
 	engines   Engines
+}
+
+// externalStorageBuilder is a wrapper around the ExternalStorage factory
+// methods. It allows us to separate the creation and initialization of the
+// builder between NewServer() and Start() respectively.
+// TODO(adityamaru): Consider moving this to pkg/storage/cloud at a future
+// stage of the ongoing refactor.
+type externalStorageBuilder struct {
+	conf              base.ExternalIODirConfig
+	settings          *cluster.Settings
+	blobClientFactory blobs.BlobClientFactory
+	engine            storage.Engine
+	initCalled        bool
+}
+
+func (e *externalStorageBuilder) init(
+	conf base.ExternalIODirConfig,
+	settings *cluster.Settings,
+	blobClientFactory blobs.BlobClientFactory,
+	engine storage.Engine,
+) {
+	e.conf = conf
+	e.settings = settings
+	e.blobClientFactory = blobClientFactory
+	e.engine = engine
+	e.initCalled = true
+}
+
+func (e *externalStorageBuilder) makeExternalStorage(
+	ctx context.Context, dest roachpb.ExternalStorage,
+) (cloud.ExternalStorage, error) {
+	if !e.initCalled {
+		return nil, errors.New("init not called before using externalStorageBuilder")
+	}
+	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory)
+}
+
+func (e *externalStorageBuilder) makeExternalStorageFromURI(
+	ctx context.Context, uri string,
+) (cloud.ExternalStorage, error) {
+	if !e.initCalled {
+		return nil, errors.New("init not called before using externalStorageBuilder")
+	}
+	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory)
 }
 
 // NewServer creates a Server from a server.Config.
@@ -388,26 +435,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	internalExecutor := &sql.InternalExecutor{}
 	jobRegistry := &jobs.Registry{} // ditto
 
-	// This function defines how ExternalStorage objects are created.
-	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-		return cloud.MakeExternalStorage(
-			ctx, dest, cfg.ExternalIODirConfig, st,
-			blobs.NewBlobClientFactory(
-				nodeIDContainer.Get(),
-				nodeDialer,
-				st.ExternalIODir,
-			),
-		)
+	// Create an ExternalStorageBuilder. This is only usable after Start() where
+	// we initialize all the configuration params.
+	externalStorageBuilder := &externalStorageBuilder{}
+	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.
+		ExternalStorage, error) {
+		return externalStorageBuilder.makeExternalStorage(ctx, dest)
 	}
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(
-			ctx, uri, cfg.ExternalIODirConfig, st,
-			blobs.NewBlobClientFactory(
-				nodeIDContainer.Get(),
-				nodeDialer,
-				st.ExternalIODir,
-			),
-		)
+		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri)
 	}
 
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
@@ -574,35 +610,36 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
-		nodeIDContainer:       nodeIDContainer,
-		cfg:                   cfg,
-		st:                    st,
-		clock:                 clock,
-		rpcContext:            rpcContext,
-		grpc:                  grpcServer,
-		gossip:                g,
-		nodeDialer:            nodeDialer,
-		nodeLiveness:          nodeLiveness,
-		storePool:             storePool,
-		tcsFactory:            tcsFactory,
-		distSender:            distSender,
-		db:                    db,
-		node:                  node,
-		registry:              registry,
-		recorder:              recorder,
-		runtime:               runtimeSampler,
-		admin:                 sAdmin,
-		status:                sStatus,
-		authentication:        sAuth,
-		tsDB:                  tsDB,
-		tsServer:              &sTS,
-		raftTransport:         raftTransport,
-		stopper:               stopper,
-		debug:                 debugServer,
-		replicationReporter:   replicationReporter,
-		protectedtsProvider:   protectedtsProvider,
-		protectedtsReconciler: protectedtsReconciler,
-		sqlServer:             sqlServer,
+		nodeIDContainer:        nodeIDContainer,
+		cfg:                    cfg,
+		st:                     st,
+		clock:                  clock,
+		rpcContext:             rpcContext,
+		grpc:                   grpcServer,
+		gossip:                 g,
+		nodeDialer:             nodeDialer,
+		nodeLiveness:           nodeLiveness,
+		storePool:              storePool,
+		tcsFactory:             tcsFactory,
+		distSender:             distSender,
+		db:                     db,
+		node:                   node,
+		registry:               registry,
+		recorder:               recorder,
+		runtime:                runtimeSampler,
+		admin:                  sAdmin,
+		status:                 sStatus,
+		authentication:         sAuth,
+		tsDB:                   tsDB,
+		tsServer:               &sTS,
+		raftTransport:          raftTransport,
+		stopper:                stopper,
+		debug:                  debugServer,
+		replicationReporter:    replicationReporter,
+		protectedtsProvider:    protectedtsProvider,
+		protectedtsReconciler:  protectedtsReconciler,
+		sqlServer:              sqlServer,
+		externalStorageBuilder: externalStorageBuilder,
 	}
 	return lateBoundServer, err
 }
@@ -1003,6 +1040,13 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create engines")
 	}
 	s.stopper.AddCloser(&s.engines)
+
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	s.externalStorageBuilder.init(s.cfg.ExternalIODirConfig, s.st,
+		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
+			s.nodeDialer, s.st.ExternalIODir), nil)
 
 	bootstrapVersion := s.cfg.Settings.Version.BinaryVersion()
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
