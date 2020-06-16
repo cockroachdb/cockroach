@@ -523,3 +523,9 @@ SELECT x FROM t28 ORDER BY x
 5
 10
 15
+
+# Regression 50277, ensure ColumnConversionValidate type conversion doesn't
+# error before running the online schema change.
+statement ok
+CREATE TABLE t29 (x INT8);
+ALTER TABLE t29 ALTER COLUMN x TYPE INT4;
