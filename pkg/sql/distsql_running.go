@@ -116,7 +116,7 @@ func (dsp *DistSQLPlanner) initRunners() {
 // It will first attempt to set up all remote flows using the dsp workers if
 // available or sequentially if not, and then finally set up the gateway flow,
 // whose output is the DistSQLReceiver provided. This flow is then returned to
-// be run.
+// be run. It also returns a boolean indicating whether the flow is vectorized.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -390,6 +390,10 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
+	}
+
+	if planCtx.planner != nil && flow.IsVectorized() {
+		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
 	}
 
 	// Check that flows that were forced to be planned locally also have no concurrency.

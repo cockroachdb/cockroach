@@ -118,6 +118,7 @@ message StatementStatisticsKey {
   optional bool failed = 4 [(gogoproto.nullable) = false];
   optional bool opt = 5 [(gogoproto.nullable) = false];
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
+  optional bool vec = 7 [(gogoproto.nullable) = false];
 }
 
 // CollectedStats wraps collected timings and metadata for some query's execution.
