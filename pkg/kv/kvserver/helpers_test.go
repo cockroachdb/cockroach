@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -91,10 +90,18 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
-func (s *Store) ConsistencyQueueShouldQueue(
-	ctx context.Context, now hlc.Timestamp, r *Replica, cfg *config.SystemConfig,
+func ConsistencyQueueShouldQueue(
+	ctx context.Context,
+	now hlc.Timestamp,
+	desc *roachpb.RangeDescriptor,
+	getQueueLastProcessed func(ctx context.Context) (hlc.Timestamp, error),
+	isNodeLive func(nodeID roachpb.NodeID) (bool, error),
+	disableLastProcessedCheck bool,
+	interval time.Duration,
 ) (bool, float64) {
-	return s.consistencyQueue.shouldQueue(ctx, now, r, cfg)
+	return consistencyQueueShouldQueueImpl(ctx, now, consistencyShouldQueueData{
+		desc, getQueueLastProcessed, isNodeLive,
+		disableLastProcessedCheck, interval})
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the
