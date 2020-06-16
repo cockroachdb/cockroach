@@ -139,6 +139,14 @@ type observedRead struct {
 
 func (*observedRead) observedMarker() {}
 
+type observedScan struct {
+	Span  roachpb.Span
+	KVs   []roachpb.KeyValue
+	Valid timeSpan
+}
+
+func (*observedScan) observedMarker() {}
+
 type validator struct {
 	kvs              *Engine
 	observedOpsByTxn map[string][]observedOp
@@ -215,6 +223,26 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				write.Timestamp = kv.Key.Timestamp
 			}
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+		}
+	case *ScanOperation:
+		v.failIfError(op, t.Result)
+		if txnID == nil {
+			v.checkAtomic(`scan`, t.Result, op)
+		} else {
+			scan := &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+				KVs: make([]roachpb.KeyValue, len(t.Result.Values)),
+			}
+			for i, kv := range t.Result.Values {
+				scan.KVs[i] = roachpb.KeyValue{
+					Key:   kv.Key,
+					Value: roachpb.Value{RawBytes: kv.Value},
+				}
+			}
+			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
 		}
 	case *SplitOperation:
 		v.failIfError(op, t.Result)
@@ -337,18 +365,23 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 	// Concretely a transaction:
 	// - Write k1@t2 -> v1
 	// - Read k2 -> v2
+	// - Scan [k3,k5) -> [v3,v4]
 	//
 	// And what was present in KV after this and some other transactions:
 	// - k1@t2, v1
-	// - k1@t3, v3
+	// - k1@t3, v5
 	// - k2@t1, v2
-	// - k2@t3, v4
+	// - k2@t3, v6
+	// - k3@t0, v3
+	// - k4@t2, v4
 	//
 	// Each of the operations in the transaction, if taken individually, has some
 	// window at which it was valid. The Write was only valid for a commit exactly
-	// at t2: [t2,t2). This is because each Write's mvcc timestamp is the
-	// timestamp of the txn commit. The Read would have been valid for [t1,t3)
-	// because v2 was written at t1 and overwritten at t3.
+	// at t2: [t2,t2). This is because each Write's mvcc timestamp is the timestamp
+	// of the txn commit. The Read would have been valid for [t1,t3) because v2 was
+	// written at t1 and overwritten at t3. The scan would have been valid for
+	// [t2,∞) because v3 was written at t0 and v4 was written at t2 and neither were
+	// overwritten.
 	//
 	// As long as these time spans overlap, we're good. However, if another write
 	// had a timestamp of t3, then there is no timestamp at which the transaction
@@ -405,15 +438,16 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 	// they show up in the failure message.
 	var failure string
 	for idx, observation := range txnObservations {
+		if failure != `` {
+			break
+		}
 		switch o := observation.(type) {
 		case *observedWrite:
+			var mvccKey storage.MVCCKey
 			if lastWriteIdx := lastWriteIdxByKey[string(o.Key)]; idx == lastWriteIdx {
 				// The last write of a given key in the txn wins and should have made it
 				// to kv.
-				mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
-				if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
-					panic(err)
-				}
+				mvccKey = storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
 			} else {
 				if o.Materialized {
 					failure = `committed txn overwritten key had write`
@@ -422,16 +456,29 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 				// overwritten later in the txn. But reads in the txn could have seen
 				// it, so we put in the batch being maintained for validReadTime using
 				// the timestamp of the write for this key that eventually "won".
-				mvccKey := storage.MVCCKey{
+				mvccKey = storage.MVCCKey{
 					Key:       o.Key,
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
-				if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
-					panic(err)
-				}
+			}
+			if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
+				panic(err)
 			}
 		case *observedRead:
 			o.Valid = validReadTime(batch, o.Key, o.Value.RawBytes)
+		case *observedScan:
+			// All kvs should be within scan boundary.
+			for _, kv := range o.KVs {
+				if !o.Span.ContainsKey(kv.Key) {
+					failure = fmt.Sprintf(`key %s outside scan bounds`, kv.Key)
+					break
+				}
+			}
+			// All kvs should be in order.
+			if !sort.IsSorted(roachpb.KeyValueByKey(o.KVs)) {
+				failure = `scan result not ordered correctly`
+			}
+			o.Valid = validScanTime(batch, o.Span, o.KVs)
 		default:
 			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observation, observation))
 		}
@@ -455,6 +502,8 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 			}
 			opValid = timeSpan{Start: o.Timestamp, End: o.Timestamp.Next()}
 		case *observedRead:
+			opValid = o.Valid
+		case *observedScan:
 			opValid = o.Valid
 		default:
 			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observation, observation))
@@ -509,6 +558,9 @@ func (v *validator) checkUncommittedTxn(atomicType string, txnObservations []obs
 				failure = atomicType + ` had writes`
 			}
 		case *observedRead:
+			// TODO(dan): Figure out what we can assert about reads in an uncommitted
+			// transaction.
+		case *observedScan:
 			// TODO(dan): Figure out what we can assert about reads in an uncommitted
 			// transaction.
 		default:
@@ -617,6 +669,52 @@ func validReadTime(b *pebble.Batch, key roachpb.Key, value []byte) timeSpan {
 	}
 }
 
+func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) timeSpan {
+	// Find the valid time spans for each kv returned.
+	var validForKeys []timeSpan
+	for _, kv := range kvs {
+		validTime := validReadTime(b, kv.Key, kv.Value.RawBytes)
+		validForKeys = append(validForKeys, validTime)
+	}
+
+	// Augment with the valid time span for any kv not observed but that
+	// overlaps the scan span.
+	// TODO(dan): this will get more complex once we add deletes.
+	keys := make(map[string]struct{}, len(kvs))
+	for _, kv := range kvs {
+		keys[string(kv.Key)] = struct{}{}
+	}
+
+	iter := b.NewIter(nil)
+	defer func() { _ = iter.Close() }()
+	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: span.Key}))
+	for ; iter.Valid(); iter.Next() {
+		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
+		if err != nil {
+			panic(err)
+		}
+		if mvccKey.Key.Compare(span.EndKey) >= 0 {
+			// Past scan boundary.
+			break
+		}
+		if _, ok := keys[string(mvccKey.Key)]; ok {
+			// Key in scan response.
+			continue
+		}
+		// Key not in scan response. Only valid is scan was before key's time.
+		validTime := timeSpan{Start: hlc.MinTimestamp, End: mvccKey.Timestamp}
+		validForKeys = append(validForKeys, validTime)
+	}
+
+	// Intersect the valid time spans to determine the valid time span of the
+	// entire scan.
+	valid := timeSpan{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}
+	for _, validForKey := range validForKeys {
+		valid = valid.Intersect(validForKey)
+	}
+	return valid
+}
+
 func printObserved(observedOps ...observedOp) string {
 	var buf strings.Builder
 	for _, observed := range observedOps {
@@ -645,6 +743,30 @@ func printObserved(observedOps ...observedOp) string {
 			}
 			fmt.Fprintf(&buf, "[r]%s:[%s,%s)->%s",
 				o.Key, start, end, mustGetStringValue(o.Value.RawBytes))
+		case *observedScan:
+			var start string
+			if o.Valid.Start == hlc.MinTimestamp {
+				start = `<min>`
+			} else {
+				start = o.Valid.Start.String()
+			}
+			var end string
+			if o.Valid.End == hlc.MaxTimestamp {
+				end = `<max>`
+			} else {
+				end = o.Valid.End.String()
+			}
+			var kvs strings.Builder
+			for i, kv := range o.KVs {
+				if i > 0 {
+					kvs.WriteString(`, `)
+				}
+				kvs.WriteString(kv.Key.String())
+				kvs.WriteByte(':')
+				kvs.WriteString(mustGetStringValue(kv.Value.RawBytes))
+			}
+			fmt.Fprintf(&buf, "[s]%s:[%s,%s)->[%s]",
+				o.Span, start, end, kvs.String())
 		default:
 			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observed, observed))
 		}

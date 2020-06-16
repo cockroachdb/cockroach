@@ -51,27 +51,36 @@ func TestApplier(t *testing.T) {
 
 	// Basic operations
 	check(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, nil)`)
+	check(t, step(scan(`a`, `c`)), `db1.Scan(ctx, "a", "c", 0) // ([], nil)`)
 
-	check(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // nil`)
-	check(t, step(get(`a`)), `db0.Get(ctx, "a") // ("1", nil)`)
+	check(t, step(put(`a`, `1`)), `db0.Put(ctx, "a", 1) // nil`)
+	check(t, step(get(`a`)), `db1.Get(ctx, "a") // ("1", nil)`)
+	check(t, step(scan(`a`, `c`)), `db0.Scan(ctx, "a", "c", 0) // (["a":"1"], nil)`)
 
-	checkErr(t, step(get(`a`)), `db1.Get(ctx, "a") // (nil, aborted in distSender: context canceled)`)
-	checkErr(t, step(put(`a`, `1`)), `db0.Put(ctx, "a", 1) // aborted in distSender: context canceled`)
+	check(t, step(put(`b`, `2`)), `db1.Put(ctx, "b", 2) // nil`)
+	check(t, step(get(`b`)), `db0.Get(ctx, "b") // ("2", nil)`)
+	check(t, step(scan(`a`, `c`)), `db1.Scan(ctx, "a", "c", 0) // (["a":"1", "b":"2"], nil)`)
+
+	checkErr(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, aborted in distSender: context canceled)`)
+	checkErr(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // aborted in distSender: context canceled`)
+	checkErr(t, step(scan(`a`, `c`)), `db0.Scan(ctx, "a", "c", 0) // (nil, aborted in distSender: context canceled)`)
 
 	// Batch
-	check(t, step(batch(put(`b`, `2`), get(`a`))), `
+	check(t, step(batch(put(`b`, `2`), get(`a`), scan(`a`, `c`))), `
 {
   b := &Batch{}
   b.Put(ctx, "b", 2) // nil
   b.Get(ctx, "a") // ("1", nil)
+  b.Scan(ctx, "a", "c") // (["a":"1", "b":"2"], nil)
   db1.Run(ctx, b) // nil
 }
 `)
-	checkErr(t, step(batch(put(`b`, `2`), get(`a`))), `
+	checkErr(t, step(batch(put(`b`, `2`), get(`a`), scan(`a`, `c`))), `
 {
   b := &Batch{}
   b.Put(ctx, "b", 2) // aborted in distSender: context canceled
   b.Get(ctx, "a") // (nil, aborted in distSender: context canceled)
+  b.Scan(ctx, "a", "c") // (nil, aborted in distSender: context canceled)
   db0.Run(ctx, b) // aborted in distSender: context canceled
 }
 `)
