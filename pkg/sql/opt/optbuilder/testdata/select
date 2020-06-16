@@ -47,8 +47,8 @@ project
  ├── values
  │    └── ()
  └── projections
-      ├── 2 [as=two:1]
-      └── 4 [as=four:2]
+      ├── 1 + 1 [as=two:1]
+      └── 2 + 2 [as=four:2]
 
 # SELECT expression tests.
 
@@ -412,7 +412,7 @@ offset
  ├── scan xyzw
  │    ├── columns: x:1!null y:2 z:3 w:4
  │    └── ordering: +1
- └── 1
+ └── 1 + 0
 
 build
 SELECT (x,y) AS r FROM xyzw

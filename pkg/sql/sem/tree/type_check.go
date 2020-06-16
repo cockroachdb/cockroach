@@ -269,10 +269,6 @@ func TypeCheck(
 			"the desired type for tree.TypeCheck cannot be nil, use types.Any instead: %T", expr)
 	}
 
-	expr, err := FoldConstantLiterals(expr)
-	if err != nil {
-		return nil, err
-	}
 	return expr.TypeCheck(ctx, semaCtx, desired)
 }
 

@@ -458,7 +458,7 @@ project
       │    ├── scan kv
       │    │    └── columns: k:1!null v:2 w:3 s:4
       │    └── projections
-      │         └── 3 [as=column6:6]
+      │         └── 1 + 2 [as=column6:6]
       └── aggregations
            └── count-rows [as=count_rows:5]
 
@@ -2797,7 +2797,7 @@ scalar-group-by
  │    ├── scan kv
  │    │    └── columns: k:1!null v:2 w:3 s:4
  │    └── projections
- │         └── 'abcxyz' [as=column5:5]
+ │         └── 'abc' || 'xyz' [as=column5:5]
  └── aggregations
       └── string-agg [as=string_agg:6]
            ├── s:4
