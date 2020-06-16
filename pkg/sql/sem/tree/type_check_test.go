@@ -112,7 +112,7 @@ func TestTypeCheck(t *testing.T) {
 		{`INTERVAL '1'`, `'00:00:01':::INTERVAL`},
 		{`DECIMAL '1.0'`, `1.0:::DECIMAL`},
 
-		{`1 + 2`, `3:::INT8`},
+		{`1 + 2`, `1:::INT8 + 2:::INT8`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
 		{`1:::float + 2`, `1.0:::FLOAT8 + 2.0:::FLOAT8`},
 		{`INTERVAL '1.5s' * 2`, `'00:00:01.5':::INTERVAL * 2:::INT8`},
@@ -172,7 +172,7 @@ func TestTypeCheck(t *testing.T) {
 			`information_schema._pg_expandarray(ARRAY[1:::INT8, 3:::INT8]:::INT8[])`,
 		},
 		{`((ROW (1) AS a)).*`, `((1:::INT8,) AS a)`},
-		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT8) AS a, b)`},
+		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING || '':::STRING, 1:::INT8 + 1:::INT8) AS a, b)`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the

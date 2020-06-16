@@ -113,7 +113,7 @@ func AlterColumnType(
 			col.Type.SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
 		col.Type = typ
-	case schemachange.ColumnConversionGeneral:
+	case schemachange.ColumnConversionGeneral, schemachange.ColumnConversionValidate:
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds); err != nil {
 			return err
 		}

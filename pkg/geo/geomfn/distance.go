@@ -100,6 +100,16 @@ func LongestLineString(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) 
 	return distanceLineStringInternal(a, b, u, geo.EmptyBehaviorOmit)
 }
 
+// ShortestLineString returns the LineString corresponds to minimum distance across
+// every pair of points comprising geometries A and B.
+func ShortestLineString(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a, b)
+	}
+	u := newGeomMinDistanceUpdater(0)
+	return distanceLineStringInternal(a, b, u, geo.EmptyBehaviorOmit)
+}
+
 // distanceLineStringInternal calculates the LineString between two geometries using
 // the DistanceCalculator operator.
 // If there are any EMPTY Geometry objects, they will be ignored. It will return an
@@ -116,6 +126,9 @@ func distanceLineStringInternal(
 	var coordA, coordB geom.Coord
 	switch u := u.(type) {
 	case *geomMaxDistanceUpdater:
+		coordA = u.coordA
+		coordB = u.coordB
+	case *geomMinDistanceUpdater:
 		coordA = u.coordA
 		coordB = u.coordB
 	default:
@@ -321,7 +334,7 @@ type geomGeodistEdgeCrosser struct {
 var _ geodist.EdgeCrosser = (*geomGeodistEdgeCrosser)(nil)
 
 // ChainCrossing implements geodist.EdgeCrosser.
-func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) bool {
+func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Point) {
 	nextEdgeV1 := p.(*geomGeodistPoint).Coord
 	result := lineintersector.LineIntersectsLine(
 		c.strategy,
@@ -331,14 +344,24 @@ func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) bool {
 		nextEdgeV1,
 	)
 	c.nextEdgeV0 = nextEdgeV1
-	return result.HasIntersection()
+	if result.HasIntersection() {
+		return true, &geomGeodistPoint{result.Intersection()[0]}
+	}
+	return false, nil
 }
 
 // geomMinDistanceUpdater finds the minimum distance using geom calculations.
-// Methods will return early if it finds a minimum distance <= stopAfterLE.
+// And preserve the line's endpoints as geom.Coord which corresponds to minimum
+// distance. Methods will return early if it finds a minimum distance <= stopAfterLE.
 type geomMinDistanceUpdater struct {
 	currentValue float64
 	stopAfterLE  float64
+	// coordA represents the first vertex of the edge that holds the maximum distance.
+	coordA geom.Coord
+	// coordB represents the second vertex of the edge that holds the maximum distance.
+	coordB geom.Coord
+
+	geometricalObjOrder geometricalObjectsOrder
 }
 
 var _ geodist.DistanceUpdater = (*geomMinDistanceUpdater)(nil)
@@ -347,8 +370,11 @@ var _ geodist.DistanceUpdater = (*geomMinDistanceUpdater)(nil)
 // correct arguments set up.
 func newGeomMinDistanceUpdater(stopAfterLE float64) *geomMinDistanceUpdater {
 	return &geomMinDistanceUpdater{
-		currentValue: math.MaxFloat64,
-		stopAfterLE:  stopAfterLE,
+		currentValue:        math.MaxFloat64,
+		stopAfterLE:         stopAfterLE,
+		coordA:              nil,
+		coordB:              nil,
+		geometricalObjOrder: geometricalObjectsNotFlipped,
 	}
 }
 
@@ -365,13 +391,22 @@ func (u *geomMinDistanceUpdater) Update(aInterface geodist.Point, bInterface geo
 	dist := coordNorm(coordSub(a, b))
 	if dist < u.currentValue {
 		u.currentValue = dist
+		if u.geometricalObjOrder == geometricalObjectsFlipped {
+			u.coordA = b
+			u.coordB = a
+		} else {
+			u.coordA = a
+			u.coordB = b
+		}
 		return dist <= u.stopAfterLE
 	}
 	return false
 }
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
-func (u *geomMinDistanceUpdater) OnIntersects() bool {
+func (u *geomMinDistanceUpdater) OnIntersects(p geodist.Point) bool {
+	u.coordA = p.(*geomGeodistPoint).Coord
+	u.coordB = p.(*geomGeodistPoint).Coord
 	u.currentValue = 0
 	return true
 }
@@ -383,8 +418,7 @@ func (u *geomMinDistanceUpdater) IsMaxDistance() bool {
 
 // FlipGeometries implements the geodist.DistanceUpdater interface.
 func (u *geomMinDistanceUpdater) FlipGeometries() {
-	// FlipGeometries for geomMinDistanceUpdater is currently unimplemented
-	// pending its implementation for the implementation of ST_ShortestLine/#49035.
+	u.geometricalObjOrder = -u.geometricalObjOrder
 }
 
 // geomMaxDistanceUpdater finds the maximum distance using geom calculations.
@@ -444,7 +478,7 @@ func (u *geomMaxDistanceUpdater) Update(aInterface geodist.Point, bInterface geo
 }
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
-func (u *geomMaxDistanceUpdater) OnIntersects() bool {
+func (u *geomMaxDistanceUpdater) OnIntersects(p geodist.Point) bool {
 	return false
 }
 

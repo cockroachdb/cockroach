@@ -519,7 +519,7 @@ project
  ├── scan t
  │    └── columns: a:1!null b:2 c:3
  └── projections
-      └── 3 [as=column4:4]
+      └── 1 + 2 [as=column4:4]
 
 build
 SELECT 1 AS r, * FROM t ORDER BY 1
