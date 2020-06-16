@@ -101,10 +101,7 @@ func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
 }
 
 func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
-	if a.curIdx != -1 {
-		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(idx + 1)
-	}
+	a.curIdx = idx
 }
 
 func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {

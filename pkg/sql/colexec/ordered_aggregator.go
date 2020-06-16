@@ -227,6 +227,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				// Now we need to restore the desired length for the Vec.
 				vec.SetLength(a.scratch.inputSize)
 				a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
+				// There might have been some NULLs set in the part that we
+				// have just copied over, so we need to unset the NULLs.
+				a.scratch.ColVec(i).Nulls().UnsetNullsAfter(newResumeIdx + 1)
 			}
 		})
 		a.scratch.resumeIdx = newResumeIdx
