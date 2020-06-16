@@ -192,8 +192,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *GeoLookupJoinExpr:
-		fmt.Fprintf(f.Buffer, "%v (geo-lookup", t.JoinType)
+	case *InvertedJoinExpr:
+		fmt.Fprintf(f.Buffer, "%v (inverted-lookup", t.JoinType)
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
@@ -451,11 +451,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("lookup columns are key")
 		}
 
-	case *GeoLookupJoinExpr:
+	case *InvertedJoinExpr:
 		if !t.Flags.Empty() {
 			tp.Childf("flags: %s", t.Flags.String())
 		}
-		tp.Childf("geo-relationship: %v", t.GeoRelationshipType)
+		tp.Childf("%v", t.DatumToInvertedExpr)
 
 	case *ZigzagJoinExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
@@ -1259,7 +1259,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " %s@%s", tab.Name(), tab.Index(t.Index).Name())
 		}
 
-	case *GeoLookupJoinPrivate:
+	case *InvertedJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s@%s", tab.Name(), tab.Index(t.Index).Name())
 

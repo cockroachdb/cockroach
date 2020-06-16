@@ -1668,7 +1668,7 @@ project
  │    │    ├── lookup columns are key
  │    │    ├── immutable
  │    │    ├── fd: (9)==(12), (12)==(9)
- │    │    ├── inner-join (geo-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
+ │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
  │    │    │    ├── columns: c.gid:1!null n.boroname:12 name:13!null n.geom:14
  │    │    │    ├── geo-relationship: intersects
  │    │    │    ├── select
@@ -1723,9 +1723,9 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  │         ├── best: (select G14 G15)
  │         └── cost: 139.35
  ├── G9: (filters G16 G17)
- ├── G10: (geo-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
+ ├── G10: (inverted-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
  │    └── []
- │         ├── best: (geo-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
+ │         ├── best: (inverted-lookup-join G8 G18 nyc_census_blocks@nyc_census_blocks_geo_idx)
  │         └── cost: 1754.40
  ├── G11: (sum G19)
  ├── G12: (variable sum)

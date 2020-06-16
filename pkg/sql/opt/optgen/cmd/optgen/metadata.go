@@ -233,7 +233,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ViewDeps":            {fullName: "opt.ViewDeps", passByVal: true},
 		"LockingItem":         {fullName: "tree.LockingItem", isPointer: true},
 		"MaterializeClause":   {fullName: "tree.MaterializeClause", passByVal: true},
-		"GeoRelationshipType": {fullName: "geoindex.RelationshipType", passByVal: true},
+		"DatumToInvertedExpr": {fullName: "invertedexpr.DatumToInvertedExpr", isInterface: true},
 		"SpanExpression":      {fullName: "invertedexpr.SpanExpression", isPointer: true, usePointerIntern: true},
 	}
 

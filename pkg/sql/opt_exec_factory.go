@@ -19,11 +19,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -775,13 +775,13 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	return n, nil
 }
 
-func (ef *execFactory) ConstructGeoLookupJoin(
+func (ef *execFactory) ConstructInvertedJoin(
 	joinType sqlbase.JoinType,
-	geoRelationshipType geoindex.RelationshipType,
+	datumToInvertedExpr invertedexpr.DatumToInvertedExpr,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	geoCol exec.NodeColumnOrdinal,
+	inputCol exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,

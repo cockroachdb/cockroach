@@ -13,10 +13,10 @@ package exec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -232,22 +232,21 @@ type Factory interface {
 		reqOrdering OutputOrdering,
 	) (Node, error)
 
-	// ConstructGeoLookupJoin returns a node that performs a geospatial lookup
-	// join. geoRelationshipType describes the type of geospatial relationship
-	// represented by the join. geoCol is the geospatial column from the input
-	// that will be used to look up into the index; lookupCols are ordinals for
-	// the table columns we are retrieving.
+	// ConstructInvertedJoin returns a node that performs an inverted join.
+	// datumToInvertedExpr is used along with inputCol (a column from the input)
+	// to find the keys to look up in the index; lookupCols are ordinals for the
+	// table columns we are retrieving.
 	//
 	// The node produces the columns in the input and (unless join type is
 	// LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
 	// condition can refer to these using IndexedVars.
-	ConstructGeoLookupJoin(
+	ConstructInvertedJoin(
 		joinType sqlbase.JoinType,
-		geoRelationshipType geoindex.RelationshipType,
+		datumToInvertedExpr invertedexpr.DatumToInvertedExpr,
 		input Node,
 		table cat.Table,
 		index cat.Index,
-		geoCol NodeColumnOrdinal,
+		inputCol NodeColumnOrdinal,
 		lookupCols TableColumnOrdinalSet,
 		onCond tree.TypedExpr,
 		reqOrdering OutputOrdering,

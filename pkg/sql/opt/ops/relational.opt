@@ -302,38 +302,16 @@ define LookupJoinPrivate {
     _ JoinPrivate
 }
 
-# GeoLookupJoin represents a join between an input expression and an index,
-# where the index is an inverted index on a Geometry or Geography column.
-#
-# A GeoLookupJoin can be generated for queries containing a join where one of
-# the join conditions is a geospatial binary function such as ST_Covers or
-# ST_CoveredBy, and at least one of the two inputs to the function is an
-# indexed geospatial column. The type of geospatial function implies the
-# GeoRelationshipType (Covers, CoveredBy or Intersects) for the join, which is
-# stored in the GeoLookupJoinPrivate and affects how the join is executed. For
-# a full list of the geospatial functions that can be index-accelerated and
-# their corresponding GeoRelationshipTypes, see geoRelationshipMap in
-# xform/custom_funcs.go.
-#
-# The GeoLookupJoin has no false negatives, but it may return false positives
-# that would not have been returned by the original geospatial function
-# join predicate. Therefore, the original function must still be applied on
-# the output of the join. Since the inverted index does not actually include
-# the geospatial column (or any other columns besides the primary key columns),
-# the GeoLookupJoin will be wrapped in an index join. The geospatial function
-# and any other filters on non-key columns will be appied as filters on the
-# outer index join.
+# InvertedJoin represents a join between an input expression and an inverted
+# index. The type of join is in the InvertedJoinPrivate field.
 [Relational]
-define GeoLookupJoin {
+define InvertedJoin {
     Input RelExpr
 
     # On only contains filters on the input columns and primary key columns of
-    # the inverted index's base table. (Since the indexed geospatial column is
-    # not actually included in the index, the GeoLookupJoin must be wrapped in
-    # an index join, which will contain the original geospatial function as one
-    # of its On conditions.)
+    # the inverted index's base table.
     On FiltersExpr
-    _ GeoLookupJoinPrivate
+    _ InvertedJoinPrivate
 
     # lookupProps caches relational properties for the "table" side of the lookup
     # join, treating it as if it were another relational input. This makes the
@@ -342,28 +320,29 @@ define GeoLookupJoin {
 }
 
 [Private]
-define GeoLookupJoinPrivate {
+define InvertedJoinPrivate {
     # JoinType is InnerJoin, LeftJoin, SemiJoin, or AntiJoin.
     JoinType Operator
 
-    # GeoRelationshipType is Covers, CoveredBy, or Intersects.
-    GeoRelationshipType GeoRelationshipType
+    # DatumToInvertedExpr is used to get the keys to lookup in the inverted
+    # index based on the value of the input column.
+    DatumToInvertedExpr DatumToInvertedExpr
 
     # Table identifies the table do to lookups in.
     Table TableID
 
-    # Index identifies the geospatial inverted index to do lookups in. It can
-    # be passed to the cat.Table.Index() method in order to fetch the cat.Index
-    # metadata.
+    # Index identifies the inverted index to do lookups in. It can be passed to
+    # the cat.Table.Index() method in order to fetch the cat.Index metadata.
     Index IndexOrdinal
 
-    # GeoCol is the geospatial column (produced by the input) used to
-    # determine the keys (i.e., s2 CellIDs) to scan in the inverted index.
-    GeoCol ColumnID
+    # InputCol is the column (produced by the input) that will be passed to
+    # DatumToInvertedExpr and used to determine the keys to scan in the
+    # inverted index.
+    InputCol ColumnID
 
-    # Cols is the set of columns produced by the geospatial lookup join. This
-    # set can contain columns from the input and columns from the index. Any
-    # columns not in the input are retrieved from the index.
+    # Cols is the set of columns produced by the inverted join. This set can
+    # contain columns from the input and columns from the index. Any columns
+    # not in the input are retrieved from the index.
     Cols ColSet
     _ JoinPrivate
 }

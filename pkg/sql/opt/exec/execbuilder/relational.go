@@ -215,8 +215,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.LookupJoinExpr:
 		ep, err = b.buildLookupJoin(t)
 
-	case *memo.GeoLookupJoinExpr:
-		ep, err = b.buildGeoLookupJoin(t)
+	case *memo.InvertedJoinExpr:
+		ep, err = b.buildInvertedJoin(t)
 
 	case *memo.ZigzagJoinExpr:
 		ep, err = b.buildZigzagJoin(t)
@@ -1361,7 +1361,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	return res, nil
 }
 
-func (b *Builder) buildGeoLookupJoin(join *memo.GeoLookupJoinExpr) (execPlan, error) {
+func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, error) {
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
@@ -1393,13 +1393,13 @@ func (b *Builder) buildGeoLookupJoin(join *memo.GeoLookupJoinExpr) (execPlan, er
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
 
-	res.root, err = b.factory.ConstructGeoLookupJoin(
+	res.root, err = b.factory.ConstructInvertedJoin(
 		joinOpToJoinType(join.JoinType),
-		join.GeoRelationshipType,
+		join.DatumToInvertedExpr,
 		input.root,
 		tab,
 		idx,
-		input.getNodeColumnOrdinal(join.GeoCol),
+		input.getNodeColumnOrdinal(join.InputCol),
 		lookupOrdinals,
 		onExpr,
 		res.reqOrdering(join),
