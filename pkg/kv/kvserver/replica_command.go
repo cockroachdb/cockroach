@@ -1879,7 +1879,6 @@ func (r *Replica) sendSnapshot(
 	}
 	if err := r.store.cfg.Transport.SendSnapshot(
 		ctx,
-		&r.store.cfg.RaftConfig,
 		r.store.allocator.storePool,
 		req,
 		snap,
