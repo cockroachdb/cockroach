@@ -157,14 +157,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							Selection:  true,
 						},
 					)
-					numHashRouterOutputs        = 3
-					numInboxes                  = numHashRouterOutputs + 3
-					inboxes                     = make([]*colrpc.Inbox, 0, numInboxes+1)
-					handleStreamErrCh           = make([]chan error, numInboxes+1)
-					synchronizerInputs          = make([]colexecbase.Operator, 0, numInboxes)
-					materializerMetadataSources = make([]execinfrapb.MetadataSource, 0, numInboxes+1)
-					streamID                    = 0
-					addAnotherRemote            = rng.Float64() < 0.5
+					numHashRouterOutputs = 3
+					numInboxes           = numHashRouterOutputs + 3
+					inboxes              = make([]*colrpc.Inbox, 0, numInboxes+1)
+					handleStreamErrCh    = make([]chan error, numInboxes+1)
+					synchronizerInputs   = make([]colexec.SynchronizerInput, 0, numInboxes)
+					streamID             = 0
+					addAnotherRemote     = rng.Float64() < 0.5
 				)
 
 				// Create an allocator for each output.
@@ -213,10 +212,16 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
-					materializerMetadataSources = append(materializerMetadataSources, inbox)
-					synchronizerInputs = append(synchronizerInputs, colexecbase.Operator(inbox))
+					synchronizerInputs = append(
+						synchronizerInputs,
+						colexec.SynchronizerInput{
+							Op:              colexecbase.Operator(inbox),
+							MetadataSources: []execinfrapb.MetadataSource{inbox},
+						},
+					)
 				}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
+				materializerMetadataSource := execinfrapb.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				// idToClosed keeps track of whether Close was called for a given id.
@@ -302,11 +307,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxAnotherRemote)
-					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, &outboxMemAccount, synchronizer, inbox, streamID, append(materializerMetadataSources, createMetadataSourceForID(streamID)))
+					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, &outboxMemAccount, synchronizer, inbox, streamID, []execinfrapb.MetadataSource{materializerMetadataSource, createMetadataSourceForID(streamID)})
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
-					materializerMetadataSources = []execinfrapb.MetadataSource{inbox}
+					materializerMetadataSource = inbox
 					materializerInput = inbox
 				} else {
 					materializerInput = synchronizer
@@ -320,7 +325,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					materializerInput,
 					typs,
 					nil, /* output */
-					materializerMetadataSources,
+					[]execinfrapb.MetadataSource{materializerMetadataSource},
 					[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil

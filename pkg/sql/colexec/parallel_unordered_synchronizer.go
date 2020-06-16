@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/errors"
 )
 
 // unorderedSynchronizerMsg is a light wrapper over a coldata.Batch sent over a
@@ -29,15 +30,35 @@ import (
 type unorderedSynchronizerMsg struct {
 	inputIdx int
 	b        coldata.Batch
+	meta     []execinfrapb.ProducerMetadata
 }
 
 var _ colexecbase.Operator = &ParallelUnorderedSynchronizer{}
 var _ execinfra.OpNode = &ParallelUnorderedSynchronizer{}
 
+type parallelUnorderedSynchronizerState int
+
+const (
+	// parallelUnorderedSynchronizerStateUninitialized is the state the
+	// ParallelUnorderedSynchronizer is in when not yet initialized.
+	parallelUnorderedSynchronizerStateUninitialized = iota
+	// parallelUnorderedSynchronizerStateRunning is the state the
+	// ParallelUnorderedSynchronizer is in when all input goroutines have been
+	// spawned and are returning batches.
+	parallelUnorderedSynchronizerStateRunning
+	// parallelUnorderedSynchronizerStateDraining is the state the
+	// ParallelUnorderedSynchronizer is in when a drain has been requested through
+	// DrainMeta. All input goroutines will call DrainMeta on its input and exit.
+	parallelUnorderedSynchronizerStateDraining
+	// parallelUnorderedSyncrhonizerStateDone is the state the
+	// ParallelUnorderedSynchronizer is in when draining has completed.
+	parallelUnorderedSynchronizerStateDone
+)
+
 // ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
 type ParallelUnorderedSynchronizer struct {
-	inputs []colexecbase.Operator
+	inputs []SynchronizerInput
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -57,8 +78,7 @@ type ParallelUnorderedSynchronizer struct {
 	// the corresponding to it input.
 	nextBatch []func()
 
-	initialized bool
-	done        bool
+	state int32
 	// externalWaitGroup refers to the WaitGroup passed in externally. Since the
 	// ParallelUnorderedSynchronizer spawns goroutines, this allows callers to
 	// wait for the completion of these goroutines.
@@ -72,6 +92,10 @@ type ParallelUnorderedSynchronizer struct {
 	cancelFn          context.CancelFunc
 	batchCh           chan *unorderedSynchronizerMsg
 	errCh             chan error
+
+	// bufferedMeta is the metadata buffered during a
+	// ParallelUnorderedSynchronizer run.
+	bufferedMeta []execinfrapb.ProducerMetadata
 }
 
 // ChildCount implements the execinfra.OpNode interface.
@@ -81,7 +105,27 @@ func (s *ParallelUnorderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return s.inputs[nth]
+	return s.inputs[nth].Op
+}
+
+// SynchronizerInput is a wrapper over a colexecbase.Operator that a
+// synchronizer goroutine will be calling Next on. An accompanying
+// []execinfrapb.MetadataSource may also be specified, in which case
+// DrainMeta will be called from the same goroutine.
+type SynchronizerInput struct {
+	// Op is the input Operator.
+	Op colexecbase.Operator
+	// MetadataSources are metadata sources in the input tree that should be
+	// drained in the same goroutine as Op.
+	MetadataSources execinfrapb.MetadataSources
+}
+
+func operatorsToSynchronizerInputs(ops []colexecbase.Operator) []SynchronizerInput {
+	result := make([]SynchronizerInput, len(ops))
+	for i := range result {
+		result[i].Op = ops[i]
+	}
+	return result
 }
 
 // NewParallelUnorderedSynchronizer creates a new ParallelUnorderedSynchronizer.
@@ -91,7 +135,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	inputs []colexecbase.Operator, typs []*types.T, wg *sync.WaitGroup,
+	inputs []SynchronizerInput, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -117,8 +161,16 @@ func NewParallelUnorderedSynchronizer(
 // Init is part of the Operator interface.
 func (s *ParallelUnorderedSynchronizer) Init() {
 	for _, input := range s.inputs {
-		input.Init()
+		input.Op.Init()
 	}
+}
+
+func (s *ParallelUnorderedSynchronizer) getState() parallelUnorderedSynchronizerState {
+	return parallelUnorderedSynchronizerState(atomic.LoadInt32(&s.state))
+}
+
+func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchronizerState) {
+	atomic.SwapInt32(&s.state, int32(state))
 }
 
 // init starts one goroutine per input to read from each input asynchronously
@@ -130,11 +182,12 @@ func (s *ParallelUnorderedSynchronizer) Init() {
 // Next goroutine. Inputs are asynchronous so that the synchronizer is minimally
 // affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
+	s.setState(parallelUnorderedSynchronizerStateRunning)
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
 	for i, input := range s.inputs {
-		s.nextBatch[i] = func(input colexecbase.Operator, inputIdx int) func() {
+		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
-				s.batches[inputIdx] = input.Next(ctx)
+				s.batches[inputIdx] = input.Op.Next(ctx)
 			}
 		}(input, i)
 		s.externalWaitGroup.Add(1)
@@ -142,7 +195,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
-		go func(input colexecbase.Operator, inputIdx int) {
+		go func(input SynchronizerInput, inputIdx int) {
 			defer func() {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
@@ -150,92 +203,181 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 			}()
+			sendErr := func(err error) {
+				select {
+				// Non-blocking write to errCh, if an error is present the main
+				// goroutine will use that and cancel all inputs.
+				case s.errCh <- err:
+				default:
+				}
+			}
 			msg := &unorderedSynchronizerMsg{
 				inputIdx: inputIdx,
 			}
 			for {
-				if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
-					select {
-					// Non-blocking write to errCh, if an error is present the main
-					// goroutine will use that and cancel all inputs.
-					case s.errCh <- err:
-					default:
+				state := s.getState()
+				switch state {
+				case parallelUnorderedSynchronizerStateRunning:
+					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+						sendErr(err)
+						return
 					}
+					msg.b = s.batches[inputIdx]
+					if s.batches[inputIdx].Length() != 0 {
+						// Send the batch.
+						break
+					}
+					// In case of a zero-length batch, proceed to drain the input.
+					fallthrough
+				case parallelUnorderedSynchronizerStateDraining:
+					if input.MetadataSources != nil {
+						msg.meta = input.MetadataSources.DrainMeta(ctx)
+					}
+					if msg.meta == nil {
+						// Initialize msg.meta to be non-nil, which is a signal that
+						// metadata has been drained.
+						msg.meta = make([]execinfrapb.ProducerMetadata, 0)
+					}
+				default:
+					sendErr(errors.AssertionFailedf("unhandled state in ParallelUnorderedSynchronizer input goroutine: %d", state))
 					return
 				}
-				if s.batches[inputIdx].Length() == 0 {
-					return
+				// Check msg.meta before sending over the channel since the channel is
+				// the synchronization primitive of meta.
+				sentMeta := false
+				if msg.meta != nil {
+					sentMeta = true
 				}
-				msg.b = s.batches[inputIdx]
 				select {
 				case <-ctx.Done():
-					select {
-					// Non-blocking write to errCh, if an error is present the main
-					// goroutine will use that and cancel all inputs.
-					case s.errCh <- ctx.Err():
-					default:
-					}
+					sendErr(ctx.Err())
 					return
 				case s.batchCh <- msg:
+				}
+
+				if sentMeta {
+					// The input has been drained and this input has pushed the metadata
+					// over the channel, exit.
+					return
 				}
 
 				// Wait until Next goroutine tells us we are good to go.
 				select {
 				case <-s.readNextBatch[inputIdx]:
 				case <-ctx.Done():
-					select {
-					// Non-blocking write to errCh, if an error is present the main
-					// goroutine will use that and cancel all inputs.
-					case s.errCh <- ctx.Err():
-					default:
-					}
+					sendErr(ctx.Err())
 					return
 				}
 			}
 		}(input, i)
 	}
-	s.initialized = true
 }
 
 // Next is part of the Operator interface.
 func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
-	if s.done {
-		return coldata.ZeroBatch
+	for {
+		state := s.getState()
+		switch state {
+		case parallelUnorderedSynchronizerStateDone:
+			return coldata.ZeroBatch
+		case parallelUnorderedSynchronizerStateUninitialized:
+			s.init(ctx)
+		case parallelUnorderedSynchronizerStateRunning:
+			// Signal the input whose batch we returned in the last call to Next that it
+			// is safe to retrieve the next batch. Since Next has been called, we can
+			// reuse memory instead of making safe copies of batches returned.
+			s.notifyInputToReadNextBatch(s.lastReadInputIdx)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled state in ParallelUnorderedSynchronizer Next goroutine: %d", state))
+		}
+
+		select {
+		case err := <-s.errCh:
+			if err != nil {
+				// If we got an error from one of our inputs, cancel all inputs and
+				// propagate this error through a panic.
+				s.cancelFn()
+				s.internalWaitGroup.Wait()
+				colexecerror.InternalError(err)
+			}
+		case msg := <-s.batchCh:
+			if msg == nil {
+				// All inputs have exited, double check that this is indeed the case.
+				s.internalWaitGroup.Wait()
+				// Check if this was a graceful termination or not.
+				select {
+				case err := <-s.errCh:
+					if err != nil {
+						colexecerror.InternalError(err)
+					}
+				default:
+				}
+				s.setState(parallelUnorderedSynchronizerStateDone)
+				return coldata.ZeroBatch
+			}
+			s.lastReadInputIdx = msg.inputIdx
+			if msg.meta != nil {
+				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+				continue
+			}
+			return msg.b
+		}
 	}
-	if !s.initialized {
+}
+
+// notifyInputToReadNextBatch is a non-blocking send to notify the given input
+// that it may proceed to read the next batch from the input. Refer to the
+// comment of the readNextBatch field in ParallelUnorderedSynchronizer for more
+// information.
+func (s *ParallelUnorderedSynchronizer) notifyInputToReadNextBatch(inputIdx int) {
+	select {
+	// This write is non-blocking because if the channel is full, it must be the
+	// case that there is a pending message for the input to proceed.
+	case s.readNextBatch[inputIdx] <- struct{}{}:
+	default:
+	}
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (s *ParallelUnorderedSynchronizer) DrainMeta(
+	ctx context.Context,
+) []execinfrapb.ProducerMetadata {
+	prevState := s.getState()
+	s.setState(parallelUnorderedSynchronizerStateDraining)
+	if prevState == parallelUnorderedSynchronizerStateUninitialized {
 		s.init(ctx)
 	} else {
-		// Signal the input whose batch we returned in the last call to Next that it
-		// is safe to retrieve the next batch. Since Next has been called, we can
-		// reuse memory instead of making safe copies of batches returned.
-		s.readNextBatch[s.lastReadInputIdx] <- struct{}{}
+		// The inputs were initialized in Next. This means that the inputs will
+		// either read the new draining state and exit, or have yet to read the
+		// state, in which case they are either pushing a batch or waiting for a
+		// signal to get the next batch. These latter inputs are preempted below by
+		// draining batchCh and sending a signal to the inputs whose batches have
+		// been read.
+		// However, there is also a case where a batch was read in Next and that
+		// input is waiting for preemption, so do that here.
+		// Note that if this is not the case (i.e. inputs were initialized but the
+		// synchronizer immediately transitioned to draining) this preemption won't
+		// hurt.
+		s.notifyInputToReadNextBatch(s.lastReadInputIdx)
 	}
-	select {
-	case err := <-s.errCh:
-		if err != nil {
-			// If we got an error from one of our inputs, cancel all inputs and
-			// propagate this error through a panic.
-			s.cancelFn()
-			s.internalWaitGroup.Wait()
-			colexecerror.InternalError(err)
+	for msg := <-s.batchCh; msg != nil; msg = <-s.batchCh {
+		if msg.meta == nil {
+			// This input goroutine pushed a batch to the batchCh and is waiting to be
+			// told to proceed. Notify it that it is ok to do so.
+			s.notifyInputToReadNextBatch(msg.inputIdx)
+			continue
 		}
-	case msg := <-s.batchCh:
-		if msg == nil {
-			// All inputs have exited, double check that this is indeed the case.
-			s.internalWaitGroup.Wait()
-			// Check if this was a graceful termination or not.
-			select {
-			case err := <-s.errCh:
-				if err != nil {
-					colexecerror.InternalError(err)
-				}
-			default:
-			}
-			s.done = true
-			return coldata.ZeroBatch
-		}
-		s.lastReadInputIdx = msg.inputIdx
-		return msg.b
+		s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
 	}
-	return nil
+	// Buffer any errors that may have happened without blocking on the channel.
+	for exitLoop := false; !exitLoop; {
+		select {
+		case err := <-s.errCh:
+			s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+		default:
+			exitLoop = true
+		}
+	}
+	s.setState(parallelUnorderedSynchronizerStateDone)
+	return s.bufferedMeta
 }
