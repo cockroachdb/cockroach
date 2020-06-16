@@ -109,7 +109,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
 			col1[i] = -1
 		} else {
-			col1[i] = 1
+			col1[i] = 10
 		}
 	}
 
@@ -136,7 +136,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	inOp := &selectInOpInt64{
 		OneInputNode: NewOneInputNode(source),
 		colIdx:       0,
-		filterRow:    []int64{1, 2, 3},
+		filterRow:    []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 	}
 	inOp.Init()
 
