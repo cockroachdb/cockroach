@@ -332,22 +332,18 @@ func (nl *NodeLiveness) SetCommissionStatus(
 			raw:      kv.Value,
 		}
 
-		// XXX: I want to maybe update with the reconciled version, but
-		// commissionStatusInternal expects empty liveness, if none existed.
-		// Need to work off a copy.
 		{
-			empty := oldLiveness == kvserverpb.Liveness{}
-			// We may have read a liveness record written by a v20.1 node, so we
-			// reconcile.
-			oldLivenessRecCopy := oldLivenessRec // XXX: Does this deep copy?
+			// We may have discovered a Liveness not yet received via Gossip.
+			// Offer it to make sure that when we actually try to update the
+			// liveness, the previous view is correct. This, too, is required to
+			// de-flake TestNodeLivenessDecommissionAbsent.
+			//
+			// We work off a copy of the liveness record. When
+			// XXX: I want to maybe update with the reconciled version, but
+			// commissionStatusInternal expects empty liveness, if none existed.
+			// Need to work off a copy.
+			oldLivenessRecCopy := oldLivenessRec
 			oldLivenessRecCopy.Liveness.EnsureCompatible()
-			if empty && (oldLivenessRecCopy.Liveness != kvserverpb.Liveness{}) {
-				panic("changed the copy - good")
-			}
-			// We may have discovered a Liveness not yet received via Gossip. Offer
-			// it to make sure that when we actually try to update the liveness, the
-			// previous view is correct. This, too, is required to de-flake
-			// TestNodeLivenessDecommissionAbsent.
 			nl.maybeUpdate(oldLivenessRecCopy)
 		}
 
@@ -497,6 +493,8 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 	// 	- Decommissioning 	=> Decommissioned
 	//
 	// See diagram above CommissionStatus type for more details.
+	//
+	// XXX: How to best surface these errors all the way up to the CLI output?
 	if newLiveness.CommissionStatus.Commissioned() &&
 		!oldLivenessRec.Liveness.CommissionStatus.Decommissioning() {
 		return false, errors.Newf("can only recommission a decommissioning node, found %s",
@@ -734,7 +732,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		update.new = kvserverpb.Liveness{
 			NodeID:           nodeID,
 			Epoch:            1,
-			CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED_,
+			CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED,
 		}
 	} else {
 		update.new = liveness

@@ -96,11 +96,11 @@ func nodeStatusesToNodeInfos(nodes *serverpb.NodesResponse) []haProxyNodeInfo {
 		status := statusByID[nodeID]
 		liveness := nodes.LivenessByNodeID[nodeID]
 		switch liveness {
-		case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
+		case kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING:
 			fmt.Fprintf(stderr, "warning: node %d status is %s, excluding from haproxy configuration\n",
 				nodeID, liveness)
 			fallthrough
-		case kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+		case kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED:
 			continue
 		}
 

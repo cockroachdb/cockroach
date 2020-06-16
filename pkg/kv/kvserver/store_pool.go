@@ -105,7 +105,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 	) kvserverpb.NodeLivenessStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
-			return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+			return kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE
 		}
 		return LivenessStatus(liveness.Liveness, now, timeUntilStoreDead)
 	}
@@ -134,111 +134,33 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 //
 // TODO(irfansharif): Reconsider usage of kvserverpb.NodeLivenessStatus. It's
 // yet another representation of liveness commission status, and it doesn't
-// quite map to what's defined there.
-//
-// FIXME(irfansharif): Because of usage of NodeLivenessStatus, and this
-// deadThreshold, it's still possible to recommission a fully decommissioned
-// node (as long as you do it within deadThreshold).
-//
-// I’m terribly confused by this enum we use to represent a node’s view of
-// liveness, of another. Some states {DEAD, LIVE, UNAVAILABLE} could very well
-// overlap with other states {DECOMMISSIONED, DECOMMISSIONING}. By that I mean
-// you could very well have a DEAD node that is also DECOMMISSIONING. So I’m not
-// sure why it’s an enum in the first place.
-// We have this random code to disambiguate between all these states, but I
-// can’t make sense of why it looks the way it does. Am I missing something
-// obvious or is this weird?
+// quite map to what's defined there. Not just that, it's unclear if the enum is
+// well considered. It seems to be enumerating across two distinct set of
+// things: the "commission" status (commissioned, decommissioning,
+// decommissioned), and the node "process" status (live, unavailable,
+// available). It's possible for two of these "states" to be true,
+// simultaneously (consider a decommissioned, dead node). It makes for confusing
+// semantics, and the code below disambiguating across these states seems wholly
+// arbitrary.
 func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
 		if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
-			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
+			return kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED
 		}
-		return kvserverpb.NodeLivenessStatus_DEAD
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD
 	}
 	if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
-		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING
 	}
 	if l.Draining {
-		return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE
 	}
 	if l.IsLive(now) {
-		return kvserverpb.NodeLivenessStatus_LIVE
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE
 	}
-	return kvserverpb.NodeLivenessStatus_UNAVAILABLE
-}
-
-// LivenessStatus returns a NodeLivenessStatus enumeration value for the
-// provided Liveness based on the provided timestamp and threshold.
-//
-// See the note on IsLive() for considerations on what should be passed in as
-// `now`.
-//
-// The timeline of the states that a liveness goes through as time passes after
-// the respective liveness record is written is the following:
-//
-//  -----|-------LIVE---|------UNAVAILABLE---|------DEAD------------> time
-//       tWrite         tExp                 tExp+threshold
-//
-// Explanation:
-//
-//  - Let's say a node write its liveness record at tWrite. It sets the
-//    Expiration field of the record as tExp=tWrite+livenessThreshold.
-//    The node is considered LIVE (or DECOMMISSIONING or UNAVAILABLE if draining).
-//  - At tExp, the IsLive() method starts returning false. The state becomes
-//    UNAVAILABLE (or stays DECOMMISSIONING or UNAVAILABLE if draining).
-//  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
-//
-// TODO(irfansharif): Reconsider usage of kvserverpb.NodeLivenessStatus. It's
-// yet another representation of liveness commission status, and it doesn't
-// quite map to what's defined there.
-//
-// FIXME(irfansharif): Because of usage of NodeLivenessStatus, and this
-// deadThreshold, it's still possible to recommission a fully decommissioned
-// node (as long as you do it within deadThreshold).
-//
-// I’m terribly confused by this enum we use to represent a node’s view of
-// liveness, of another. Some states {DEAD, LIVE, UNAVAILABLE} could very well
-// overlap with other states {DECOMMISSIONED, DECOMMISSIONING}. By that I mean
-// you could very well have a DEAD node that is also DECOMMISSIONING. So I’m not
-// sure why it’s an enum in the first place.
-// We have this random code to disambiguate between all these states, but I
-// can’t make sense of why it looks the way it does. Am I missing something
-// obvious or is this weird?
-func LivenessStatusV2(
-	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
-) kvserverpb.NodeLivenessStatus {
-	// XXX: When recommissioning a node, CPut should check for decommissioning
-	// status.
-	// XXX: There are two things we're interested in: "Commission" status (comm,
-	// decom'ing, decom'ed), and "Liveness" status (live, unavailable,
-	// available).
-	if l.CommissionStatus.Decommissioned() {
-		return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
-	}
-	if l.CommissionStatus.Decommissioning() {
-		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
-	}
-	if l.CommissionStatus.Commissioned() {
-	}
-
-	if l.IsDead(now, deadThreshold) {
-		if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
-			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
-		}
-		return kvserverpb.NodeLivenessStatus_DEAD
-	}
-	if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
-		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
-	}
-	if l.Draining {
-		return kvserverpb.NodeLivenessStatus_UNAVAILABLE
-	}
-	if l.IsLive(now) {
-		return kvserverpb.NodeLivenessStatus_LIVE
-	}
-	return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+	return kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE
 }
 
 type storeDetail struct {
@@ -301,11 +223,11 @@ func (sd *storeDetail) status(
 	// Even if the store has been new via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
-	case kvserverpb.NodeLivenessStatus_DEAD, kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+	case kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD, kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED:
 		return storeStatusDead
-	case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
+	case kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case kvserverpb.NodeLivenessStatus_UNKNOWN, kvserverpb.NodeLivenessStatus_UNAVAILABLE:
+	case kvserverpb.NodeLivenessStatus_DEPRECATED_UNKNOWN, kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE:
 		return storeStatusUnknown
 	}
 

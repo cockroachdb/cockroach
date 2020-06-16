@@ -258,6 +258,8 @@ func execCLI(
 }
 
 func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
+	t.Skip("TODO(irfansharif)", "Rewrite this test to incorporate new recommission semantics")
+
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
@@ -374,6 +376,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		return res
 	}
 
+	// XXX: In this test we're able to issue decommission commands through nodes
+	// that have been fully decommissioned.
+
 	t.l.Printf("decommissioning first node from the second, polling the status manually\n")
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
@@ -389,7 +394,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			decommissionHeader,
-			{"1", "true", "0", "true", "decommissioning|decommissioned", "false"},
+			{"1", "true", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
 
@@ -432,9 +437,11 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 	}
 
+	// We expect this to fail, seeing as how it's attempting to recommission a
+	// fully decommissioned node.
 	t.l.Printf("recommissioning first node (from third node)\n")
-	if _, err := decommission(ctx, 3, c.Node(1), "recommission"); err != nil {
-		t.Fatalf("recommission failed: %v", err)
+	if _, err := decommission(ctx, 3, c.Node(1), "recommission"); err == nil {
+		t.Fatal("expected recommission to fail")
 	}
 
 	t.l.Printf("decommissioning second node from third, using --wait=all\n")
@@ -456,8 +463,8 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 
 	t.l.Printf("recommissioning second node from itself\n")
-	if _, err := decommission(ctx, 2, c.Node(2), "recommission"); err != nil {
-		t.Fatalf("recommission failed: %v", err)
+	if _, err := decommission(ctx, 2, c.Node(2), "recommission"); err == nil {
+		t.Fatal("expected recommission to failed")
 	}
 
 	t.l.Printf("decommissioning third node (from itself)\n")
@@ -506,9 +513,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		c.Stop(ctx, c.Node(3))
 		c.Start(ctx, t, c.Node(3), args)
 
-		// Recommission. Welcome back!
-		if _, err = decommission(ctx, 2, c.Node(3), "recommission"); err != nil {
-			t.Fatalf("recommission failed: %v", err)
+		// Recommission. Expecting it to fail.
+		if _, err = decommission(ctx, 2, c.Node(3), "recommission"); err == nil {
+			t.Fatalf("expected recommission to fail")
 		}
 	}
 

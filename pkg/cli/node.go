@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -316,68 +315,8 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 	defer finish()
 
-	if err := checkExpectedCommissionStatus(ctx, conn, nodeIDs, kvserverpb.CommissionStatus_DECOMMISSIONED_); err != nil {
-		return err
-	}
-
 	c := serverpb.NewAdminClient(conn)
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
-}
-
-func checkExpectedCommissionStatus(
-	ctx context.Context, conn *grpc.ClientConn, nodeIDs []roachpb.NodeID, targetStatus kvserverpb.CommissionStatus,
-) error {
-	s := serverpb.NewStatusClient(conn)
-	// XXX: This NodesResponse API is not quite the same as CommissionStatus,
-	// unfortunately. Can we rework to use CommissionStatus instead? What's the
-	// difference? Need to make sure they're one an the same. It uses a
-	// different view of "decommissioned".
-	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return err
-	}
-	for _, nodeID := range nodeIDs {
-		liveness, ok := resp.LivenessByNodeID[nodeID]
-		if !ok {
-			fmt.Fprintln(stderr, "warning: cannot find status of node", nodeID)
-			continue
-		}
-		if targetStatus == kvserverpb.CommissionStatus_DECOMMISSIONED_ {
-			// We're decommissioning a node.
-			switch liveness {
-			case kvserverpb.NodeLivenessStatus_UNAVAILABLE,
-				kvserverpb.NodeLivenessStatus_DEAD,
-				kvserverpb.NodeLivenessStatus_LIVE:
-				// It's possible to decommission a node that's either
-				// live, dead, or unavailable.
-			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
-				kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
-				fmt.Fprintln(stderr, "warning: node", nodeID, "is already decommissioning or decommissioned")
-			default:
-				err := fmt.Sprintf("unexpected liveness status: %s", liveness.String())
-				panic(err)
-			}
-		} else if targetStatus == kvserverpb.CommissionStatus_COMMISSIONED_ {
-			// We're recommissioning a node.
-			switch liveness {
-			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
-				// It's only possible to recommission a decommissioning node.
-			case kvserverpb.NodeLivenessStatus_LIVE:
-				// No-op.
-				fmt.Fprintln(stderr, "warning: node", nodeID, "is already commissioned")
-			case kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
-				// We don't allow users to recommission fully decommissioned nodes.
-				return errors.New(fmt.Sprintf("node %d is fully decommissioned", nodeID))
-			default: // Dead, Unavailable, etc
-				return errors.New(fmt.Sprintf("node %d is in unexpected state: %s", nodeID, liveness.String()))
-			}
-		} else {
-			err := fmt.Sprintf("invalid target state %s, expected one of decommissioned/commissioned",
-				targetStatus.String())
-			panic(err)
-		}
-	}
-	return nil
 }
 
 func runDecommissionNodeImpl(
@@ -397,7 +336,7 @@ func runDecommissionNodeImpl(
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.CommissionRequest{
 			NodeIDs:          nodeIDs,
-			CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONING_,
+			CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONING,
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -420,8 +359,6 @@ func runDecommissionNodeImpl(
 			replicaCount += status.ReplicaCount
 			allDecommissioning = allDecommissioning && status.CommissionStatus.Decommissioning() ||
 				status.CommissionStatus.Decommissioned()
-			// XXX: Write tests for what we expect partway through
-			// decommissioning. End of decommissioning.
 			// XXX: Write tests for recommissioning only canceling out extant
 			// decommissioning attempts, and no more.
 		}
@@ -429,12 +366,18 @@ func runDecommissionNodeImpl(
 			// We now mark the node as fully decommissioned.
 			req := &serverpb.CommissionRequest{
 				NodeIDs:          nodeIDs,
-				CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONED_,
+				CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONED,
 			}
-			_, err := c.Decommission(ctx, req)
+			resp, err := c.Decommission(ctx, req)
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
+			}
+			// We print out the final commission_status stating
+			// `decommissioned`. This is checked in tests.
+			fmt.Fprintln(stderr)
+			if err := printDecommissionStatus(*resp); err != nil {
+				return err
 			}
 		}
 		if replicaCount == 0 && allDecommissioning {
@@ -512,15 +455,10 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 	defer finish()
 
-	if err := checkExpectedCommissionStatus(ctx, conn, nodeIDs, kvserverpb.CommissionStatus_COMMISSIONED_); err != nil {
-		return err
-	}
-
 	c := serverpb.NewAdminClient(conn)
-
 	req := &serverpb.CommissionRequest{
 		NodeIDs:          nodeIDs,
-		CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED_,
+		CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED,
 	}
 	resp, err := c.Decommission(ctx, req)
 	if err != nil {

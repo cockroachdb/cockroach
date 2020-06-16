@@ -852,14 +852,14 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	decommissioningNodeID := tc.Server(2).NodeID()
 	log.Infof(ctx, "decommissioning node %d", decommissioningNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.CommissionStatus_DECOMMISSIONING_, []roachpb.NodeID{decommissioningNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, kvserverpb.CommissionStatus_DECOMMISSIONING, []roachpb.NodeID{decommissioningNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "done decommissioning node %d", decommissioningNodeID)
 
 	removedNodeID := tc.Server(3).NodeID()
 	log.Infof(ctx, "decommissioning and shutting down node %d", removedNodeID)
-	if err := firstServer.Decommission(ctx, kvserverpb.CommissionStatus_DECOMMISSIONING_, []roachpb.NodeID{removedNodeID}); err != nil {
+	if err := firstServer.Decommission(ctx, kvserverpb.CommissionStatus_DECOMMISSIONING, []roachpb.NodeID{removedNodeID}); err != nil {
 		t.Fatal(err)
 	}
 	tc.StopServer(3)
@@ -938,14 +938,14 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
 	if _, err := callerNodeLiveness.SetDecommissioningInternal(
-		ctx, nodeID, kvserver.LivenessRecord{}, kvserverpb.CommissionStatus_COMMISSIONED_,
+		ctx, nodeID, kvserver.LivenessRecord{}, kvserverpb.CommissionStatus_COMMISSIONED,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set a node to decommissioning state.
 	if _, err := callerNodeLiveness.SetCommissionStatus(
-		ctx, nodeID, kvserverpb.CommissionStatus_DECOMMISSIONING_); err != nil {
+		ctx, nodeID, kvserverpb.CommissionStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	}
 	verifyNodeIsDecommissioning(t, mtc, nodeID)
@@ -992,7 +992,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 
 	// When the node simply never existed, expect an error.
 	if _, err := mtc.nodeLivenesses[0].SetCommissionStatus(
-		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING_,
+		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING,
 	); !errors.Is(err, kvserver.ErrNoLivenessRecord) {
 		t.Fatal(err)
 	}
@@ -1008,35 +1008,35 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 
 	// Decommission from second node.
 	if committed, err := mtc.nodeLivenesses[1].SetCommissionStatus(
-		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING_); err != nil {
+		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Re-decommission from first node.
 	if committed, err := mtc.nodeLivenesses[0].SetCommissionStatus(
-		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING_); err != nil {
+		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	} else if committed {
 		t.Fatal("spurious change committed")
 	}
 	// Recommission from first node.
 	if committed, err := mtc.nodeLivenesses[0].SetCommissionStatus(
-		ctx, goneNodeID, kvserverpb.CommissionStatus_COMMISSIONED_); err != nil {
+		ctx, goneNodeID, kvserverpb.CommissionStatus_COMMISSIONED); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Decommission from second node (a second time).
 	if committed, err := mtc.nodeLivenesses[1].SetCommissionStatus(
-		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING_); err != nil {
+		ctx, goneNodeID, kvserverpb.CommissionStatus_DECOMMISSIONING); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")
 	}
 	// Recommission from third node.
 	if committed, err := mtc.nodeLivenesses[2].SetCommissionStatus(
-		ctx, goneNodeID, kvserverpb.CommissionStatus_COMMISSIONED_); err != nil {
+		ctx, goneNodeID, kvserverpb.CommissionStatus_COMMISSIONED); err != nil {
 		t.Fatal(err)
 	} else if !committed {
 		t.Fatal("no change committed")

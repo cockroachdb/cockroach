@@ -116,28 +116,28 @@ func CommissionStatusFromBooleanForm(decommissioning bool) CommissionStatus {
 		// decommissioned nodes in a cluster running v20.1 and v20.2 nodes,
 		// they may have to decommission the nodes again once fully onto
 		// v20.2 in order to durably mark said nodes as decommissioned.
-		return CommissionStatus_DECOMMISSIONING_
+		return CommissionStatus_DECOMMISSIONING
 	}
 	// We take the optimistic route here and assume the node is fully
 	// commissioned (we don't have a way of representing a node in the
 	// 'recommissioning' state, see comment on CommissionStatus for why
 	// that is).
-	return CommissionStatus_COMMISSIONED_
+	return CommissionStatus_COMMISSIONED
 }
 
-func (c CommissionStatus) Unknown() bool         { return c == CommissionStatus_UNKNOWN_ }
-func (c CommissionStatus) Decommissioning() bool { return c == CommissionStatus_DECOMMISSIONING_ }
-func (c CommissionStatus) Decommissioned() bool  { return c == CommissionStatus_DECOMMISSIONED_ }
-func (c CommissionStatus) Commissioned() bool    { return c == CommissionStatus_COMMISSIONED_ }
+func (c CommissionStatus) Unknown() bool         { return c == CommissionStatus_UNKNOWN }
+func (c CommissionStatus) Decommissioning() bool { return c == CommissionStatus_DECOMMISSIONING }
+func (c CommissionStatus) Decommissioned() bool  { return c == CommissionStatus_DECOMMISSIONED }
+func (c CommissionStatus) Commissioned() bool    { return c == CommissionStatus_COMMISSIONED }
 func (c CommissionStatus) String() string {
 	switch c {
-	case CommissionStatus_UNKNOWN_:
+	case CommissionStatus_UNKNOWN:
 		return "unknown"
-	case CommissionStatus_COMMISSIONED_:
+	case CommissionStatus_COMMISSIONED:
 		return "commissioned"
-	case CommissionStatus_DECOMMISSIONING_:
+	case CommissionStatus_DECOMMISSIONING:
 		return "decommissioning"
-	case CommissionStatus_DECOMMISSIONED_:
+	case CommissionStatus_DECOMMISSIONED:
 		return "decommissioned"
 	default:
 		err := "unknown commission status, expected one of [unknown,commissioned,decommissioning,decommissioned]"

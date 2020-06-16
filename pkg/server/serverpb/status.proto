@@ -113,11 +113,13 @@ message NodesRequest {}
 message NodesResponse {
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
   // TODO(irfansharif): Deprecate this view of node liveness in favor of
-  // storagepb.CommissionStatus. It's currently used by the Allocator to detect
+  // kvserverpb.CommissionStatus. It's currently used by the Allocator to detect
   // replicas placed on dead nodes. But there's no good reason for the
-  // "deadness" to be backed by a proto. It should suffice to capture the
-  // CommissionStatus and view of node's liveness + current time to inform
-  // allocator decisions.
+  // "deadness" to be proto-backed. It should suffice to capture the
+  // CommissionStatus and view of node's liveness (when was the record last
+  // heartbeated) + current time to inform allocator decisions.
+  // NodeLivenessStatus is also an ill-defined enum that we should make do
+  // without. See comment on the proto definition for more details.
   map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,
