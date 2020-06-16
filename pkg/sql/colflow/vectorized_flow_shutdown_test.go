@@ -178,9 +178,32 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
 				}
+				createMetadataSourceForID := func(id int) execinfrapb.MetadataSource {
+					return execinfrapb.CallbackMetadataSource{
+						DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+							return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
+						},
+					}
+				}
+				// The first numHashRouterOutputs streamIDs are allocated to the
+				// outboxes that drain these outputs. The outboxes will drain the router
+				// outputs which should in turn drain the HashRouter that will return
+				// this metadata.
+				toDrain := make([]execinfrapb.MetadataSource, numHashRouterOutputs)
+				for i := range toDrain {
+					toDrain[i] = createMetadataSourceForID(i)
+				}
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
-					allocators, hashRouterInput, typs, []uint32{0}, 64<<20, /* 64 MiB */
-					queueCfg, &colexecbase.TestingSemaphore{}, diskAccounts, nil, /* toClose */
+					allocators,
+					hashRouterInput,
+					typs,
+					[]uint32{0},
+					64<<20,
+					queueCfg,
+					&colexecbase.TestingSemaphore{},
+					diskAccounts,
+					toDrain,
+					nil, /* toClose */
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -214,18 +237,15 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
-					outbox, err := colrpc.NewOutbox(colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs,
-						append(outboxMetadataSources, execinfrapb.CallbackMetadataSource{
-							DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
-							},
-						},
-						), []colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+					outbox, err := colrpc.NewOutbox(
+						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
+						[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
 							idToClosed.Lock()
 							idToClosed.mapping[id] = true
 							idToClosed.Unlock()
 							return nil
-						}}})
+						}}},
+					)
 
 					require.NoError(t, err)
 					wg.Add(1)
@@ -253,22 +273,17 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					wg.Done()
 				}()
 				for i := 0; i < numInboxes; i++ {
-					var outboxMetadataSources []execinfrapb.MetadataSource
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxRemote)
 					if i < numHashRouterOutputs {
-						if i == 0 {
-							// Only one outbox should drain the hash router.
-							outboxMetadataSources = append(outboxMetadataSources, hashRouter)
-						}
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, []execinfrapb.MetadataSource{hashRouterOutputs[i]})
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
 						remoteAllocator := colmem.NewAllocator(ctxRemote, &sourceMemAccount, testColumnFactory)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, []execinfrapb.MetadataSource{createMetadataSourceForID(streamID)})
 					}
 					streamID++
 				}
@@ -287,7 +302,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxAnotherRemote)
-					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, &outboxMemAccount, synchronizer, inbox, streamID, materializerMetadataSources)
+					runOutboxInbox(ctxAnotherRemote, cancelAnotherRemote, &outboxMemAccount, synchronizer, inbox, streamID, append(materializerMetadataSources, createMetadataSourceForID(streamID)))
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
 					// only metadata source.
