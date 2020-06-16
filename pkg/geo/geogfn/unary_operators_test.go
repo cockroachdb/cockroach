@@ -55,6 +55,26 @@ var unaryOperatorTestCases = []struct {
 		},
 	},
 	{
+		wkt: "SRID=4004;LINESTRING(1.0 1.0, 2.0 2.0, 3.0 3.0)",
+		sphere: unaryOperatorExpectedResult{
+			expectedLength: 314367.99984330626,
+		},
+		spheroid: unaryOperatorExpectedResult{
+			expectedLength: 313672.2213232639,
+		},
+	},
+	{
+		wkt: "SRID=4004;POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0))",
+		sphere: unaryOperatorExpectedResult{
+			expectedArea:      6181093937.160788,
+			expectedPerimeter: 379596.9916332415,
+		},
+		spheroid: unaryOperatorExpectedResult{
+			expectedArea:      6153550906.915973,
+			expectedPerimeter: 378753.30454341066,
+		},
+	},
+	{
 		wkt: "POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0), (0.1 0.1, 0.2 0.1, 0.2 0.2, 0.1 0.1))",
 		sphere: unaryOperatorExpectedResult{
 			expectedArea:      6120665080.445181,
@@ -225,17 +245,24 @@ func TestLength(t *testing.T) {
 func TestProject(t *testing.T) {
 	var testCases = []struct {
 		desc      string
-		point     *geom.Point
+		point     *geo.Geography
 		distance  float64
 		azimuth   float64
-		projected *geom.Point
+		projected *geo.Geography
 	}{
 		{
 			"POINT(0 0), 100000, radians(45)",
-			geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4326)),
 			100000,
 			45 * math.Pi / 180.0,
-			geom.NewPointFlat(geom.XY, []float64{0.6352310291255374, 0.6394723347291977}),
+			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0.6352310291255374, 0.6394723347291977}).SetSRID(4326)),
+		},
+		{
+			"SRID=4004;POINT(0 0), 100000, radians(45)",
+			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4004)),
+			100000,
+			45 * math.Pi / 180.0,
+			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0.635304728143855, 0.6395336363116583}).SetSRID(4004)),
 		},
 	}
 
@@ -249,7 +276,8 @@ func TestProject(t *testing.T) {
 				projected,
 				"expected %f, found %f",
 				&tc.projected,
-				projected)
+				projected,
+			)
 		})
 	}
 }

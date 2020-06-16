@@ -19,11 +19,11 @@ import (
 
 var (
 	spheroid1 = geographiclib.NewSpheroid(6.370997e+06, 0)
-	spheroid2 = geographiclib.NewSpheroid(6.378137e+06, 0.006188076572136892)
-	spheroid3 = geographiclib.NewSpheroid(6.378137e+06, 0.006188076601273604)
+	spheroid2 = geographiclib.NewSpheroid(6.378137e+06, 0.00335281066474748)
+	spheroid3 = geographiclib.NewSpheroid(6.378137e+06, 0.0033528106811823184)
 	spheroid4 = geographiclib.NewSpheroid(6.371228e+06, 0)
 	spheroid5 = geographiclib.NewSpheroid(6.378137e+06, 0)
-	spheroid6 = geographiclib.NewSpheroid(6.377397155e+06, 0.006170279914991346)
+	spheroid6 = geographiclib.NewSpheroid(6.377397155e+06, 0.003342773182174806)
 )
 
 // Projections is a mapping of SRID to projections.
