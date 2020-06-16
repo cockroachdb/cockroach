@@ -1199,7 +1199,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 
 // BenchmarkLeaseAcquireByNameCached benchmarks the AcquireByName
 // acquisition code path if a valid lease exists and is contained in
-// tableNameCache. In particular this benchmark is done with
+// nameCache. In particular this benchmark is done with
 // parallelism, which is important to also benchmark locking.
 func BenchmarkLeaseAcquireByNameCached(b *testing.B) {
 	defer leaktest.AfterTest(b)()
@@ -1220,7 +1220,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableName := tableDesc.Name
 	leaseManager := t.node(1)
 
-	// Acquire the lease so it is put into the tableNameCache.
+	// Acquire the lease so it is put into the nameCache.
 	_, _, err := leaseManager.AcquireByName(
 		context.Background(),
 		t.server.Clock().Now(),
@@ -2315,7 +2315,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	tdb1 := sqlutils.MakeSQLRunner(db1)
 	db2 := tc.ServerConn(1)
 
-	// Create a couple of tables.
+	// Create a couple of descriptors.
 	tdb1.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 
 	// Find the table ID for the table we'll be mucking with.
