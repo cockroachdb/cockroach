@@ -1186,7 +1186,13 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// Disable GC job so that the final check of crdb_internal.tables is
 	// guaranteed to not be cleaned up. Although this was never observed by a
 	// stress test, it is here for safety.
-	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} /* blocks forever */ }}
+	blockGC := make(chan struct{})
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+		RunBeforeResume: func(_ int64) error {
+			<-blockGC
+			return nil
+		},
+	}
 
 	const numAccounts = 1000
 	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
