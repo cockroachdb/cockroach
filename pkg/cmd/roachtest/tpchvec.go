@@ -111,7 +111,7 @@ type tpchVecTestCase interface {
 	postQueryRunHook(t *test, output []byte, vectorized bool)
 	// postTestRunHook is called after all tpch queries are run. Can be used to
 	// perform teardown or general validation.
-	postTestRunHook(t *test, conn *gosql.DB, version crdbVersion)
+	postTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion)
 }
 
 // tpchVecTestCaseBase is a default tpchVecTestCase implementation that can be
@@ -145,9 +145,12 @@ func (b tpchVecTestCaseBase) preTestRunHook(
 	}
 }
 
-func (b tpchVecTestCaseBase) postQueryRunHook(_ *test, _ []byte, _ bool) {}
+func (b tpchVecTestCaseBase) postQueryRunHook(*test, []byte, bool) {}
 
-func (b tpchVecTestCaseBase) postTestRunHook(_ *test, _ *gosql.DB, _ crdbVersion) {}
+func (b tpchVecTestCaseBase) postTestRunHook(
+	context.Context, *test, *cluster, *gosql.DB, crdbVersion,
+) {
+}
 
 const (
 	tpchPerfTestNumRunsPerQuery = 3
@@ -232,7 +235,9 @@ func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bo
 	}
 }
 
-func (p *tpchVecPerfTest) postTestRunHook(t *test, conn *gosql.DB, version crdbVersion) {
+func (p *tpchVecPerfTest) postTestRunHook(
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
+) {
 	queriesToSkip := p.getQueriesToSkip(version)
 	t.Status("comparing the runtimes (only median values for each query are compared)")
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
@@ -274,7 +279,7 @@ func (p *tpchVecPerfTest) postTestRunHook(t *test, conn *gosql.DB, version crdbV
 			// For some reason, the vectorized engine executed the query a lot
 			// slower than the row-by-row engine which is unexpected. In order
 			// to understand where the slowness comes from, we will run EXPLAIN
-			// ANALYZE of the query with all `vectorize` options
+			// ANALYZE (DEBUG) of the query with all `vectorize` options
 			// tpchPerfTestNumRunsPerQuery times (hoping at least one will
 			// "catch" the slowness).
 			for _, vectorize := range p.vectorizeOptions() {
@@ -283,24 +288,43 @@ func (p *tpchVecPerfTest) postTestRunHook(t *test, conn *gosql.DB, version crdbV
 					t.Fatal(err)
 				}
 				for i := 0; i < tpchPerfTestNumRunsPerQuery; i++ {
+					t.Status(fmt.Sprintf("\nRunning EXPLAIN ANALYZE (DEBUG) with vectorize=%s\n", vectorizeSetting))
 					rows, err := conn.Query(fmt.Sprintf(
-						"EXPLAIN ANALYZE %s;", tpch.QueriesByNumber[queryNum],
+						"EXPLAIN ANALYZE (DEBUG) %s;", tpch.QueriesByNumber[queryNum],
 					))
 					if err != nil {
 						t.Fatal(err)
 					}
-					var (
-						automatic bool
-						url       string
-					)
-					rows.Next()
-					if err = rows.Scan(&automatic, &url); err != nil {
-						t.Fatal(err)
+					// The output of the command looks like:
+					//   Statement diagnostics bundle generated. Download from the Admin UI (Advanced
+					//   Debug -> Statement Diagnostics History) or use the direct link below.
+					//   Admin UI: http://127.0.0.1:56014
+					//   Direct link: http://127.0.0.1:56014/_admin/v1/stmtbundle/564245503516377089
+					// We are interested in the last line that contains the url
+					// that we will curl below.
+					var lastLine string
+					for rows.Next() {
+						if err = rows.Scan(&lastLine); err != nil {
+							t.Fatal(err)
+						}
 					}
 					if err = rows.Close(); err != nil {
 						t.Fatal(err)
 					}
-					t.Status(fmt.Sprintf("EXPLAIN ANALYZE with vectorize=%s url:\n%s", vectorizeSetting, url))
+					expectedPrefix := "Direct link: "
+					if !strings.HasPrefix(lastLine, expectedPrefix) {
+						t.Fatal(fmt.Sprintf("unexpectedly the last line of EXPLAIN ANALYZE (DEBUG) "+
+							"doesn't have 'Direct link: ' prefix, received %s", lastLine))
+					}
+					url := lastLine[len(expectedPrefix):]
+					// We will curl into the logs folder so that test runner
+					// retrieves the bundle together with the log files.
+					curlCmd := fmt.Sprintf(
+						"curl %s > logs/bundle_%s_%d.zip", url, vectorizeSetting, i,
+					)
+					if err = c.RunL(ctx, t.l, c.Node(1), curlCmd); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			t.Fatal(fmt.Sprintf(
@@ -473,7 +497,7 @@ func runTPCHVec(
 
 	testCase.preTestRunHook(ctx, t, c, conn, version)
 	testRun(ctx, t, c, version, testCase)
-	testCase.postTestRunHook(t, conn, version)
+	testCase.postTestRunHook(ctx, t, c, conn, version)
 }
 
 const tpchVecNodeCount = 3
