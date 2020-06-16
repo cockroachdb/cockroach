@@ -82,23 +82,33 @@ Please follow the instructions above on updating the golang version, omitting th
 
 #  Dependencies
 
-A snapshot of CockroachDB's dependencies is maintained at
-https://github.com/cockroachdb/vendored and checked out as a submodule at
-`./vendor`.
+Dependencies are managed using `go mod`. We use `go mod vendor` so that we can import and use non-Go files (e.g. protobuf files) using the [modvendor](https://github.com/goware/modvendor) script.
 
-## Updating Dependencies
+## Usage
 
-This snapshot was built and is managed using `dep` and we manage `vendor` as a
-submodule.
+### Installing or updating a dependency
 
-Use the version of `dep` in `bin` (may need to `make` first): import your new
-dependency from the Go source you're working on, then run `./bin/dep ensure -v`.
-The tool will add the newly-imported packages into the `vendor` directory; see
-instructions below about how to commit the changes in the `vendor` submodule. To
-update an existing dependency, use `./bin/dep ensure -v -update <pkg import
-path>`.
+Run `go get -u <dependency>`. To get a specific version, run `go get -u <dependency>@<version|branch|sha>`.
 
-### Working with Submodules
+You must then run `make -k vendor_rebuild` to ensure the modules are installed. These changes must
+then be committed in the submodule directory (see Working with Submodules).
+
+Programs can then be run using `go build -mod=vendor ...` or `go test -mod=vendor ...`.
+
+When you have included the necessary changes, run `go mod tidy` to ensure there are no dangling
+dependencies.
+
+### Removing a dependency
+
+When a dependency has been removed, run `go mod tidy` and then `make -k vendor_rebuild`. Then follow
+the submodule changes below.
+
+### Requiring a new tool
+
+When installing a tool, you may need to add blank import to `pkg/cmd/import-tools/main.go` so that `go mod tidy` does not clean it up.
+
+
+## Working with Submodules
 
 To keep the bloat of all the changes in all our dependencies out of our main
 repository, we embed `vendor` as a git submodule, storing its content and
@@ -129,7 +139,7 @@ on `github.com/cockroachdb/vendored`.
 `cockroachdb/vendored`, and need wait for it to merge before they will be able
 to use it in a `cockroachdb/cockroach` PR.
 
-#### `master` Branch Pointer in Vendored Repo
+### `master` Branch Pointer in Vendored Repo
 
 Since the `cockroachdb/cockroach` submodule references individual commit
 hashes in `vendored`, there is little significance to the `master` branch in
@@ -143,7 +153,7 @@ PR referencing a ref merges, the `vendored` `master` branch should be updated
 to point to it before the named feature branch can be deleted, to ensure the
 ref remains reachable and thus is never garbage collected.
 
-#### Conflicting Submodule Changes
+### Conflicting Submodule Changes
 
 The canonical linearization of history is always the main repo. In the event
 of concurrent changes to `vendor`, the first should cause the second to see a
@@ -151,15 +161,3 @@ conflict on the `vendor` submodule pointer. When resolving that conflict, it
 is important to re-run dep against the fetched, updated `vendor` ref, thus
 generating a new commit in the submodule that has as its parent the one from
 the earlier change.
-
-## Repository Name
-
-We only want the vendor directory used by builds when it is explicitly checked
-out *and managed* as a submodule at `./vendor`.
-
-If a go build fails to find a dependency in `./vendor`, it will continue
-searching anything named "vendor" in parent directories. Thus the vendor
-repository is _not_ named "vendor", to minimize the risk of it ending up
-somewhere in `GOPATH` with the name `vendor` (e.g. if it is manually cloned),
-where it could end up being unintentionally used by builds and causing
-confusion.

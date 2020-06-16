@@ -70,10 +70,8 @@ func collectFiles(path string, includeTest bool, options testOptions) ([]string,
 	config := &packages.Config{
 		Dir:   cwd,
 		Mode:  packages.NeedName | packages.NeedFiles | packages.NeedDeps | packages.NeedImports,
-		Tests: includeTest}
-	// We turn this off because it's hard to set up test data that works with the
-	// module system. Nevertheless, the tests are quite comprehensive.
-	config.Env = append(os.Environ(), "GO111MODULE=off")
+		Tests: includeTest,
+	}
 	if options.gopath != "" {
 		config.Env = append(config.Env, "GOPATH="+options.gopath)
 	}
