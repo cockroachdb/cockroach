@@ -290,6 +290,13 @@ func ResolveTypeDescByID(
 	if err != nil {
 		return nil, nil, err
 	}
+	if desc == nil {
+		if lookupFlags.Required {
+			return nil, nil, pgerror.Newf(
+				pgcode.UndefinedObject, "type with ID %d does not exist", id)
+		}
+		return nil, nil, nil
+	}
 	if desc.TypeDesc() == nil {
 		return nil, nil, errors.AssertionFailedf("%s was not a type descriptor", desc)
 	}
