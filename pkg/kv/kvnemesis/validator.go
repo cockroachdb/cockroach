@@ -320,7 +320,7 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 	}
 	txnObservations := v.observedOpsByTxn[fakeTxnID]
 	delete(v.observedOpsByTxn, fakeTxnID)
-	if result.Type == ResultType_NoError {
+	if result.Type != ResultType_Error {
 		v.checkCommittedTxn(`committed `+atomicType, txnObservations)
 	} else if resultIsAmbiguous(result) {
 		v.checkAmbiguousTxn(`ambiguous `+atomicType, txnObservations)

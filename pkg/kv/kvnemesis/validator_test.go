@@ -284,6 +284,17 @@ func TestValidate(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name: "one read before write returning wrong value",
+			steps: []Step{
+				step(withReadResult(get(`a`), `v2`, nil)),
+				step(withResult(put(`a`, `v1`), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed get non-atomic timestamps: [r]"a":[0,0,0,0)->v2`,
+			},
+		},
+		{
 			name: "one read after write",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
@@ -291,6 +302,17 @@ func TestValidate(t *testing.T) {
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
+		},
+		{
+			name: "one read after write returning wrong value",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withReadResult(get(`a`), `v2`, nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`)),
+			expected: []string{
+				`committed get non-atomic timestamps: [r]"a":[0,0,0,0)->v2`,
+			},
 		},
 		{
 			name: "one read in between writes",
@@ -301,6 +323,52 @@ func TestValidate(t *testing.T) {
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`)),
 			expected: nil,
+		},
+		{
+			name: "batch of reads after writes",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(batch(
+					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`b`), `v2`, nil),
+					withReadResult(get(`c`), ``, nil),
+				), nil)),
+			},
+			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: nil,
+		},
+		{
+			name: "batch of reads after writes returning wrong values",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(batch(
+					withReadResult(get(`a`), ``, nil),
+					withReadResult(get(`b`), `v1`, nil),
+					withReadResult(get(`c`), `v2`, nil),
+				), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed batch non-atomic timestamps: [r]"a":[<min>,0.000000001,0)-><nil> [r]"b":[0,0,0,0)->v1 [r]"c":[0,0,0,0)->v2`,
+			},
+		},
+		{
+			name: "batch of reads after writes with non-empty time overlap",
+			steps: []Step{
+				step(withResult(put(`a`, `v1`), nil)),
+				step(withResult(put(`b`, `v2`), nil)),
+				step(withResult(batch(
+					withReadResult(get(`a`), ``, nil),
+					withReadResult(get(`b`), `v2`, nil),
+					withReadResult(get(`c`), ``, nil),
+				), nil)),
+			},
+			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
+			expected: []string{
+				`committed batch non-atomic timestamps: [r]"a":[<min>,0.000000001,0)-><nil> [r]"b":[0.000000002,0,<max>)->v2 [r]"c":[<min>,<max>)-><nil>`,
+			},
 		},
 		{
 			name: "transactional reads with non-empty time overlap",
