@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TODO(ajwerner): provide option to limit the maximum queue size.
@@ -129,9 +128,7 @@ func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 		name: name,
 		done: make(chan struct{}),
 	}
-	for _, o := range options {
-		o.apply(&qp.config)
-	}
+	initializeConfig(&qp.config, options...)
 	qp.mu.quota = initialResource
 	initializeNotifyQueue(&qp.mu.q)
 	return qp
@@ -207,7 +204,7 @@ var chanSyncPool = sync.Pool{
 // Safe for concurrent use.
 func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 	// Set up onAcquisition if we have one.
-	start := timeutil.Now()
+	start := qp.timeSource.Now()
 	if qp.config.onAcquisition != nil {
 		defer func() {
 			if err == nil {
@@ -221,20 +218,20 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 		return err
 	}
 	// Set up the infrastructure to report slow requests.
-	var slowTimer *timeutil.Timer
+	var slowTimer Timer
 	var slowTimerC <-chan time.Time
 	if qp.onSlowAcquisition != nil {
-		slowTimer = timeutil.NewTimer()
+		slowTimer = qp.timeSource.NewTimer()
 		defer slowTimer.Stop()
 		// Intentionally reset only once, for we care more about the select duration in
 		// goroutine profiles than periodic logging.
 		slowTimer.Reset(qp.slowAcquisitionThreshold)
-		slowTimerC = slowTimer.C
+		slowTimerC = slowTimer.Ch()
 	}
 	for {
 		select {
 		case <-slowTimerC:
-			slowTimer.Read = true
+			slowTimer.MarkRead()
 			slowTimerC = nil
 			defer qp.onSlowAcquisition(ctx, qp.name, r, start)()
 			continue
