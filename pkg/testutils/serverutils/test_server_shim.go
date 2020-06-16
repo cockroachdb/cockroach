@@ -149,7 +149,7 @@ type TestServerInterface interface {
 	GetFirstStoreID() roachpb.StoreID
 
 	// GetStores returns the collection of stores from this TestServer's node.
-	// The return value is of type *storage.Stores.
+	// The return value is of type *kvserver.Stores.
 	GetStores() interface{}
 
 	// ClusterSettings returns the ClusterSettings shared by all components of
