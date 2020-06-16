@@ -402,3 +402,8 @@ export const partitionedStatuses = createSelector(
     );
   },
 );
+
+export const isSingleNodeCluster = createSelector(
+  nodeStatusesSelector,
+  nodeStatuses => nodeStatuses && nodeStatuses.length === 1,
+);
