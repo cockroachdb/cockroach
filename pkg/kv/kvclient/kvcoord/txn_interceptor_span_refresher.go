@@ -285,8 +285,12 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 			bumpedTxn)
 		br = nil
 	}
-	if pErr != nil && maxRefreshAttempts > 0 {
-		br, pErr = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+	if pErr != nil {
+		if maxRefreshAttempts > 0 {
+			br, pErr = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+		} else {
+			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
+		}
 	}
 	sr.forwardRefreshTimestampOnResponse(br, pErr)
 	return br, pErr
@@ -323,6 +327,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr
 	}
 	sr.refreshSuccess.Inc(1)
+	log.VEventf(ctx, 2, "refresh succeeded. retrying original request.")
 
 	// We've refreshed all of the read spans successfully and bumped
 	// ba.Txn's timestamps. Attempt the request again.
