@@ -147,8 +147,8 @@ func (ex *connExecutor) recordStatementSummary(
 
 	ex.statsCollector.recordStatement(
 		stmt, planner.curPlan.instrumentation.savedPlanForStats,
-		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagImplicitTxn),
-		automaticRetryCount, rowsAffected, err,
+		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagVectorized),
+		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, bytesRead, rowsRead,
 	)
 
