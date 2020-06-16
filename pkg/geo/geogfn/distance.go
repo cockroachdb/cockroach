@@ -159,8 +159,10 @@ type s2GeodistEdgeCrosser struct {
 var _ geodist.EdgeCrosser = (*s2GeodistEdgeCrosser)(nil)
 
 // ChainCrossing implements geodist.EdgeCrosser.
-func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) bool {
-	return c.EdgeCrosser.ChainCrossingSign(p.(*s2GeodistPoint).Point) != s2.DoNotCross
+func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Point) {
+	// Returns nil for the intersection point as we don't require the intersection
+	// point for calculation of minimum distance in geography.
+	return c.EdgeCrosser.ChainCrossingSign(p.(*s2GeodistPoint).Point) != s2.DoNotCross, nil
 }
 
 // distanceGeographyRegions calculates the distance between two sets of regions.
@@ -284,7 +286,7 @@ func (u *geographyMinDistanceUpdater) Update(
 }
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
-func (u *geographyMinDistanceUpdater) OnIntersects() bool {
+func (u *geographyMinDistanceUpdater) OnIntersects(p geodist.Point) bool {
 	u.minD = 0
 	return true
 }
