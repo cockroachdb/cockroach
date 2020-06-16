@@ -311,21 +311,22 @@ func emitEntries(
 		}
 
 		// If the resolved timestamp frequency is specified, use it as a rough
-		// approximation of how latency-sensitive the changefeed user is. If
-		// it's not, fall back to the poll interval.
+		// approximation of how latency-sensitive the changefeed user is. If it's
+		// not, fall back to a default of 5s
 		//
-		// The current poller implementation means we emit a changefeed-level
-		// resolved timestamps to the user once per changefeedPollInterval. This
-		// buffering adds on average timeBetweenFlushes/2 to that latency. With
-		// timeBetweenFlushes and changefeedPollInterval both set to 1s, TPCC
-		// was seeing about 100x more time spent emitting than flushing.
-		// Dividing by 5 tries to balance these a bit, but ultimately is fairly
-		// unprincipled.
+		// With timeBetweenFlushes and changefeedPollInterval both set to 1s, TPCC
+		// was seeing about 100x more time spent emitting than flushing when tested
+		// with low-latency sinks like Kafka. However when using cloud-storage
+		// sinks, flushes can take much longer and trying to flush too often can
+		// thus end up spending too much time flushing and not enough in emitting to
+		// keep up with the feed. If a user does not specify a 'resolved' time, we
+		// instead default to 5s, which is hopefully long enough to account for most
+		// possible sink latencies we could see without falling behind.
 		//
 		// NB: As long as we periodically get new span-level resolved timestamps
-		// from the poller (which should always happen, even if the watched data
-		// is not changing), then this is sufficient and we don't have to do
-		// anything fancy with timers.
+		// from the poller (which should always happen, even if the watched data is
+		// not changing), then this is sufficient and we don't have to do anything
+		// fancy with timers.
 		var timeBetweenFlushes time.Duration
 		if r, ok := details.Opts[changefeedbase.OptResolvedTimestamps]; ok && r != `` {
 			var err error
@@ -333,7 +334,7 @@ func emitEntries(
 				return nil, err
 			}
 		} else {
-			timeBetweenFlushes = changefeedbase.TableDescriptorPollInterval.Get(&settings.SV) / 5
+			timeBetweenFlushes = time.Second * 5
 		}
 		if len(resolvedSpans) == 0 ||
 			(timeutil.Since(lastFlush) < timeBetweenFlushes && !boundaryReached) {
