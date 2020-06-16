@@ -888,6 +888,11 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// indexed, it doesn't actually, and it's only valid to extract the
 		// primary key columns from it.
 		newScanPrivate.Cols = sb.primaryKeyCols()
+		if geoOk {
+			// The inverted filterer needs all the columns from the index,
+			// including the inverted column.
+			newScanPrivate.InvertedInputCols = sb.indexCols(newScanPrivate.Index)
+		}
 
 		// The Scan operator always goes in a new group, since it's always nested
 		// underneath the IndexJoin. The IndexJoin may also go into its own group,

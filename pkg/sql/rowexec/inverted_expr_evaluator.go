@@ -12,9 +12,11 @@ package rowexec
 
 import (
 	"bytes"
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // The abstractions in this file help with evaluating (batches of)
@@ -422,6 +424,7 @@ func (b *batchedInvertedExprEvaluator) addIndexRow(
 		return bytes.Compare(b.fragmentedSpans[i].span.Start, enc) > 0
 	})
 	i--
+	log.Errorf(context.Background(), "addIndexRow: keyIndex: %d, i: %d", keyIndex, i)
 	for _, elem := range b.fragmentedSpans[i].exprAndSetIndexList {
 		b.exprEvals[elem.exprIndex].addIndexRow(elem.setIndex, keyIndex)
 	}
