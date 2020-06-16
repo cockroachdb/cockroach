@@ -61,6 +61,9 @@ func (c *customFuncs) LookupColumn(name string) opt.ColumnID {
 // ColList creates a ColList from a comma-separated list of column names,
 // looking up each column.
 func (c *customFuncs) ColList(cols string) opt.ColList {
+	if cols == "" {
+		return opt.ColList{}
+	}
 	strs := strings.Split(cols, ",")
 	res := make(opt.ColList, len(strs))
 	for i, col := range strs {

@@ -2219,7 +2219,7 @@ project
            │    │    └── ()
            │    └── projections
            │         └── 1 [as="?column?":1]
-           └── 3::DECIMAL
+           └── 3
 
 build
 SELECT 3::decimal IN (SELECT 1::int)
