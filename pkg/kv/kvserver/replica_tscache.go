@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -265,6 +266,7 @@ func (r *Replica) applyTimestampCache(
 	// below is due to the minReadTS.
 	var bumpedDueToMinReadTS bool
 	var bumped bool
+	var conflictingTxn uuid.UUID
 
 	for _, union := range ba.Requests {
 		args := union.GetInner()
@@ -291,14 +293,31 @@ func (r *Replica) applyTimestampCache(
 			} else {
 				bumpedCurReq = ba.Timestamp.Forward(nextRTS)
 			}
+			if bumpedCurReq && (rTxnID != (uuid.UUID{})) {
+				conflictingTxn = rTxnID
+			}
 			// Preserve bumpedDueToMinReadTS if we did not just bump or set it
 			// appropriately if we did.
 			bumpedDueToMinReadTS = (!bumpedCurReq && bumpedDueToMinReadTS) || (bumpedCurReq && forwardedToMinReadTS)
 			bumped, bumpedCurReq = bumped || bumpedCurReq, false
 		}
 	}
-	if bumpedDueToMinReadTS {
-		telemetry.Inc(batchesPushedDueToClosedTimestamp)
+	if bumped {
+		bumpedTS := ba.Timestamp
+		if ba.Txn != nil {
+			bumpedTS = ba.Txn.WriteTimestamp
+		}
+
+		if bumpedDueToMinReadTS {
+			telemetry.Inc(batchesPushedDueToClosedTimestamp)
+			log.VEventf(ctx, 2, "bumped write timestamp due to closed ts: %s", minReadTS)
+		} else {
+			conflictMsg := "conflicting txn unknown"
+			if conflictingTxn != (uuid.UUID{}) {
+				conflictMsg = "conflicting txn: " + conflictingTxn.Short()
+			}
+			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, log.Safe(conflictMsg))
+		}
 	}
 	return bumped
 }
