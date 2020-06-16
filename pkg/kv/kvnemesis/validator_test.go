@@ -32,24 +32,13 @@ func withResult(op Operation, err error) Operation {
 	return op
 }
 
-func withReadResult(op Operation, value string, err error) Operation {
+func withReadResult(op Operation, value string) Operation {
 	get := op.GetValue().(*GetOperation)
-	if err == nil {
-		get.Result = Result{
-			Type: ResultType_Value,
-		}
-		if value != `` {
-			get.Result.Value = roachpb.MakeValueFromString(value).RawBytes
-		}
-		return op
+	get.Result = Result{
+		Type: ResultType_Value,
 	}
 	if value != `` {
-		panic(errors.AssertionFailedf(`non-empty value %s with error %s`, value, err))
-	}
-	ee := errors.EncodeError(context.Background(), err)
-	get.Result = Result{
-		Type: ResultType_Error,
-		Err:  &ee,
+		get.Result.Value = roachpb.MakeValueFromString(value).RawBytes
 	}
 	return op
 }
@@ -277,7 +266,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one read before write",
 			steps: []Step{
-				step(withReadResult(get(`a`), ``, nil)),
+				step(withReadResult(get(`a`), ``)),
 				step(withResult(put(`a`, `v1`), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
@@ -286,7 +275,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one read before write returning wrong value",
 			steps: []Step{
-				step(withReadResult(get(`a`), `v2`, nil)),
+				step(withReadResult(get(`a`), `v2`)),
 				step(withResult(put(`a`, `v1`), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
@@ -298,7 +287,7 @@ func TestValidate(t *testing.T) {
 			name: "one read after write",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withReadResult(get(`a`), `v1`, nil)),
+				step(withReadResult(get(`a`), `v1`)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
@@ -307,7 +296,7 @@ func TestValidate(t *testing.T) {
 			name: "one read after write returning wrong value",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withReadResult(get(`a`), `v2`, nil)),
+				step(withReadResult(get(`a`), `v2`)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
@@ -318,7 +307,7 @@ func TestValidate(t *testing.T) {
 			name: "one read in between writes",
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withReadResult(get(`a`), `v1`, nil)),
+				step(withReadResult(get(`a`), `v1`)),
 				step(withResult(put(`a`, `v2`), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`)),
@@ -330,9 +319,9 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(batch(
-					withReadResult(get(`a`), `v1`, nil),
-					withReadResult(get(`b`), `v2`, nil),
-					withReadResult(get(`c`), ``, nil),
+					withReadResult(get(`a`), `v1`),
+					withReadResult(get(`b`), `v2`),
+					withReadResult(get(`c`), ``),
 				), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
@@ -344,9 +333,9 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(batch(
-					withReadResult(get(`a`), ``, nil),
-					withReadResult(get(`b`), `v1`, nil),
-					withReadResult(get(`c`), `v2`, nil),
+					withReadResult(get(`a`), ``),
+					withReadResult(get(`b`), `v1`),
+					withReadResult(get(`c`), `v2`),
 				), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
@@ -360,9 +349,9 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(batch(
-					withReadResult(get(`a`), ``, nil),
-					withReadResult(get(`b`), `v2`, nil),
-					withReadResult(get(`c`), ``, nil),
+					withReadResult(get(`a`), ``),
+					withReadResult(get(`b`), `v2`),
+					withReadResult(get(`c`), ``),
 				), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
@@ -378,8 +367,8 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
-					withReadResult(get(`b`), `v3`, nil),
+					withReadResult(get(`a`), `v1`),
+					withReadResult(get(`b`), `v3`),
 				), nil)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid from 2-3: overlap 2-3
@@ -394,8 +383,8 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
-					withReadResult(get(`b`), `v3`, nil),
+					withReadResult(get(`a`), `v1`),
+					withReadResult(get(`b`), `v3`),
 				), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 2-3: no overlap
@@ -412,8 +401,8 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
-					withReadResult(get(`b`), ``, nil),
+					withReadResult(get(`a`), `v1`),
+					withReadResult(get(`b`), ``),
 				), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-2: overlap 1-2
@@ -427,8 +416,8 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
-					withReadResult(get(`b`), ``, nil),
+					withReadResult(get(`a`), `v1`),
+					withReadResult(get(`b`), ``),
 				), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-1: no overlap
@@ -444,7 +433,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`a`), `v1`),
 					withResult(put(`b`, `v3`), nil),
 				), nil)),
 			},
@@ -458,7 +447,7 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`a`), `v1`),
 					withResult(put(`b`, `v3`), nil),
 				), nil)),
 			},
@@ -473,9 +462,9 @@ func TestValidate(t *testing.T) {
 			name: "transaction with read before and after write",
 			steps: []Step{
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``, nil),
+					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
-					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`a`), `v1`),
 				), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
@@ -485,9 +474,9 @@ func TestValidate(t *testing.T) {
 			name: "transaction with incorrect read before write",
 			steps: []Step{
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`a`), `v1`),
 					withResult(put(`a`, `v1`), nil),
-					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`a`), `v1`),
 				), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
@@ -500,9 +489,9 @@ func TestValidate(t *testing.T) {
 			name: "transaction with incorrect read after write",
 			steps: []Step{
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``, nil),
+					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
-					withReadResult(get(`a`), ``, nil),
+					withReadResult(get(`a`), ``),
 				), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
@@ -515,11 +504,11 @@ func TestValidate(t *testing.T) {
 			name: "two transactionally committed puts of the same key with reads",
 			steps: []Step{
 				step(withResult(closureTxn(ClosureTxnType_Commit,
-					withReadResult(get(`a`), ``, nil),
+					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
-					withReadResult(get(`a`), `v1`, nil),
+					withReadResult(get(`a`), `v1`),
 					withResult(put(`a`, `v2`), nil),
-					withReadResult(get(`a`), `v2`, nil),
+					withReadResult(get(`a`), `v2`),
 				), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`)),
