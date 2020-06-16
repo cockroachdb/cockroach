@@ -84,3 +84,9 @@ func TestParseBufferParams(t *testing.T) {
 		})
 	}
 }
+
+func TestBuffer(t *testing.T) {
+	// Fool the linter (which seems broken) into thinking buffer is used.
+	// It is used in geo_builtins.go.
+	_, _ = Buffer(nil, MakeDefaultBufferParams(), 10)
+}
