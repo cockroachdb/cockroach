@@ -288,7 +288,14 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		switch ft := nb.builtin.Types.(type) {
 		case tree.ArgTypes:
 			for _, arg := range ft {
-				args = append(args, r.GenerateRandomArg(arg.Typ))
+				// CollatedString's default has no Locale, and so GenerateRandomArg will panic
+				// on RandDatumWithNilChance. Copy the typ and fake a locale.
+				typ := *arg.Typ
+				if typ.Locale() == "" && typ.Family() == types.CollatedStringFamily {
+					locale := "en_US"
+					typ.InternalType.Locale = &locale
+				}
+				args = append(args, r.GenerateRandomArg(&typ))
 			}
 		case tree.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
