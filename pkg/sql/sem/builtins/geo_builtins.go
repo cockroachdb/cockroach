@@ -1891,6 +1891,31 @@ Note if geometries are the same, it will return the LineString with the maximum 
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_shortestline": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				shortestLineString, err := geomfn.ShortestLineString(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(shortestLineString), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns the LineString corresponds to the minimum distance across every pair of points comprising ` +
+					`the given geometries. 
+
+Note if geometries are the same, it will return the LineString with the minimum distance between the geometry's ` +
+					`vertexes. The function will return the shortest line that was discovered first when comparing minimum ` +
+					`distances if more than one is found.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Binary Predicates
