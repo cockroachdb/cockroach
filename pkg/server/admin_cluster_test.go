@@ -178,7 +178,7 @@ func TestLivenessAPI(t *testing.T) {
 			if !ok {
 				return errors.Errorf("found no liveness status for node %d", s.NodeID())
 			}
-			if a, e := status, kvserverpb.NodeLivenessStatus_LIVE; a != e {
+			if a, e := status, kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE; a != e {
 				return errors.Errorf(
 					"liveness status for node %s was %s, wanted %s", s.NodeID(), a, e,
 				)

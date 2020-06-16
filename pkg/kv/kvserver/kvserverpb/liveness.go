@@ -58,12 +58,14 @@ func (l *Liveness) String() string {
 // v20.2 we introduced a dedicated enum to be able to disambiguate between the
 // two. That being said, v20.2 nodes need to be able to operate in mixed
 // clusters with v20.1 nodes, that only know to interpret the boolean
-// representation. EnsureCompatible is able to reconcile across both
-// representations by mutating the receiver such that it's understood by both
-// v20.1 and v20.2 nodes (See AssertValid for what this entails).
-// If the receiver object is clearly one generated from a v20.1 node, we
-// consider the deprecated boolean representation as the authoritative one. We
-// consider the enum state authoritative if not.
+// representation.
+//
+// EnsureCompatible is able to reconcile across both representations by mutating
+// the receiver such that it's understood by both v20.1 and v20.2 nodes (See
+// AssertValid for what this entails). If the receiver object is clearly one
+// generated from a v20.1 node, we consider the deprecated boolean
+// representation as the authoritative one. We consider the enum state
+// authoritative if not.
 //
 // TODO(irfansharif): Remove this once v20.2 is cut.
 func (l *Liveness) EnsureCompatible() {

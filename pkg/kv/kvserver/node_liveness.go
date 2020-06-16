@@ -48,6 +48,11 @@ var (
 	// when encountering this error.
 	errChangeCommissionStatusFailed = errors.New("failed to change the commissioning status")
 
+	// ErrIllegalCommissionStatusTransition is returned when we're not allowed
+	// to set a target commission status because of the existing commission
+	// status. It's not a retryable error.
+	ErrIllegalCommissionTransition = errors.New("illegal commission status transition")
+
 	// ErrEpochIncremented is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
 	ErrEpochIncremented = errors.New("heartbeat failed on epoch increment")
@@ -248,11 +253,11 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter func(int, string)) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		livenessRec, err := nl.SelfEx()
+		oldLivenessRec, err := nl.SelfEx()
 		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
-		err = nl.setDrainingInternal(ctx, livenessRec, drain, reporter)
+		err = nl.setDrainingInternal(ctx, oldLivenessRec, drain, reporter)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
@@ -338,10 +343,13 @@ func (nl *NodeLiveness) SetCommissionStatus(
 			// liveness, the previous view is correct. This, too, is required to
 			// de-flake TestNodeLivenessDecommissionAbsent.
 			//
-			// We work off a copy of the liveness record. When
-			// XXX: I want to maybe update with the reconciled version, but
-			// commissionStatusInternal expects empty liveness, if none existed.
-			// Need to work off a copy.
+			// We work off a copy of the liveness record as the version we
+			// update with needs to be compatible with the v20.1 representation.
+			// `setCommissionStatusInternal` checks for the case where the
+			// liveness record is an empty one (i.e. no record existed
+			// previously). Since making the liveness record backwards
+			// compatible entails setting a non-zero value for the
+			// CommissionStatus, we have to use a copy here.
 			oldLivenessRecCopy := oldLivenessRec
 			oldLivenessRecCopy.Liveness.EnsureCompatible()
 			nl.maybeUpdate(oldLivenessRecCopy)
@@ -376,30 +384,34 @@ func (nl *NodeLiveness) setDrainingInternal(
 		<-sem
 	}()
 
-	update := livenessUpdate{
-		old:         oldLivenessRec.Liveness,
-		oldRaw:      oldLivenessRec.raw,
-		ignoreCache: true,
-	}
+	// Lets compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
 	if oldLivenessRec.Liveness == (kvserverpb.Liveness{}) {
 		// Liveness record didn't previously exist, so we create one.
-		update.new = kvserverpb.Liveness{
-			NodeID: nodeID,
-			Epoch:  1,
+		newLiveness = kvserverpb.Liveness{
+			NodeID:           nodeID,
+			Epoch:            1,
+			CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED,
 		}
 	} else {
-		update.new = oldLivenessRec.Liveness
+		newLiveness = oldLivenessRec.Liveness
+		// We may have read a liveness record written by a v20.1 node, so we
+		// reconcile.
+		newLiveness.EnsureCompatible()
 	}
 
-	if reporter != nil && drain && !update.new.Draining {
+	if reporter != nil && drain && !newLiveness.Draining {
 		// Report progress to the Drain RPC.
 		reporter(1, "liveness record")
 	}
-	update.new.Draining = drain
-	// We may have read a liveness record written by a v20.1 node, so we
-	// reconcile.
-	update.new.EnsureCompatible()
+	newLiveness.Draining = drain
 
+	update := livenessUpdate{
+		old:         oldLivenessRec.Liveness,
+		new:         newLiveness,
+		oldRaw:      oldLivenessRec.raw,
+		ignoreCache: true,
+	}
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		// We may have read a liveness record written by a v20.1 node, so we
 		// reconcile.
@@ -478,11 +490,10 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 
 	if oldLivenessRec.CommissionStatus == newLiveness.CommissionStatus {
 		// No-op. Return early.
-		// XXX: Write tests for what gets inserted into event log, and what doesn't.
 		return false, nil
 	} else if oldLivenessRec.CommissionStatus.Decommissioned() &&
 		newLiveness.CommissionStatus.Decommissioning() {
-		// Also check for old == decomm'd and new == decomm'ing.
+		// Marking a decommissioned node for decommissioning is a no-op.
 		return false, nil
 	}
 
@@ -493,22 +504,31 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 	// 	- Decommissioning 	=> Decommissioned
 	//
 	// See diagram above CommissionStatus type for more details.
-	//
-	// XXX: How to best surface these errors all the way up to the CLI output?
-	if newLiveness.CommissionStatus.Commissioned() &&
-		!oldLivenessRec.Liveness.CommissionStatus.Decommissioning() {
-		return false, errors.Newf("can only recommission a decommissioning node, found %s",
-			oldLivenessRec.Liveness.CommissionStatus.String())
-	}
-	if newLiveness.CommissionStatus.Decommissioning() &&
-		!oldLivenessRec.Liveness.CommissionStatus.Commissioned() {
-		return false, errors.Newf("can only decommission a commissioned node, found %s",
-			oldLivenessRec.Liveness.CommissionStatus.String())
-	}
-	if newLiveness.CommissionStatus.Decommissioned() &&
-		!oldLivenessRec.Liveness.CommissionStatus.Decommissioning() {
-		return false, errors.Newf("can only fully decommission a decommissioning node, found %s",
-			oldLivenessRec.Liveness.CommissionStatus.String())
+
+	// ASK(reviewers): How to best surface these errors all the way up to the
+	// CLI output? I can't figure out what pieces I need from the errors package
+	// to make it work.
+	if oldLivenessRec.Liveness != (kvserverpb.Liveness{}) {
+		if newLiveness.CommissionStatus.Commissioned() &&
+			!oldLivenessRec.Liveness.CommissionStatus.Decommissioning() {
+			err := errors.Newf("can only recommission a decommissioning node, found %s",
+				oldLivenessRec.Liveness.CommissionStatus.String())
+			return false, errors.Mark(err, ErrIllegalCommissionTransition)
+		}
+		if newLiveness.CommissionStatus.Decommissioning() &&
+			!oldLivenessRec.Liveness.CommissionStatus.Commissioned() {
+			// NB: This code-path is actually inaccessible, given the no-op
+			// conditions above. We keep it for clarity.
+			err := errors.Newf("can only decommission a commissioned node, found %s",
+				oldLivenessRec.Liveness.CommissionStatus.String())
+			return false, errors.Mark(err, ErrIllegalCommissionTransition)
+		}
+		if newLiveness.CommissionStatus.Decommissioned() &&
+			!oldLivenessRec.Liveness.CommissionStatus.Decommissioning() {
+			err := errors.Newf("can only fully decommission a decommissioning node, found %s",
+				oldLivenessRec.Liveness.CommissionStatus.String())
+			return false, errors.Mark(err, ErrIllegalCommissionTransition)
+		}
 	}
 
 	update := livenessUpdate{
@@ -541,16 +561,6 @@ func (nl *NodeLiveness) setCommissionStatusInternal(
 
 	return statusChanged, nil
 }
-
-// XXX: Add a test for the following scenario.
-//	- Decommission n2 from n1, where n2 has no liveness record. n1
-//	  running v20.2
-//	- n2 is running v20.1, tries to update it's liveness record. Finds
-//	  it's own liveness record written by n1 (but the new proto,
-//	  which it doesn't know how to read fully). Will it parse
-//	  properly? It's important for v20.2 nodes to be able to read v20.1 and
-//	  v20.2 representations. It's important for v20.2 to write a representation
-//	  understood by both v20.1 and v20.2.
 
 // GetLivenessThreshold returns the maximum duration between heartbeats
 // before a node is considered not-live.
@@ -699,7 +709,7 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness kvserverpb.Liven
 }
 
 func (nl *NodeLiveness) heartbeatInternal(
-	ctx context.Context, liveness kvserverpb.Liveness, incrementEpoch bool,
+	ctx context.Context, oldLiveness kvserverpb.Liveness, incrementEpoch bool,
 ) error {
 	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
 	defer sp.Finish()
@@ -723,47 +733,43 @@ func (nl *NodeLiveness) heartbeatInternal(
 		<-sem
 	}()
 
-	update := livenessUpdate{
-		old: liveness,
-	}
-	if liveness == (kvserverpb.Liveness{}) {
+	// Lets compute what our new liveness record should be.
+	var newLiveness kvserverpb.Liveness
+	if oldLiveness == (kvserverpb.Liveness{}) {
 		// Liveness record didn't previously exist, so we create one.
-		// XXX: Expects empty liveness.
-		update.new = kvserverpb.Liveness{
+		newLiveness = kvserverpb.Liveness{
 			NodeID:           nodeID,
 			Epoch:            1,
 			CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED,
 		}
 	} else {
-		update.new = liveness
+		newLiveness = oldLiveness
 		if incrementEpoch {
-			update.new.Epoch++
-			// Clear draining field.
-			update.new.Draining = false
+			newLiveness.Epoch++
+			newLiveness.Draining = false // Clear draining field.
 		}
+		// We may have read a liveness record written by a v20.1 node, so we
+		// reconcile.
+		newLiveness.EnsureCompatible()
 	}
-
-	// We may have read a liveness record written by a v20.1 node, so we
-	// reconcile.
-	//
-	// XXX: What's the guarantee that v21.1 nodes will never see v20.1
-	// representation? A: Heartbeats are only ever sent out by live nodes, and
-	// operators aren't allowed to deploy clusters such that there's a 20.1
-	// node heartbeating a 21.1 cluster. Still, can we foolproof this somehow?
-	update.new.EnsureCompatible()
 
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
 	{
-		update.new.Expiration = hlc.LegacyTimestamp(
+		newLiveness.Expiration = hlc.LegacyTimestamp(
 			nl.clock.Now().Add((nl.livenessThreshold).Nanoseconds(), 0))
 		// This guards against the system clock moving backwards. As long
 		// as the cockroach process is running, checks inside hlc.Clock
 		// will ensure that the clock never moves backwards, but these
 		// checks don't work across process restarts.
-		if update.new.Expiration.Less(liveness.Expiration) {
+		if newLiveness.Expiration.Less(oldLiveness.Expiration) {
 			return errors.Errorf("proposed liveness update expires earlier than previous record")
 		}
+	}
+
+	update := livenessUpdate{
+		old: oldLiveness,
+		new: newLiveness,
 	}
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		// Update liveness to actual value on mismatch.
@@ -1155,7 +1161,6 @@ func (nl *NodeLiveness) maybeUpdate(new LivenessRecord) {
 // shouldReplaceLiveness checks to see if the new liveness, is infact, newer
 // than the old liveness.
 func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
-	// XXX: Expects empty liveness.
 	if (old == kvserverpb.Liveness{}) {
 		return true
 	}

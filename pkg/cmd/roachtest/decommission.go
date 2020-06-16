@@ -260,6 +260,26 @@ func execCLI(
 func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	t.Skip("TODO(irfansharif)", "Rewrite this test to incorporate new recommission semantics")
 
+	// XXX: Write tests for recommissioning only canceling out extant
+	// decommissioning attempts, and no more.
+
+	// XXX: Test all the error conditions for setCommissionStatusInternal.
+
+	// XXX: Add a test for the following scenario.
+	//	- Decommission n2 from n1, where n2 has no liveness record. n1
+	//	  running v20.2
+	//	- n2 is running v20.1, tries to update it's liveness record. Finds
+	//	  it's own liveness record written by n1 (but the new proto,
+	//	  which it doesn't know how to read fully). Will it parse
+	//	  properly? It's important for v20.2 nodes to be able to read v20.1 and
+	//	  v20.2 representations. It's important for v20.2 to write a representation
+	//	  understood by both v20.1 and v20.2.
+
+	// XXX: What's the guarantee that v21.1 nodes will never see v20.1
+	// representation? A: Heartbeats are only ever sent out by live nodes, and
+	// operators aren't allowed to deploy clusters such that there's a 20.1
+	// node heartbeating a 21.1 cluster. Still, can we foolproof this somehow?
+
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
@@ -375,6 +395,8 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 		return res
 	}
+
+	// XXX: Write tests for what gets inserted into event log, and what doesn't.
 
 	// XXX: In this test we're able to issue decommission commands through nodes
 	// that have been fully decommissioned.

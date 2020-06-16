@@ -359,8 +359,6 @@ func runDecommissionNodeImpl(
 			replicaCount += status.ReplicaCount
 			allDecommissioning = allDecommissioning && status.CommissionStatus.Decommissioning() ||
 				status.CommissionStatus.Decommissioned()
-			// XXX: Write tests for recommissioning only canceling out extant
-			// decommissioning attempts, and no more.
 		}
 		if replicaCount == 0 {
 			// We now mark the node as fully decommissioned.
@@ -373,11 +371,12 @@ func runDecommissionNodeImpl(
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
 			}
-			// We print out the final commission_status stating
-			// `decommissioned`. This is checked in tests.
-			fmt.Fprintln(stderr)
-			if err := printDecommissionStatus(*resp); err != nil {
-				return err
+			if !reflect.DeepEqual(&prevResponse, resp) {
+				fmt.Fprintln(stderr)
+				if err := printDecommissionStatus(*resp); err != nil {
+					return err
+				}
+				prevResponse = *resp
 			}
 		}
 		if replicaCount == 0 && allDecommissioning {
