@@ -17,13 +17,13 @@ some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 20:16:27.658082 +0
 
 # Not using TIMETZ until #26074 and #25224 are resolved.
 statement ok
-ALTER TABLE t ALTER s TYPE BYTES, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMESTAMPTZ
+ALTER TABLE t ALTER s TYPE STRING, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMESTAMPTZ
 
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
 column_name  data_type    is_nullable  column_default  generation_expression  indices    is_hidden
-s            BYTES        true         NULL            ·                      {}         false
+s            STRING       true         NULL            ·                      {}         false
 sl           STRING(6)    true         NULL            ·                      {}         false
 t            TIME         true         NULL            ·                      {}         false
 ts           TIMESTAMPTZ  true         NULL            ·                      {}         false
@@ -523,3 +523,27 @@ SELECT x FROM t28 ORDER BY x
 5
 10
 15
+
+# Regression 50277, ensure ColumnConversionValidate type conversion doesn't
+# error before running the online schema change.
+statement ok
+CREATE TABLE t29 (x INT8);
+INSERT INTO t29 VALUES (1), (2), (3);
+ALTER TABLE t29 ALTER COLUMN x TYPE INT4;
+
+query I
+SELECT x FROM t29 ORDER BY x
+----
+1
+2
+3
+
+# ColumnConversionValidate should error out if the conversion is not valid.
+# STRING -> BYTES is a ColumnConversionValidate type conversion, it should
+# try the conversion and error out if the cast cannot be applied.
+statement ok
+CREATE TABLE t30 (x STRING);
+INSERT INTO t30 VALUES (e'a\\01');
+
+statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
+ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
