@@ -531,6 +531,12 @@ func (a internalClientAdapter) Batch(
 	return a.InternalServer.Batch(ctx, ba)
 }
 
+func (a internalClientAdapter) UnsafeHealRange(
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest, _ ...grpc.CallOption,
+) (*roachpb.UnsafeHealRangeResponse, error) {
+	return a.InternalServer.UnsafeHealRange(ctx, req)
+}
+
 type rangeFeedClientAdapter struct {
 	ctx    context.Context
 	eventC chan *roachpb.RangeFeedEvent

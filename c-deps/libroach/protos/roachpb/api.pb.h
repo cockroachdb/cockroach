@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[119];
+  static const ::google::protobuf::internal::ParseTable schema[121];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -408,6 +408,12 @@ extern TruncateLogRequestDefaultTypeInternal _TruncateLogRequest_default_instanc
 class TruncateLogResponse;
 class TruncateLogResponseDefaultTypeInternal;
 extern TruncateLogResponseDefaultTypeInternal _TruncateLogResponse_default_instance_;
+class UnsafeHealRangeRequest;
+class UnsafeHealRangeRequestDefaultTypeInternal;
+extern UnsafeHealRangeRequestDefaultTypeInternal _UnsafeHealRangeRequest_default_instance_;
+class UnsafeHealRangeResponse;
+class UnsafeHealRangeResponseDefaultTypeInternal;
+extern UnsafeHealRangeResponseDefaultTypeInternal _UnsafeHealRangeResponse_default_instance_;
 class WriteBatchRequest;
 class WriteBatchRequestDefaultTypeInternal;
 extern WriteBatchRequestDefaultTypeInternal _WriteBatchRequest_default_instance_;
@@ -535,6 +541,8 @@ template<> ::cockroach::roachpb::SubsumeResponse* Arena::CreateMaybeMessage<::co
 template<> ::cockroach::roachpb::TransferLeaseRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::TransferLeaseRequest>(Arena*);
 template<> ::cockroach::roachpb::TruncateLogRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::TruncateLogRequest>(Arena*);
 template<> ::cockroach::roachpb::TruncateLogResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::TruncateLogResponse>(Arena*);
+template<> ::cockroach::roachpb::UnsafeHealRangeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::UnsafeHealRangeRequest>(Arena*);
+template<> ::cockroach::roachpb::UnsafeHealRangeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::UnsafeHealRangeResponse>(Arena*);
 template<> ::cockroach::roachpb::WriteBatchRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::WriteBatchRequest>(Arena*);
 template<> ::cockroach::roachpb::WriteBatchResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::WriteBatchResponse>(Arena*);
 }  // namespace protobuf
@@ -16803,6 +16811,212 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::RangeFeedValue* val_;
   ::cockroach::roachpb::RangeFeedCheckpoint* checkpoint_;
   ::cockroach::roachpb::RangeFeedError* error_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class UnsafeHealRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.UnsafeHealRangeRequest) */ {
+ public:
+  UnsafeHealRangeRequest();
+  virtual ~UnsafeHealRangeRequest();
+
+  UnsafeHealRangeRequest(const UnsafeHealRangeRequest& from);
+
+  inline UnsafeHealRangeRequest& operator=(const UnsafeHealRangeRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  UnsafeHealRangeRequest(UnsafeHealRangeRequest&& from) noexcept
+    : UnsafeHealRangeRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline UnsafeHealRangeRequest& operator=(UnsafeHealRangeRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const UnsafeHealRangeRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const UnsafeHealRangeRequest* internal_default_instance() {
+    return reinterpret_cast<const UnsafeHealRangeRequest*>(
+               &_UnsafeHealRangeRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    119;
+
+  void Swap(UnsafeHealRangeRequest* other);
+  friend void swap(UnsafeHealRangeRequest& a, UnsafeHealRangeRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline UnsafeHealRangeRequest* New() const final {
+    return CreateMaybeMessage<UnsafeHealRangeRequest>(NULL);
+  }
+
+  UnsafeHealRangeRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<UnsafeHealRangeRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const UnsafeHealRangeRequest& from);
+  void MergeFrom(const UnsafeHealRangeRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(UnsafeHealRangeRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_range_id();
+  static const int kRangeIdFieldNumber = 1;
+  ::google::protobuf::int64 range_id() const;
+  void set_range_id(::google::protobuf::int64 value);
+
+  void clear_node_id();
+  static const int kNodeIdFieldNumber = 2;
+  ::google::protobuf::int64 node_id() const;
+  void set_node_id(::google::protobuf::int64 value);
+
+  void clear_store_id();
+  static const int kStoreIdFieldNumber = 3;
+  ::google::protobuf::int64 store_id() const;
+  void set_store_id(::google::protobuf::int64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.UnsafeHealRangeRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::int64 range_id_;
+  ::google::protobuf::int64 node_id_;
+  ::google::protobuf::int64 store_id_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class UnsafeHealRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.UnsafeHealRangeResponse) */ {
+ public:
+  UnsafeHealRangeResponse();
+  virtual ~UnsafeHealRangeResponse();
+
+  UnsafeHealRangeResponse(const UnsafeHealRangeResponse& from);
+
+  inline UnsafeHealRangeResponse& operator=(const UnsafeHealRangeResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  UnsafeHealRangeResponse(UnsafeHealRangeResponse&& from) noexcept
+    : UnsafeHealRangeResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline UnsafeHealRangeResponse& operator=(UnsafeHealRangeResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const UnsafeHealRangeResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const UnsafeHealRangeResponse* internal_default_instance() {
+    return reinterpret_cast<const UnsafeHealRangeResponse*>(
+               &_UnsafeHealRangeResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    120;
+
+  void Swap(UnsafeHealRangeResponse* other);
+  friend void swap(UnsafeHealRangeResponse& a, UnsafeHealRangeResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline UnsafeHealRangeResponse* New() const final {
+    return CreateMaybeMessage<UnsafeHealRangeResponse>(NULL);
+  }
+
+  UnsafeHealRangeResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<UnsafeHealRangeResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const UnsafeHealRangeResponse& from);
+  void MergeFrom(const UnsafeHealRangeResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(UnsafeHealRangeResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.UnsafeHealRangeResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -34449,9 +34663,60 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeFeedEvent.error)
 }
 
+// -------------------------------------------------------------------
+
+// UnsafeHealRangeRequest
+
+inline void UnsafeHealRangeRequest::clear_range_id() {
+  range_id_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 UnsafeHealRangeRequest::range_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.UnsafeHealRangeRequest.range_id)
+  return range_id_;
+}
+inline void UnsafeHealRangeRequest::set_range_id(::google::protobuf::int64 value) {
+  
+  range_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.UnsafeHealRangeRequest.range_id)
+}
+
+inline void UnsafeHealRangeRequest::clear_node_id() {
+  node_id_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 UnsafeHealRangeRequest::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.UnsafeHealRangeRequest.node_id)
+  return node_id_;
+}
+inline void UnsafeHealRangeRequest::set_node_id(::google::protobuf::int64 value) {
+  
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.UnsafeHealRangeRequest.node_id)
+}
+
+inline void UnsafeHealRangeRequest::clear_store_id() {
+  store_id_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 UnsafeHealRangeRequest::store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.UnsafeHealRangeRequest.store_id)
+  return store_id_;
+}
+inline void UnsafeHealRangeRequest::set_store_id(::google::protobuf::int64 value) {
+  
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.UnsafeHealRangeRequest.store_id)
+}
+
+// -------------------------------------------------------------------
+
+// UnsafeHealRangeResponse
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
