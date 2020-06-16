@@ -116,7 +116,7 @@ func (dsp *DistSQLPlanner) initRunners() {
 // It will first attempt to set up all remote flows using the dsp workers if
 // available or sequentially if not, and then finally set up the gateway flow,
 // whose output is the DistSQLReceiver provided. This flow is then returned to
-// be run.
+// be run. It also returns a boolean indicating whether the flow is vectorized.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -125,14 +125,14 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	vectorizeThresholdMet bool,
-) (context.Context, flowinfra.Flow, error) {
+) (context.Context, flowinfra.Flow, bool, error) {
 	thisNodeID := dsp.nodeDesc.NodeID
 	_, ok := flows[thisNodeID]
 	if !ok {
-		return nil, nil, errors.AssertionFailedf("missing gateway flow")
+		return nil, nil, false, errors.AssertionFailedf("missing gateway flow")
 	}
 	if localState.IsLocal && len(flows) != 1 {
-		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
+		return nil, nil, false, errors.AssertionFailedf("IsLocal set but there's multiple flows")
 	}
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
@@ -199,7 +199,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 					}
 					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
 					if returnVectorizationSetupError {
-						return nil, nil, err
+						return nil, nil, false, err
 					}
 					// Vectorization is not supported for this flow, so we override the
 					// setting.
@@ -218,7 +218,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// A tenant server should never find itself distributing flows.
 			// NB: we wouldn't hit this in practice but if we did the actual
 			// error would be opaque.
-			return nil, nil, errorutil.UnsupportedWithMultiTenancy(47900)
+			return nil, nil, false, errorutil.UnsupportedWithMultiTenancy(47900)
 		}
 		req := setupReq
 		req.Flow = *flowSpec
@@ -252,7 +252,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		return nil, nil, firstErr
+		return nil, nil, false, firstErr
 	}
 
 	// Set up the flow on this node.
@@ -261,10 +261,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 	defer physicalplan.ReleaseSetupFlowRequest(&localReq)
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
-	return ctx, flow, nil
+	return ctx, flow, setupReq.EvalContext.Vectorize != int32(sessiondata.VectorizeOff), nil
 }
 
 // Run executes a physical plan. The plan should have been finalized using
@@ -382,7 +382,7 @@ func (dsp *DistSQLPlanner) Run(
 		localState.IsLocal = true
 	}
 
-	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet)
+	ctx, flow, vectorized, err := dsp.setupFlows(ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}
@@ -390,6 +390,10 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
+	}
+
+	if planCtx.planner != nil && vectorized {
+		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
 	}
 
 	// Check that flows that were forced to be planned locally also have no concurrency.
