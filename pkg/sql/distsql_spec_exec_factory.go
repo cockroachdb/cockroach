@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -398,13 +397,13 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
-func (e *distSQLSpecExecFactory) ConstructGeoLookupJoin(
+func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	joinType sqlbase.JoinType,
-	geoRelationshipType geoindex.RelationshipType,
+	invertedExpr tree.TypedExpr,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	geoCol exec.NodeColumnOrdinal,
+	inputCol exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,

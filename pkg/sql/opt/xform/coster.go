@@ -187,8 +187,8 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.LookupJoinOp:
 		cost = c.computeLookupJoinCost(candidate.(*memo.LookupJoinExpr), required)
 
-	case opt.GeoLookupJoinOp:
-		cost = c.computeGeoLookupJoinCost(candidate.(*memo.GeoLookupJoinExpr), required)
+	case opt.InvertedJoinOp:
+		cost = c.computeInvertedJoinCost(candidate.(*memo.InvertedJoinExpr), required)
 
 	case opt.ZigzagJoinOp:
 		cost = c.computeZigzagJoinCost(candidate.(*memo.ZigzagJoinExpr))
@@ -483,8 +483,8 @@ func (c *coster) computeLookupJoinCost(
 	return cost
 }
 
-func (c *coster) computeGeoLookupJoinCost(
-	join *memo.GeoLookupJoinExpr, required *physical.Required,
+func (c *coster) computeInvertedJoinCost(
+	join *memo.InvertedJoinExpr, required *physical.Required,
 ) memo.Cost {
 	lookupCount := join.Input.Relational().Stats.RowCount
 
@@ -501,7 +501,7 @@ func (c *coster) computeGeoLookupJoinCost(
 		// We shouldn't ever get here. Since we don't allow the memo
 		// to be optimized twice, the coster should never be used after
 		// logPropsBuilder.clear() is called.
-		panic(errors.AssertionFailedf("could not get rows processed for geolookup join"))
+		panic(errors.AssertionFailedf("could not get rows processed for inverted join"))
 	}
 
 	// Lookup joins can return early if enough rows have been found. An otherwise
