@@ -4,12 +4,11 @@ statement ok
 CREATE TABLE f (x FLOAT)
 
 statement ok
-INSERT INTO f(x) VALUES (1e10000 * 1e-9999), (3/2), (1)
+INSERT INTO f(x) VALUES (3/2), (1)
 
 query R rowsort
 SELECT * FROM f
 ----
-10
 1.5
 1
 
@@ -20,7 +19,7 @@ statement error value type decimal doesn't match type int of column "x"
 INSERT INTO i(x) VALUES (4.5)
 
 statement ok
-INSERT INTO i(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6)
+INSERT INTO i(x) VALUES (2.0)
 
 statement error numeric constant out of int64 range
 INSERT INTO i(x) VALUES (9223372036854775809)
@@ -28,9 +27,7 @@ INSERT INTO i(x) VALUES (9223372036854775809)
 query I rowsort
 SELECT * FROM i
 ----
-1
 2
-7
 
 statement ok
 CREATE TABLE d (x DECIMAL)
@@ -41,9 +38,9 @@ INSERT INTO d(x) VALUES (((9 / 3) * (1 / 3))), (2.0), (2.4 + 4.6)
 query R rowsort
 SELECT * FROM d
 ----
-1
+0.99999999999999999999
 2.0
-7
+7.0
 
 statement ok
 UPDATE d SET x = x + 1 WHERE x + sqrt(x) >= 2 + .1
@@ -51,9 +48,9 @@ UPDATE d SET x = x + 1 WHERE x + sqrt(x) >= 2 + .1
 query R rowsort
 SELECT * FROM d
 ----
-1
+0.99999999999999999999
 3.0
-8
+8.0
 
 statement ok
 CREATE TABLE s (x STRING)
@@ -87,8 +84,11 @@ SELECT COALESCE(1, 'foo')
 query error incompatible COALESCE expressions: could not parse "foo" as type int
 SELECT COALESCE(1::INT, 'foo')
 
-query R
+query error expected 2.3 to be of type int, found type decimal
 SELECT greatest(-1, 1, 2.3, 123456789, 3 + 5, -(-4))
+
+query I
+SELECT greatest(-1, 1, 2, 123456789, 3 + 5, -(-4))
 ----
 123456789
 
@@ -102,20 +102,10 @@ SELECT greatest('PT12H2M', 'PT12H2M'::INTERVAL, '1s')
 ----
 12:02:00
 
-# This is a current limitation where a nested constant that does not get folded (eg. abs(-9))
-# will not be exposed to the same constant type resolution rules as other constants, meaning that
-# it may miss out on being upcast. The limitation could be addressed by either improving the
-# scope of constant folding or improving homogeneous type resolution.
-# TODO(nvanbenschoten) We may be able to address this by desiring the commonNumericConstantType
-#     of all constants for the first resolvableExpr in typeCheckSameTypedExprs when the parent
-#     expression has no desired type.
-query error greatest\(\): expected -1.123 to be of type int, found type decimal
-SELECT greatest(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), abs(-9))
-
 query R
-SELECT greatest(-1, 1, 2.3, 123456789, 3 + 5, -(-4), abs(-9.0))
+SELECT greatest(-1.123, 1.21313, 2.3, 123456789.321, 3 + 5.3213, -(-4.3213), abs(-9))
 ----
-123456789
+123456789.321
 
 statement ok
 CREATE TABLE untyped (b bool, n INT, f FLOAT, e DECIMAL, d DATE, ts TIMESTAMP, tz TIMESTAMPTZ, i INTERVAL)

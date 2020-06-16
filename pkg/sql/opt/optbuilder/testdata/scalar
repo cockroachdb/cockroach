@@ -6,7 +6,9 @@ const: 1 [type=int]
 build-scalar
 1 + 2
 ----
-const: 3 [type=int]
+plus [type=int]
+ ├── const: 1 [type=int]
+ └── const: 2 [type=int]
 
 build-scalar vars=(string)
 @1
@@ -1094,7 +1096,9 @@ tuple [type=tuple{int, string, float}]
  │    └── const: 1 [type=int]
  ├── indirection [type=string]
  │    ├── variable: "@2":2 [type=string[]]
- │    └── const: 2 [type=int]
+ │    └── plus [type=int]
+ │         ├── const: 1 [type=int]
+ │         └── const: 1 [type=int]
  └── indirection [type=float]
       ├── variable: "@3":3 [type=float[]]
       └── variable: "@4":4 [type=int]

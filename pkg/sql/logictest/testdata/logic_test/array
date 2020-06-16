@@ -256,7 +256,7 @@ SELECT ARRAY['a', 'b', 'c'][4]
 NULL
 
 query T
-SELECT ARRAY['a', 'b', 'c'][1.5 + 1.5]
+SELECT ARRAY['a', 'b', 'c'][1 + 2]
 ----
 c
 
@@ -281,7 +281,7 @@ SELECT ARRAY[1, 2, 3][4]
 NULL
 
 query I
-SELECT ARRAY[1, 2, 3][1.5 + 1.5]
+SELECT ARRAY[1, 2, 3][1 + 2]
 ----
 3
 
