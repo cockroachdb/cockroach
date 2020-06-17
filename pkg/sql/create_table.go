@@ -337,7 +337,10 @@ func (n *createTableNode) startExec(params runParams) error {
 	for _, updated := range affected {
 		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if err := params.p.writeSchemaChange(
-			params.ctx, updated, sqlbase.InvalidMutationID, "updating referenced table",
+			params.ctx, updated, sqlbase.InvalidMutationID,
+			fmt.Sprintf("updating referenced FK table %s(%d) for table %s(%d)",
+				updated.Name, updated.ID, desc.Name, desc.ID,
+			),
 		); err != nil {
 			return err
 		}
@@ -561,7 +564,8 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 			// TODO (lucy): Have more consistent/informative names for dependent jobs.
 			err := p.writeSchemaChange(
 				ctx, sqlbase.NewMutableExistingTableDescriptor(*tbl), sqlbase.InvalidMutationID,
-				"updating foreign key references on table",
+				fmt.Sprintf("updating foreign key references on table %s(%d)",
+					tbl.Name, tbl.ID),
 			)
 			if err != nil {
 				return err
@@ -1013,7 +1017,11 @@ func (p *planner) finalizeInterleave(
 
 	// TODO (lucy): Have more consistent/informative names for dependent jobs.
 	if err := p.writeSchemaChange(
-		ctx, ancestorTable, sqlbase.InvalidMutationID, "updating ancestor table",
+		ctx, ancestorTable, sqlbase.InvalidMutationID,
+		fmt.Sprintf(
+			"updating ancestor table %s(%d) for table %s(%d)",
+			ancestorTable.Name, ancestorTable.ID, desc.Name, desc.ID,
+		),
 	); err != nil {
 		return err
 	}
@@ -1022,6 +1030,7 @@ func (p *planner) finalizeInterleave(
 		desc.State = sqlbase.TableDescriptor_PUBLIC
 
 		// No job description, since this is presumably part of some larger schema change.
+		// TODO(lucy): what is the right job description here?
 		if err := p.writeSchemaChange(
 			ctx, desc, sqlbase.InvalidMutationID, "",
 		); err != nil {
@@ -1794,7 +1803,7 @@ func makeTableDesc(
 				seqName,
 				temporary,
 				seqOpts,
-				"creating sequence",
+				fmt.Sprintf("creating sequence %s for new table %s", seqName, n.Table.Table()),
 			); err != nil {
 				return ret, err
 			}

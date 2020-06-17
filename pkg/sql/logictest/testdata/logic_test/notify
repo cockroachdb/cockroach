@@ -1,0 +1,70 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration='10ms'
+
+statement ok
+LISTEN foo
+
+statement ok
+LISTEN bar
+
+# Duplicate listens do nothing.
+statement ok
+LISTEN foo
+
+statement ok
+NOTIFY foo
+
+query T notificationtrace retry
+SELECT 1
+----
+Asynchronous notification "foo" received from server with node ID 1.
+
+statement ok
+NOTIFY foo, 'bar'
+
+query T retry notificationtrace
+SELECT 1
+----
+Asynchronous notification "foo" with payload "bar" received from server with node ID 1.
+
+statement ok
+NOTIFY foo; NOTIFY foo, 'bar';
+
+query T retry notificationtrace
+----
+Asynchronous notification "foo" received from server with node ID 1.
+Asynchronous notification "foo" with payload "bar" received from server with node ID 1.
+
+statement ok
+NOTIFY bar, 'hello mate"\n foosfoo'
+
+query T retry notificationtrace
+SELECT 1
+----
+Asynchronous notification "bar" with payload "hello mate\"\\n foosfoo" received from server with node ID 1.
+
+statement ok
+UNLISTEN foo
+
+# We're not listening on foo - no notification.
+query T notificationtrace
+NOTIFY foo
+----
+
+statement ok
+NOTIFY bar
+
+query T retry notificationtrace
+SELECT 1
+----
+Asynchronous notification "bar" received from server with node ID 1.
+
+statement ok
+UNLISTEN *
+
+# We're not listening on bar - no notification.
+query T notificationtrace
+NOTIFY bar
+----

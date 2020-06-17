@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -163,7 +164,9 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			// DROP DATABASE.
 			// TODO (lucy): Have more consistent/informative names for dependent jobs.
 			if err := p.createOrUpdateSchemaChangeJob(
-				ctx, d, "updating privileges", sqlbase.InvalidMutationID,
+				ctx, d,
+				fmt.Sprintf("updating privileges for table %d", d.ID),
+				sqlbase.InvalidMutationID,
 			); err != nil {
 				return err
 			}
