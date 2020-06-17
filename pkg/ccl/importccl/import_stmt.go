@@ -859,7 +859,9 @@ func prepareNewTableDescsForIngestion(
 ) ([]*sqlbase.TableDescriptor, error) {
 	var tableDescs []*sqlbase.TableDescriptor
 	for _, i := range importTables {
-		if err := backupccl.CheckTableExists(ctx, txn, p.ExecCfg().Codec, parentID, i.Desc.Name); err != nil {
+		// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
+		//  support user defined schemas.
+		if err := backupccl.CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, i.Desc.Name); err != nil {
 			return nil, err
 		}
 		tableDescs = append(tableDescs, i.Desc)
@@ -869,15 +871,15 @@ func prepareNewTableDescsForIngestion(
 	// restoring. We do this last because we want to avoid calling
 	// GenerateUniqueDescID if there's any kind of error above.
 	// Reserving a table ID now means we can avoid the rekey work during restore.
-	tableRewrites := make(backupccl.TableRewriteMap)
+	tableRewrites := make(backupccl.DescRewriteMap)
 	seqVals := make(map[sqlbase.ID]int64, len(importTables))
 	for _, tableDesc := range importTables {
 		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 		if err != nil {
 			return nil, err
 		}
-		tableRewrites[tableDesc.Desc.ID] = &jobspb.RestoreDetails_TableRewrite{
-			TableID:  id,
+		tableRewrites[tableDesc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
+			ID:       id,
 			ParentID: parentID,
 		}
 		seqVals[id] = tableDesc.SeqVal
@@ -911,7 +913,7 @@ func prepareNewTableDescsForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteTableDescs(ctx, txn, nil /* databases */, tables, tree.RequestedDescriptors, p.ExecCfg().Settings, seqValKVs); err != nil {
+	if err := backupccl.WriteDescriptors(ctx, txn, nil /* databases */, tables, nil, tree.RequestedDescriptors, p.ExecCfg().Settings, seqValKVs); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
 

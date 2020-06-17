@@ -765,6 +765,14 @@ func (tc *Collection) GetAllDescriptors(
 			typeLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
+				if dbDesc == nil {
+					// TODO (rohany): Since DROP TYPE has not been implemented yet
+					//  (see #48363), dropped databases do not yet clean up their
+					//  orphaned child type descriptors. That could lead to dbDesc being
+					//  nil here. Once we support drop type, this check does not need to
+					//  be performed.
+					return nil, nil, errors.Newf("database id %d not found", typDesc.ParentID)
+				}
 				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.GetID(), typDesc.ParentSchemaID)
 				if err != nil {
 					return nil, nil, err

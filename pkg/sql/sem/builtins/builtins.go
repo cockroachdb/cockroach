@@ -2981,7 +2981,7 @@ may increase either contention or retry errors, or both.`,
 				}
 				return arr, nil
 			},
-			Info:       "Returns all values of the input enum in an ordered array between the two arguments.",
+			Info:       "Returns all values of the input enum in an ordered array between the two arguments (inclusive).",
 			Volatility: tree.VolatilityStable,
 		},
 	),
