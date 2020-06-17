@@ -256,8 +256,7 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 ) {
 	// New stage has the same distribution as the previous one, so we need to
 	// figure out whether the last stage contains a remote processor.
-	containsRemoteProcessor := len(p.ResultRouters) > 1 || p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID
-	stageID := p.NewStage(containsRemoteProcessor)
+	stageID := p.NewStage(p.IsLastStageDistributed())
 	for i, resultProc := range p.ResultRouters {
 		prevProc := &p.Processors[resultProc]
 
@@ -358,6 +357,26 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 
 	p.ResultTypes = outputTypes
 	p.MergeOrdering = execinfrapb.Ordering{}
+}
+
+// EnsureSingleStreamOnGateway ensures that there is only one stream on the
+// gateway node in the plan (meaning it possibly merges multiple streams or
+// brings a single stream from a remote node to the gateway).
+func (p *PhysicalPlan) EnsureSingleStreamOnGateway() {
+	// If we don't already have a single result router on the gateway, add a
+	// single grouping stage.
+	if len(p.ResultRouters) != 1 ||
+		p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID {
+		p.AddSingleGroupStage(
+			p.GatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+			execinfrapb.PostProcessSpec{},
+			p.ResultTypes,
+		)
+		if len(p.ResultRouters) != 1 || p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID {
+			panic("ensuring a single stream on the gateway failed")
+		}
+	}
 }
 
 // CheckLastStagePost checks that the processors of the last stage of the
@@ -1259,9 +1278,9 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
 }
 
 // IsLastStageDistributed returns whether the last stage of processors is
-// distributed.
+// distributed (meaning that it contains at least one remote processor).
 func (p *PhysicalPlan) IsLastStageDistributed() bool {
-	return len(p.ResultRouters) > 1
+	return len(p.ResultRouters) > 1 || p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID
 }
 
 // PlanDistribution describes the distribution of the physical plan.

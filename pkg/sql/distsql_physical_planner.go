@@ -2978,12 +2978,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// which would violate an assumption later down the line. Check for this
 			// condition and add a no-op stage if it exists.
 			if err := p.CheckLastStagePost(); err != nil {
-				p.AddSingleGroupStage(
-					dsp.gatewayNodeID,
-					execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-					execinfrapb.PostProcessSpec{},
-					p.ResultTypes,
-				)
+				p.EnsureSingleStreamOnGateway()
 			}
 		}
 	} else {
@@ -3269,20 +3264,9 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
 		}
 	}
-	// If we don't already have a single result router on this node, add a final
-	// stage.
-	if len(plan.ResultRouters) != 1 ||
-		plan.Processors[plan.ResultRouters[0]].Node != dsp.gatewayNodeID {
-		plan.AddSingleGroupStage(
-			dsp.gatewayNodeID,
-			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-			execinfrapb.PostProcessSpec{},
-			plan.ResultTypes,
-		)
-		if len(plan.ResultRouters) != 1 {
-			panic(fmt.Sprintf("%d results after single group stage", len(plan.ResultRouters)))
-		}
-	}
+
+	// Add a final "result" stage if necessary.
+	plan.EnsureSingleStreamOnGateway()
 
 	if len(metadataSenders) > 0 {
 		plan.AddSingleGroupStage(
