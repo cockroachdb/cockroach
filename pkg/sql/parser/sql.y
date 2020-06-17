@@ -2787,7 +2787,6 @@ drop_database_stmt:
 // %Help: DROP TYPE - remove a type
 // %Category: DDL
 // %Text: DROP TYPE [IF EXISTS] <type_name> [, ...] [CASCASE | RESTRICT]
-// %SeeAlso: WEBDOCS/drop-type.html
 drop_type_stmt:
   DROP TYPE type_name_list opt_drop_behavior
   {
@@ -5626,7 +5625,6 @@ opt_view_recursive:
 // %Help: CREATE TYPE -- create a type
 // %Category: DDL
 // %Text: CREATE TYPE <type_name> AS ENUM (...)
-// %SeeAlso: WEBDOCS/create-type.html
 create_type_stmt:
   // Enum types.
   CREATE TYPE type_name AS ENUM '(' opt_enum_val_list ')'
