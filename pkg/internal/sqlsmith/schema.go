@@ -19,6 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -43,7 +44,11 @@ func (s *Smither) ReloadSchemas() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	var err error
-	s.tables, err = extractTables(s.db)
+	s.userDefinedTypes, err = extractTypes(s.db)
+	if err != nil {
+		return err
+	}
+	s.tables, err = s.extractTables()
 	if err != nil {
 		return err
 	}
@@ -103,8 +108,14 @@ func (s *Smither) getRandTableIndex(
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	for _, col := range idx.Columns {
+		ref := s.columns[table][col.Column]
+		if ref == nil {
+			// TODO (rohany): There are some cases here where colRef is nil, but we
+			//  aren't yet sure why. Rather than panicking, just return.
+			return nil, nil, nil, false
+		}
 		refs = append(refs, &colRef{
-			typ:  tree.MustBeStaticallyKnownType(s.columns[table][col.Column].Type),
+			typ:  tree.MustBeStaticallyKnownType(ref.Type),
 			item: tree.NewColumnItem(&alias, col.Column),
 		})
 	}
@@ -123,8 +134,68 @@ func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, colRe
 	return s.getRandTableIndex(name, name)
 }
 
-func extractTables(db *gosql.DB) ([]*tableRef, error) {
+func extractTypes(db *gosql.DB) (map[string]*types.T, error) {
 	rows, err := db.Query(`
+SELECT
+	database_name, schema_name, descriptor_name, descriptor_id, enum_members
+FROM
+	crdb_internal.create_type_statements
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	evalCtx := tree.EvalContext{}
+	result := make(map[string]*types.T)
+
+	for rows.Next() {
+		// For each row, collect columns.
+		var dbName, scName, name string
+		var id int
+		var membersRaw []byte
+		if err := rows.Scan(&dbName, &scName, &name, &id, &membersRaw); err != nil {
+			return nil, err
+		}
+		// If enum members were provided, parse the result into a string array.
+		var members []string
+		if len(membersRaw) != 0 {
+			arr, err := tree.ParseDArrayFromString(&evalCtx, string(membersRaw), types.String)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range arr.Array {
+				members = append(members, string(tree.MustBeDString(d)))
+			}
+		}
+		// Try to construct type information from the resulting row.
+		switch {
+		case len(members) > 0:
+			typ := types.MakeEnum(uint32(id), 0 /* arrayTypeID */)
+			typ.TypeMeta = types.UserDefinedTypeMetadata{
+				Name: &types.UserDefinedTypeName{
+					Catalog: dbName,
+					Schema:  scName,
+					Name:    name,
+				},
+				EnumData: &types.EnumMetadata{
+					LogicalRepresentations: members,
+					// The physical representations don't matter in this case, but the
+					// enum related code in tree expects that the length of
+					// PhysicalRepresentations is equal to the length of LogicalRepresentations.
+					PhysicalRepresentations: make([][]byte, len(members)),
+				},
+			}
+			result[name] = typ
+		default:
+			return nil, errors.New("unsupported SQLSmith type kind")
+		}
+	}
+	return result, nil
+}
+
+func (s *Smither) extractTables() ([]*tableRef, error) {
+	rows, err := s.db.Query(`
 SELECT
 	table_catalog,
 	table_schema,
@@ -193,7 +264,10 @@ ORDER BY
 			currentCols = nil
 		}
 
-		coltyp := typeFromName(typ)
+		coltyp, err := s.typeFromName(typ)
+		if err != nil {
+			return nil, err
+		}
 		column := tree.ColumnTableDef{
 			Name: col,
 			Type: coltyp,

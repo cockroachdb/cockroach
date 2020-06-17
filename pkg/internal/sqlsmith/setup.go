@@ -81,6 +81,8 @@ func randTables(r *rand.Rand) string {
 
 const (
 	seedTable = `
+SET experimental_enable_enums = true;
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
 CREATE TABLE IF NOT EXISTS seed AS
 	SELECT
 		g::INT2 AS _int2,
@@ -98,7 +100,8 @@ CREATE TABLE IF NOT EXISTS seed AS
 		g::STRING::BYTES AS _bytes,
 		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid,
 		'0.0.0.0'::INET + g AS _inet,
-		g::STRING::JSONB AS _jsonb
+		g::STRING::JSONB AS _jsonb,
+		enum_range('hello'::greeting)[g] as _enum
 	FROM
 		generate_series(1, 5) AS g;
 
