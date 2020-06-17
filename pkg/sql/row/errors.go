@@ -123,7 +123,11 @@ func NewUniquenessConstraintViolationError(
 		&sqlbase.DatumAlloc{},
 		tableArgs,
 	); err != nil {
-		return err
+		return pgerror.Newf(pgcode.UniqueViolation,
+			"duplicate key value (%s)=(%v) violates unique constraint %q",
+			strings.Join(index.ColumnNames, ","),
+			errors.Wrapf(err, "couldn't fetch value"),
+			index.Name)
 	}
 	f := singleKVFetcher{kvs: [1]roachpb.KeyValue{{Key: key}}}
 	if value != nil {
