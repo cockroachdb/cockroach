@@ -188,11 +188,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:82298f2aa48be0c275272f8cada5e78e2100cefd032bf13ef84a9d26c1a80d92"
+  digest = "1:d1b7be8b46e3825e9f616cd5b2e44f03eb2e3174379cd6d1a64ea0a0d9ad124b"
   name = "github.com/andy-kimball/arenaskl"
-  packages = ["."]
+  packages = [
+    ".",
+    "internal/fastrand",
+  ]
   pruneopts = "UT"
-  revision = "4b42aa066e46a6900c75bf45abd9f0dbfb704c46"
+  revision = "f701008588b9f33126c0bc1c2a47587f2aafbbef"
 
 [[projects]]
   digest = "1:66b3310cf22cdc96c35ef84ede4f7b9b370971c4025f394c89a2638729653b11"
