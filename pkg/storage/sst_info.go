@@ -156,17 +156,26 @@ func (s SSTableInfos) String() string {
 	return buf.String()
 }
 
-// ReadAmplification returns RocksDB's worst case read amplification, which is
-// the number of level-0 sstables plus the number of levels, other than level 0,
-// with at least one sstable.
+// ReadAmplification returns the store's worst case read amplification, which is
+// the number of levels (other than L0) with at least one sstable, and for
+// L0, either the value of `sublevels` if that's greater than 0, or the number
+// of sstables in L0 in all.
 //
-// This definition comes from here:
+// This definition comes from here (minus the sublevel handling, which is a
+// Pebble-specific optimization):
 // https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#level-style-compaction
-func (s SSTableInfos) ReadAmplification() int {
+func (s SSTableInfos) ReadAmplification(sublevels int) int {
 	var readAmp int
 	seenLevel := make(map[int]bool)
 	for _, t := range s {
 		if t.Level == 0 {
+			if sublevels > 0 {
+				if !seenLevel[t.Level] {
+					seenLevel[t.Level] = true
+					readAmp += sublevels
+				}
+				continue
+			}
 			readAmp++
 		} else if !seenLevel[t.Level] {
 			readAmp++

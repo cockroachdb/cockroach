@@ -86,6 +86,8 @@ func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
 
 	rng := rand.New(rand.NewSource(seed))
 	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
+	opts.Experimental.FlushSplitBytes = 1 << rngIntRange(rng, 8, 24)
+	opts.Experimental.L0SublevelCompactions = rng.Intn(2) == 0
 	opts.LBaseMaxBytes = 1 << rngIntRange(rng, 8, 30)
 	opts.L0CompactionThreshold = int(rngIntRange(rng, 1, 10))
 	opts.L0StopWritesThreshold = int(rngIntRange(rng, 1, 32))

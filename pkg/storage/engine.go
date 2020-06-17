@@ -503,6 +503,7 @@ type Stats struct {
 	TableReadersMemEstimate        int64
 	PendingCompactionBytesEstimate int64
 	L0FileCount                    int64
+	L0SublevelCount                int64
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
@@ -725,7 +726,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files", targetDelay, stats.L0FileCount)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, stats.L0FileCount, stats.L0SublevelCount)
 
 	select {
 	case <-time.After(targetDelay):
@@ -738,9 +739,13 @@ func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Dura
 	l0Filelimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	if stats.L0FileCount > l0Filelimit {
+	l0FileCount := stats.L0FileCount
+	if stats.L0SublevelCount > 0 {
+		l0FileCount = stats.L0SublevelCount
+	}
+	if l0FileCount > l0Filelimit {
 		delayPerFile := maxDelay / time.Duration(ramp)
-		targetDelay := time.Duration(stats.L0FileCount-l0Filelimit) * delayPerFile
+		targetDelay := time.Duration(l0FileCount-l0Filelimit) * delayPerFile
 		if targetDelay > maxDelay {
 			return maxDelay
 		}

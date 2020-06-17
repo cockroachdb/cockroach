@@ -313,6 +313,8 @@ func DefaultPebbleOptions() *pebble.Options {
 		MinFlushRate:                4 << 20, // 4 MB/sec
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
+	opts.Experimental.L0SublevelCompactions = true
+	opts.Experimental.FlushSplitBytes = 10 << 20  // 10 MB
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
@@ -773,6 +775,7 @@ func (p *Pebble) GetStats() (*Stats, error) {
 		TableReadersMemEstimate:        m.TableCache.Size,
 		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
 		L0FileCount:                    m.Levels[0].NumFiles,
+		L0SublevelCount:                int64(m.Levels[0].Sublevels),
 	}, nil
 }
 
