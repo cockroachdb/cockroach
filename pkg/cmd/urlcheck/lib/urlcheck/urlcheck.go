@@ -255,7 +255,7 @@ func checkURLs(uniqueURLs map[string][]string) error {
 	if len(errs) > 0 {
 		var buf bytes.Buffer
 		for _, err := range errs {
-			fmt.Fprint(&buf, err)
+			fmt.Fprintln(&buf, err)
 		}
 		fmt.Fprintf(&buf, "%d errors\n", len(errs))
 		return errors.Newf("%s", buf.String())
