@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -370,8 +371,8 @@ func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioni
 	}
 
 	req := &serverpb.CommissionRequest{
-		NodeIDs:                   []roachpb.NodeID{nodeID},
-		DeprecatedDecommissioning: decommissioning,
+		NodeIDs:          []roachpb.NodeID{nodeID},
+		CommissionStatus: kvserverpb.CommissionStatusFromBooleanForm(decommissioning),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

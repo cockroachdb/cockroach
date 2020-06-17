@@ -17,8 +17,10 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -61,7 +63,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	_, rows, err := runQuery(
 		conn,
 		makeQuery(`SELECT node_id FROM crdb_internal.gossip_liveness
-               WHERE decommissioning = false OR split_part(expiration,',',1)::decimal > now()::decimal`),
+               WHERE commission_status = 'commissioned' OR split_part(expiration,',',1)::decimal > now()::decimal`),
 		false,
 	)
 	if err != nil {
@@ -102,6 +104,7 @@ var statusNodesColumnHeadersForStats = []string{
 var statusNodesColumnHeadersForDecommission = []string{
 	"gossiped_replicas",
 	"is_decommissioning",
+	"commission_status",
 	"is_draining",
 }
 
@@ -140,7 +143,7 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 
 	maybeAddActiveNodesFilter := func(query string) string {
 		if !showDecommissioned {
-			query += " WHERE decommissioning = false OR split_part(expiration,',',1)::decimal > now()::decimal"
+			query += " WHERE commission_status = 'commissioned' OR split_part(expiration,',',1)::decimal > now()::decimal"
 		}
 		return query
 	}
@@ -184,7 +187,8 @@ GROUP BY node_id`
 	const decommissionQuery = `
 SELECT node_id AS id,
        ranges AS gossiped_replicas,
-       decommissioning AS is_decommissioning,
+       commission_status = 'decommissioning' OR commission_status = 'decommissioned' as is_decommissioning,
+       commission_status AS commission_status,
        draining AS is_draining
 FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`
 
@@ -271,6 +275,7 @@ var decommissionNodesColumnHeaders = []string{
 	"is_live",
 	"replicas",
 	"is_decommissioning",
+	"commission_status",
 	"is_draining",
 }
 
@@ -312,7 +317,6 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	defer finish()
 
 	c := serverpb.NewAdminClient(conn)
-
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
 }
 
@@ -332,8 +336,8 @@ func runDecommissionNodeImpl(
 	prevResponse := serverpb.CommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.CommissionRequest{
-			NodeIDs:                   nodeIDs,
-			DeprecatedDecommissioning: true,
+			NodeIDs:          nodeIDs,
+			CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONING,
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -354,7 +358,27 @@ func runDecommissionNodeImpl(
 		allDecommissioning := true
 		for _, status := range resp.Status {
 			replicaCount += status.ReplicaCount
-			allDecommissioning = allDecommissioning && status.DeprecatedDecommissioning
+			allDecommissioning = allDecommissioning && status.CommissionStatus.Decommissioning() ||
+				status.CommissionStatus.Decommissioned()
+		}
+		if replicaCount == 0 {
+			// We now mark the node as fully decommissioned.
+			req := &serverpb.CommissionRequest{
+				NodeIDs:          nodeIDs,
+				CommissionStatus: kvserverpb.CommissionStatus_DECOMMISSIONED,
+			}
+			resp, err := c.Decommission(ctx, req)
+			if err != nil {
+				fmt.Fprintln(stderr)
+				return errors.Wrap(err, "while trying to mark as decommissioned")
+			}
+			if !reflect.DeepEqual(&prevResponse, resp) {
+				fmt.Fprintln(stderr)
+				if err := printDecommissionStatus(*resp); err != nil {
+					return err
+				}
+				prevResponse = *resp
+			}
 		}
 		if replicaCount == 0 && allDecommissioning {
 			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
@@ -362,6 +386,10 @@ func runDecommissionNodeImpl(
 			return nil
 		}
 		if wait == nodeDecommissionWaitNone {
+			// We don't bother with marking the node as fully decommissioned.
+			// The intent behind --wait=none is for it to be used when polling
+			// manually from an external system. We'll only mark the node as
+			// fully decommissioned once the replica count hits zero.
 			return nil
 		}
 		if replicaCount < minReplicaCount {
@@ -373,10 +401,10 @@ func runDecommissionNodeImpl(
 }
 
 func decommissionResponseAlignment() string {
-	return "rcrcc"
+	return "rcrccc"
 }
 
-// decommissionResponseValueToRows converts CommissionStatusResponse_Status to
+// decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
 // SQL-like result rows, so that we can pretty-print them.
 func decommissionResponseValueToRows(
 	statuses []serverpb.CommissionStatusResponse_Status,
@@ -388,7 +416,8 @@ func decommissionResponseValueToRows(
 			strconv.FormatInt(int64(node.NodeID), 10),
 			strconv.FormatBool(node.IsLive),
 			strconv.FormatInt(node.ReplicaCount, 10),
-			strconv.FormatBool(node.DeprecatedDecommissioning),
+			strconv.FormatBool(node.CommissionStatus.Decommissioning() || node.CommissionStatus.Decommissioned()),
+			node.CommissionStatus.String(),
 			strconv.FormatBool(node.Draining),
 		})
 	}
@@ -411,6 +440,13 @@ func printDecommissionStatus(resp serverpb.CommissionStatusResponse) error {
 		newRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 
+// extractCommissionErr can extract the specific commission transition error
+// messages generated by cockroach.
+func extractCommissionErr(errMsg string) string {
+	idx := strings.Index(errMsg, kvserverpb.ErrIllegalCommissionStatusTransition.Error())
+	return errMsg[idx:]
+}
+
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -427,13 +463,19 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	defer finish()
 
 	c := serverpb.NewAdminClient(conn)
-
 	req := &serverpb.CommissionRequest{
-		NodeIDs:                   nodeIDs,
-		DeprecatedDecommissioning: false,
+		NodeIDs:          nodeIDs,
+		CommissionStatus: kvserverpb.CommissionStatus_COMMISSIONED,
 	}
 	resp, err := c.Decommission(ctx, req)
 	if err != nil {
+		// If it's a specific illegal commission transition error, we try to
+		// surface a more readable message to the user.
+		if strings.Contains(err.Error(), kvserverpb.ErrIllegalCommissionStatusTransition.Error()) {
+			errMsg := extractCommissionErr(err.Error())
+			fmt.Fprintf(stderr, "command failed: %s\n", errMsg)
+			return errors.New(errMsg)
+		}
 		return err
 	}
 	return printDecommissionStatus(*resp)

@@ -127,20 +127,31 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 //
 //  - Let's say a node write its liveness record at tWrite. It sets the
 //    Expiration field of the record as tExp=tWrite+livenessThreshold.
-//    The node is considered LIVE (or DECOMISSIONING or UNAVAILABLE if draining).
+//    The node is considered LIVE (or DECOMMISSIONING or UNAVAILABLE if draining).
 //  - At tExp, the IsLive() method starts returning false. The state becomes
-//    UNAVAILABLE (or stays DECOMISSIONING or UNAVAILABLE if draining).
+//    UNAVAILABLE (or stays DECOMMISSIONING or UNAVAILABLE if draining).
 //  - Once threshold passes, the node is considered DEAD (or DECOMMISSIONED).
+//
+// TODO(irfansharif): Reconsider usage of kvserverpb.NodeLivenessStatus. It's
+// yet another representation of liveness commission status, and it doesn't
+// quite map to what's defined there. Not just that, it's unclear if the enum is
+// well considered. It seems to be enumerating across two distinct set of
+// things: the "commission" status (commissioned, decommissioning,
+// decommissioned), and the node "process" status (live, unavailable,
+// available). It's possible for two of these "states" to be true,
+// simultaneously (consider a decommissioned, dead node). It makes for confusing
+// semantics, and the code below disambiguating across these states seems wholly
+// arbitrary.
 func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
-		if l.DeprecatedDecommissioning {
+		if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
 			return kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED
 		}
 		return kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD
 	}
-	if l.DeprecatedDecommissioning {
+	if l.CommissionStatus.Decommissioning() || l.CommissionStatus.Decommissioned() {
 		return kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING
 	}
 	if l.Draining {
