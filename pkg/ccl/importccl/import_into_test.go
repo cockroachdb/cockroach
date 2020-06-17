@@ -54,7 +54,7 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := base.TestClusterArgs{}
-	tc := testcluster.StartTestCluster(t, 3, args)
+	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
 	tc.WaitForNodeLiveness(t)
