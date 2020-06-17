@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -912,6 +913,19 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	// This test intentionally relies on uncontended transactions not being pushed
+	// in order to verify what it claims to verify. The default closed timestamp
+	// interval in 20.1+ is 3s. When run under the race detector, the process can
+	// stall for upwards of 3s leading to the write transaction getting pushed.
+	//
+	// In order to mitigate that push, we increase the target_duration when the
+	// test is run under race.
+	if util.RaceEnabled {
+		_, err := sqlDB.Exec(
+			"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '120s'")
+		require.NoError(t, err)
+	}
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
