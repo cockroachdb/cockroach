@@ -268,7 +268,8 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	if err != nil {
 		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
 	} else {
-		log.Infof(ctx, "GEOS initialized at %s", loc)
+		log.Infof(ctx, "GEOS libgeos_c loaded at %s", loc.GEOSCFile)
+		log.Infof(ctx, "GEOS libgeos loaded at %s", loc.GEOSFile)
 	}
 
 	c, err := setupTransientCluster(ctx, cmd, gen)

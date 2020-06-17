@@ -19,17 +19,17 @@ import (
 
 func TestInitGEOS(t *testing.T) {
 	t.Run("test no initGEOS paths", func(t *testing.T) {
-		_, _, err := initGEOS([]string{})
+		_, _, err := initGEOS([]LibraryLocation{})
 		require.Error(t, err)
 	})
 
 	t.Run("test invalid initGEOS paths", func(t *testing.T) {
-		_, _, err := initGEOS([]string{"/invalid/path"})
+		_, _, err := initGEOS([]LibraryLocation{{GEOSFile: "/invalid/path"}})
 		require.Error(t, err)
 	})
 
 	t.Run("test valid initGEOS paths", func(t *testing.T) {
-		ret, loc, err := initGEOS(findGEOSLocations(""))
+		ret, loc, err := initGEOS(findLibraryLocations(""))
 		require.NoError(t, err)
 		require.NotEmpty(t, loc)
 		require.NotNil(t, ret)
