@@ -379,7 +379,9 @@ $left
 # one-row operator's columns are never used.
 [EliminateJoinNoColsLeft, Normalize]
 (InnerJoin | InnerJoinApply
-    $left:* & (HasNoCols $left) & (HasOneRow $left)
+    $left:* &
+        (ColsAreEmpty (OutputCols $left)) &
+        (HasOneRow $left)
     $right:*
     $on:*
 )
@@ -392,7 +394,9 @@ $left
 [EliminateJoinNoColsRight, Normalize]
 (InnerJoin | InnerJoinApply
     $left:*
-    $right:* & (HasNoCols $right) & (HasOneRow $right)
+    $right:* &
+        (ColsAreEmpty (OutputCols $right)) &
+        (HasOneRow $right)
     $on:*
 )
 =>
