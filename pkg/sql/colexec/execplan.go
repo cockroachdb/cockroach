@@ -1850,32 +1850,6 @@ func planProjectionExpr(
 		return nil, resultIdx, typs, internalMemUsed, err
 	}
 	resultIdx = -1
-	// actualOutputType tracks the logical type of the output column of the
-	// projection operator. See the comment below for more details.
-	actualOutputType := outputType
-	if outputType.Identical(types.Int) {
-		// Currently, SQL type system does not respect the width of integers
-		// when figuring out the type of the output of a projection expression
-		// (for example, INT2 + INT2 will be typed as INT8); however,
-		// vectorized operators do respect the width when both operands have
-		// the same width. In order to go around this limitation, we explicitly
-		// check whether output type is INT8, and if so, we override the output
-		// physical types to be what the vectorized projection operators will
-		// actually output.
-		//
-		// Note that in mixed-width scenarios (i.e. INT2 + INT4) the vectorized
-		// engine will output INT8, so no overriding is needed.
-		//
-		// We do, however, need to plan a cast to the expected logical type and
-		// we will do that below.
-		leftType := left.ResolvedType()
-		rightType := right.ResolvedType()
-		if leftType.Identical(types.Int2) && rightType.Identical(types.Int2) {
-			actualOutputType = types.Int2
-		} else if leftType.Identical(types.Int4) && rightType.Identical(types.Int4) {
-			actualOutputType = types.Int4
-		}
-	}
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
 	if lConstArg, lConst := left.(tree.Datum); lConst {
@@ -1894,7 +1868,7 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		op, err = GetProjectionLConstOperator(
-			colmem.NewAllocator(ctx, acc, factory), left.ResolvedType(), typs[rightIdx], actualOutputType,
+			colmem.NewAllocator(ctx, acc, factory), left.ResolvedType(), typs[rightIdx], outputType,
 			projOp, input, rightIdx, lConstArg, resultIdx, overloadHelper,
 		)
 	} else {
@@ -1942,7 +1916,7 @@ func planProjectionExpr(
 				op = newIsNullProjOp(colmem.NewAllocator(ctx, acc, factory), input, leftIdx, resultIdx, negate)
 			} else {
 				op, err = GetProjectionRConstOperator(
-					colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], right.ResolvedType(), actualOutputType,
+					colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], right.ResolvedType(), outputType,
 					projOp, input, leftIdx, rConstArg, resultIdx, overloadHelper,
 				)
 			}
@@ -1961,7 +1935,7 @@ func planProjectionExpr(
 			internalMemUsed += internalMemUsedRight
 			resultIdx = len(typs)
 			op, err = GetProjectionOperator(
-				colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], typs[rightIdx], actualOutputType,
+				colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], typs[rightIdx], outputType,
 				projOp, input, leftIdx, rightIdx, resultIdx, overloadHelper,
 			)
 		}
@@ -1972,24 +1946,7 @@ func planProjectionExpr(
 	if sMem, ok := op.(InternalMemoryOperator); ok {
 		internalMemUsed += sMem.InternalMemoryUsage()
 	}
-	typs = appendOneType(typs, actualOutputType)
-	if !outputType.Identical(actualOutputType) {
-		// The projection operator outputs a column of a different type than
-		// the expected logical type. In order to "synchronize" the reality and
-		// the expectations, we plan a cast.
-		//
-		// For example, INT2 + INT2 will be typed as INT8 by the SQL type
-		// system, but we will plan a projection operator that outputs INT2, so
-		// in such scenario we will have
-		//    actualOutputType = types.Int2
-		//          outputType = types.Int8
-		// and will plan the corresponding cast.
-		//
-		// NOTE: this is *only* needed for integer types and should be removed
-		// once #46940 is resolved.
-		op, resultIdx, typs, err =
-			planCastOperator(ctx, acc, typs, op, resultIdx, actualOutputType, outputType, factory)
-	}
+	typs = appendOneType(typs, outputType)
 	return op, resultIdx, typs, internalMemUsed, err
 }
 
