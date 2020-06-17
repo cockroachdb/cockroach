@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -32,6 +33,9 @@ func registerNamespaceUpgrade(r *testRegistry) {
 			predV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !strings.HasPrefix(predV, "v19.2") {
+				t.Skip("wrong version", "this test only makes sense for the v19.2->v20.1 upgrade")
 			}
 			runNamespaceUpgrade(ctx, t, c, predV)
 		},
