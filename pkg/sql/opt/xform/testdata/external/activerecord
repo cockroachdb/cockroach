@@ -116,13 +116,13 @@ sort
  ├── columns: attname:2!null format_type:65 pg_get_expr:66 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:67 comment:68  [hidden: attnum:6!null]
  ├── stable
  ├── key: (6)
- ├── fd: (6)-->(2,3,9,13,65-68), (2)-->(3,6,9,13,65-68), (3,9)-->(65), (6)-->(68)
+ ├── fd: (6)-->(2,3,9,13,65-68), (2)-->(3,6,9,13,65-68), (3,9)-->(65)
  ├── ordering: +6
  └── project
       ├── columns: format_type:65 pg_get_expr:66 collname:67 comment:68 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
       ├── stable
       ├── key: (6)
-      ├── fd: (6)-->(2,3,9,13,65-68), (2)-->(3,6,9,13,65-68), (3,9)-->(65), (6)-->(68)
+      ├── fd: (6)-->(2,3,9,13,65-68), (2)-->(3,6,9,13,65-68), (3,9)-->(65)
       ├── right-join (hash)
       │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:15!null attcollation:18!null adrelid:23 adnum:24 adbin:25 c.oid:27 c.collname:28 t.oid:34 typcollation:61
       │    ├── key: (6)
