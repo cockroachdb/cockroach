@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -101,6 +102,7 @@ type Registry struct {
 	planFn     planHookMaker
 	metrics    Metrics
 	adoptionCh chan struct{}
+	cm         sqlliveness.ClaimManager
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
@@ -192,6 +194,7 @@ func MakeRegistry(
 		planFn:              planFn,
 		preventAdoptionFile: preventAdoptionFile,
 		adoptionCh:          make(chan struct{}),
+		cm:                  sqlliveness.NewSqlLiveness(db, ex),
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 )
 
 func ResetConstructors() func() {
@@ -99,4 +100,9 @@ func (j *Job) Failed(ctx context.Context, causingErr error) error {
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
 	return j.succeeded(ctx, nil /* fn */)
+}
+
+// GetClaimManager is a getter for the ClaimManager embedded in the registry.
+func (r *Registry) GetClaimManager() sqlliveness.ClaimManager {
+	return r.cm
 }
