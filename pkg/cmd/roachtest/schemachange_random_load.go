@@ -92,6 +92,8 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 		// TODO(spaskob): remove when https://github.com/cockroachdb/cockroach/issues/47430
 		// is closed.
 		"--tolerate-errors=true",
+		// Save the histograms so that they can be reported to https://roachperf.crdb.dev/.
+		" --histograms=" + perfArtifactsDir + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 	}
