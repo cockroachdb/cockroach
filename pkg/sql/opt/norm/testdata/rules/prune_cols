@@ -1170,7 +1170,7 @@ project
  ├── columns: k:1!null x:5 r:7
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(5), (1,5)-->(7)
+ ├── fd: (1)-->(5,7)
  ├── left-join (hash)
  │    ├── columns: k:1!null x:5
  │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)

@@ -321,7 +321,7 @@ update stock
       ├── cardinality: [0 - 13]
       ├── volatile, side-effects
       ├── key: (18)
-      ├── fd: ()-->(19), (18)-->(20-35), (18)-->(36-38)
+      ├── fd: ()-->(19), (18)-->(20-38)
       ├── scan stock
       │    ├── columns: s_i_id:18!null s_w_id:19!null s_quantity:20 s_dist_01:21 s_dist_02:22 s_dist_03:23 s_dist_04:24 s_dist_05:25 s_dist_06:26 s_dist_07:27 s_dist_08:28 s_dist_09:29 s_dist_10:30 s_ytd:31 s_order_cnt:32 s_remote_cnt:33 s_data:34
       │    ├── constraint: /19/18

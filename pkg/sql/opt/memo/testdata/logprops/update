@@ -256,7 +256,7 @@ project
            ├── columns: column15:15(int!null) a:7(int!null) b:8(int!null) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int) a_new:13(int!null) column14:14(int!null)
            ├── immutable
            ├── key: (11)
-           ├── fd: ()-->(13,14), (11)-->(7-10,12), (8)==(9), (9)==(8), (8,9)-->(15)
+           ├── fd: ()-->(13,14), (11)-->(7-10,12), (8)==(9), (9)==(8), (9)-->(15)
            ├── prune: (7-15)
            ├── interesting orderings: (+11)
            ├── project
