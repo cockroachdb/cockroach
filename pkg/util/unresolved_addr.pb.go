@@ -20,7 +20,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// / UnresolvedAddr is an unresolved version of net.Addr.
+// UnresolvedAddr is an unresolved version of net.Addr.
 type UnresolvedAddr struct {
 	NetworkField string `protobuf:"bytes,1,opt,name=network_field,json=networkField" json:"network_field"`
 	AddressField string `protobuf:"bytes,2,opt,name=address_field,json=addressField" json:"address_field"`
@@ -29,7 +29,7 @@ type UnresolvedAddr struct {
 func (m *UnresolvedAddr) Reset()      { *m = UnresolvedAddr{} }
 func (*UnresolvedAddr) ProtoMessage() {}
 func (*UnresolvedAddr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_unresolved_addr_a6b5b457ac12f1b5, []int{0}
+	return fileDescriptor_unresolved_addr_0d9480e232c67772, []int{0}
 }
 func (m *UnresolvedAddr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -332,10 +332,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/unresolved_addr.proto", fileDescriptor_unresolved_addr_a6b5b457ac12f1b5)
+	proto.RegisterFile("util/unresolved_addr.proto", fileDescriptor_unresolved_addr_0d9480e232c67772)
 }
 
-var fileDescriptor_unresolved_addr_a6b5b457ac12f1b5 = []byte{
+var fileDescriptor_unresolved_addr_0d9480e232c67772 = []byte{
 	// 188 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x2d, 0xc9, 0xcc,
 	0xd1, 0x2f, 0xcd, 0x2b, 0x4a, 0x2d, 0xce, 0xcf, 0x29, 0x4b, 0x4d, 0x89, 0x4f, 0x4c, 0x49, 0x29,
