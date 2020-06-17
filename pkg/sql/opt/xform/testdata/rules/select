@@ -125,7 +125,7 @@ SELECT i FROM p WHERE s = 'foo'
 ----
 project
  ├── columns: i:1
- └── scan p@if_s
+ └── scan p@if_s,partial
       ├── columns: i:1 s:3!null
       └── fd: ()-->(3)
 
@@ -139,7 +139,7 @@ project
  └── select
       ├── columns: i:1 f:2 s:3!null
       ├── fd: ()-->(3)
-      ├── scan p@if_s
+      ├── scan p@if_s,partial
       │    └── columns: i:1 f:2 s:3
       └── filters
            └── (i:1 = 1) OR (f:2 = 2.0) [outer=(1,2)]
@@ -170,9 +170,9 @@ memo (optimized, ~6KB, required=[presentation: b:4])
  │         ├── best: (scan p,cols=(3,4))
  │         └── cost: 1070.02
  ├── G5: (filters G7)
- ├── G6: (scan p@if_s,cols=(3,5))
+ ├── G6: (scan p@if_s,partial,cols=(3,5))
  │    └── []
- │         ├── best: (scan p@if_s,cols=(3,5))
+ │         ├── best: (scan p@if_s,partial,cols=(3,5))
  │         └── cost: 1060.02
  ├── G7: (eq G8 G9)
  ├── G8: (variable s)
@@ -207,9 +207,9 @@ memo (optimized, ~8KB, required=[presentation: b:4])
  │         └── cost: 1090.03
  ├── G7: (eq G11 G12)
  ├── G8: (or G13 G14)
- ├── G9: (scan p@if_s,cols=(1-3,5))
+ ├── G9: (scan p@if_s,partial,cols=(1-3,5))
  │    └── []
- │         ├── best: (scan p@if_s,cols=(1-3,5))
+ │         ├── best: (scan p@if_s,partial,cols=(1-3,5))
  │         └── cost: 1080.02
  ├── G10: (filters G8)
  ├── G11: (variable s)
@@ -250,9 +250,9 @@ memo (optimized, ~8KB, required=[presentation: b:4])
  ├── G7: (filters G9)
  ├── G8: (eq G11 G12)
  ├── G9: (variable b)
- ├── G10: (scan p@if_s,cols=(3,5))
+ ├── G10: (scan p@if_s,partial,cols=(3,5))
  │    └── []
- │         ├── best: (scan p@if_s,cols=(3,5))
+ │         ├── best: (scan p@if_s,partial,cols=(3,5))
  │         └── cost: 1060.02
  ├── G11: (variable s)
  └── G12: (const 'foo')
@@ -295,9 +295,9 @@ memo (optimized, ~9KB, required=[presentation: b:4])
  ├── G13: (const 'foo')
  ├── G14: (variable i)
  ├── G15: (const 1)
- ├── G16: (scan p@if_s,cols=(1,3,5))
+ ├── G16: (scan p@if_s,partial,cols=(1,3,5))
  │    └── []
- │         ├── best: (scan p@if_s,cols=(1,3,5))
+ │         ├── best: (scan p@if_s,partial,cols=(1,3,5))
  │         └── cost: 1070.02
  └── G17: (filters G9)
 
@@ -332,13 +332,13 @@ memo (optimized, ~11KB, required=[presentation: i:1,s:2,b:3])
  │         └── cost: 1706.69
  ├── G9: (gt G14 G15)
  ├── G10: (eq G16 G17)
- ├── G11: (scan q@i_gt_0,cols=(1,4))
+ ├── G11: (scan q@i_gt_0,partial,cols=(1,4))
  │    └── []
- │         ├── best: (scan q@i_gt_0,cols=(1,4))
+ │         ├── best: (scan q@i_gt_0,partial,cols=(1,4))
  │         └── cost: 1040.02
- ├── G12: (scan q@s_eq_foo,cols=(2,4))
+ ├── G12: (scan q@s_eq_foo,partial,cols=(2,4))
  │    └── []
- │         ├── best: (scan q@s_eq_foo,cols=(2,4))
+ │         ├── best: (scan q@s_eq_foo,partial,cols=(2,4))
  │         └── cost: 1040.02
  ├── G13: (scan q@i,cols=(1,4),constrained)
  │    └── []
