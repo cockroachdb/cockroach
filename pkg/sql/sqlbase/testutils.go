@@ -283,8 +283,21 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.AnyFamily:
 		return RandDatumWithNullChance(rng, RandType(rng), nullChance)
 	case types.EnumFamily:
-		// We don't yet have the ability to generate random user defined types.
-		return tree.DNull
+		// If the input type is not hydrated with metadata, or doesn't contain
+		// any enum values, then return NULL.
+		if typ.TypeMeta.EnumData == nil {
+			return tree.DNull
+		}
+		reps := typ.TypeMeta.EnumData.LogicalRepresentations
+		if len(reps) == 0 {
+			return tree.DNull
+		}
+		// Otherwise, pick a random enum value.
+		d, err := tree.MakeDEnumFromLogicalRepresentation(typ, reps[rng.Intn(len(reps))])
+		if err != nil {
+			panic(err)
+		}
+		return d
 	default:
 		panic(fmt.Sprintf("invalid type %v", typ.DebugString()))
 	}
@@ -689,13 +702,13 @@ var (
 )
 
 var (
-	// seedTypes includes the following types that form the basis of randomly
+	// SeedTypes includes the following types that form the basis of randomly
 	// generated types:
 	//   - All scalar types, except UNKNOWN and ANY
 	//   - ARRAY of ANY, where the ANY will be replaced with one of the legal
 	//     array element types in RandType
 	//   - OIDVECTOR and INT2VECTOR types
-	seedTypes []*types.T
+	SeedTypes []*types.T
 
 	// arrayContentsTypes contains all of the types that are valid to store within
 	// an array.
@@ -710,11 +723,11 @@ func init() {
 			// Don't include these.
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
 			// Include these.
-			seedTypes = append(seedTypes, typ)
+			SeedTypes = append(SeedTypes, typ)
 		default:
 			// Only include scalar types.
 			if typ.Family() != types.ArrayFamily {
-				seedTypes = append(seedTypes, typ)
+				SeedTypes = append(SeedTypes, typ)
 			}
 		}
 	}
@@ -736,8 +749,8 @@ func init() {
 	}
 
 	// Sort these so randomly chosen indexes always point to the same element.
-	sort.Slice(seedTypes, func(i, j int) bool {
-		return seedTypes[i].String() < seedTypes[j].String()
+	sort.Slice(SeedTypes, func(i, j int) bool {
+		return SeedTypes[i].String() < SeedTypes[j].String()
 	})
 	sort.Slice(arrayContentsTypes, func(i, j int) bool {
 		return arrayContentsTypes[i].String() < arrayContentsTypes[j].String()
@@ -796,21 +809,17 @@ func RandCollationLocale(rng *rand.Rand) *string {
 
 // RandType returns a random type value.
 func RandType(rng *rand.Rand) *types.T {
-	return randType(rng, seedTypes)
-}
-
-// RandScalarType returns a random type value that is not an array or tuple.
-func RandScalarType(rng *rand.Rand) *types.T {
-	return randType(rng, types.Scalar)
+	return RandTypeFromSlice(rng, SeedTypes)
 }
 
 // RandArrayContentsType returns a random type that's guaranteed to be valid to
 // use as the contents of an array.
 func RandArrayContentsType(rng *rand.Rand) *types.T {
-	return randType(rng, arrayContentsTypes)
+	return RandTypeFromSlice(rng, arrayContentsTypes)
 }
 
-func randType(rng *rand.Rand, typs []*types.T) *types.T {
+// RandTypeFromSlice returns a random type from the input slice of types.
+func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 	typ := typs[rng.Intn(len(typs))]
 	switch typ.Family() {
 	case types.BitFamily:
