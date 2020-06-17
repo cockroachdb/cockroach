@@ -172,26 +172,22 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, er
 	return result, hasNulls, nil
 }
 
+// Filter row input is already sorted due to normalization
 func cmpIn_TYPE(
 	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
 ) comparisonResult {
 	lo := 0
-	hi := len(filterRow) - 1
-	for {
+	hi := len(filterRow)
+	for lo < hi {
 		i := (lo + hi) / 2
 		var cmpResult int
 		_COMPARE(cmpResult, targetElem, filterRow[i], targetCol, _)
-		switch cmpResult {
-		case 0:
+		if cmpResult == 0 {
 			return siTrue
-		case 1:
+		} else if cmpResult > 0 {
 			lo = i + 1
-		case -1:
+		} else {
 			hi = i - 1
-		}
-
-		if lo > hi || lo < 0 || hi > len(filterRow)-1 {
-			break
 		}
 	}
 
