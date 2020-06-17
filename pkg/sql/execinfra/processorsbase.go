@@ -474,6 +474,10 @@ type ProcessorBase struct {
 	// trace.
 	FinishTrace func()
 
+	// runningErr (when non-nil) is the error that the processor transitioned
+	// into StateDraining with. It has the highest priority and is returned as
+	// metadata first by DrainHelper.
+	runningErr error
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling InternalClose()) and generate the trailing meta that
@@ -488,7 +492,7 @@ type ProcessorBase struct {
 	// specified.
 	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
 	// trailingMeta is scratch space where metadata is stored to be returned
-	// later.
+	// later, when in StateTrailingMeta.
 	trailingMeta []execinfrapb.ProducerMetadata
 
 	// inputsToDrain, if not empty, contains inputs to be drained by
@@ -571,7 +575,7 @@ const (
 // returned from now on. In this state, the processor is expected to drain its
 // inputs (commonly by using DrainHelper()).
 //
-// If the processor has no input (ProcStateOpts.intputToDrain was not specified
+// If the processor has no input (ProcStateOpts.inputsToDrain was not specified
 // at init() time), then we move straight to the StateTrailingMeta.
 //
 // An error can be optionally passed. It will be the first piece of metadata
@@ -589,9 +593,7 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 		return
 	}
 
-	if err != nil {
-		pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
-	}
+	pb.runningErr = err
 	if len(pb.inputsToDrain) > 0 {
 		// We go to StateDraining here. DrainHelper() will transition to
 		// StateTrailingMeta when the inputs are drained (including if the inputs
@@ -605,6 +607,26 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 	}
 }
 
+// maybeSwallowErrorWhenDraining checks whether the passed-in meta contains an
+// error that needs to be swallowed. If it does, then it is "swallowed" by
+// returning nil. See the comments on StateDraining for more details.
+func maybeSwallowErrorWhenDraining(
+	meta *execinfrapb.ProducerMetadata,
+) *execinfrapb.ProducerMetadata {
+	if meta != nil && meta.Err != nil {
+		// We only look for UnhandledRetryableErrors. Local reads (which would
+		// be transformed by the Root TxnCoordSender into
+		// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
+		if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &ure) {
+			uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
+			if uncertain != nil {
+				return nil
+			}
+		}
+	}
+	return meta
+}
+
 // DrainHelper is supposed to be used in states draining and trailingMetadata.
 // It deals with optionally draining an input and returning trailing meta. It
 // also moves from StateDraining to StateTrailingMeta when appropriate.
@@ -613,11 +635,9 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 		log.Fatal(pb.Ctx, "drain helper called in StateRunning")
 	}
 
-	// trailingMeta always has priority; it seems like a good idea because it
-	// causes metadata to be sent quickly after it is produced (e.g. the error
-	// passed to MoveToDraining()).
-	if len(pb.trailingMeta) > 0 {
-		return pb.popTrailingMeta()
+	if err := pb.runningErr; err != nil {
+		pb.runningErr = nil
+		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 
 	if pb.State != StateDraining {
@@ -637,20 +657,7 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 			}
 			continue
 		}
-		if meta != nil {
-			// Swallow ReadWithinUncertaintyIntervalErrors. See comments on
-			// StateDraining.
-			if err := meta.Err; err != nil {
-				// We only look for UnhandledRetryableErrors. Local reads (which would
-				// be transformed by the Root TxnCoordSender into
-				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
-				if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
-					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
-					if uncertain != nil {
-						continue
-					}
-				}
-			}
+		if meta = maybeSwallowErrorWhenDraining(meta); meta != nil {
 			return meta
 		}
 	}
@@ -659,10 +666,12 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 // popTrailingMeta peels off one piece of trailing metadata or advances to
 // StateExhausted if there's no more trailing metadata.
 func (pb *ProcessorBase) popTrailingMeta() *execinfrapb.ProducerMetadata {
-	if len(pb.trailingMeta) > 0 {
+	for len(pb.trailingMeta) > 0 {
 		meta := &pb.trailingMeta[0]
 		pb.trailingMeta = pb.trailingMeta[1:]
-		return meta
+		if meta = maybeSwallowErrorWhenDraining(meta); meta != nil {
+			return meta
+		}
 	}
 	pb.State = StateExhausted
 	return nil
