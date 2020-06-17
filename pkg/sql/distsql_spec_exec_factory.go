@@ -40,16 +40,18 @@ type distSQLSpecExecFactory struct {
 		// localPlanCtx stores the local planning context of the gateway.
 		localPlanCtx *PlanningCtx
 	}
-	singleTenant bool
+	singleTenant  bool
+	gatewayNodeID roachpb.NodeID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
 func newDistSQLSpecExecFactory(p *planner) exec.Factory {
 	return &distSQLSpecExecFactory{
-		planner:      p,
-		dsp:          p.extendedEvalCtx.DistSQLPlanner,
-		singleTenant: p.execCfg.Codec.ForSystemTenant(),
+		planner:       p,
+		dsp:           p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
+		gatewayNodeID: roachpb.NodeID(p.execCfg.NodeID.SQLInstanceID()),
 	}
 }
 
@@ -211,47 +213,84 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	return planMaybePhysical{physPlan: &p}, err
 }
 
-func (e *distSQLSpecExecFactory) ConstructFilter(
-	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
-) (exec.Node, error) {
-	plan := n.(planMaybePhysical)
-	physPlan := plan.physPlan
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
-	// We recommend for filter's distribution to be the same as the last stage
+// checkExprsAndMaybeMergeLastStage is a helper method that returns a
+// recommendation about exprs' distribution. If one of the expressions cannot
+// be distributed, then all expressions cannot be distributed either. In such
+// case if the last stage is distributed, this method takes care of merging the
+// streams on a single node.
+func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
+	physPlan *PhysicalPlan, exprs tree.TypedExprs,
+) distRecommendation {
+	// We recommend for exprs' distribution to be the same as the last stage
 	// of processors.
 	recommendation := shouldNotDistribute
 	if physPlan.IsLastStageDistributed() {
 		recommendation = shouldDistribute
 	}
-	gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
-	if err := checkExpr(filter); err != nil {
-		recommendation = cannotDistribute
-		if physPlan.IsLastStageDistributed() {
-			// The last stage has been distributed, but filter expression
-			// cannot be distributed, so we need to merge the streams on a
-			// single node. We could do so on one of the nodes that streams
-			// originate from, but for now we choose the gateway.
-			physPlan.AddSingleGroupStage(
-				gatewayNodeID,
-				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				execinfrapb.PostProcessSpec{},
-				physPlan.ResultTypes,
-				gatewayNodeID,
-			)
+	for _, expr := range exprs {
+		if err := checkExpr(expr); err != nil {
+			recommendation = cannotDistribute
+			if physPlan.IsLastStageDistributed() {
+				// The last stage has been distributed, but filter expression
+				// cannot be distributed, so we need to merge the streams on a
+				// single node. We could do so on one of the nodes that streams
+				// originate from, but for now we choose the gateway.
+				physPlan.AddSingleGroupStage(
+					e.gatewayNodeID,
+					execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+					execinfrapb.PostProcessSpec{},
+					physPlan.ResultTypes,
+					e.gatewayNodeID,
+				)
+			}
+			break
 		}
 	}
+	return recommendation
+}
+
+func (e *distSQLSpecExecFactory) ConstructFilter(
+	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, []tree.TypedExpr{filter})
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
-	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, gatewayNodeID); err != nil {
+	if err := physPlan.AddFilter(
+		filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, e.gatewayNodeID,
+	); err != nil {
 		return nil, err
 	}
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
 	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	projection := make([]uint32, len(cols))
+	for i := range cols {
+		projection[i] = uint32(cols[i])
+	}
+	physPlan.AddProjection(projection)
+	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.ResultTypes, physPlan.ResultColumns)
+	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
+	// TODO(yuzefovich): I think it is wrong that a "simple projection" can
+	// change the required ordering. This condition is put in place temporarily
+	// so that applyPresentation call didn't unset the merge ordering currently
+	// set on the plan. In the old factory every planNode has their own
+	// reqOrdering field, so it was ok to set a nil ordering in
+	// ConstructSimpleProject because it would not modify the ordering on
+	// already present planNodes. However, in this new factory the merge
+	// ordering is the property of the whole physical plan built so far, and we
+	// cannot simply unset it without possibly merging the streams.
+	if len(reqOrdering) > 0 {
+		physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	}
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructRender(
@@ -260,7 +299,18 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 	exprs tree.TypedExprs,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, exprs)
+	if err := physPlan.AddRendering(
+		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns), e.gatewayNodeID,
+	); err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = columns
+	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(exprs))
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructApplyJoin(
