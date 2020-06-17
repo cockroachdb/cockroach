@@ -15,8 +15,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -33,8 +31,8 @@ func genSelectIn(inputFileContents string, wr io.Writer) error {
 	)
 	s := r.Replace(inputFileContents)
 
-	assignEq := makeFunctionRegex("_ASSIGN_CMP", 6)
-	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
+	assignEq := makeFunctionRegex("_COMPARE", 5)
+	s = assignEq.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 5))
 
 	s = replaceManipulationFuncs(s)
 
@@ -43,38 +41,7 @@ func genSelectIn(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	tmplInfos := populateTwoArgsOverloads(
-		&overloadBase{
-			kind:  comparisonOverload,
-			Name:  execgen.ComparisonOpName[tree.EQ],
-			CmpOp: tree.EQ,
-			OpStr: comparisonOpInfix[tree.EQ],
-		},
-		cmpOpOutputTypes,
-		func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
-			if b, ok := customizer.(cmpOpTypeCustomizer); ok {
-				lawo.AssignFunc = func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
-					cmp := b.getCmpOpCompareFunc()(targetElem, leftElem, rightElem, leftCol, rightCol)
-					if cmp == "" {
-						return ""
-					}
-					args := map[string]string{"Cmp": cmp}
-					buf := strings.Builder{}
-					t := template.Must(template.New("").Parse(`
-											{{.Cmp}}
-									`))
-					if err := t.Execute(&buf, args); err != nil {
-						colexecerror.InternalError(err)
-					}
-					return buf.String()
-				}
-				lawo.CompareFunc = b.getCmpOpCompareFunc()
-			}
-		},
-		typeCustomizers,
-	)
-
-	return tmpl.Execute(wr, tmplInfos)
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
 }
 
 func init() {

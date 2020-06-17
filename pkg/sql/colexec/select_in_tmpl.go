@@ -50,7 +50,7 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
 
-func _ASSIGN_CMP(_, _, _, _, _, _ interface{}) int {
+func _COMPARE(_, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
@@ -180,7 +180,7 @@ func cmpIn_TYPE(
 	for {
 		i := (lo + hi) / 2
 		var cmpResult int
-		_ASSIGN_CMP(cmpResult, targetElem, filterRow[i], _, targetCol, _)
+		_COMPARE(cmpResult, targetElem, filterRow[i], targetCol, _)
 		switch cmpResult {
 		case 0:
 			return siTrue
