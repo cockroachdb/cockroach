@@ -112,6 +112,13 @@ message NodesRequest {}
 
 message NodesResponse {
   repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
+  // TODO(irfansharif): Deprecate this view of node liveness (see comment on
+  // NodeLivenessStatus proto for more details). It's currently used by the
+  // Allocator to detect replicas placed on dead nodes. But there's no good
+  // reason for the "deadness" to be proto-backed. It should suffice to capture
+  // the "membership status" (active, decommissioning, decommissioned) and view
+  // of node's liveness (when was the record last heartbeated) + current time to
+  // inform allocator decisions.
   map<int32, cockroach.kv.kvserver.storagepb.NodeLivenessStatus> liveness_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.nullable) = false,

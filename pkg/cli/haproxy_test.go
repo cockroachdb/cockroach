@@ -124,12 +124,12 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 					{Desc: roachpb.NodeDescriptor{NodeID: 6}},
 				},
 				LivenessByNodeID: map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{
-					1: kvserverpb.NodeLivenessStatus_DEAD,
-					2: kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
-					3: kvserverpb.NodeLivenessStatus_UNKNOWN,
-					4: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
-					5: kvserverpb.NodeLivenessStatus_LIVE,
-					6: kvserverpb.NodeLivenessStatus_DECOMMISSIONED,
+					1: kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD,
+					2: kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING,
+					3: kvserverpb.NodeLivenessStatus_DEPRECATED_UNKNOWN,
+					4: kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE,
+					5: kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE,
+					6: kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED,
 				},
 			},
 			[]haProxyNodeInfo{

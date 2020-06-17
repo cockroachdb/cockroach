@@ -1114,7 +1114,7 @@ func (s *statusServer) nodesStatusWithLiveness(
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
 		livenessStatus := statusMap[nodeID]
-		if livenessStatus == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
+		if livenessStatus == kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED {
 			// Skip over removed nodes.
 			continue
 		}

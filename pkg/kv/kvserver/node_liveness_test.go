@@ -869,10 +869,10 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	// Below we're going to check that all statuses converge and stabilize
 	// to a known situation.
 	testData := []testCase{
-		{liveNodeID, kvserverpb.NodeLivenessStatus_LIVE},
-		{deadNodeID, kvserverpb.NodeLivenessStatus_DEAD},
-		{decommissioningNodeID, kvserverpb.NodeLivenessStatus_DECOMMISSIONING},
-		{removedNodeID, kvserverpb.NodeLivenessStatus_DECOMMISSIONED},
+		{liveNodeID, kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE},
+		{deadNodeID, kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD},
+		{decommissioningNodeID, kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING},
+		{removedNodeID, kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED},
 	}
 
 	for _, test := range testData {
