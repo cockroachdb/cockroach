@@ -86,7 +86,7 @@ func TestReadAmplification(t *testing.T) {
 		info(0, 0),
 		info(1, 0),
 	}
-	if a, e := tables1.ReadAmplification(), 4; a != e {
+	if a, e := tables1.ReadAmplification(-1), 4; a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
 
@@ -96,7 +96,7 @@ func TestReadAmplification(t *testing.T) {
 		info(2, 0),
 		info(3, 0),
 	}
-	if a, e := tables2.ReadAmplification(), 4; a != e {
+	if a, e := tables2.ReadAmplification(-1), 4; a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
 
@@ -111,7 +111,13 @@ func TestReadAmplification(t *testing.T) {
 		info(3, 0),
 		info(6, 0),
 	}
-	if a, e := tables3.ReadAmplification(), 7; a != e {
+	if a, e := tables3.ReadAmplification(-1), 7; a != e {
+		t.Errorf("got %d, expected %d", a, e)
+	}
+	if a, e := tables3.ReadAmplification(2), 6; a != e {
+		t.Errorf("got %d, expected %d", a, e)
+	}
+	if a, e := tables3.ReadAmplification(1), 5; a != e {
 		t.Errorf("got %d, expected %d", a, e)
 	}
 }

@@ -935,6 +935,7 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),
 		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
 		L0FileCount:                    int64(s.l0_file_count),
+		L0SublevelCount:                -1, // Not a RocksDB feature.
 	}, nil
 }
 
