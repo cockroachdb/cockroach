@@ -241,7 +241,16 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				// downloading logs.
 				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure" `+
 				// And sometimes the analysis succeeds and yet we still get an error code for some reason.
-				`-e "Everything looks good"`,
+				`-e "Everything looks good" `+
+				// main - jepsen.cli Oh jeez, I'm sorry, Jepsen broke. Here's why:
+				// org.postgresql.util.PSQLException: ERROR: restart transaction:
+				// TransactionRetryWithProtoRefreshError: TransactionAbort
+				// edError(ABORT_REASON_NEW_LEASE_PREVENTS_TXN): "sql txn"
+				// meta={id=a762bddf key=/Table/SystemConfigSpan/Start pri=0.0165 6576
+				// epo=0 ts=1592384065.128230720,1 min=1592384065.123218152,0 seq=8}
+				// lock=true stat=PENDING rts=1592384065.123218152 ,0 wto=false
+				// max=1592384065.128230720,0
+				`-e "TransactionRetryWithProtoRefreshError"`,
 		); err == nil {
 			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
 				"Ignoring it and considering the test successful. " +
