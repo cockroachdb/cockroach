@@ -1464,3 +1464,70 @@ limit
  │    └── filters
  │         └── a = y
  └── 10
+
+# No-op case because the left input has outer columns.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) disable=(TryDecorrelateProject,PushLimitIntoProject) format=hide-all
+SELECT *
+FROM uv
+LEFT JOIN LATERAL (
+  SELECT *
+  FROM (SELECT a*u FROM ab)
+  INNER JOIN (VALUES (1))
+  ON True
+  LIMIT 1
+)
+ON True
+----
+distinct-on
+ ├── left-join-apply
+ │    ├── scan uv
+ │    ├── inner-join (cross)
+ │    │    ├── project
+ │    │    │    ├── scan ab
+ │    │    │    └── projections
+ │    │    │         └── a * u
+ │    │    ├── values
+ │    │    │    └── (1,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── aggregations
+      ├── const-agg
+      │    └── v
+      ├── first-agg
+      │    └── "?column?"
+      └── first-agg
+           └── column1
+
+# No-op case because the right input has outer columns. An infinite loop will
+# occur if the limit is pushed down. Regression test for #50355.
+norm expect-not=(AssociateLimitJoinsLeft,AssociateLimitJoinsRight) disable=(TryDecorrelateProject,PushLimitIntoProject) format=hide-all
+SELECT *
+FROM uv
+LEFT JOIN LATERAL (
+  SELECT *
+  FROM (VALUES (1))
+  INNER JOIN (SELECT a*u FROM ab)
+  ON True
+  LIMIT 1
+)
+ON True
+----
+distinct-on
+ ├── left-join-apply
+ │    ├── scan uv
+ │    ├── inner-join (cross)
+ │    │    ├── values
+ │    │    │    └── (1,)
+ │    │    ├── project
+ │    │    │    ├── scan ab
+ │    │    │    └── projections
+ │    │    │         └── a * u
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── aggregations
+      ├── const-agg
+      │    └── v
+      ├── first-agg
+      │    └── column1
+      └── first-agg
+           └── "?column?"
