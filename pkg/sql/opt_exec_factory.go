@@ -308,22 +308,18 @@ func (ef *execFactory) ConstructSimpleProject(
 	rb.init(n, reqOrdering)
 
 	exprs := make(tree.TypedExprs, len(cols))
-	resultCols := make(sqlbase.ResultColumns, len(cols))
 	for i, col := range cols {
-		v := rb.r.ivarHelper.IndexedVar(int(col))
-		if colNames == nil {
-			resultCols[i] = inputCols[col]
-			// If we have a SimpleProject, we should clear the hidden bit on any
-			// column since it indicates it's been explicitly selected.
-			resultCols[i].Hidden = false
-		} else {
-			resultCols[i] = sqlbase.ResultColumn{
-				Name: colNames[i],
-				Typ:  v.ResolvedType(),
-			}
-		}
-		exprs[i] = v
+		exprs[i] = rb.r.ivarHelper.IndexedVar(int(col))
 	}
+	var resultTypes []*types.T
+	if colNames != nil {
+		// We will need updated result types.
+		resultTypes = make([]*types.T, len(cols))
+		for i := range exprs {
+			resultTypes[i] = exprs[i].ResolvedType()
+		}
+	}
+	resultCols := getResultColumnsForSimpleProject(cols, colNames, resultTypes, inputCols)
 	rb.setOutput(exprs, resultCols)
 	return rb.res, nil
 }
