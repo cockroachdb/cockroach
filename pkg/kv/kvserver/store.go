@@ -2186,6 +2186,16 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
 
+// ClosedTimestamp accessor.
+func (s *Store) ClosedTimestamp() *container.Container {
+	return s.cfg.ClosedTimestamp
+}
+
+// NodeLiveness accessor.
+func (s *Store) NodeLiveness() *NodeLiveness {
+	return s.cfg.NodeLiveness
+}
+
 // IsDraining accessor.
 func (s *Store) IsDraining() bool {
 	return s.draining.Load().(bool)
