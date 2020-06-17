@@ -46,7 +46,8 @@ type jobSchedulerEnv interface {
 // production jobSchedulerEnv implementation.
 type prodJobSchedulerEnvImpl struct{}
 
-var prodJobSchedulerEnv jobSchedulerEnv = &prodJobSchedulerEnvImpl{}
+// ProdJobSchedulerEnv is a jobSchedulerEnv implementation suitable for production.
+var ProdJobSchedulerEnv jobSchedulerEnv = &prodJobSchedulerEnvImpl{}
 
 const createdByName = "crdb_schedule"
 
@@ -75,7 +76,7 @@ type jobScheduler struct {
 
 func newJobScheduler(env jobSchedulerEnv, ex sqlutil.InternalExecutor) *jobScheduler {
 	if env == nil {
-		env = prodJobSchedulerEnv
+		env = ProdJobSchedulerEnv
 	}
 	return &jobScheduler{
 		env: env,
@@ -273,7 +274,7 @@ func StartJobSchedulerDaemon(
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		for waitPeriod := getInitialScanDelay(); ; waitPeriod = getWaitPeriod(sv) {
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			case <-time.After(waitPeriod):
 				if !schedulerEnabledSetting.Get(sv) {
