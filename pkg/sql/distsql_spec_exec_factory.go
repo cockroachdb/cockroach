@@ -216,44 +216,55 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	return planMaybePhysical{physPlan: &p, distribution: distribution}, err
 }
 
-func (e *distSQLSpecExecFactory) ConstructFilter(
-	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
-) (exec.Node, error) {
-	plan := n.(planMaybePhysical)
-	physPlan := plan.physPlan
+// checkExprsAndMaybeMergeLastStage is a helper method that returns a
+// recommendation about exprs' distribution. If one of the expressions cannot
+// be distributed, then all expressions cannot be distributed either. In such
+// case if the last stage is distributed, this method takes care of merging the
+// streams on a single node.
+func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
+	physPlan *PhysicalPlan, exprs tree.TypedExprs, reqOrdering exec.OutputOrdering,
+) distRecommendation {
 	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
-	// We recommend for filter's distribution to be the same as the last stage
+	// We recommend for exprs' distribution to be the same as the last stage
 	// of processors.
 	recommendation := shouldNotDistribute
 	if physPlan.IsLastStageDistributed() {
 		recommendation = shouldDistribute
 	}
-	if err := checkExpr(filter); err != nil {
-		recommendation = cannotDistribute
-		if physPlan.IsLastStageDistributed() {
-			// The last stage has been distributed, but filter expression
-			// cannot be distributed, so we need to merge the streams on a
-			// single node. We could do so on one of the nodes that streams
-			// originate from, but for now we choose the gateway.
-			gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
-			physPlan.AddSingleGroupStage(
-				gatewayNodeID,
-				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				execinfrapb.PostProcessSpec{},
-				physPlan.ResultTypes,
-			)
+	for _, expr := range exprs {
+		if err := checkExpr(expr); err != nil {
+			recommendation = cannotDistribute
+			if physPlan.IsLastStageDistributed() {
+				// The last stage has been distributed, but this expression
+				// cannot be distributed, so we need to merge the streams on a
+				// single node. We could do so on one of the nodes that streams
+				// originate from, but for now we choose the gateway.
+				gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
+				physPlan.AddSingleGroupStage(
+					gatewayNodeID,
+					execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+					execinfrapb.PostProcessSpec{},
+					physPlan.ResultTypes,
+				)
+			}
+			break
 		}
 	}
+	return recommendation
+}
+
+func (e *distSQLSpecExecFactory) ConstructFilter(
+	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, []tree.TypedExpr{filter}, reqOrdering)
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
 	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
 		return nil, err
 	}
-	distribution := localPlan
-	if physPlan.IsLastStageDistributed() {
-		distribution = fullyDistributedPlan
-	}
-	plan.distribution = plan.distribution.compose(distribution)
+	plan.updateDistribution()
 	return plan, nil
 }
 
@@ -269,7 +280,18 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 	exprs tree.TypedExprs,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, exprs, reqOrdering)
+	if err := physPlan.AddRendering(
+		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+	); err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = columns
+	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(exprs))
+	plan.updateDistribution()
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructApplyJoin(

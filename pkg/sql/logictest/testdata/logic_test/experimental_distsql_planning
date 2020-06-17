@@ -45,9 +45,12 @@ v
 statement error pq: unimplemented: experimental opt-driven distsql planning
 SELECT v, k FROM kv
 
-# Renders are not yet supported.
-statement error pq: unimplemented: experimental opt-driven distsql planning
+query I rowsort
 SELECT k + v FROM kv
+----
+2
+3
+5
 
 query II rowsort
 SELECT * FROM kv WHERE k > v

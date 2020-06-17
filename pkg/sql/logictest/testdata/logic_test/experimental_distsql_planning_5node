@@ -109,3 +109,30 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 
 statement ok
 SET experimental_distsql_planning = always
+
+# Check that plan is partially distributed (due to DOid type in a render
+# expression which is not supported by DistSQL).
+query T
+EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
+----
+│
+├ Node 1
+│ └ *colexec.castOp
+│   └ *colexec.ParallelUnorderedSynchronizer
+│     ├ *colexec.colBatchScan
+│     ├ *colrpc.Inbox
+│     ├ *colrpc.Inbox
+│     ├ *colrpc.Inbox
+│     └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *colexec.colBatchScan
+├ Node 3
+│ └ *colrpc.Outbox
+│   └ *colexec.colBatchScan
+├ Node 4
+│ └ *colrpc.Outbox
+│   └ *colexec.colBatchScan
+└ Node 5
+  └ *colrpc.Outbox
+    └ *colexec.colBatchScan

@@ -334,6 +334,16 @@ func (p planMaybePhysical) planColumns() sqlbase.ResultColumns {
 	return planColumns(p.planNode)
 }
 
+// updateDistribution updates the distribution of the plan with the
+// distribution of the last stage. It assumes that p.physPlan is non-nil.
+func (p planMaybePhysical) updateDistribution() {
+	lastStageDistribution := localPlan
+	if p.physPlan.IsLastStageDistributed() {
+		lastStageDistribution = fullyDistributedPlan
+	}
+	p.distribution = p.distribution.compose(lastStageDistribution)
+}
+
 func (p planMaybePhysical) Close(ctx context.Context) {
 	if p.planNode != nil {
 		p.planNode.Close(ctx)
