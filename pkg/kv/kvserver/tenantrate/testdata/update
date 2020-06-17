@@ -1,0 +1,54 @@
+init
+requests: { rate: 1, burst: 2 }
+readbytes: { rate: 1024, burst: 2048 }
+writebytes: { rate: 10, burst: 20 }
+----
+00:00:00.000
+
+get_tenants
+- 2
+----
+[2#1]
+
+launch
+- { id: g1, tenant: 2, writebytes: 30 }
+----
+[g1@2]
+
+await
+- g1
+----
+[]
+
+launch
+- { id: g1, tenant: 2, writebytes: 20 }
+----
+[g1@2]
+
+timers
+----
+00:00:03.000
+
+advance
+1s
+----
+00:00:01.000
+
+update_settings
+writebytes: { rate: 20, burst: 10 }
+----
+00:00:01.000
+
+timers
+----
+00:00:01.500
+
+advance
+501ms
+----
+00:00:01.501
+
+await
+- g1
+----
+[]

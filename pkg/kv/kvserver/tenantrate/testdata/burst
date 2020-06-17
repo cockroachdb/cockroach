@@ -1,0 +1,92 @@
+# This tests bursting and how requests above the burst limit put the limiter
+# into debt
+
+init
+requests: { rate: 1, burst: 2 }
+readbytes: { rate: 1024, burst: 2048 }
+writebytes: { rate: 10, burst: 20 }
+----
+00:00:00.000
+
+get_tenants
+- 2
+----
+[2#1]
+
+launch
+- { id: g1, tenant: 2, writebytes: 30 }
+----
+[g1@2]
+
+await
+- g1
+----
+[]
+
+launch
+- { id: g1, tenant: 2, writebytes: 10 }
+----
+[g1@2]
+
+timers
+----
+00:00:02.000
+
+advance
+1s999ms
+----
+00:00:01.999
+
+blocked
+{ tenants: { 2: 1 }, tasks: [ g1 ] }
+----
+[g1@2]
+
+advance
+1ms
+----
+00:00:02.000
+
+await
+- g1
+----
+[]
+
+# Test that when consuming more than burst that we wait for the token bucket to
+# be full. At time 4s the token bucket will be full. When requesting 30, which
+# is above the burst of 20, we'll need to wait for the bucket to be full.
+
+launch
+- { id: g1,  tenant: 2, writebytes: 30 }
+----
+[g1@2]
+
+# Wait for the goroutine to be blocked to ensure that the timing is correct.
+
+blocked
+tenants: { 2: 1 }
+tasks: [ g1 ]
+----
+[g1@2]
+
+# Verify that the timer exists to avoid races setting the timer and advancing
+# time.
+
+timers
+----
+00:00:04.000
+
+advance
+1s999ms
+----
+00:00:03.999
+
+advance
+1ms
+----
+00:00:04.000
+
+await
+- g1
+----
+[]

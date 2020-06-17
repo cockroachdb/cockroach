@@ -1,0 +1,77 @@
+init
+requests: { rate: 1, burst: 2 }
+readbytes: { rate: 1024, burst: 2048 }
+writebytes: { rate: 1024, burst: 2048 }
+----
+00:00:00.000
+
+get_tenants
+[2, 2, 3, 5, 5, 5]
+----
+[2#2, 3#1, 5#3]
+
+launch
+- { id: g1, tenant: 2 }
+- { id: g2, tenant: 2 }
+- { id: g3, tenant: 3 }
+----
+[g1@2, g2@2, g3@3]
+
+await
+[g1, g2, g3]
+----
+[]
+
+launch
+- { id: g4, tenant: 2 }
+----
+[g4@2]
+
+blocked
+tenants: { 2: 1 }
+tasks: [ g4 ]
+----
+[g4@2]
+
+timers
+----
+00:00:01.000
+
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 1
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 1
+kv_tenant_rate_limit_current_blocked{tenant_id="3"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="5"} 0
+
+release_tenants
+[3]
+----
+[2#2, 5#3]
+
+metrics
+\{tenant_id="3"\}
+----
+
+
+advance
+999ms
+----
+00:00:00.999
+
+blocked
+tenants: { 2: 1 }
+tasks: [ g4 ]
+----
+[g4@2]
+
+advance
+1ms
+----
+00:00:01.000
+
+await
+- g4
+----
+[]

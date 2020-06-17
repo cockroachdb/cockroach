@@ -1,0 +1,46 @@
+init
+requests: { rate: 1, burst: 2 }
+readbytes: { rate: 1024, burst: 2048 }
+writebytes: { rate: 1024, burst: 2048 }
+----
+00:00:00.000
+
+get_tenants
+- 2
+----
+[2#1]
+
+launch
+- { id: g1, tenant: 2, writebytes: 1024 }
+----
+[g1@2]
+
+await
+[g1]
+----
+[]
+
+launch
+- { id: g2, tenant: 2, writebytes: 1025 }
+----
+[g2@2]
+
+blocked
+{ tenants: { 2: 1 }, tasks: [ g2 ] }
+----
+[g2@2]
+
+launch
+- { id: g3, tenant: 2, writebytes: 1024 }
+----
+[g2@2, g3@2]
+
+cancel
+- g2
+----
+[g3@2]
+
+await
+- g3
+----
+[]
