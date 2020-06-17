@@ -157,6 +157,10 @@ func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
 			}
 		}
 	}
+	if idRef, ok := ref.(*IDTypeReference); ok && ctx.indexedTypeFormatter != nil {
+		ctx.indexedTypeFormatter(ctx, idRef)
+		return
+	}
 	ctx.WriteString(ref.SQLString())
 }
 

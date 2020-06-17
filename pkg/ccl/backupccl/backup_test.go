@@ -948,10 +948,10 @@ func TestBackupRestoreResume(t *testing.T) {
 		createAndWaitForJob(
 			t, sqlDB, []sqlbase.ID{restoreTableID},
 			jobspb.RestoreDetails{
-				TableRewrites: map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite{
+				DescriptorRewrites: map[sqlbase.ID]*jobspb.RestoreDetails_DescriptorRewrite{
 					backupTableDesc.ID: {
 						ParentID: sqlbase.ID(restoreDatabaseID),
-						TableID:  restoreTableID,
+						ID:       restoreTableID,
 					},
 				},
 				URIs: []string{restoreDir},
@@ -1268,6 +1268,178 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		`DROP DATABASE data`,
 	)
 	close(blockGC)
+}
+
+func TestBackupRestoreUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO (rohany): Add tests for backup/restore with revision history and
+	//  incremental backups once types can change.
+
+	// Test full cluster backup/restore.
+	t.Run("full-cluster", func(t *testing.T) {
+		_, _, sqlDB, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		// Create some types, databases, and tables that use them.
+		sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE d.t1 (x d.greeting);
+INSERT INTO d.t1 VALUES ('hello'), ('howdy');
+CREATE TABLE d.t2 (x d.greeting[]);
+INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+
+CREATE DATABASE d2;
+CREATE TYPE d2.farewell AS ENUM ('bye', 'cya');
+CREATE TABLE d2.t1 (x d2.farewell);
+INSERT INTO d2.t1 VALUES ('bye'), ('cya');
+CREATE TABLE d2.t2 (x d2.farewell[]);
+INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
+`)
+		// Backup the cluster.
+		sqlDB.Exec(t, `BACKUP TO 'nodelocal://0/test/'`)
+		// Start a new server that shares the data directory.
+		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone)
+		defer cleanupRestore()
+
+		// Restore into the new cluster.
+		sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/test/'`)
+
+		// Check all of the tables have the right data.
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d.t1 ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d.t2 ORDER BY x`, [][]string{{"{howdy}"}, {"{hi}"}})
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d2.t1 ORDER BY x`, [][]string{{"bye"}, {"cya"}})
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d2.t2 ORDER BY x`, [][]string{{"{bye}"}, {"{cya}"}})
+
+		// We should be able to resolve each restored type. Test this by inserting
+		// into each of the restored tables.
+		sqlDBRestore.Exec(t, `INSERT INTO d.t1 VALUES ('hi')`)
+		sqlDBRestore.Exec(t, `INSERT INTO d.t2 VALUES (ARRAY['hello'])`)
+		sqlDBRestore.Exec(t, `INSERT INTO d2.t1 VALUES ('cya')`)
+		sqlDBRestore.Exec(t, `INSERT INTO d2.t2 VALUES (ARRAY['cya'])`)
+
+		// Each of the restored types should have namespace entries. Test this by
+		// trying to create types that would cause namespace conflicts.
+		sqlDBRestore.Exec(t, `SET experimental_enable_enums = true`)
+		sqlDBRestore.ExpectErr(t, `pq: type "d.public.greeting" already exists`, `CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')`)
+		sqlDBRestore.ExpectErr(t, `pq: type "d.public._greeting" already exists`, `CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')`)
+		sqlDBRestore.ExpectErr(t, `pq: type "d2.public.farewell" already exists`, `CREATE TYPE d2.farewell AS ENUM ('go', 'away')`)
+		sqlDBRestore.ExpectErr(t, `pq: type "d2.public._farewell" already exists`, `CREATE TYPE d2._farewell AS ENUM ('go', 'away')`)
+	})
+
+	// Test backup/restore of a database.
+	t.Run("database", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		// Create a database with some types and tables. We include a table with
+		// different expressions within to test that the types within get remapped.
+		sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
+CREATE TABLE d.t1 (x d.greeting);
+INSERT INTO d.t1 VALUES ('hello'), ('howdy');
+CREATE TABLE d.t2 (x d.greeting[]);
+INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+CREATE TABLE d.expr (
+	x d.greeting,
+  y d.greeting DEFAULT 'hello',
+	z d.greeting[] AS (enum_range(x, 'hi')) STORED,
+  CHECK (x < 'hi')
+);
+`)
+		// Now backup the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+		sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+
+		// All of the tables should have the values we expect.
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t1 ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t2 ORDER BY x`, [][]string{{"{howdy}"}, {"{hi}"}})
+
+		// Insert a row into the expr table so that all of the expressions are
+		// evaluated and checked.
+		sqlDB.Exec(t, `INSERT INTO d.expr VALUES ('howdy')`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.expr`, [][]string{{"howdy", "hello", "{howdy,hi}"}})
+		sqlDB.ExpectErr(t, `pq: failed to satisfy CHECK constraint`, `INSERT INTO d.expr VALUES ('hi')`)
+
+		// We should be able to use the restored types to create new tables.
+		sqlDB.Exec(t, `CREATE TABLE d.t3 (x d.greeting, y d.farewell)`)
+		// We should detect name conflicts trying to overwrite existing type names.
+		sqlDB.ExpectErr(t, `pq: type "d.public.greeting" already exists`, `CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')`)
+		sqlDB.ExpectErr(t, `pq: type "d.public._greeting" already exists`, `CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')`)
+		sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`, `CREATE TYPE d.farewell AS ENUM ('hello', 'hiya')`)
+		sqlDB.ExpectErr(t, `pq: type "d.public._farewell" already exists`, `CREATE TYPE d._farewell AS ENUM ('hello', 'hiya')`)
+	})
+
+	// Test backup/restore of a single table.
+	t.Run("table", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE DATABASE d;
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE d.t (x d.greeting);
+INSERT INTO d.t VALUES ('hello'), ('howdy');
+CREATE TABLE d.t2 (x d.greeting[]);
+INSERT INTO d.t2 VALUES (ARRAY['hello']);
+CREATE TABLE d.t3 (x d.greeting);
+INSERT INTO d.t3 VALUES ('hi');
+`)
+		// Test backups of t.
+		{
+			// Now backup t.
+			sqlDB.Exec(t, `BACKUP TABLE d.t TO 'nodelocal://0/test/'`)
+			// Create a new database to restore the table into.
+			sqlDB.Exec(t, `CREATE DATABASE d2`)
+			// Restore t into d2.
+			sqlDB.Exec(t, `RESTORE TABLE d.t FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+			// Ensure that greeting type has been restored into d2 as well.
+			sqlDB.Exec(t, `CREATE TABLE d2.t2 (x d2.greeting, y d2._greeting)`)
+			// Check that the table data is as expected.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d2.t ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
+		}
+
+		// Test backing up t2. It only references the implicit array type, so we're
+		// checking that the base type gets included as well.
+		{
+			// Now backup t2.
+			sqlDB.Exec(t, `BACKUP TABLE d.t2 TO 'nodelocal://0/test2/'`)
+			// Create a new database to restore the table into.
+			sqlDB.Exec(t, `CREATE DATABASE d3`)
+			// Restore t2 into d3.
+			sqlDB.Exec(t, `RESTORE TABLE d.t2 FROM 'nodelocal://0/test2/' WITH into_db = 'd3'`)
+			// Ensure that the base type and array type have been restored into d3.
+			sqlDB.Exec(t, `CREATE TABLE d3.t (x d3.greeting, y d3._greeting)`)
+			// Check that the table data is as expected.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d3.t2`, [][]string{{"{hello}"}})
+		}
+
+		// Create a backup of all the tables in d.
+		{
+			// Backup all of the tables.
+			sqlDB.Exec(t, `BACKUP d.* TO 'nodelocal://0/test3/'`)
+			// Create a new database to restore all of the tables into.
+			sqlDB.Exec(t, `CREATE DATABASE d4`)
+			// Restore all of the tables.
+			sqlDB.Exec(t, `RESTORE TABLE d.* FROM 'nodelocal://0/test3/' WITH into_db = 'd4'`)
+			// Check that all of the tables have expected data.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t2 ORDER BY x`, [][]string{{"{hello}"}})
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d4.t3 ORDER BY x`, [][]string{{"hi"}})
+			// Ensure that the types have been restored as well.
+			sqlDB.Exec(t, `CREATE TABLE d4.t4 (x d4.greeting, y d4._greeting)`)
+		}
+
+		// We won't be able to restore t into d because we'll have a type conflict.
+		sqlDB.Exec(t, `DROP TABLE d.t`)
+		sqlDB.ExpectErr(t, `pq: type "(_?)greeting" already exists`, `RESTORE TABLE d.t FROM 'nodelocal://0/test/'`)
+	})
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {

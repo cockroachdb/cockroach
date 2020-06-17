@@ -62,9 +62,9 @@ message BackupProgress {
 }
 
 message RestoreDetails {
-  message TableRewrite {
-    uint32 table_id = 1 [
-      (gogoproto.customname) = "TableID",
+  message DescriptorRewrite {
+    uint32 id = 1 [
+      (gogoproto.customname) = "ID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
     uint32 parent_id = 2 [
@@ -77,7 +77,7 @@ message RestoreDetails {
   }
   reserved 1;
   util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
-  map<uint32, TableRewrite> table_rewrites = 2 [
+  map<uint32, DescriptorRewrite> descriptor_rewrites = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
   // URIs contains one URI for each backup (full or incremental) corresponding
