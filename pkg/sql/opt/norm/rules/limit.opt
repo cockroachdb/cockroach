@@ -127,9 +127,10 @@ $input
 # LeftJoin when rows from the left input are guaranteed to be preserved by the
 # join. Since the join creates an output row for each left input row, we only
 # need that many rows from that input. We can only do this if the limit ordering
-# refers only to the left input columns. We also check that the cardinality of
-# the left input is more than the limit, to prevent repeated applications of the
-# rule.
+# refers only to the left input columns. We check that the cardinality of the
+# left input is more than the limit, to prevent repeated applications of the
+# rule. We also check that the left input has no outer columns to avoid
+# interfering with decorrelation.
 #
 # Why can we only match InnerJoins and LeftJoins (e.g. not FullJoins)?
 #
@@ -150,7 +151,7 @@ $input
 [PushLimitIntoJoinLeft, Normalize]
 (Limit
     $input:(InnerJoin | LeftJoin
-            $left:*
+            $left:* & ^(HasOuterCols $left)
             $right:*
             $on:*
             $private:*
@@ -180,7 +181,12 @@ $input
 # PushLimitIntoJoinRight mirrors PushLimitIntoJoinLeft.
 [PushLimitIntoJoinRight, Normalize]
 (Limit
-    $input:(InnerJoin $left:* $right:* $on:* $private:*) &
+    $input:(InnerJoin
+            $left:*
+            $right:* & ^(HasOuterCols $right)
+            $on:*
+            $private:*
+        ) &
         (JoinPreservesRightRows $input)
     $limitExpr:(Const $limit:*) &
         (IsPositiveInt $limit) &
