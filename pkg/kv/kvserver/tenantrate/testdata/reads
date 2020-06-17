@@ -1,0 +1,62 @@
+# This tests bursting and how requests above the burst limit put the limiter
+# into debt
+
+init
+requests: { rate: 1, burst: 2 }
+readbytes: { rate: 10, burst: 100 }
+----
+00:00:00.000
+
+get_tenants
+- 2
+----
+[2#1]
+
+# Read the entire burst worth of bytes plus 4 which should put the limiter
+# in debt by 4.
+
+record_read
+- { tenant: 2, readbytes: 104 }
+----
+[]
+
+# Launch a request which will block on the lack of available readbytes as it
+# tries to read its 1 courtesy byte.
+
+launch
+- { id: g1, tenant: 2 }
+----
+[g1@2]
+
+timers
+----
+00:00:00.500
+
+# Record more reads, putting the limiter further into debt
+
+record_read
+- { tenant: 2, readbytes: 5 }
+----
+[g1@2]
+
+# Note that the head of the queue received this update and reset its timer.
+# This is probably not advisable and should be addressed.
+
+
+timers
+----
+00:00:01.000
+
+advance
+1s
+----
+00:00:01.000
+
+await
+- g1
+----
+[]
+
+
+
+
