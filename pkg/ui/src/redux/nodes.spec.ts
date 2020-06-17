@@ -39,7 +39,7 @@ function makeNodesState(...addresses: { id: number, address: string, status?: Li
     statuses: {},
   };
   addresses.forEach(addr => {
-    livenessData.statuses[addr.id] = addr.status || LivenessStatus.LIVE;
+    livenessData.statuses[addr.id] = addr.status || LivenessStatus.NODE_STATUS_LIVE;
   });
   const store = createAdminUIStore(createHashHistory());
   store.dispatch(nodesReducerObj.receiveData(nodeData));
@@ -91,15 +91,15 @@ describe("node data selectors", function() {
 
     it("adds decommissioned flag to decommissioned nodes", function() {
       const state: any = makeNodesState(
-        { id: 1, address: "addressA", status: LivenessStatus.DECOMMISSIONED },
+        { id: 1, address: "addressA", status: LivenessStatus.NODE_STATUS_DECOMMISSIONED },
         { id: 2, address: "addressB" },
-        { id: 3, address: "addressC", status: LivenessStatus.DECOMMISSIONED },
-        { id: 4, address: "addressD", status: LivenessStatus.DEAD },
-        { id: 5, address: "addressA", status: LivenessStatus.DECOMMISSIONED },
+        { id: 3, address: "addressC", status: LivenessStatus.NODE_STATUS_DECOMMISSIONED },
+        { id: 4, address: "addressD", status: LivenessStatus.NODE_STATUS_DEAD },
+        { id: 5, address: "addressA", status: LivenessStatus.NODE_STATUS_DECOMMISSIONED },
         { id: 6, address: "addressC" },
         { id: 7, address: "addressA" },
-        { id: 8, address: "addressE", status: LivenessStatus.DECOMMISSIONING },
-        { id: 9, address: "addressF", status: LivenessStatus.UNAVAILABLE },
+        { id: 8, address: "addressE", status: LivenessStatus.NODE_STATUS_DECOMMISSIONING },
+        { id: 9, address: "addressF", status: LivenessStatus.NODE_STATUS_UNAVAILABLE },
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
@@ -198,11 +198,11 @@ describe("selectCommissionedNodeStatuses", function() {
   });
 
   const testCases: [string, LivenessStatus, INodeStatus[]][] = [
-    ["excludes decommissioned nodes", LivenessStatus.DECOMMISSIONED, []],
-    ["includes decommissioning nodes", LivenessStatus.DECOMMISSIONING, nodeStatuses],
-    ["includes live nodes", LivenessStatus.LIVE, nodeStatuses],
-    ["includes unavailable nodes", LivenessStatus.UNAVAILABLE, nodeStatuses],
-    ["includes dead nodes", LivenessStatus.DEAD, nodeStatuses],
+    ["excludes decommissioned nodes", LivenessStatus.NODE_STATUS_DECOMMISSIONED, []],
+    ["includes decommissioning nodes", LivenessStatus.NODE_STATUS_DECOMMISSIONING, nodeStatuses],
+    ["includes live nodes", LivenessStatus.NODE_STATUS_LIVE, nodeStatuses],
+    ["includes unavailable nodes", LivenessStatus.NODE_STATUS_UNAVAILABLE, nodeStatuses],
+    ["includes dead nodes", LivenessStatus.NODE_STATUS_DEAD, nodeStatuses],
   ];
 
   testCases.forEach(([name, status, expected]) => {
@@ -240,8 +240,8 @@ describe("sumNodeStats", function() {
       },
     ];
     const livenessStatusByNodeID: { [key: string]: LivenessStatus } = {
-      1: LivenessStatus.LIVE,
-      2: LivenessStatus.LIVE,
+      1: LivenessStatus.NODE_STATUS_LIVE,
+      2: LivenessStatus.NODE_STATUS_LIVE,
     };
     const actual = sumNodeStats(nodeStatuses, livenessStatusByNodeID);
     assert.equal(actual.nodeCounts.healthy, 2);

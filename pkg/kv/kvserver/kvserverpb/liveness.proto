@@ -40,26 +40,39 @@ message Liveness {
   // pessimism of a checker does not matter very much.
   util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
+
+  // decommissioning is true if the given node is decommissioning or
+  // fully decommissioned.
   bool decommissioning = 5;
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
-// liveness system.
+// liveness system. See comment on LivenessStatus() for a description of the
+// states.
 //
-// See comment on LivenessStatus() for a description of the states.
+// TODO(irfansharif): We should reconsider usage of NodeLivenessStatus.
+// It's unclear if the enum is well considered. It enumerates across two
+// distinct set of things: the "membership" status (live/active,
+// decommissioning, decommissioned), and the node "process" status (live,
+// unavailable, available). It's possible for two of these "states" to be true,
+// simultaneously (consider a decommissioned, dead node). It makes for confusing
+// semantics, and the code attempting to disambiguate across these states
+// (kvserver.LivenessStatus() for e.g.) seem wholly arbitrary.
+//
+// See #50707 for more details.
 enum NodeLivenessStatus {
-  UNKNOWN = 0;
+  NODE_STATUS_UNKNOWN = 0 [(gogoproto.enumvalue_customname) = "UNKNOWN"];
   // DEAD indicates the node is considered dead.
-  DEAD = 1;
+  NODE_STATUS_DEAD = 1 [(gogoproto.enumvalue_customname) = "DEAD"];
   // UNAVAILABLE indicates that the node is unavailable - it has not updated its
   // liveness record recently enough to be considered live, but has not been
   // unavailable long enough to be considered dead.
-  UNAVAILABLE = 2;
+  NODE_STATUS_UNAVAILABLE = 2 [(gogoproto.enumvalue_customname) = "UNAVAILABLE"];
   // LIVE indicates a live node.
-  LIVE = 3;
+  NODE_STATUS_LIVE = 3 [(gogoproto.enumvalue_customname) = "LIVE"];
   // DECOMMISSIONING indicates a node that is in the decommissioning process.
-  DECOMMISSIONING = 4;
+  NODE_STATUS_DECOMMISSIONING = 4 [(gogoproto.enumvalue_customname) = "DECOMMISSIONING"];
   // DECOMMISSIONED indicates a node that has finished the decommissioning
   // process.
-  DECOMMISSIONED = 5;
+  NODE_STATUS_DECOMMISSIONED = 5 [(gogoproto.enumvalue_customname) = "DECOMMISSIONED"];
 }

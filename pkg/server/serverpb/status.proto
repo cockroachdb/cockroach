@@ -892,6 +892,9 @@ service Status {
       get : "/_status/details/{node_id}"
     };
   }
+
+  // Don't introduce additional usages of this RPC. See #50707 for more details.
+  // The underlying response type is something we're looking to get rid of.
   rpc Nodes(NodesRequest) returns (NodesResponse) {
     option (google.api.http) = {
       get : "/_status/nodes"

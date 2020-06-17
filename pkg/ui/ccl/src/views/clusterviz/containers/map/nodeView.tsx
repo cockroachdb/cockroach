@@ -39,9 +39,9 @@ const TRANSLATE_Y = -100 * SCALE_FACTOR;
 export class NodeView extends React.Component<NodeViewProps> {
   getLivenessIcon(livenessStatus: NodeLivenessStatus) {
     switch (livenessStatus) {
-      case NodeLivenessStatus.LIVE:
+      case NodeLivenessStatus.NODE_STATUS_LIVE:
         return liveIcon;
-      case NodeLivenessStatus.DEAD:
+      case NodeLivenessStatus.NODE_STATUS_DEAD:
         return deadIcon;
       default:
         return suspectIcon;
@@ -52,7 +52,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { node, livenessStatus, liveness } = this.props;
 
     switch (livenessStatus) {
-      case NodeLivenessStatus.DEAD: {
+      case NodeLivenessStatus.NODE_STATUS_DEAD: {
         if (!liveness) {
           return "dead";
         }
@@ -61,7 +61,7 @@ export class NodeView extends React.Component<NodeViewProps> {
         const deadMoment = LongToMoment(deadTime);
         return `dead for ${moment.duration(deadMoment.diff(moment())).humanize()}`;
       }
-      case NodeLivenessStatus.LIVE: {
+      case NodeLivenessStatus.NODE_STATUS_LIVE: {
         const startTime = LongToMoment(node.started_at);
         return `up for ${moment.duration(startTime.diff(moment())).humanize()}`;
       }
