@@ -172,10 +172,11 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, er
 	return result, hasNulls, nil
 }
 
-// Filter row input is already sorted due to normalization
 func cmpIn_TYPE(
 	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
 ) comparisonResult {
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {
@@ -187,7 +188,7 @@ func cmpIn_TYPE(
 		} else if cmpResult > 0 {
 			lo = i + 1
 		} else {
-			hi = i - 1
+			hi = i
 		}
 	}
 
