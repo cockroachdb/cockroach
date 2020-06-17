@@ -297,7 +297,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(
         nodeID =>
-          nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.LIVE,
+          nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.NODE_STATUS_LIVE,
       )
       .filter(nodeID => !_.isNil(nodesSummary.nodeStatusByID[nodeID].activity))
       .map(nodeID => Number.parseInt(nodeID, 0));
@@ -305,7 +305,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       .filter(
         nodeID =>
           nodesSummary.livenessStatusByNodeID[nodeID] ===
-          LivenessStatus.UNAVAILABLE,
+          LivenessStatus.NODE_STATUS_UNAVAILABLE,
       )
       .map(nodeID => Number.parseInt(nodeID, 0));
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {

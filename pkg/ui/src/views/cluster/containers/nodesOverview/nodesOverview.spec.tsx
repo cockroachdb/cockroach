@@ -340,13 +340,13 @@ describe("Nodes Overview page", () => {
               { node_id: 7, expiration: { wall_time: Long.fromNumber(Date.now()) }},
             ],
             statuses: {
-              1: NodeLivenessStatus.LIVE,
-              2: NodeLivenessStatus.DECOMMISSIONED, // node_id: 2
-              3: NodeLivenessStatus.DEAD,
-              4: NodeLivenessStatus.UNAVAILABLE,
-              5: NodeLivenessStatus.UNKNOWN,
-              6: NodeLivenessStatus.DECOMMISSIONING,
-              7: NodeLivenessStatus.DECOMMISSIONED, // node_id: 7
+              1: NodeLivenessStatus.NODE_STATUS_LIVE,
+              2: NodeLivenessStatus.NODE_STATUS_DECOMMISSIONED, // node_id: 2
+              3: NodeLivenessStatus.NODE_STATUS_DEAD,
+              4: NodeLivenessStatus.NODE_STATUS_UNAVAILABLE,
+              5: NodeLivenessStatus.NODE_STATUS_UNKNOWN,
+              6: NodeLivenessStatus.NODE_STATUS_DECOMMISSIONING,
+              7: NodeLivenessStatus.NODE_STATUS_DECOMMISSIONED, // node_id: 7
             },
             toJSON: () => ({}),
           },
