@@ -163,3 +163,29 @@ EXPLAIN (VEC) SELECT max(c) FROM a
   └ *colexec.orderedAggregator
     └ *colexec.distinctChainOps
       └ *colexec.colBatchScan
+
+# Verify that binary operations on integers of any width return INT8.
+statement ok
+CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
+INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
+
+query T
+SELECT pg_typeof(_int2 - _int2) FROM ints LIMIT 1
+----
+bigint
+
+query T
+EXPLAIN (VEC) SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+│
+└ Node 1
+  └ *colexec.projMultInt16Int16Op
+    └ *colexec.selEQInt64Int64Op
+      └ *colexec.projPlusInt64Int64ConstOp
+        └ *colexec.projPlusInt32Int32Op
+          └ *colexec.colBatchScan
+
+query I
+SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+4
