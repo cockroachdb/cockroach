@@ -640,6 +640,7 @@ ORDER BY indexrelid
 ----
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation               indclass  indoption  indexprs  indpred
 144368028   32        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+404104299   39        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3903121477                 0         2          NULL      NULL
 543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
@@ -675,7 +676,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL
-                    
+
 # From #26504
 query OOI colnames
 SELECT indexrelid,
@@ -686,6 +687,7 @@ ORDER BY indexrelid, operator_argument_position
 ----
 indexrelid  operator_argument_type_oid  operator_argument_position
 144368028   0                           1
+404104299   0                           1
 543291288   0                           1
 543291289   0                           1
 543291291   0                           1
@@ -2527,4 +2529,3 @@ UPDATE pg_catalog.pg_tables SET a = 'abc'
 
 statement error pg_tables is a system catalog
 TRUNCATE TABLE pg_catalog.pg_tables
-

@@ -2,14 +2,14 @@ The following types are considered always safe for reporting:
 
 File | Type
 --|--
-pkg/kv/kvserver/raft.go | `SnapshotRequest_Type`
-pkg/roachpb/data.go | `ReplicaChangeType`
-pkg/roachpb/metadata.go | `NodeID`
-pkg/roachpb/metadata.go | `StoreID`
-pkg/roachpb/metadata.go | `RangeID`
-pkg/roachpb/metadata.go | `ReplicaID`
-pkg/roachpb/metadata.go | `ReplicaType`
-pkg/util/hlc/timestamp.go | `Timestamp`
+pkg/kv/kvserver/raft.go:298:func (SnapshotRequest_Type) SafeValue() {}
+pkg/roachpb/data.go:2281:func (ReplicaChangeType) SafeValue() {}
+pkg/roachpb/metadata.go:36:func (n NodeID) SafeValue() {}
+pkg/roachpb/metadata.go:55:func (n StoreID) SafeValue() {}
+pkg/roachpb/metadata.go:66:func (r RangeID) SafeValue() {}
+pkg/roachpb/metadata.go:84:func (r ReplicaID) SafeValue() {}
+pkg/roachpb/metadata.go:375:func (r ReplicaType) SafeValue() {}
+pkg/util/hlc/timestamp.go:96:func (Timestamp) SafeValue() {}
 pkg/util/log/redact.go | `reflect.TypeOf(true)`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`
 pkg/util/log/redact.go | `reflect.TypeOf(int8(0))`

@@ -171,11 +171,14 @@ CREATE TABLE system.jobs (
 	progress          BYTES,
 	created_by_type   STRING,
 	created_by_id     INT,
+	sqlliveness_name  STRING,
+	sqlliveness_epoch INT8,
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
 
 	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
-	FAMILY progress (progress)
+	FAMILY progress (progress),
+	FAMILY sqlliveness (sqlliveness_name, sqlliveness_epoch)
 );`
 
 	// web_sessions are used to track authenticated user actions over stateless
@@ -331,6 +334,13 @@ CREATE TABLE system.scheduled_jobs (
        schedule_details, executor_type, execution_args, schedule_changes 
     )
 )`
+
+	SqllivenessTableSchema = `
+CREATE TABLE system.sqlliveness (
+    name             STRING PRIMARY KEY NOT NULL,
+    epoch				     INT8,
+    expiration       TIMESTAMPTZ
+)`
 )
 
 func pk(name string) IndexDescriptor {
@@ -386,6 +396,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
 	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
 	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
+	keys.SqllivenessID:                        privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -852,8 +863,10 @@ var (
 			{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
 			{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
 			{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
+			{Name: "sqlliveness_name", ID: 8, Type: types.String, Nullable: true},
+			{Name: "sqlliveness_epoch", ID: 9, Type: types.Int, Nullable: true},
 		},
-		NextColumnID: 8,
+		NextColumnID: 10,
 		Families: []ColumnFamilyDescriptor{
 			{
 				// NB: We are using family name that existed prior to adding created_by_type and
@@ -871,8 +884,14 @@ var (
 				ColumnIDs:       []ColumnID{5},
 				DefaultColumnID: 5,
 			},
+			{
+				Name:        "sqlliveness",
+				ID:          2,
+				ColumnNames: []string{"sqlliveness_name", "sqlliveness_epoch"},
+				ColumnIDs:   []ColumnID{8, 9},
+			},
 		},
-		NextFamilyID: 2,
+		NextFamilyID: 3,
 		PrimaryIndex: pk("id"),
 		Indexes: []IndexDescriptor{
 			{
@@ -1644,6 +1663,35 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
+
+	// SqllivenessTable is the descriptor for the sqlliveness table.
+	SqllivenessTable = NewImmutableTableDescriptor(TableDescriptor{
+		Name:                    "sqlliveness",
+		ID:                      keys.SqllivenessID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []ColumnDescriptor{
+			{Name: "name", ID: 1, Type: types.String, Nullable: false},
+			{Name: "epoch", ID: 2, Type: types.Int, Nullable: false},
+			{Name: "expiration", ID: 3, Type: types.TimestampTZ},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "name_epoch",
+				ID:          0,
+				ColumnNames: []string{"name", "epoch", "expiration"},
+				ColumnIDs:   []ColumnID{1, 2, 3},
+			},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("name"),
+		NextIndexID:    2,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SqllivenessID]),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
 )
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -1706,6 +1754,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Tables introduced in 20.2.
 
 	target.AddDescriptor(keys.SystemDatabaseID, ScheduledJobsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, SqllivenessTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
