@@ -615,10 +615,13 @@ func resolveBackupManifests(
 
 // TODO(anzoteh96): benchmark the performance of different search algorithms,
 // e.g.  linear search, binary search, reverse linear search.
-func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) int {
+func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) (int, error) {
+	if len(backupManifests) == 0 {
+		return -1, errors.New("Expected a nonempty backup manifest list, got an empty list")
+	}
 	backupManifestIndex := len(backupManifests) - 1
 	if asOf.IsEmpty() {
-		return backupManifestIndex
+		return backupManifestIndex, nil
 	}
 	for ind, b := range backupManifests {
 		if asOf.Less(b.StartTime) {
@@ -626,7 +629,7 @@ func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) 
 		}
 		backupManifestIndex = ind
 	}
-	return backupManifestIndex
+	return backupManifestIndex, nil
 }
 
 func loadSQLDescsFromBackupsAtTime(

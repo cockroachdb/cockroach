@@ -778,8 +778,9 @@ func restore(
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
-// TODO(anzoteh96): this method returns two things: the sqlbase.Descriptor
-// and the backup manifest. Ideally, this should be broken down into two methods.
+// TODO(anzoteh96): this method returns two things: backup manifests
+// and the descriptors of the relevant manifests. Ideally, this should
+// be broken down into two methods.
 func loadBackupSQLDescs(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -834,24 +835,27 @@ func getStatisticsFromBackup(
 	exportStore cloud.ExternalStorage,
 	encryption *roachpb.FileEncryptionOptions,
 	backup BackupManifest,
-) []*stats.TableStatisticProto {
-	if backup.Statistics != nil {
-		return backup.Statistics
+) ([]*stats.TableStatisticProto, error) {
+	// This part deals with pre-20.2 stats format where backup statistics
+	// are stored as a field in backup manifests instead of in their
+	// individual files.
+	if backup.DeprecatedStatistics != nil {
+		return backup.DeprecatedStatistics, nil
 	}
-	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.Statistics))
+	tableStatistics := make([]*stats.TableStatisticProto, 0, len(backup.StatisticsFilenames))
 	uniqueFileNames := make(map[string]struct{})
 	for _, fname := range backup.StatisticsFilenames {
-		uniqueFileNames[fname] = struct{}{}
-	}
-	for fname := range uniqueFileNames {
-		myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
-		if err != nil {
-			return tableStatistics
+		if _, exists := uniqueFileNames[fname]; !exists {
+			uniqueFileNames[fname] = struct{}{}
+			myStatsTable, err := readTableStatistics(ctx, exportStore, fname, encryption)
+			if err != nil {
+				return tableStatistics, err
+			}
+			tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
 		}
-		tableStatistics = append(tableStatistics, myStatsTable.Statistics...)
 	}
 
-	return tableStatistics
+	return tableStatistics, nil
 }
 
 // remapRelevantStatistics changes the table ID references in the stats
@@ -1027,7 +1031,10 @@ func (r *restoreResumer) Resume(
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,
 	)
-	lastBackupIndex := getBackupIndexAtTime(backupManifests, details.EndTime)
+	if err != nil {
+		return err
+	}
+	lastBackupIndex, err := getBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
 	}
@@ -1048,7 +1055,10 @@ func (r *restoreResumer) Resume(
 	r.descriptorCoverage = details.DescriptorCoverage
 	r.databases = databases
 	r.execCfg = p.ExecCfg()
-	backupStats := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
+	backupStats, err := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
+	if err != nil {
+		return err
+	}
 	r.latestStats = remapRelevantStatistics(backupStats, details.DescriptorRewrites)
 
 	if len(r.tables) == 0 {

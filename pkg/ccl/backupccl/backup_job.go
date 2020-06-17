@@ -350,14 +350,13 @@ func backup(
 	var tableStatistics []*stats.TableStatisticProto
 	for _, desc := range backupManifest.Descriptors {
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-
 			// Collect all the table stats for this table.
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
 			if err != nil {
 				return RowCount{}, err
 			}
-			for i := range tableStatisticsAcc {
-				tableStatistics = append(tableStatistics, &tableStatisticsAcc[i].TableStatisticProto)
+			for _, stat := range tableStatisticsAcc {
+				tableStatistics = append(tableStatistics, &stat.TableStatisticProto)
 			}
 		}
 	}
@@ -548,7 +547,7 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 	if err := protoutil.Unmarshal(details.BackupManifest, &backupManifest); err != nil {
 		return err
 	}
-	backupManifest.Statistics = nil
+	backupManifest.DeprecatedStatistics = nil
 	descBytes, err := protoutil.Marshal(&backupManifest)
 	if err != nil {
 		return err

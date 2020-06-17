@@ -117,7 +117,7 @@ message BackupManifest {
   // This field is used by backups in 19.2 and 20.1 where a backup manifest stores all the table
   // statistics in the field, the later versions all write the statistics to a separate file
   // indicated in the table_statistic_files field.
-  repeated sql.stats.TableStatisticProto statistics = 21;
+  repeated sql.stats.TableStatisticProto deprecated_statistics = 21;
   map<uint32, string> statistics_filenames = 23 [
       (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
