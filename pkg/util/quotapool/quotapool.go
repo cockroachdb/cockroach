@@ -138,6 +138,11 @@ func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 	return qp
 }
 
+// TimeSource returns the TimeSource associated with this QuotaPool.
+func (qp *QuotaPool) TimeSource() TimeSource {
+	return qp.timeSource
+}
+
 // ApproximateQuota will report approximately the amount of quota available
 // in the pool to f. The provided Resource must not be mutated.
 func (qp *QuotaPool) ApproximateQuota(f func(Resource)) {

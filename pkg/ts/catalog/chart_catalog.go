@@ -695,6 +695,36 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Tenant Rate Limiting"}},
+		Charts: []chartDescription{
+			{
+				Title:       "Requests Blocked on Tenant Rate Limiting",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.current_blocked"},
+			},
+			{
+				Title:       "Number of Tenants",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.num_tenants"},
+			},
+			{
+				Title:       "Requests Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.num_tenants"},
+			},
+			{
+				Title:       "Write Bytes Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.requests_admitted"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
 			{KVTransactionLayer, "Requests", "Slow"},
 			{ReplicationLayer, "Requests", "Slow"},
 			{DistributionLayer, "Requests", "Slow"},
