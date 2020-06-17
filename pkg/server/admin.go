@@ -1636,8 +1636,8 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 
 // DecommissionStatus returns the DecommissionStatus for all or the given nodes.
 func (s *adminServer) DecommissionStatus(
-	ctx context.Context, req *serverpb.DecommissionStatusRequest,
-) (*serverpb.DecommissionStatusResponse, error) {
+	ctx context.Context, req *serverpb.CommissionStatusRequest,
+) (*serverpb.CommissionStatusResponse, error) {
 	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
 	ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
@@ -1681,18 +1681,18 @@ func (s *adminServer) DecommissionStatus(
 		return nil, err
 	}
 
-	var res serverpb.DecommissionStatusResponse
+	var res serverpb.CommissionStatusResponse
 
 	for nodeID := range replicaCounts {
 		l, err := s.server.nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to get liveness for %d", nodeID)
 		}
-		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:          l.NodeID,
-			ReplicaCount:    replicaCounts[l.NodeID],
-			Decommissioning: l.Decommissioning,
-			Draining:        l.Draining,
+		nodeResp := serverpb.CommissionStatusResponse_Status{
+			NodeID:                    l.NodeID,
+			ReplicaCount:              replicaCounts[l.NodeID],
+			DeprecatedDecommissioning: l.DeprecatedDecommissioning,
+			Draining:                  l.Draining,
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
@@ -1710,8 +1710,8 @@ func (s *adminServer) DecommissionStatus(
 
 // Decommission sets the decommission flag to the specified value on the specified node(s).
 func (s *adminServer) Decommission(
-	ctx context.Context, req *serverpb.DecommissionRequest,
-) (*serverpb.DecommissionStatusResponse, error) {
+	ctx context.Context, req *serverpb.CommissionRequest,
+) (*serverpb.CommissionStatusResponse, error) {
 	nodeIDs := req.NodeIDs
 
 	if len(nodeIDs) == 0 {
@@ -1720,10 +1720,10 @@ func (s *adminServer) Decommission(
 
 	// Mark the target nodes as decommissioning. They'll find out as they
 	// heartbeat their liveness.
-	if err := s.server.Decommission(ctx, req.Decommissioning, nodeIDs); err != nil {
+	if err := s.server.Decommission(ctx, req.DeprecatedDecommissioning, nodeIDs); err != nil {
 		return nil, err
 	}
-	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+	return s.DecommissionStatus(ctx, &serverpb.CommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
 // DataDistribution returns a count of replicas on each node for each table.

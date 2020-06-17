@@ -23,10 +23,10 @@ func TestShouldReplaceLiveness(t *testing.T) {
 
 	l := func(epo int64, expiration hlc.Timestamp, draining, decom bool) kvserverpb.Liveness {
 		return kvserverpb.Liveness{
-			Epoch:           epo,
-			Expiration:      hlc.LegacyTimestamp(expiration),
-			Draining:        draining,
-			Decommissioning: decom,
+			Epoch:                     epo,
+			Expiration:                hlc.LegacyTimestamp(expiration),
+			Draining:                  draining,
+			DeprecatedDecommissioning: decom,
 		}
 	}
 	const (

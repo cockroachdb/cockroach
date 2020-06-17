@@ -44,26 +44,99 @@ message Liveness {
   // TODO(andrei): Change this to a regular Timestamp field in 21.1.
   util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
-  bool decommissioning = 5;
+
+  // DeprecatedDecommissioning is true if the given node is decommissioning or
+  // fully decommissioned. It is deprecated in favor of CommissionStatus, and is
+  // slated for removal in v21.1.
+  bool deprecated_decommissioning = 5;
+
+  // CommissionStatus enumerates the possible "commission" states a node could be
+  // in: Commissioned, Decommissioning, Decommissioned.
+  CommissionStatus commission_status = 6;
+}
+
+// CommissionStatus enumerates the possible "commission" states a node could be
+// in.
+//
+//    +--------------------+                                        +--------------------+
+//    |                    |     cockroach node decommission        |                    |
+//    |                    |--------------------------------------->|                    |
+//    |    Commissioned    |                                        |  Decommissioning   |
+//    |                    |<---------------------------------------|                    |
+//    |                    |     cockroach node recommission        |                    |
+//    +--------------------+                                        +--------------------+
+//                                                                             ^
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             v
+//                                                                  +--------------------+
+//                                                                  |                    |
+//                                                                  |                    |
+//                                                                  |   Decommissioned   |
+//                                                                  |                    |
+//                                                                  |                    |
+//                                                                  +--------------------+
+//
+// Note that we've intentionally elided a 'recommissioning' state. To
+// recommission a node is to simply cancel an inflight decommissioning process,
+// which we do by persisting the appropriate commission status in the liveness
+// record. It then makes no sense to bother with persisting an explicit
+// in-progress state.
+enum CommissionStatus {
+  option (gogoproto.goproto_enum_stringer) = false;
+  // Unknown is the placeholder default value we use for wire compatibility in
+  // mixed version clusters where earlier version nodes don't make use of this
+  // commission status enum.
+  //
+  // TODO(irfansharif): Remove usage of `UNKNOWN` state once v20.2 is cut. We
+  // only need it as a stopgap when migrating from v20.1.
+  UNKNOWN = 0;
+
+  // Commissioned represents a node that is neither decommissioning or already
+  // fully decommissioned.
+  COMMISSIONED = 1;
+
+  // Decommissioning represents a node that we've only started decommissioning,
+  // but has not yet fully decommissioned. It is safe to recommission it during
+  // this time, in order to cancel the inflight decommissioning process.
+  DECOMMISSIONING = 2;
+
+  // Decommissioned represents a node that has been fully decommissioned. It
+  // will no longer be allowed to join the cluster.
+  //
+  // TODO(irfansharif): We don't disallow the joining as yet (but will come in
+  // as part of the Connect RPC subsystem).
+  DECOMMISSIONED = 3;
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
-// liveness system.
+// liveness system. See comment on LivenessStatus() for a description of the
+// states.
 //
-// See comment on LivenessStatus() for a description of the states.
+// TODO(irfansharif): We should reconsider usage of NodeLivenessStatus. It's yet
+// another representation of CommissionStatus, and it doesn't quite map to
+// what's defined there. It's also unclear if the enum is well considered. It
+// enumerates across two distinct set of things: the "commission" status
+// (commissioned, decommissioning, decommissioned), and the node "process"
+// status (live, unavailable, available). It's possible for two of these
+// "states" to be true, simultaneously (consider a decommissioned, dead node).
+// It makes for confusing semantics, and the code attempting to disambiguate
+// across these states (LivenessStatus for e.g.) seems wholly arbitrary.
 enum NodeLivenessStatus {
-  UNKNOWN = 0;
+  DEPRECATED_UNKNOWN = 0;
   // DEAD indicates the node is considered dead.
-  DEAD = 1;
+  DEPRECATED_DEAD = 1;
   // UNAVAILABLE indicates that the node is unavailable - it has not updated its
   // liveness record recently enough to be considered live, but has not been
   // unavailable long enough to be considered dead.
-  UNAVAILABLE = 2;
+  DEPRECATED_UNAVAILABLE = 2;
   // LIVE indicates a live node.
-  LIVE = 3;
+  DEPRECATED_LIVE = 3;
   // DECOMMISSIONING indicates a node that is in the decommissioning process.
-  DECOMMISSIONING = 4;
+  DEPRECATED_DECOMMISSIONING = 4;
   // DECOMMISSIONED indicates a node that has finished the decommissioning
   // process.
-  DECOMMISSIONED = 5;
+  DEPRECATED_DECOMMISSIONED = 5;
 }

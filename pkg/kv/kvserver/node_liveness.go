@@ -439,19 +439,19 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 	if liveness.Liveness != (kvserverpb.Liveness{}) {
 		update.updated = liveness.Liveness
 	}
-	update.updated.Decommissioning = decommission
+	update.updated.DeprecatedDecommissioning = decommission
 
 	var conditionFailed bool
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		conditionFailed = true
-		if actual.Decommissioning == update.updated.Decommissioning {
+		if actual.DeprecatedDecommissioning == update.updated.DeprecatedDecommissioning {
 			return nil
 		}
 		return errChangeDecommissioningFailed
 	}); err != nil {
 		return false, err
 	}
-	committed := !conditionFailed && liveness.Decommissioning != decommission
+	committed := !conditionFailed && liveness.DeprecatedDecommissioning != decommission
 	return committed, nil
 }
 
@@ -733,7 +733,7 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	now := nl.clock.Now().GoTime()
 	for nID, l := range nl.mu.nodes {
 		isLive := l.IsLive(now)
-		if !isLive && l.Decommissioning {
+		if !isLive && l.DeprecatedDecommissioning {
 			// This is a node that was completely removed. Skip over it.
 			continue
 		}
@@ -1044,7 +1044,7 @@ func shouldReplaceLiveness(old, new kvserverpb.Liveness) bool {
 	// number.
 	//
 	// See #18219.
-	return old.Draining != new.Draining || old.Decommissioning != new.Decommissioning
+	return old.Draining != new.Draining || old.DeprecatedDecommissioning != new.DeprecatedDecommissioning
 }
 
 // livenessGossipUpdate is the gossip callback used to keep the
@@ -1125,7 +1125,7 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	defer nl.mu.RUnlock()
 	var count int
 	for _, l := range nl.mu.nodes {
-		if !l.Decommissioning {
+		if !l.DeprecatedDecommissioning {
 			count++
 		}
 	}

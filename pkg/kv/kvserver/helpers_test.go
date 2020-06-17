@@ -239,7 +239,7 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 			return 1
 		},
 		func(roachpb.NodeID, time.Time, time.Duration) kvserverpb.NodeLivenessStatus {
-			return kvserverpb.NodeLivenessStatus_LIVE
+			return kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE
 		},
 		/* deterministic */ false,
 	)

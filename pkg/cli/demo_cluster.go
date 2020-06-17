@@ -369,9 +369,9 @@ func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioni
 		return errors.Errorf("node %d does not exist", nodeID)
 	}
 
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:         []roachpb.NodeID{nodeID},
-		Decommissioning: decommissioning,
+	req := &serverpb.CommissionRequest{
+		NodeIDs:                   []roachpb.NodeID{nodeID},
+		DeprecatedDecommissioning: decommissioning,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

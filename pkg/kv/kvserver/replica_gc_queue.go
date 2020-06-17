@@ -164,7 +164,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		// Without this, node decommissioning can stall on such dormant ranges.
 		// Make sure NodeLiveness isn't nil because it can be in tests/benchmarks.
 		if repl.store.cfg.NodeLiveness != nil {
-			if liveness, err := repl.store.cfg.NodeLiveness.Self(); err == nil && liveness.Decommissioning {
+			if liveness, err := repl.store.cfg.NodeLiveness.Self(); err == nil && liveness.DeprecatedDecommissioning {
 				return true, replicaGCPriorityDefault
 			}
 		}

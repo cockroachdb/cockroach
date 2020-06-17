@@ -2795,7 +2795,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 				tree.NewDInt(tree.DInt(l.Epoch)),
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
-				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+				tree.MakeDBool(tree.DBool(l.DeprecatedDecommissioning)),
 				updatedTSDatum,
 			); err != nil {
 				return err

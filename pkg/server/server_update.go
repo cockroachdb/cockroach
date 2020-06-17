@@ -105,8 +105,8 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	var newVersion string
 	var notRunningErr error
 	for nodeID, st := range nodesWithLiveness {
-		if st.livenessStatus != kvserverpb.NodeLivenessStatus_LIVE &&
-			st.livenessStatus != kvserverpb.NodeLivenessStatus_DECOMMISSIONING {
+		if st.livenessStatus != kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE &&
+			st.livenessStatus != kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING {
 			// We definitely won't be able to upgrade, but defer this error as
 			// we may find out that we are already at the latest version (the
 			// cluster may be up to date, but a node is down).

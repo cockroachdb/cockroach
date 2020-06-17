@@ -340,8 +340,8 @@ func expectNodesDecommissioned(
 			// The user is expecting the node to not be
 			// decommissioned/decommissioning already.
 			switch liveness {
-			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
-				kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+			case kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING,
+				kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED:
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is already decommissioning or decommissioned")
 			default:
 				// It's always possible to decommission a node that's either live
@@ -350,10 +350,10 @@ func expectNodesDecommissioned(
 		} else {
 			// The user is expecting the node to be recommissionable.
 			switch liveness {
-			case kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
-				kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+			case kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING,
+				kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED:
 				// ok.
-			case kvserverpb.NodeLivenessStatus_LIVE:
+			case kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE:
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is not decommissioned")
 			default: // dead, unavailable, etc
 				fmt.Fprintln(stderr, "warning: node", nodeID, "is in unexpected state", liveness)
@@ -376,11 +376,11 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
-	prevResponse := serverpb.DecommissionStatusResponse{}
+	prevResponse := serverpb.CommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		req := &serverpb.DecommissionRequest{
-			NodeIDs:         nodeIDs,
-			Decommissioning: true,
+		req := &serverpb.CommissionRequest{
+			NodeIDs:                   nodeIDs,
+			DeprecatedDecommissioning: true,
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -401,7 +401,7 @@ func runDecommissionNodeImpl(
 		allDecommissioning := true
 		for _, status := range resp.Status {
 			replicaCount += status.ReplicaCount
-			allDecommissioning = allDecommissioning && status.Decommissioning
+			allDecommissioning = allDecommissioning && status.DeprecatedDecommissioning
 		}
 		if replicaCount == 0 && allDecommissioning {
 			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
@@ -423,10 +423,10 @@ func decommissionResponseAlignment() string {
 	return "rcrcc"
 }
 
-// decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
+// decommissionResponseValueToRows converts CommissionStatusResponse_Status to
 // SQL-like result rows, so that we can pretty-print them.
 func decommissionResponseValueToRows(
-	statuses []serverpb.DecommissionStatusResponse_Status,
+	statuses []serverpb.CommissionStatusResponse_Status,
 ) [][]string {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
@@ -435,7 +435,7 @@ func decommissionResponseValueToRows(
 			strconv.FormatInt(int64(node.NodeID), 10),
 			strconv.FormatBool(node.IsLive),
 			strconv.FormatInt(node.ReplicaCount, 10),
-			strconv.FormatBool(node.Decommissioning),
+			strconv.FormatBool(node.DeprecatedDecommissioning),
 			strconv.FormatBool(node.Draining),
 		})
 	}
@@ -453,7 +453,7 @@ signaling the affected nodes to participate in the cluster again.
 	RunE: MaybeDecorateGRPCError(runRecommissionNode),
 }
 
-func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
+func printDecommissionStatus(resp serverpb.CommissionStatusResponse) error {
 	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
 		newRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
@@ -479,9 +479,9 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 
 	c := serverpb.NewAdminClient(conn)
 
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:         nodeIDs,
-		Decommissioning: false,
+	req := &serverpb.CommissionRequest{
+		NodeIDs:                   nodeIDs,
+		DeprecatedDecommissioning: false,
 	}
 	resp, err := c.Decommission(ctx, req)
 	if err != nil {

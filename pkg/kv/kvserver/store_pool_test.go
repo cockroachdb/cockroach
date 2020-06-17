@@ -126,7 +126,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -193,7 +193,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	constraints := []zonepb.ConstraintsConjunction{
@@ -259,11 +259,11 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		// absentStore is purposefully not gossiped.
 	}, t)
 	for i := 1; i <= 7; i++ {
-		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_LIVE)
+		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE)
 	}
 
 	// Set deadStore as dead.
-	mnl.setNodeStatus(deadStore.Node.NodeID, kvserverpb.NodeLivenessStatus_DEAD)
+	mnl.setNodeStatus(deadStore.Node.NodeID, kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	sp.detailsMu.Lock()
 	// Set declinedStore as throttled.
 	sp.detailsMu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
@@ -444,7 +444,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	stores := []*roachpb.StoreDescriptor{
@@ -565,7 +565,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(ctx)
 
 	// Create store.
@@ -615,7 +615,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
@@ -635,7 +635,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -692,7 +692,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 
 	sg.GossipStores(stores, t)
 	for i := 1; i <= 5; i++ {
-		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_LIVE)
+		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE)
 	}
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas)
@@ -703,8 +703,8 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
 	}
 	// Mark nodes 4 & 5 as dead.
-	mnl.setNodeStatus(4, kvserverpb.NodeLivenessStatus_DEAD)
-	mnl.setNodeStatus(5, kvserverpb.NodeLivenessStatus_DEAD)
+	mnl.setNodeStatus(4, kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
+	mnl.setNodeStatus(5, kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 
 	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas)
 	if a, e := liveReplicas, replicas[:3]; !reflect.DeepEqual(a, e) {
@@ -715,7 +715,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	}
 
 	// Mark node 4 as merely unavailable.
-	mnl.setNodeStatus(4, kvserverpb.NodeLivenessStatus_UNAVAILABLE)
+	mnl.setNodeStatus(4, kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE)
 
 	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas)
 	if a, e := liveReplicas, replicas[:3]; !reflect.DeepEqual(a, e) {
@@ -738,7 +738,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas([]roachpb.ReplicaDescriptor{{StoreID: 1}})
@@ -763,7 +763,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 
 	sg := gossiputil.NewStoreGossiper(g)
@@ -801,7 +801,7 @@ func TestGetLocalities(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -872,7 +872,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
-		kvserverpb.NodeLivenessStatus_DEAD)
+		kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 	defer stopper.Stop(context.Background())
 	sg := gossiputil.NewStoreGossiper(g)
 
@@ -929,7 +929,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 
 	sg.GossipStores(stores, t)
 	for i := 1; i <= 5; i++ {
-		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_LIVE)
+		mnl.setNodeStatus(roachpb.NodeID(i), kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE)
 	}
 
 	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(replicas)
@@ -940,9 +940,9 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
 	}
 	// Mark node 4 as decommissioning.
-	mnl.setNodeStatus(4, kvserverpb.NodeLivenessStatus_DECOMMISSIONING)
+	mnl.setNodeStatus(4, kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING)
 	// Mark node 5 as dead.
-	mnl.setNodeStatus(5, kvserverpb.NodeLivenessStatus_DEAD)
+	mnl.setNodeStatus(5, kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD)
 
 	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(replicas)
 	// Decommissioning replicas are considered live.
@@ -976,10 +976,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(5 * time.Minute).UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_LIVE,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE,
 		},
 		{
 			liveness: kvserverpb.Liveness{
@@ -989,10 +990,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 					// Expires just slightly in the future.
 					WallTime: now.UnixNano() + 1,
 				},
-				Decommissioning: false,
-				Draining:        false,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_LIVE,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE,
 		},
 		// Expired status.
 		{
@@ -1003,10 +1005,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 					// Just expired.
 					WallTime: now.UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE,
 		},
 		// Expired status.
 		{
@@ -1016,10 +1019,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE,
 		},
 		// Max bound of expired.
 		{
@@ -1029,10 +1033,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(-threshold).UnixNano() + 1,
 				},
-				Decommissioning: false,
-				Draining:        false,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE,
 		},
 		// Dead status.
 		{
@@ -1042,10 +1047,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_DEAD,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD,
 		},
 		// Decommissioning.
 		{
@@ -1055,10 +1061,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(time.Second).UnixNano(),
 				},
-				Decommissioning: true,
-				Draining:        false,
+				DeprecatedDecommissioning: true,
+				CommissionStatus:          kvserverpb.CommissionStatus_DECOMMISSIONING,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING,
 		},
 		// Decommissioned.
 		{
@@ -1068,10 +1075,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
-				Decommissioning: true,
-				Draining:        false,
+				DeprecatedDecommissioning: true,
+				CommissionStatus:          kvserverpb.CommissionStatus_DECOMMISSIONED,
+				Draining:                  false,
 			},
-			expected: kvserverpb.NodeLivenessStatus_DECOMMISSIONED,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED,
 		},
 		// Draining (reports as unavailable).
 		{
@@ -1081,10 +1089,11 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(5 * time.Minute).UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        true,
+				DeprecatedDecommissioning: false,
+				CommissionStatus:          kvserverpb.CommissionStatus_COMMISSIONED,
+				Draining:                  true,
 			},
-			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
+			expected: kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE,
 		},
 	} {
 		t.Run("", func(t *testing.T) {

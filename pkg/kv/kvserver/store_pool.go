@@ -105,7 +105,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 	) kvserverpb.NodeLivenessStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
-			return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+			return kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE
 		}
 		return LivenessStatus(liveness.Liveness, now, timeUntilStoreDead)
 	}
@@ -135,21 +135,21 @@ func LivenessStatus(
 	l kvserverpb.Liveness, now time.Time, deadThreshold time.Duration,
 ) kvserverpb.NodeLivenessStatus {
 	if l.IsDead(now, deadThreshold) {
-		if l.Decommissioning {
-			return kvserverpb.NodeLivenessStatus_DECOMMISSIONED
+		if l.DeprecatedDecommissioning {
+			return kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED
 		}
-		return kvserverpb.NodeLivenessStatus_DEAD
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD
 	}
-	if l.Decommissioning {
-		return kvserverpb.NodeLivenessStatus_DECOMMISSIONING
+	if l.DeprecatedDecommissioning {
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING
 	}
 	if l.Draining {
-		return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE
 	}
 	if l.IsLive(now) {
-		return kvserverpb.NodeLivenessStatus_LIVE
+		return kvserverpb.NodeLivenessStatus_DEPRECATED_LIVE
 	}
-	return kvserverpb.NodeLivenessStatus_UNAVAILABLE
+	return kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE
 }
 
 type storeDetail struct {
@@ -212,11 +212,11 @@ func (sd *storeDetail) status(
 	// Even if the store has been updated via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
-	case kvserverpb.NodeLivenessStatus_DEAD, kvserverpb.NodeLivenessStatus_DECOMMISSIONED:
+	case kvserverpb.NodeLivenessStatus_DEPRECATED_DEAD, kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONED:
 		return storeStatusDead
-	case kvserverpb.NodeLivenessStatus_DECOMMISSIONING:
+	case kvserverpb.NodeLivenessStatus_DEPRECATED_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case kvserverpb.NodeLivenessStatus_UNKNOWN, kvserverpb.NodeLivenessStatus_UNAVAILABLE:
+	case kvserverpb.NodeLivenessStatus_DEPRECATED_UNKNOWN, kvserverpb.NodeLivenessStatus_DEPRECATED_UNAVAILABLE:
 		return storeStatusUnknown
 	}
 
