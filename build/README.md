@@ -44,6 +44,8 @@ usual fashion. To be more specific, the steps to do this are:
 ```
 go/src/github.com/cockroachdb/cockroach $ ./build/builder.sh mkrelease linux-gnu
 go/src/github.com/cockroachdb/cockroach $ cp ./cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
+# optional step to make geospatial operations work.
+go/src/github.com/cockroachdb/cockroach $ cp -L $GOPATH/native/x86_64-unknown-linux-gnu/geos/lib/libgeos_c.so $GOPATH/native/x86_64-unknown-linux-gnu/geos/lib/libgeos.so.3.8.1 build/deploy/
 go/src/github.com/cockroachdb/cockroach $ cd build/deploy && docker build -t cockroachdb/cockroach .
 ```
 

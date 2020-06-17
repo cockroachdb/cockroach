@@ -26,7 +26,7 @@ import (
 )
 
 // #cgo CXXFLAGS: -std=c++14
-// #cgo !windows LDFLAGS: -ldl
+// #cgo !windows LDFLAGS: -ldl -Wl,-rpath,/usr/local/lib/cockroach
 //
 // #include "geos.h"
 import "C"

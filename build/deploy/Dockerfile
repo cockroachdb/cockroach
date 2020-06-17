@@ -10,6 +10,10 @@ RUN apt-get update && \
 	apt-get install -y libc6 ca-certificates tzdata && \
 	rm -rf /var/lib/apt/lists/*
 
+# Install GEOS libraries.
+RUN mkdir /usr/local/lib/cockroach
+COPY libgeos*.so* /usr/local/lib/cockroach/
+
 RUN mkdir -p /cockroach
 COPY cockroach.sh cockroach /cockroach/
 # Set working directory so that relative paths
