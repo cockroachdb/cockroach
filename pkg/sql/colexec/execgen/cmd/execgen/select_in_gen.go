@@ -11,12 +11,13 @@
 package main
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"io"
 	"strings"
 	"text/template"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 const selectInTmpl = "pkg/sql/colexec/select_in_tmpl.go"

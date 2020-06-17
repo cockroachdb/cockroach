@@ -178,7 +178,7 @@ func cmpIn_TYPE(
 	lo := 0
 	hi := len(filterRow) - 1
 	for {
-		i := (lo + hi)/2
+		i := (lo + hi) / 2
 		var cmpResult int
 		_ASSIGN_CMP(cmpResult, targetElem, filterRow[i], _, targetCol, _)
 		switch cmpResult {
@@ -190,7 +190,7 @@ func cmpIn_TYPE(
 			hi = i - 1
 		}
 
-		if lo > hi || lo < 0 || hi > len(filterRow) - 1 {
+		if lo > hi || lo < 0 || hi > len(filterRow)-1 {
 			if hasNulls {
 				return siNull
 			} else {
