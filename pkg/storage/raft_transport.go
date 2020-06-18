@@ -646,6 +646,37 @@ func (t *RaftTransport) startProcessNewQueue(
 	return true
 }
 
+func initAndSendSnapshot(
+	ctx context.Context,
+	stream MultiRaft_RaftSnapshotClient,
+	st *cluster.Settings,
+	storePool SnapshotStorePool,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+	newBatch func() engine.Batch,
+	sent func(),
+) error {
+
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+		}
+	}()
+	return sendSnapshot(
+		ctx,
+		// Only used when sending the raft log, which will not happen in this
+		// invocation (and generally won't on 19.2 anyway already).
+		&base.RaftConfig{RaftLogTruncationThreshold: 100 * 1 << 20},
+		st,
+		stream,
+		storePool,
+		header,
+		snap,
+		newBatch,
+		sent,
+	)
+}
+
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible
 // for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(
@@ -657,7 +688,6 @@ func (t *RaftTransport) SendSnapshot(
 	newBatch func() engine.Batch,
 	sent func(),
 ) error {
-	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
 	conn, err := t.dialer.Dial(ctx, nodeID, rpc.DefaultClass)
@@ -666,15 +696,10 @@ func (t *RaftTransport) SendSnapshot(
 	}
 
 	client := NewMultiRaftClient(conn)
-	stream, err = client.RaftSnapshot(ctx)
+	stream, err := client.RaftSnapshot(ctx)
 	if err != nil {
 		return err
 	}
 
-	defer func() {
-		if err := stream.CloseSend(); err != nil {
-			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
-		}
-	}()
-	return sendSnapshot(ctx, raftCfg, t.st, stream, storePool, header, snap, newBatch, sent)
+	return initAndSendSnapshot(ctx, stream, t.st, storePool, header, snap, newBatch, sent)
 }

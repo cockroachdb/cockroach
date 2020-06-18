@@ -1895,8 +1895,16 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+message UnsafeHealRangeRequest {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+}
+
+message UnsafeHealRangeResponse {}
+
 // Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
   rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
   rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+
+  rpc UnsafeHealRange (UnsafeHealRangeRequest) returns (UnsafeHealRangeResponse) {}
 }

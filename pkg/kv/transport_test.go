@@ -144,6 +144,10 @@ type mockInternalClient struct {
 
 var _ roachpb.InternalClient = &mockInternalClient{}
 
+func (*mockInternalClient) UnsafeHealRange(context.Context, *roachpb.UnsafeHealRangeRequest, ...grpc.CallOption) (*roachpb.UnsafeHealRangeResponse, error) {
+	panic("unimplemented")
+}
+
 // Batch is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,

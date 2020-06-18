@@ -21,6 +21,7 @@ func registerAcceptance(r *testRegistry) {
 		fn         func(ctx context.Context, t *test, c *cluster)
 		skip       string
 		minVersion string
+		numNodes int
 	}{
 		// Sorted. Please keep it that way.
 		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
@@ -44,9 +45,9 @@ func registerAcceptance(r *testRegistry) {
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "status-server", fn: runStatusServer},
 		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0"},
+		{name: "missing-range", fn: runMissingRange, minVersion: "v19.2.0", numNodes: 8},
 	}
 	tags := []string{"default", "quick"}
-	const numNodes = 4
 	specTemplate := testSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
@@ -57,12 +58,18 @@ func registerAcceptance(r *testRegistry) {
 		Name:    "acceptance",
 		Timeout: 10 * time.Minute,
 		Tags:    tags,
-		Cluster: makeClusterSpec(numNodes),
 	}
 
 	for _, tc := range testCases {
 		tc := tc // copy for closure
+
+		numNodes := 4
+		if tc.numNodes != 0 {
+			numNodes = tc.numNodes
+		}
+
 		spec := specTemplate
+		spec.Cluster = makeClusterSpec(numNodes)
 		spec.Name = specTemplate.Name + "/" + tc.name
 		spec.MinVersion = tc.minVersion
 		spec.Run = func(ctx context.Context, t *test, c *cluster) {

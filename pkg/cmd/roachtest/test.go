@@ -246,9 +246,19 @@ func (t *test) Fatal(args ...interface{}) {
 	t.fatalfInner("" /* format */, args...)
 }
 
+// Errorf fatals.
+func (t *test) Errorf(format string, args ...interface{}) {
+	t.Fatalf(format, args...)
+}
+
 // Fatalf is like Fatal, but takes a format string.
 func (t *test) Fatalf(format string, args ...interface{}) {
 	t.fatalfInner(format, args...)
+}
+
+// FailNow fatals.
+func (t *test) FailNow() {
+	t.Fatalf("failnow")
 }
 
 func (t *test) fatalfInner(format string, args ...interface{}) {

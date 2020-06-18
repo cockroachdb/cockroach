@@ -17,12 +17,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -32,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -933,6 +939,115 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 		e.index, e.term,
 	)
 }
+
+// HackSendSnapshot .
+func HackSendSnapshot(
+	ctx context.Context,
+	st *cluster.Settings,
+	cc *grpc.ClientConn,
+	now hlc.Timestamp,
+	desc roachpb.RangeDescriptor,
+	to roachpb.ReplicaDescriptor,
+) error {
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20 /* cacheSize */)
+	defer eng.Close()
+
+	var ms enginepb.MVCCStats
+	if err := engine.MVCCPutProto(
+		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, nil /* txn */, &desc,
+	); err != nil {
+		return err
+	}
+	ms, err := stateloader.WriteInitialReplicaState(
+		ctx,
+		eng,
+		ms,
+		desc,
+		roachpb.Lease{},
+		hlc.Timestamp{}, // gcThreshold
+		st.Version.ServerVersion,
+		stateloader.TruncatedStateUnreplicated,
+	)
+	if err != nil {
+		return err
+	}
+
+	sl := stateloader.Make(desc.RangeID)
+	state, err := sl.Load(ctx, eng, &desc)
+	if err != nil {
+		return err
+	}
+	hs, err := sl.LoadHardState(ctx, eng)
+	if err != nil {
+		return err
+	}
+
+	snapUUID, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+
+	outgoingSnap, err := snapshot(
+		ctx,
+		snapUUID,
+		sl,
+		SnapshotRequest_RAFT,
+		eng,
+		desc.RangeID,
+		raftentry.NewCache(1),
+		func(func(SideloadStorage) error) error { return nil },
+		desc.StartKey,
+	)
+	defer outgoingSnap.Close()
+	if err != nil {
+		return err
+	}
+
+	from := to
+	req := RaftMessageRequest{
+		RangeID:     desc.RangeID,
+		FromReplica: from,
+		ToReplica:   to,
+		Message: raftpb.Message{
+			Type:     raftpb.MsgSnap,
+			To:       uint64(to.ReplicaID),
+			From:     uint64(from.ReplicaID),
+			Term:     hs.Term,
+			Snapshot: outgoingSnap.RaftSnap,
+		},
+	}
+
+	header := SnapshotRequest_Header{
+		State:                      state,
+		RaftMessageRequest:         req,
+		RangeSize:                  ms.Total(),
+		CanDecline:                 false,
+		Priority:                   SnapshotRequest_RECOVERY,
+		Strategy:                   SnapshotRequest_KV_BATCH,
+		Type:                       SnapshotRequest_RAFT,
+		UnreplicatedTruncatedState: true,
+	}
+
+	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+
+	return initAndSendSnapshot(
+		ctx,
+		stream,
+		st,
+		noopStorePool{},
+		header,
+		&outgoingSnap,
+		eng.NewBatch,
+		func() {},
+	)
+}
+
+type noopStorePool struct{}
+
+func (n noopStorePool) throttle(throttleReason, string, roachpb.StoreID) {}
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(

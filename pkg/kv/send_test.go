@@ -45,6 +45,10 @@ func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFee
 	panic("unimplemented")
 }
 
+func (n Node) UnsafeHealRange(context.Context, *roachpb.UnsafeHealRangeRequest) (*roachpb.UnsafeHealRangeResponse, error) {
+	panic("unimplemented")
+}
+
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1043,4 +1044,82 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+func (n *Node) UnsafeHealRange(
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest,
+) (_ *roachpb.UnsafeHealRangeResponse, rErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rErr = errors.Errorf("%v", r)
+		}
+	}()
+
+	var expValue *roachpb.Value
+	var desc roachpb.RangeDescriptor
+	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			// TODO(tbg): paginate.
+			Key:    roachpb.KeyMin,
+			EndKey: roachpb.KeyMax,
+		})
+		if err != nil {
+			return err
+		}
+
+		for i := range kvs {
+			if err := kvs[i].Value.GetProto(&desc); err != nil {
+				return err
+			}
+			if desc.RangeID == req.RangeID {
+				expValue = kvs[i].Value
+				return nil
+			}
+		}
+		return errors.Errorf("r%d not found", req.RangeID)
+	}); err != nil {
+		return nil, err
+	}
+
+	var s *storage.Store
+	if err := n.stores.VisitStores(func(inner *storage.Store) error {
+		if s == nil {
+			s = inner
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	storeID, nodeID := s.Ident.StoreID, s.Ident.NodeID
+
+	dead := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	to := desc.AddReplica(nodeID, storeID, roachpb.VOTER_FULL)
+	for _, rd := range dead {
+		desc.RemoveReplica(rd.NodeID, rd.StoreID)
+	}
+
+	if err := n.storeCfg.DB.CPut(
+		ctx, keys.RangeMetaKey(desc.EndKey).AsRawKey(), &desc, expValue,
+	); err != nil {
+		return nil, err
+	}
+
+	// Set up connection to self.
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := storage.HackSendSnapshot(
+		ctx,
+		n.storeCfg.Settings,
+		conn,
+		n.storeCfg.Clock.Now(),
+		desc,
+		to,
+	); err != nil {
+		return nil, err
+	}
+
+	return &roachpb.UnsafeHealRangeResponse{}, nil
 }
