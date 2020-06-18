@@ -265,11 +265,11 @@ func TestValueDataEquals(t *testing.T) {
 		{v1: e, v2: g, eq: false},
 		{v1: f, v2: g, eq: true},
 	} {
-		if tc.eq != tc.v1.EqualData(*tc.v2) {
+		if tc.eq != tc.v1.EqualTagAndData(*tc.v2) {
 			t.Errorf("%d: wanted eq=%t", i, tc.eq)
 		}
 		// Test symmetry.
-		if tc.eq != tc.v2.EqualData(*tc.v1) {
+		if tc.eq != tc.v2.EqualTagAndData(*tc.v1) {
 			t.Errorf("%d: wanted eq=%t", i, tc.eq)
 		}
 	}
