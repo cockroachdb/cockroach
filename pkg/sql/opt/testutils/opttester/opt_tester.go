@@ -157,9 +157,13 @@ type Flags struct {
 	// the coster will be in the range [c - 0.5 * c, c + 0.5 * c).
 	PerturbCost float64
 
-	// ReorderJoinsLimit is the maximum number of joins in a query which the optimizer
+	// JoinLimit is the maximum number of joins in a query which the optimizer
 	// should attempt to reorder.
 	JoinLimit int
+
+	// IsJoinLimitSet indicates whether opttester should set JoinLimit to a
+	// value other than the default.
+	IsJoinLimitSet bool
 
 	// Locality specifies the location of the planning node as a set of user-
 	// defined key/value pairs, ordered from most inclusive to least inclusive.
@@ -296,6 +300,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    target expression as a table. The name of this table must be provided
 //    with the table flag.
 //
+//  - reorderjoins [flags]
+//
+//    Fully optimizes the given query and outputs information from
+//    joinOrderBuilder during join reordering. See the ReorderJoins comment in
+//    reorder_joins.go for information on the output format.
+//
 //  - import file=...
 //
 //    Imports a file containing exec-ddl commands in order to add tables and/or
@@ -376,7 +386,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 	}
 
-	if ot.Flags.JoinLimit != 0 {
+	if ot.Flags.IsJoinLimitSet {
 		defer func(oldValue int) {
 			ot.evalCtx.SessionData.ReorderJoinsLimit = oldValue
 		}(ot.evalCtx.SessionData.ReorderJoinsLimit)
@@ -558,6 +568,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		ot.InjectStats(tb, d)
 		return ""
 
+	case "reorderjoins":
+		result, err := ot.ReorderJoins()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
 		return ""
@@ -693,6 +710,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return errors.Wrap(err, "join-limit")
 		}
 		f.JoinLimit = int(limit)
+		f.IsJoinLimitSet = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {

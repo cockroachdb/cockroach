@@ -148,10 +148,20 @@ const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
 
 // ReorderJoinsLimitClusterValue controls the cluster default for the maximum
 // number of joins reordered.
-var ReorderJoinsLimitClusterValue = settings.RegisterNonNegativeIntSetting(
+var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	ReorderJoinsLimitClusterSettingName,
 	"default number of joins to reorder",
 	opt.DefaultJoinOrderLimit,
+	func(limit int64) error {
+		if limit < 0 || limit > opt.MaxReorderJoinsLimit {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"cannot set %s to a value less than 0 or greater than %v",
+				ReorderJoinsLimitClusterSettingName,
+				opt.MaxReorderJoinsLimit,
+			)
+		}
+		return nil
+	},
 )
 
 var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
