@@ -1545,3 +1545,33 @@ func MakeRepeatedIntRows(n int, numRows int, numCols int) EncDatumRows {
 	}
 	return rows
 }
+
+// RandString generates a random string of the desired length from the
+// input alphaget.
+func RandString(rng *rand.Rand, length int, alphabet string) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	}
+	return string(buf)
+}
+
+// RandCreateType creates a random CREATE TYPE statement. The resulting
+// type's name will be name, and if the type is an enum, the members will
+// be random strings generated from alphabet.
+func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
+	numLabels := rng.Intn(6) + 1
+	labels := make([]string, numLabels)
+	for i := 0; i < numLabels; i++ {
+		labels[i] = RandString(rng, rng.Intn(6)+1, alphabet)
+	}
+	un, err := tree.NewUnresolvedObjectName(1, [3]string{name}, 0)
+	if err != nil {
+		panic(err)
+	}
+	return &tree.CreateType{
+		TypeName:   un,
+		Variety:    tree.Enum,
+		EnumLabels: labels,
+	}
+}

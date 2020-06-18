@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	alters               = append(altersTableExistence, altersExistingTable...)
+	alters               = append(append(altersTableExistence, altersExistingTable...), altersTypeExistence...)
 	altersTableExistence = []statementWeight{
 		{10, makeCreateTable},
 		{1, makeDropTable},
@@ -35,6 +35,9 @@ var (
 		{10, makeCreateIndex},
 		{1, makeDropIndex},
 		{5, makeRenameIndex},
+	}
+	altersTypeExistence = []statementWeight{
+		{5, makeCreateType},
 	}
 )
 
@@ -320,4 +323,9 @@ func makeRenameIndex(s *Smither) (tree.Statement, bool) {
 		Index:   tin,
 		NewName: tree.UnrestrictedName(s.name("idx")),
 	}, ok
+}
+
+func makeCreateType(s *Smither) (tree.Statement, bool) {
+	name := s.name("typ")
+	return sqlbase.RandCreateType(s.rnd, string(name), letters), true
 }
