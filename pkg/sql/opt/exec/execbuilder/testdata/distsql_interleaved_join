@@ -929,4 +929,3 @@ merge-join  ·                  ·                        (pid1, v, pid1, cid1, 
 ·           table              child1@primary           ·                               ·
 ·           spans              FULL SCAN                ·                               ·
 ·           filter             v = 1                    ·                               ·
-
