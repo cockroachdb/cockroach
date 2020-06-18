@@ -11,36 +11,46 @@
 package acceptance
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 )
 
 func TestComposeGSS(t *testing.T) {
-	out, err := exec.Command(
-		"docker-compose",
-		"--no-ansi",
-		"-f", filepath.Join("compose", "gss", "docker-compose.yml"),
-		"up",
-		"--build",
-		"--exit-code-from", "psql",
-	).CombinedOutput()
-	if err != nil {
-		t.Log(string(out))
-		t.Fatal(err)
-	}
+	testCompose(t, filepath.Join("compose", "gss", "docker-compose.yml"), "psql")
+}
+
+func TestComposeGSSPython(t *testing.T) {
+	testCompose(t, filepath.Join("compose", "gss", "docker-compose-python.yml"), "python")
 }
 
 func TestComposeFlyway(t *testing.T) {
-	out, err := exec.Command(
+	testCompose(t, filepath.Join("compose", "flyway", "docker-compose.yml"), "flyway")
+}
+
+func testCompose(t *testing.T, path string, exitCodeFrom string) {
+	cmd := exec.Command(
 		"docker-compose",
-		"-f", filepath.Join("compose", "flyway", "docker-compose.yml"),
+		"--no-ansi",
+		"-f", path,
 		"up",
 		"--force-recreate",
-		"--exit-code-from", "flyway",
-	).CombinedOutput()
-	if err != nil {
-		t.Log(string(out))
+		"--build",
+		"--exit-code-from", exitCodeFrom,
+	)
+	var buf bytes.Buffer
+	if testing.Verbose() {
+		cmd.Stdout = io.MultiWriter(&buf, os.Stdout)
+		cmd.Stderr = io.MultiWriter(&buf, os.Stderr)
+	} else {
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+	}
+	if err := cmd.Run(); err != nil {
+		t.Log(buf.String())
 		t.Fatal(err)
 	}
 }
