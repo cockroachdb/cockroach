@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -127,8 +126,9 @@ func distChangefeedFlow(
 		}
 	}
 
-	changeAggregatorProcs := make([]physicalplan.Processor, 0, len(spanPartitions))
-	for _, sp := range spanPartitions {
+	nodes := make([]roachpb.NodeID, len(spanPartitions))
+	cores := make([]execinfrapb.ProcessorCoreUnion, len(spanPartitions))
+	for i, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
 		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
@@ -139,18 +139,11 @@ func distChangefeedFlow(
 			}
 		}
 
-		changeAggregatorProcs = append(changeAggregatorProcs, physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core: execinfrapb.ProcessorCoreUnion{
-					ChangeAggregator: &execinfrapb.ChangeAggregatorSpec{
-						Watches: watches,
-						Feed:    details,
-					},
-				},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-			},
-		})
+		nodes[i] = sp.Node
+		cores[i].ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
+			Watches: watches,
+			Feed:    details,
+		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
 	// static. Currently there is no way for them to change after the changefeed
@@ -163,15 +156,9 @@ func distChangefeedFlow(
 	}
 
 	var p sql.PhysicalPlan
-
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(changeAggregatorProcs))
-	for i, proc := range changeAggregatorProcs {
-		proc.Spec.StageID = stageID
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
-	}
-
+	p.AddNoInputStage(
+		nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{},
+	)
 	p.AddSingleGroupStage(
 		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
@@ -179,7 +166,6 @@ func distChangefeedFlow(
 		changefeedResultTypes,
 	)
 
-	p.ResultTypes = changefeedResultTypes
 	p.PlanToStreamColMap = []int{1, 2, 3}
 	dsp.FinalizePlan(planCtx, &p)
 

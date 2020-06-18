@@ -163,11 +163,10 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		ancsIdx, descIdx = 1, 0
 	}
 
-	stageID := plan.NewStageID()
-
 	// We provision a separate InterleavedReaderJoiner per node that has
 	// rows from either table.
-	for _, nodeID := range nodes {
+	cores := make([]execinfrapb.ProcessorCoreUnion, len(nodes))
+	for i, nodeID := range nodes {
 		// Find the relevant span from each table for this node.
 		// Note it is possible that either set of spans can be empty
 		// (but not both).
@@ -208,32 +207,19 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 			Type:              joinType,
 		}
 
-		proc := physicalplan.Processor{
-			Node: nodeID,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{InterleavedReaderJoiner: irj},
-				Post:    post,
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-
-		plan.Processors = append(plan.Processors, proc)
+		cores[i].InterleavedReaderJoiner = irj
 	}
 
-	// Each result router correspond to each of the processors we appended.
-	plan.ResultRouters = make([]physicalplan.ProcessorIdx, len(nodes))
-	for i := 0; i < len(nodes); i++ {
-		plan.ResultRouters[i] = physicalplan.ProcessorIdx(i)
-	}
-
-	plan.PlanToStreamColMap = joinToStreamColMap
-	plan.ResultTypes, err = getTypesForPlanResult(n, joinToStreamColMap)
+	resultTypes, err := getTypesForPlanResult(n, joinToStreamColMap)
 	if err != nil {
 		return nil, false, err
 	}
+	plan.AddNoInputStage(
+		nodes, cores, post, resultTypes, dsp.convertOrdering(n.reqOrdering, joinToStreamColMap),
+	)
 
-	plan.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap))
+	plan.PlanToStreamColMap = joinToStreamColMap
+
 	return plan, true, nil
 }
 
