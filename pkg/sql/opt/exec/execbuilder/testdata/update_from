@@ -161,33 +161,33 @@ CREATE TABLE ac (a INT, c INT)
 query TTT
 EXPLAIN UPDATE abc SET b = ab.b, c = ac.c FROM ab, ac WHERE abc.a = ab.a AND abc.a = ac.a
 ----
-·                                   distribution        local
-·                                   vectorized          false
-count                               ·                   ·
- └── update                         ·                   ·
-      │                             table               abc
-      │                             set                 b, c
-      │                             strategy            updater
-      │                             auto commit         ·
-      └── render                    ·                   ·
-           └── distinct             ·                   ·
-                │                   distinct on         a
-                └── hash-join       ·                   ·
-                     │              type                inner
-                     │              equality            (a) = (a)
-                     ├── scan       ·                   ·
-                     │              table               ab@primary
-                     │              spans               FULL SCAN
-                     └── hash-join  ·                   ·
-                          │         type                inner
-                          │         equality            (a) = (a)
-                          │         right cols are key  ·
-                          ├── scan  ·                   ·
-                          │         table               ac@primary
-                          │         spans               FULL SCAN
-                          └── scan  ·                   ·
-·                                   table               abc@primary
-·                                   spans               FULL SCAN
+·                                   distribution       local
+·                                   vectorized         false
+count                               ·                  ·
+ └── update                         ·                  ·
+      │                             table              abc
+      │                             set                b, c
+      │                             strategy           updater
+      │                             auto commit        ·
+      └── render                    ·                  ·
+           └── distinct             ·                  ·
+                │                   distinct on        a
+                └── hash-join       ·                  ·
+                     │              type               inner
+                     │              equality           (a) = (a)
+                     ├── scan       ·                  ·
+                     │              table              ab@primary
+                     │              spans              FULL SCAN
+                     └── hash-join  ·                  ·
+                          │         type               inner
+                          │         equality           (a) = (a)
+                          │         left cols are key  ·
+                          ├── scan  ·                  ·
+                          │         table              abc@primary
+                          │         spans              FULL SCAN
+                          └── scan  ·                  ·
+·                                   table              ac@primary
+·                                   spans              FULL SCAN
 
 # Make sure UPDATE ... FROM works with LATERAL.
 query TTT
@@ -202,30 +202,30 @@ WHERE
 RETURNING
   *
 ----
-·                                   distribution        local
-·                                   vectorized          false
-run                                 ·                   ·
- └── update                         ·                   ·
-      │                             table               abc
-      │                             set                 b, c
-      │                             strategy            updater
-      │                             auto commit         ·
-      └── render                    ·                   ·
-           └── distinct             ·                   ·
-                │                   distinct on         a
-                └── hash-join       ·                   ·
-                     │              type                inner
-                     │              equality            (a) = (a)
-                     ├── scan       ·                   ·
-                     │              table               ab@primary
-                     │              spans               FULL SCAN
-                     └── hash-join  ·                   ·
-                          │         type                inner
-                          │         equality            (a) = (a)
-                          │         right cols are key  ·
-                          ├── scan  ·                   ·
-                          │         table               ac@primary
-                          │         spans               FULL SCAN
-                          └── scan  ·                   ·
-·                                   table               abc@primary
-·                                   spans               FULL SCAN
+·                                   distribution       local
+·                                   vectorized         false
+run                                 ·                  ·
+ └── update                         ·                  ·
+      │                             table              abc
+      │                             set                b, c
+      │                             strategy           updater
+      │                             auto commit        ·
+      └── render                    ·                  ·
+           └── distinct             ·                  ·
+                │                   distinct on        a
+                └── hash-join       ·                  ·
+                     │              type               inner
+                     │              equality           (a) = (a)
+                     ├── scan       ·                  ·
+                     │              table              ab@primary
+                     │              spans              FULL SCAN
+                     └── hash-join  ·                  ·
+                          │         type               inner
+                          │         equality           (a) = (a)
+                          │         left cols are key  ·
+                          ├── scan  ·                  ·
+                          │         table              abc@primary
+                          │         spans              FULL SCAN
+                          └── scan  ·                  ·
+·                                   table              ac@primary
+·                                   spans              FULL SCAN

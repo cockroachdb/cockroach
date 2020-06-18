@@ -1955,6 +1955,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (5)-->(6-8), (7,8)~~>(5,6), (9)-->(10-12), (11,12)~~>(9,10), (5)==(3,9), (9)==(3,5), (3)==(5,9)
  ├── prune: (1,2,4,6-8,10-12)
  ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (-7,+8,+5) (+9) (-11,+12,+9)
+ ├── join-size: 2
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)
@@ -2004,6 +2005,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (5)==(3,9), (9)==(3,5), (3)==(5,9)
  ├── prune: (1,2,4)
  ├── interesting orderings: (+1) (+3,+1) (+4,+1) (+5) (+9)
+ ├── join-size: 2
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)
@@ -2358,7 +2360,7 @@ CREATE TABLE trade (
 ----
 
 # Regression test for #49821.
-opt format=show-ruleprops disable=(RightAssociateJoinsLeft,RightAssociateJoinsRight)
+opt format=show-ruleprops disable=(RightAssociateJoinsLeft,RightAssociateJoinsRight,ReorderJoins)
 SELECT *
 FROM trade, status_type, trade_type, security, exchange
 WHERE st_id = t_st_id
@@ -2380,7 +2382,7 @@ limit
  │    ├── limit hint: 50.00
  │    ├── prune: (8)
  │    ├── interesting orderings: (+1) (+2) (+3) (+5) (+6) (+7) (+8,+7) (+9,+7) (+10)
- │    ├── join-size: 5
+ │    ├── join-size: 4
  │    ├── inner-join (cross)
  │    │    ├── columns: st_id:5(int!null) tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -2388,14 +2390,14 @@ limit
  │    │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9)
  │    │    ├── prune: (5-8)
  │    │    ├── interesting orderings: (+5) (+6) (+7) (+8,+7) (+9,+7) (+10)
- │    │    ├── join-size: 4
+ │    │    ├── join-size: 3
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
  │    │    │    ├── key: (6,7)
  │    │    │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9)
  │    │    │    ├── prune: (6-8)
  │    │    │    ├── interesting orderings: (+6) (+7) (+8,+7) (+9,+7) (+10)
- │    │    │    ├── join-size: 3
+ │    │    │    ├── join-size: 2
  │    │    │    ├── scan trade_type
  │    │    │    │    ├── columns: tt_id:6(int!null)
  │    │    │    │    ├── key: (6)
@@ -2409,7 +2411,6 @@ limit
  │    │    │    │    ├── fd: (7)-->(8,9), (9)==(10), (10)==(9)
  │    │    │    │    ├── prune: (7,8)
  │    │    │    │    ├── interesting orderings: (+7) (+8,+7) (+9,+7) (+10)
- │    │    │    │    ├── join-size: 2
  │    │    │    │    ├── unfiltered-cols: (7-9)
  │    │    │    │    ├── scan security
  │    │    │    │    │    ├── columns: s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null)
