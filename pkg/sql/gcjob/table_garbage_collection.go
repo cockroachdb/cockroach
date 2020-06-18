@@ -48,6 +48,15 @@ func gcTables(
 			table, err = sqlbase.GetTableDescFromID(ctx, txn, droppedTable.ID)
 			return err
 		}); err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				// This can happen if another GC job created for the same table got to
+				// the table first. See #50344.
+				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				// Update the details payload to indicate that the table was dropped.
+				markTableGCed(ctx, droppedTable.ID, progress)
+				didGC = true
+				continue
+			}
 			return false, errors.Wrapf(err, "fetching table %d", droppedTable.ID)
 		}
 
