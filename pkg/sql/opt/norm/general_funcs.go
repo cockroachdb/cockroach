@@ -840,6 +840,35 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 	return private.Ordering
 }
 
+// AppendAggCols constructs a new Aggregations operator containing the aggregate
+// functions from an existing Aggregations operator plus an additional set of
+// aggregate functions, one for each column in the given set. The new functions
+// are of the given aggregate operator type.
+func (c *CustomFuncs) AppendAggCols(
+	aggs memo.AggregationsExpr, aggOp opt.Operator, cols opt.ColSet,
+) memo.AggregationsExpr {
+	outAggs := make(memo.AggregationsExpr, len(aggs)+cols.Len())
+	copy(outAggs, aggs)
+	c.makeAggCols(aggOp, cols, outAggs[len(aggs):])
+	return outAggs
+}
+
+// MakeAggCols constructs a new Aggregations operator containing an aggregate
+// function of the given operator type for each of column in the given set. For
+// example, for ConstAggOp and columns (1,2), this expression is returned:
+//
+//   (Aggregations
+//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2))]
+//     [1,2]
+//   )
+//
+func (c *CustomFuncs) MakeAggCols(aggOp opt.Operator, cols opt.ColSet) memo.AggregationsExpr {
+	colsLen := cols.Len()
+	aggs := make(memo.AggregationsExpr, colsLen)
+	c.makeAggCols(aggOp, cols, aggs)
+	return aggs
+}
+
 // ----------------------------------------------------------------------
 //
 // Join functions
