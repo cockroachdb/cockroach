@@ -34,6 +34,8 @@ type Materializer struct {
 
 	da sqlbase.DatumAlloc
 
+	drainHelper *drainHelper
+
 	// runtime fields --
 
 	// curIdx represents the current index into the column batch: the next row the
@@ -66,6 +68,55 @@ type Materializer struct {
 	closers []IdempotentCloser
 }
 
+// drainHelper is a utility struct that wraps MetadataSources in a RowSource
+// interface. This is done so that the Materializer can drain MetadataSources
+// in the vectorized input tree as inputs, rather than draining them in the
+// trailing metadata state, which should is meant only for internal metadata
+// generation.
+type drainHelper struct {
+	execinfrapb.MetadataSources
+	ctx          context.Context
+	bufferedMeta []execinfrapb.ProducerMetadata
+}
+
+var _ execinfra.RowSource = &drainHelper{}
+
+func newDrainHelper(sources execinfrapb.MetadataSources) *drainHelper {
+	return &drainHelper{
+		MetadataSources: sources,
+	}
+}
+
+// OutputTypes implements the RowSource interface.
+func (d *drainHelper) OutputTypes() []*types.T {
+	panic("unimplemented")
+}
+
+// Start implements the RowSource interface.
+func (d *drainHelper) Start(ctx context.Context) context.Context {
+	d.ctx = ctx
+	return ctx
+}
+
+// Next implements the RowSource interface.
+func (d *drainHelper) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if d.bufferedMeta == nil {
+		d.bufferedMeta = d.DrainMeta(d.ctx)
+	}
+	if len(d.bufferedMeta) == 0 {
+		return nil, nil
+	}
+	meta := d.bufferedMeta[0]
+	d.bufferedMeta = d.bufferedMeta[1:]
+	return nil, &meta
+}
+
+// ConsumerDone implements the RowSource interface.
+func (d *drainHelper) ConsumerDone() {}
+
+// ConsumerClosed implements the RowSource interface.
+func (d *drainHelper) ConsumerClosed() {}
+
 const materializerProcName = "materializer"
 
 // NewMaterializer creates a new Materializer processor which processes the
@@ -93,10 +144,11 @@ func NewMaterializer(
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := &Materializer{
-		input:   input,
-		typs:    typs,
-		row:     make(sqlbase.EncDatumRow, len(typs)),
-		closers: toClose,
+		input:       input,
+		typs:        typs,
+		drainHelper: newDrainHelper(metadataSourcesQueue),
+		row:         make(sqlbase.EncDatumRow, len(typs)),
+		closers:     toClose,
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -110,13 +162,10 @@ func NewMaterializer(
 		output,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{m.drainHelper},
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				var trailingMeta []execinfrapb.ProducerMetadata
-				for _, src := range metadataSourcesQueue {
-					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
-				}
 				m.InternalClose()
-				return trailingMeta
+				return nil
 			},
 		},
 	); err != nil {
@@ -147,6 +196,7 @@ func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 // Start is part of the execinfra.RowSource interface.
 func (m *Materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
+	ctx = m.drainHelper.Start(ctx)
 	return m.ProcessorBase.StartInternal(ctx, materializerProcName)
 }
 
