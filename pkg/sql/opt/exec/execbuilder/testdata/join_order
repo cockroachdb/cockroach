@@ -30,8 +30,11 @@ CREATE TABLE abc (
 statement ok
 SET reorder_joins_limit = 0
 
-statement error cannot set.*negative value
+statement error cannot set sql.defaults.reorder_joins_limit to a value less than 0 or greater than 63
 SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
+
+statement error cannot set sql.defaults.reorder_joins_limit to a value less than 0 or greater than 63
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 65
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
