@@ -1380,7 +1380,8 @@ project
            └── sum [as=sum:6, outer=(1)]
                 └── k:1
 
-# GroupBy with no key.
+# GroupBy with no key. The AggDistinct is instead pushed into the GroupBy by
+# PushAggDistinctIntoGroupBy.
 norm expect-not=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT a) FROM abc GROUP BY b
 ----
@@ -1391,12 +1392,15 @@ project
       ├── grouping columns: b:2!null
       ├── key: (2)
       ├── fd: (2)-->(4)
-      ├── scan abc
-      │    └── columns: a:1!null b:2!null
+      ├── distinct-on
+      │    ├── columns: a:1!null b:2!null
+      │    ├── grouping columns: a:1!null b:2!null
+      │    ├── key: (1,2)
+      │    └── scan abc
+      │         └── columns: a:1!null b:2!null
       └── aggregations
-           └── agg-distinct [as=sum:4, outer=(1)]
-                └── sum
-                     └── a:1
+           └── sum [as=sum:4, outer=(1)]
+                └── a:1
 
 # GroupBy with composite key formed by argument plus grouping columns.
 norm expect=EliminateAggDistinctForKeys
@@ -2704,11 +2708,11 @@ insert a
                 └── "?column?":11
 
 # --------------------------------------------------
-# PushAggDistinctIntoScalarGroupBy
+# PushAggDistinctIntoGroupBy
 # --------------------------------------------------
 
 # SUM case.
-norm expect=PushAggDistinctIntoScalarGroupBy
+norm expect=PushAggDistinctIntoGroupBy
 SELECT sum(DISTINCT y) FROM xyzbs
 ----
 scalar-group-by
@@ -2727,7 +2731,7 @@ scalar-group-by
            └── y:2
 
 # COUNT case. Expecting an index scan because opt command is used.
-opt expect=PushAggDistinctIntoScalarGroupBy
+opt expect=PushAggDistinctIntoGroupBy
 SELECT count(DISTINCT y) FROM xyzbs
 ----
 scalar-group-by
@@ -2748,7 +2752,7 @@ scalar-group-by
            └── y:2
 
 # AVG case.
-norm expect=PushAggDistinctIntoScalarGroupBy
+norm expect=PushAggDistinctIntoGroupBy
 SELECT avg(DISTINCT y) FROM xyzbs
 ----
 scalar-group-by
@@ -2767,7 +2771,7 @@ scalar-group-by
            └── y:2
 
 # JSON_AGG case.
-norm expect=PushAggDistinctIntoScalarGroupBy
+norm expect=PushAggDistinctIntoGroupBy
 SELECT json_agg(DISTINCT y) FROM xyzbs
 ----
 scalar-group-by
@@ -2787,7 +2791,7 @@ scalar-group-by
 
 # CORR case.
 # Multiple input arguments for aggregate function.
-norm expect=PushAggDistinctIntoScalarGroupBy
+norm expect=PushAggDistinctIntoGroupBy
 SELECT corr(DISTINCT y, z) FROM xyzbs
 ----
 scalar-group-by
@@ -2808,7 +2812,7 @@ scalar-group-by
 
 # STRING_AGG case.
 # Multiple input arguments for aggregate function.
-norm expect=PushAggDistinctIntoScalarGroupBy
+norm expect=PushAggDistinctIntoGroupBy
 SELECT string_agg(DISTINCT s, '-') FROM xyzbs
 ----
 scalar-group-by
@@ -2838,7 +2842,7 @@ scalar-group-by
 
 # STRING_AGG case with an ORDER BY.
 # Multiple input arguments for aggregate function.
-norm expect=PushAggDistinctIntoScalarGroupBy
+norm expect=PushAggDistinctIntoGroupBy
 SELECT string_agg(DISTINCT s, '-') FROM (SELECT s FROM xyzbs ORDER BY s)
 ----
 scalar-group-by
@@ -2865,6 +2869,8 @@ scalar-group-by
  │         │    └── projections
  │         │         └── '-' [as=column6:6]
  │         └── aggregations
+ │              ├── first-agg [as=s:5, outer=(5)]
+ │              │    └── s:5
  │              └── const-agg [as=column6:6, outer=(6)]
  │                   └── column6:6
  └── aggregations
@@ -2872,9 +2878,102 @@ scalar-group-by
            ├── s:5
            └── column6:6
 
+# Case with a GroupBy operator.
+norm expect=PushAggDistinctIntoGroupBy
+SELECT b, count(DISTINCT y) FROM xyzbs GROUP BY b
+----
+group-by
+ ├── columns: b:4!null count:6!null
+ ├── grouping columns: b:4!null
+ ├── key: (4)
+ ├── fd: (4)-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2 b:4!null
+ │    ├── grouping columns: y:2 b:4!null
+ │    ├── key: (2,4)
+ │    └── scan xyzbs
+ │         └── columns: y:2 b:4!null
+ └── aggregations
+      └── count [as=count:6, outer=(2)]
+           └── y:2
+
+# Case with a GroupBy operator grouping on multiple columns.
+norm expect=PushAggDistinctIntoGroupBy
+SELECT b, s, count(DISTINCT y) FROM xyzbs GROUP BY b, s
+----
+group-by
+ ├── columns: b:4!null s:5 count:6!null
+ ├── grouping columns: b:4!null s:5
+ ├── key: (4,5)
+ ├── fd: (4,5)-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2 b:4!null s:5
+ │    ├── grouping columns: y:2 b:4!null s:5
+ │    ├── key: (2,4,5)
+ │    └── scan xyzbs
+ │         └── columns: y:2 b:4!null s:5
+ └── aggregations
+      └── count [as=count:6, outer=(2)]
+           └── y:2
+
+# Case with a GroupBy operator and an aggregate with multiple input columns.
+norm expect=PushAggDistinctIntoGroupBy
+SELECT s, corr(DISTINCT y, z) FROM xyzbs GROUP BY s
+----
+group-by
+ ├── columns: s:5 corr:6
+ ├── grouping columns: s:5
+ ├── key: (5)
+ ├── fd: (5)-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2 z:3!null s:5
+ │    ├── grouping columns: y:2 z:3!null s:5
+ │    ├── key: (2,3,5)
+ │    └── scan xyzbs
+ │         └── columns: y:2 z:3!null s:5
+ └── aggregations
+      └── corr [as=corr:6, outer=(2,3)]
+           ├── y:2
+           └── z:3
+
+# The ordering columns of the GroupBy operator should become FirstAggs in the
+# DistinctOn. This ensures that the ordering columns are available for the
+# GroupBy operator.
+norm expect=PushAggDistinctIntoGroupBy
+SELECT array_agg(DISTINCT s) FROM (SELECT * FROM a ORDER BY i) GROUP BY f
+----
+project
+ ├── columns: array_agg:6!null
+ └── group-by
+      ├── columns: f:3 array_agg:6!null
+      ├── grouping columns: f:3
+      ├── internal-ordering: +2 opt(3)
+      ├── key: (3)
+      ├── fd: (3)-->(6)
+      ├── sort
+      │    ├── columns: i:2!null f:3 s:4!null
+      │    ├── key: (2,4)
+      │    ├── fd: (2,4)-->(3), (2,3)~~>(4), (3,4)-->(2)
+      │    ├── ordering: +2 opt(3) [actual: +2]
+      │    └── distinct-on
+      │         ├── columns: i:2!null f:3 s:4!null
+      │         ├── grouping columns: f:3 s:4!null
+      │         ├── key: (2,4)
+      │         ├── fd: (2,4)-->(3), (2,3)~~>(4), (3,4)-->(2)
+      │         ├── scan a
+      │         │    ├── columns: i:2!null f:3 s:4!null
+      │         │    ├── key: (2,4)
+      │         │    └── fd: (2,4)-->(3), (2,3)~~>(4)
+      │         └── aggregations
+      │              └── first-agg [as=i:2, outer=(2)]
+      │                   └── i:2
+      └── aggregations
+           └── array-agg [as=array_agg:6, outer=(4)]
+                └── s:4
+
 # No-op case where the same aggregate function is called on different
 # columns.
-norm expect-not=PushAggDistinctIntoScalarGroupBy
+norm expect-not=PushAggDistinctIntoGroupBy
 SELECT count(DISTINCT y), count(DISTINCT z) FROM xyzbs
 ----
 scalar-group-by
@@ -2894,7 +2993,7 @@ scalar-group-by
 
 # No-op case where different aggregate functions are called on the same
 # column.
-norm expect-not=PushAggDistinctIntoScalarGroupBy
+norm expect-not=PushAggDistinctIntoGroupBy
 SELECT count(DISTINCT y), sum(DISTINCT y) FROM xyzbs
 ----
 scalar-group-by
@@ -2913,9 +3012,9 @@ scalar-group-by
                 └── y:2
 
 # No-op cases where EliminateAggDistinct removes the AggDistinct before
-# PushAggDistinctIntoScalarGroupBy is applied. Applies to MAX, MIN, BOOL_AND,
+# PushAggDistinctIntoGroupBy is applied. Applies to MAX, MIN, BOOL_AND,
 # and BOOL_OR.
-norm expect-not=PushAggDistinctIntoScalarGroupBy
+norm expect-not=PushAggDistinctIntoGroupBy
 SELECT max(DISTINCT y) FROM xyzbs
 ----
 scalar-group-by
@@ -2929,7 +3028,7 @@ scalar-group-by
       └── max [as=max:6, outer=(2)]
            └── y:2
 
-norm expect-not=PushAggDistinctIntoScalarGroupBy
+norm expect-not=PushAggDistinctIntoGroupBy
 SELECT bool_and(DISTINCT b) FROM xyzbs
 ----
 scalar-group-by
@@ -3333,7 +3432,7 @@ scalar-group-by
 
 # No-op case because the DISTINCT requires the count input column, so the count
 # can't be eliminated.
-norm
+norm expect-not=ConvertCountToCountRows
 SELECT count(DISTINCT y) FROM xyzbs GROUP BY z
 ----
 project
@@ -3343,12 +3442,15 @@ project
       ├── grouping columns: z:3!null
       ├── key: (3)
       ├── fd: (3)-->(6)
-      ├── scan xyzbs
-      │    └── columns: y:2 z:3!null
+      ├── distinct-on
+      │    ├── columns: y:2 z:3!null
+      │    ├── grouping columns: y:2 z:3!null
+      │    ├── key: (2,3)
+      │    └── scan xyzbs
+      │         └── columns: y:2 z:3!null
       └── aggregations
-           └── agg-distinct [as=count:6, outer=(2)]
-                └── count
-                     └── y:2
+           └── count [as=count:6, outer=(2)]
+                └── y:2
 
 # --------------------------------------------------
 # FoldGroupingOperators
