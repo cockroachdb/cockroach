@@ -230,7 +230,7 @@ func (ds *DistSender) singleRangeFeed(
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas, err := NewReplicaSlice(ctx, ds.gossip, desc)
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc)
 	if err != nil {
 		return args.Timestamp, err
 	}

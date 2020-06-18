@@ -46,11 +46,7 @@ type ReplicaSlice []ReplicaInfo
 // If there's no info in gossip for any of the nodes in the descriptor, a
 // sendError is returned.
 func NewReplicaSlice(
-	ctx context.Context,
-	gossip interface {
-		GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
-	},
-	desc *roachpb.RangeDescriptor,
+	ctx context.Context, nodeDescs NodeDescStore, desc *roachpb.RangeDescriptor,
 ) (ReplicaSlice, error) {
 	// Learner replicas won't serve reads/writes, so we'll send only to the
 	// `Voters` replicas. This is just an optimization to save a network hop,
@@ -58,7 +54,7 @@ func NewReplicaSlice(
 	voters := desc.Replicas().Voters()
 	rs := make(ReplicaSlice, 0, len(voters))
 	for _, r := range voters {
-		nd, err := gossip.GetNodeDescriptor(r.NodeID)
+		nd, err := nodeDescs.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)

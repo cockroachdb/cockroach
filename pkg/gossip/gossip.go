@@ -196,7 +196,7 @@ func NewKeyNotPresentError(key string) error {
 }
 
 // AddressResolver is a thin wrapper around gossip's GetNodeIDAddress
-// that allows it to be used as a nodedialer.AddressResolver
+// that allows it to be used as a nodedialer.AddressResolver.
 func AddressResolver(gossip *Gossip) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
 		return gossip.GetNodeIDAddress(nodeID)
@@ -274,7 +274,7 @@ type Gossip struct {
 	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
-	localityTierMap map[string]struct{}
+	locality roachpb.Locality
 
 	lastConnectivity redact.RedactableString
 
@@ -320,13 +320,10 @@ func New(
 		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
-		localityTierMap:   map[string]struct{}{},
+		locality:          locality,
 		defaultZoneConfig: defaultZoneConfig,
 	}
 
-	for _, loc := range locality.Tiers {
-		g.localityTierMap[loc.String()] = struct{}{}
-	}
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
 	registry.AddMetric(g.outgoing.gauge)
@@ -980,19 +977,12 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 	if err != nil {
 		return nil, err
 	}
-	for i := range nd.LocalityAddress {
-		locality := &nd.LocalityAddress[i]
-		if _, ok := g.localityTierMap[locality.LocalityTier.String()]; ok {
-			return &locality.Address, nil
-		}
-	}
-	return &nd.Address, nil
+	return nd.AddressForLocality(g.locality), nil
 }
 
-// getNodeIDAddressLocked looks up the SQL address of the node by ID. The mutex is
-// assumed held by the caller. This method is called externally via
-// GetNodeIDSQLAddress or internally when looking up a "distant" node address to
-// connect directly to.
+// getNodeIDAddressLocked looks up the SQL address of the node by ID. The mutex
+// is assumed held by the caller. This method is called externally via
+// GetNodeIDSQLAddress.
 func (g *Gossip) getNodeIDSQLAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
 	nd, err := g.getNodeDescriptorLocked(nodeID)
 	if err != nil {
@@ -1617,6 +1607,38 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 		}
 	}
 	return nil
+}
+
+// A firstRangeMissingError indicates that the first range has not yet
+// been gossiped. This will be the case for a node which hasn't yet
+// joined the gossip network.
+type firstRangeMissingError struct{}
+
+// Error is part of the error interface.
+func (f firstRangeMissingError) Error() string {
+	return "the descriptor for the first range is not available via gossip"
+}
+
+// GetFirstRangeDescriptor implements kvcoord.FirstRangeProvider.
+func (g *Gossip) GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error) {
+	desc := &roachpb.RangeDescriptor{}
+	if err := g.GetInfoProto(KeyFirstRangeDescriptor, desc); err != nil {
+		return nil, firstRangeMissingError{}
+	}
+	return desc, nil
+}
+
+// OnFirstRangeChanged implements kvcoord.FirstRangeProvider.
+func (g *Gossip) OnFirstRangeChanged(cb func(*roachpb.RangeDescriptor)) {
+	g.RegisterCallback(KeyFirstRangeDescriptor, func(_ string, value roachpb.Value) {
+		ctx := context.Background()
+		desc := &roachpb.RangeDescriptor{}
+		if err := value.GetProto(desc); err != nil {
+			log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
+		} else {
+			cb(desc)
+		}
+	})
 }
 
 // MakeExposedGossip initializes a DeprecatedGossip instance which exposes a

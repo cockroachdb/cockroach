@@ -287,14 +287,16 @@ func sendBatch(
 	}
 
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		RPCContext: rpcContext,
+		AmbientCtx:         log.AmbientContext{Tracer: tracing.NewTracer()},
+		Settings:           cluster.MakeTestingClusterSettings(),
+		NodeDescs:          g,
+		RPCContext:         rpcContext,
+		NodeDialer:         nodeDialer,
+		FirstRangeProvider: g,
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: transportFactory,
 		},
-		Settings:   cluster.MakeTestingClusterSettings(),
-		NodeDialer: nodeDialer,
-	}, g)
+	})
 
 	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, desc, false /* withCommit */)
 }
