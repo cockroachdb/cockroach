@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,11 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
-
-func strToValue(s string) *roachpb.Value {
-	v := roachpb.MakeValueFromBytes([]byte(s))
-	return &v
-}
 
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
@@ -534,7 +530,7 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	{
-		err := txn.CPut(ctx, key, []byte("x"), strToValue("born to fail"))
+		err := txn.CPut(ctx, key, []byte("x"), kvclientutils.StrToCPutExistingValue("born to fail"))
 		if !errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 			t.Fatal(err)
 		}
