@@ -60,7 +60,7 @@ func DequalifyAndValidateExpr(
 	typ *types.T,
 	op string,
 	semaCtx *tree.SemaContext,
-	allowImpure bool,
+	maxVolatility tree.Volatility,
 	tn *tree.TableName,
 ) (tree.TypedExpr, sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
@@ -88,7 +88,7 @@ func DequalifyAndValidateExpr(
 		typ,
 		op,
 		semaCtx,
-		allowImpure,
+		maxVolatility,
 	)
 
 	if err != nil {

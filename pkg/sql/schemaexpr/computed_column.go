@@ -123,7 +123,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		defType,
 		"computed column",
 		v.semaCtx,
-		false, /* allowImpure */
+		tree.VolatilityStable,
 		v.tableName,
 	)
 	if err != nil {

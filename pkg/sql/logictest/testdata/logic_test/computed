@@ -289,14 +289,18 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
-statement error impure functions are not allowed in computed column
-CREATE TABLE y (
-  a TIMESTAMP AS (now()) STORED
+# Allow stable functions.
+statement ok
+CREATE TABLE y_stable (
+  a STRING AS (now()::STRING) STORED
 )
 
-statement error impure functions are not allowed in computed column
+statement ok
+DROP TABLE y_stable
+
+statement error volatile functions are not allowed in computed column
 CREATE TABLE y (
-  a STRING AS (concat(now()::STRING, uuid_v4()::STRING)) STORED
+  a STRING AS (uuid_v4()::STRING) STORED
 )
 
 statement error computed columns cannot reference other computed columns

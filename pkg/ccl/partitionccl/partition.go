@@ -92,8 +92,11 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
+		// TODO(radu): should we disallow Stable operators (like now())?
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].Type, "partition",
-			&semaCtx, false /* allowImpure */)
+			&semaCtx,
+			tree.VolatilityVolatile,
+		)
 		if err != nil {
 			return nil, err
 		}
