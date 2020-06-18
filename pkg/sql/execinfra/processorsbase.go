@@ -605,6 +605,20 @@ func (pb *ProcessorBase) MoveToDraining(err error) {
 	}
 }
 
+// ShouldSwallowErrWhenDraining returns whether the given error should be
+// swallowed when a component is draining. See comments on StateDraining for
+// more information.
+func ShouldSwallowErrWhenDraining(err error) bool {
+	// Swallow ReadWithinUncertaintyIntervalErrors.
+	if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
+		// We only look for UnhandledRetryableErrors. Local reads (which would
+		// be transformed by the Root TxnCoordSender into
+		// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
+		return ure.PErr.Detail.GetReadWithinUncertaintyInterval() != nil
+	}
+	return false
+}
+
 // DrainHelper is supposed to be used in states draining and trailingMetadata.
 // It deals with optionally draining an input and returning trailing meta. It
 // also moves from StateDraining to StateTrailingMeta when appropriate.
@@ -638,17 +652,9 @@ func (pb *ProcessorBase) DrainHelper() *execinfrapb.ProducerMetadata {
 			continue
 		}
 		if meta != nil {
-			// Swallow ReadWithinUncertaintyIntervalErrors. See comments on
-			// StateDraining.
 			if err := meta.Err; err != nil {
-				// We only look for UnhandledRetryableErrors. Local reads (which would
-				// be transformed by the Root TxnCoordSender into
-				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
-				if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
-					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
-					if uncertain != nil {
-						continue
-					}
+				if ShouldSwallowErrWhenDraining(err) {
+					continue
 				}
 			}
 			return meta

@@ -373,6 +373,9 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta(
 	for exitLoop := false; !exitLoop; {
 		select {
 		case err := <-s.errCh:
+			if execinfra.ShouldSwallowErrWhenDraining(err) {
+				continue
+			}
 			s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
 		default:
 			exitLoop = true
