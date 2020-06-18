@@ -16,9 +16,9 @@ import "math"
 func NewBoundingBox() *BoundingBox {
 	return &BoundingBox{
 		MinX: math.MaxFloat64,
-		MaxX: math.SmallestNonzeroFloat64,
+		MaxX: -math.MaxFloat64,
 		MinY: math.MaxFloat64,
-		MaxY: math.SmallestNonzeroFloat64,
+		MaxY: -math.MaxFloat64,
 	}
 }
 
