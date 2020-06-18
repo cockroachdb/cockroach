@@ -381,7 +381,6 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 // The upreplication here is immaterial and serves only to add realism to the test.
 func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("Skip until #48251 is fixed")
 	testutils.RunTrueAndFalse(t, "hadEstimates", testConsistencyQueueRecomputeStatsImpl)
 }
 
