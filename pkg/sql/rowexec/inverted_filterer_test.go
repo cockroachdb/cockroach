@@ -45,16 +45,16 @@ func intSpanToEncodedSpan(start, end int64) invertedexpr.SpanExpressionProto_Spa
 func TestInvertedFilterer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Test does a simple intersection and On expression, to exercise the
+	// Tests do simple intersection and reordering of columns, to exercise the
 	// plumbing in invertedFilterer -- all the heavy lifting for filtering is
 	// done in helpers called by invertedFilterer that have their own
-	// comprehensive tests.
+	// comprehensive tests. The intersection intersects the spans for the
+	// inverted column values 1 and 3.
 	testCases := []ProcessorTestCase{
 		{
 			Name: "simple-intersection-and-onexpr",
 			Input: ProcessorTestCaseRows{
-				// Intersection is {23, 41, 50}. The OnExpr eliminates 50, so
-				// the output is {23, 41}.
+				// Inverted column is at index 0. Intersection is {23, 41, 50}.
 				Rows: [][]interface{}{
 					{1, 12},
 					{1, 23},
@@ -73,30 +73,58 @@ func TestInvertedFilterer(t *testing.T) {
 				Rows: [][]interface{}{
 					{23},
 					{41},
+					{50},
 				},
 				Types: sqlbase.MakeIntCols(1),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{},
+			},
+		},
+		{
+			Name: "inverted-is-middle-column",
+			Input: ProcessorTestCaseRows{
+				// Inverted column is at index 1. Intersection is {{12, 41}, {14, 43}}.
+				Rows: [][]interface{}{
+					{12, 1, 41},
+					{13, 1, 42},
+					{14, 1, 43},
+					{12, 3, 41},
+					{14, 3, 43},
+				},
+				Types: sqlbase.MakeIntCols(3),
+			},
+			Output: ProcessorTestCaseRows{
+				Rows: [][]interface{}{
+					{12, 41},
+					{14, 43},
+				},
+				Types: sqlbase.MakeIntCols(2),
+			},
+			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{
-					InvertedExpr: invertedexpr.SpanExpressionProto{
-						Node: invertedexpr.SpanExpressionProto_Node{
-							Operator: invertedexpr.SetIntersection,
-							Left: &invertedexpr.SpanExpressionProto_Node{
-								FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
-									intSpanToEncodedSpan(1, 2),
-								},
-							},
-							Right: &invertedexpr.SpanExpressionProto_Node{
-								FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
-									intSpanToEncodedSpan(3, 4),
-								},
-							},
-						},
-					},
-					OnExpr: execinfrapb.Expression{Expr: "@1 < 45"},
+					InvertedColIdx: 1,
 				},
 			},
 		},
+	}
+	for i := range testCases {
+		// Add the intersection InvertedExpr.
+		testCases[i].ProcessorCore.InvertedFilterer.InvertedExpr = invertedexpr.SpanExpressionProto{
+			Node: invertedexpr.SpanExpressionProto_Node{
+				Operator: invertedexpr.SetIntersection,
+				Left: &invertedexpr.SpanExpressionProto_Node{
+					FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
+						intSpanToEncodedSpan(1, 2),
+					},
+				},
+				Right: &invertedexpr.SpanExpressionProto_Node{
+					FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
+						intSpanToEncodedSpan(3, 4),
+					},
+				},
+			},
+		}
 	}
 	// Setup test environment.
 	ctx := context.Background()
