@@ -126,14 +126,17 @@ func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 // CanCreateTxnRecord determines whether a transaction record can be created for
 // the provided transaction. If not, the function will return an error. If so,
 // the function may modify the provided transaction.
-func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
+func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) error {
 	// Provide the transaction's minimum timestamp. The transaction could not
 	// have written a transaction record previously with a timestamp below this.
 	ok, minCommitTS, reason := rec.CanCreateTxnRecord(txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
+		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
 		return roachpb.NewTransactionAbortedError(reason)
 	}
-	txn.WriteTimestamp.Forward(minCommitTS)
+	if bumped := txn.WriteTimestamp.Forward(minCommitTS); bumped {
+		log.VEventf(ctx, 2, "write timestamp bumped by txn tombstone to: %s", txn.WriteTimestamp)
+	}
 	return nil
 }
 

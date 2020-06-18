@@ -66,7 +66,7 @@ func HeartbeatTxn(
 		txn = *h.Txn
 
 		// Verify that it is safe to create the transaction record.
-		if err := CanCreateTxnRecord(cArgs.EvalCtx, &txn); err != nil {
+		if err := CanCreateTxnRecord(ctx, cArgs.EvalCtx, &txn); err != nil {
 			return result.Result{}, err
 		}
 	}
