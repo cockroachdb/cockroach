@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -144,6 +145,13 @@ import (
 //    example:
 //      statement count 2
 //      INSERT INTO kv VALUES (1,2), (2,3)
+//
+//  - statement count-round-trips N
+//    Like "statement ok" but expect N round trips (kv batch requests) to be
+//    performed for the operation.
+//    example:
+//      statement count-round-trips 13
+//      GRANT ALL ON * TO TEST
 //
 //  - statement error <regexp>
 //    Runs the statement that follows and expects an
@@ -712,6 +720,8 @@ type logicStatement struct {
 	expectErrCode string
 	// expected rows affected count. -1 to avoid testing this.
 	expectCount int64
+	// expected round trips. -1 to avoid testing this.
+	expectRoundTrips int64
 }
 
 // readSQL reads the lines of a SQL statement or query until the first blank
@@ -1062,6 +1072,8 @@ type logicTest struct {
 	// set to 1 with 25% probability, {2, 3} with 25% probability or default batch
 	// size with 50% probability.
 	randomizedVectorizedBatchSize int
+
+	roundTripsCount *sql.RoundTripsCount
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1214,6 +1226,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	} else {
 		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), serverArgs.tempStorageDiskLimit)
 	}
+	t.roundTripsCount = &sql.RoundTripsCount{}
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Specify a fixed memory limit (some test cases verify OOM conditions; we
@@ -1231,6 +1244,9 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
+				},
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					RoundTripsCount: t.roundTripsCount,
 				},
 			},
 			ClusterName: "testclustername",
@@ -1745,8 +1761,9 @@ func (t *logicTest) processSubtest(
 
 		case "statement":
 			stmt := logicStatement{
-				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
-				expectCount: -1,
+				pos:              fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				expectCount:      -1,
+				expectRoundTrips: -1,
 			}
 			// Parse "statement error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
@@ -1760,8 +1777,18 @@ func (t *logicTest) processSubtest(
 				}
 				stmt.expectCount = n
 			}
+			if len(fields) >= 3 && fields[1] == "count-round-trips" {
+				n, err := strconv.ParseInt(fields[2], 10, 64)
+				if err != nil {
+					return err
+				}
+				stmt.expectRoundTrips = n
+			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
+			}
+			if stmt.expectRoundTrips >= 0 {
+				t.roundTripsCount.Stmt = stmt.sql
 			}
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
@@ -2317,6 +2344,15 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 
 		if err == nil && count != stmt.expectCount {
 			t.Errorf("%s: %s\nexpected %d rows affected, got %d", stmt.pos, execSQL, stmt.expectCount, count)
+		}
+	}
+
+	if err == nil && stmt.expectRoundTrips >= 0 {
+		if err == nil && t.roundTripsCount.Count != int(stmt.expectRoundTrips) {
+			t.Errorf("%s: %s\nexpected %d round trips, got %d"+
+				"\nnote: this is only a concern if the number of round trips "+
+				"(significantly) increases",
+				stmt.pos, execSQL, stmt.expectRoundTrips, t.roundTripsCount.Count)
 		}
 	}
 

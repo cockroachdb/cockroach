@@ -329,6 +329,47 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 	return "", false
 }
 
+// CountRoundTrips returns the number of round trips found in the
+// Recording by counting the number of "txn coordinator send" operation
+// found in the child flow span of the root span.
+// The top-most flow span contains the operations of the main statement
+// we are executing.
+func (r Recording) CountRoundTrips() int {
+	var root RecordedSpan
+
+	for _, sp := range r {
+		if sp.ParentSpanID == 0 {
+			root = sp
+		}
+	}
+
+	// Count from the flow child span of the root span.
+	for _, sp := range r {
+		if sp.ParentSpanID == root.SpanID && sp.Operation == "flow" {
+			return r.countRoundTrips(sp)
+		}
+	}
+	return -1
+}
+
+func (r Recording) countRoundTrips(sp RecordedSpan) int {
+	count := 0
+	// We can approximate round trips by counting the number of
+	// txn coordinator send operations.
+	if sp.Operation == "txn coordinator send" {
+		count++
+	}
+
+	for _, osp := range r {
+		if osp.ParentSpanID != sp.SpanID {
+			continue
+		}
+		count += r.countRoundTrips(osp)
+	}
+
+	return count
+}
+
 // visitSpan returns the log messages for sp, and all of sp's children.
 //
 // All messages from a span are kept together. Sibling spans are ordered within

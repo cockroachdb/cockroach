@@ -1,0 +1,23 @@
+# LogicTest: !3node-tenant
+
+statement ok
+CREATE USER TEST;
+
+statement ok
+CREATE TABLE t0();
+
+statement count-round-trips 13
+GRANT ALL ON * TO TEST
+
+statement ok
+CREATE TABLE t1();
+CREATE TABLE t2();
+CREATE TABLE t3();
+CREATE TABLE t4();
+CREATE TABLE t5();
+
+statement count-round-trips 108
+GRANT ALL ON * TO TEST
+
+statement count-round-trips 16
+CREATE ROLE rolea

@@ -716,6 +716,14 @@ func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
 // ExecutorTestingKnobs.StatementFilter takes.
 type StatementFilter func(context.Context, string, error)
 
+// RoundTripsCount represents the number of round trips (approximated by
+// the number of "txn coordinator send" operations in a trace for a given
+// statement.
+type RoundTripsCount struct {
+	Stmt  string
+	Count int
+}
+
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
@@ -771,6 +779,10 @@ type ExecutorTestingKnobs struct {
 	// OnTempObjectsCleanupDone will trigger when the temporary objects cleanup
 	// job is done.
 	OnTempObjectsCleanupDone func()
+
+	// RoundTripsCount is used to count the number of round trips for a given
+	// statement.
+	RoundTripsCount *RoundTripsCount
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

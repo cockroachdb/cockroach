@@ -252,6 +252,23 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
+	if ex.server.cfg.TestingKnobs.RoundTripsCount != nil &&
+		ex.server.cfg.TestingKnobs.RoundTripsCount.Stmt == stmt.SQL {
+		tr := ex.server.cfg.AmbientCtx.Tracer
+		var sp opentracing.Span
+		ctx, sp = tracing.StartSnowballTrace(ctx, tr, stmt.SQL)
+		// TODO(radu): consider removing this if/when #46164 is addressed.
+		p.extendedEvalCtx.Context = ctx
+
+		defer func() {
+			sp.Finish()
+			trace := tracing.GetRecording(sp)
+			if ex.server.cfg.TestingKnobs.RoundTripsCount != nil {
+				ex.server.cfg.TestingKnobs.RoundTripsCount.Count = trace.CountRoundTrips()
+			}
+		}()
+	}
+
 	if ex.sessionData.StmtTimeout > 0 {
 		timeoutTicker = time.AfterFunc(
 			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
