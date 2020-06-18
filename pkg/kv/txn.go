@@ -410,10 +410,13 @@ func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 //
+// A nil expVal means that the key is expected to not exist. If not nil,
+// expValue should come from a Value.TagAndDataBytes().
+//
 // Note that, as an exception to the general rule, it's ok to send more requests
 // after getting a ConditionFailedError. See comments on ConditionalPutRequest
 // for more info.
-func (txn *Txn) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
+func (txn *Txn) CPut(ctx context.Context, key, value interface{}, expValue []byte) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
 	return getOneErr(txn.Run(ctx, b), b)

@@ -21,6 +21,7 @@ import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/wrappers.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -178,10 +179,28 @@ message ConditionalPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
-  // Set exp_value.bytes empty to test for non-existence. Specify as nil
-  // to indicate there should be no existing entry. This is different
-  // from the expectation that the value exists but is empty.
-  Value exp_value = 3;
+  // deprecated_exp_val represents the expected existing value for the key. If the existing
+  // value is different, the request will return a ConditionFailedError. A
+  // missing (Go nil) exp_value.raw_bytes means that the key is expected to not
+  // exist. This is different from the expectation that the value exists but is
+  // empty.
+  //
+  // This is deprecated in 20.2 in favor of exp_bytes, which clarifies that the
+  // checksum and timestamp of the expected value are irrelevant. Remove in
+  // 21.1.
+  Value deprecated_exp_value = 3;
+  // exp_bytes represents the expected existing value for the key. If missing,
+  // the key is expected to not exist. If set to []byte{}, the value is expected
+  // to be empty. If not empty, these bytes are expected to contain the tag and
+  // data of the existing value (without the existing value's checksum). A
+  // value's checksum covers the key in addition to covering the value, so not
+  // including a checksum here makes for a easier to use API - the creator of
+  // the ConditionalPutRequest can simply put in bytes coming from a different
+  // key.
+  //
+  // Note that the existing value's timestamp doesn't matter, only its data. So,
+  // the CPut will succeed in ABA situations.
+  google.protobuf.BytesValue exp_bytes = 6;
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.

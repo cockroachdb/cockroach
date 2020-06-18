@@ -411,7 +411,9 @@ func (b *Batch) PutInline(key, value interface{}) {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
-func (b *Batch) CPut(key, value interface{}, expValue *roachpb.Value) {
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
+func (b *Batch) CPut(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, false)
 }
 
@@ -432,11 +434,11 @@ func (b *Batch) CPutDeprecated(key, value, expValue interface{}) {
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
-func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue *roachpb.Value) {
+func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, true)
 }
 
-func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, allowNotExist bool) {
+func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotExist bool) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -447,15 +449,7 @@ func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, al
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	var ev roachpb.Value
-	if expValue != nil {
-		ev = *expValue
-		// This expected value is assumed to come from a kv read or from writing a
-		// roachpb.Value. In both cases it will have a checksum set. Instead of
-		// requiring callers to clear it, do it for them.
-		ev.ClearChecksum()
-	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev, allowNotExist))
+	b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -475,7 +469,7 @@ func (b *Batch) cputInternalDeprecated(key, value, expValue interface{}, allowNo
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev, allowNotExist))
+	b.appendReqs(roachpb.NewConditionalPut(k, v, ev.TagAndDataBytes(), allowNotExist))
 	b.initResult(1, 1, notRaw, nil)
 }
 

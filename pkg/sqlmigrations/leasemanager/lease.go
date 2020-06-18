@@ -55,7 +55,7 @@ type Lease struct {
 	val struct {
 		sem      chan struct{}
 		lease    *LeaseVal
-		leaseRaw roachpb.Value
+		leaseRaw []byte
 	}
 }
 
@@ -114,11 +114,7 @@ func (m *LeaseManager) AcquireLease(ctx context.Context, key roachpb.Key) (*Leas
 		if err := txn.Put(ctx, key, &leaseRaw); err != nil {
 			return err
 		}
-		// After using newRaw as an arg to CPut, we're not allowed to modify it.
-		// Passing it back to CPut again (which is the whole point of keeping it
-		// around) will clear and re-init the checksum, so defensively copy it before
-		// we save it.
-		lease.val.leaseRaw = roachpb.Value{RawBytes: append([]byte(nil), leaseRaw.RawBytes...)}
+		lease.val.leaseRaw = leaseRaw.TagAndDataBytes()
 		return nil
 	}); err != nil {
 		return nil, err
@@ -164,7 +160,7 @@ func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 	if err := newRaw.SetProto(newVal); err != nil {
 		return err
 	}
-	if err := m.db.CPut(ctx, l.key, &newRaw, &l.val.leaseRaw); err != nil {
+	if err := m.db.CPut(ctx, l.key, &newRaw, l.val.leaseRaw); err != nil {
 		if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 			// Something is wrong - immediately expire the local lease state.
 			l.val.lease.Expiration = hlc.Timestamp{}
@@ -173,11 +169,7 @@ func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 		return err
 	}
 	l.val.lease = newVal
-	// After using newRaw as an arg to CPut, we're not allowed to modify it.
-	// Passing it back to CPut again (which is the whole point of keeping it
-	// around) will clear and re-init the checksum, so defensively copy it before
-	// we save it.
-	l.val.leaseRaw = roachpb.Value{RawBytes: append([]byte(nil), newRaw.RawBytes...)}
+	l.val.leaseRaw = newRaw.TagAndDataBytes()
 	return nil
 }
 
@@ -191,5 +183,5 @@ func (m *LeaseManager) ReleaseLease(ctx context.Context, l *Lease) error {
 	}
 	defer func() { <-l.val.sem }()
 
-	return m.db.CPut(ctx, l.key, nil, &l.val.leaseRaw)
+	return m.db.CPut(ctx, l.key, nil, l.val.leaseRaw)
 }
