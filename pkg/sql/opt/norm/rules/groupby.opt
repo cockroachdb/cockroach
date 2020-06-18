@@ -322,13 +322,13 @@
     $aggregations
 )
 
-# PushAggDistinctIntoScalarGroupBy pushes an aggregate function DISTINCT
-# modifier into the input of the ScalarGroupBy operator. This allows the
-# optimizer to take advantage of an index on the column(s) subject to the
-# DISTINCT operation. PushAggDistinctIntoScalarGroupBy can match any single
-# aggregate function, including those that have multiple input arguments.
-[PushAggDistinctIntoScalarGroupBy, Normalize]
-(ScalarGroupBy
+# PushAggDistinctIntoGroupBy pushes an aggregate function DISTINCT modifier into
+# the input of a GroupBy or ScalarGroupBy operator. This allows the optimizer to
+# take advantage of an index on the column(s) subject to the DISTINCT operation.
+# PushAggDistinctIntoGroupBy can match any single aggregate function, including
+# those that have multiple input arguments.
+[PushAggDistinctIntoGroupBy, Normalize]
+(GroupBy | ScalarGroupBy
     $input:*
     $aggregations:[
         $item:(AggregationsItem (AggDistinct $agg:*) $aggColID:*)
@@ -336,12 +336,15 @@
     $groupingPrivate:*
 )
 =>
-(ScalarGroupBy
+((OpName)
     (DistinctOn
         $input
         []
         (MakeGrouping
-            (ExtractAggInputColumns $agg)
+            (UnionCols
+                (GroupingCols $groupingPrivate)
+                (ExtractAggInputColumns $agg)
+            )
             (EmptyOrdering)
         )
     )
