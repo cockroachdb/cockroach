@@ -110,7 +110,7 @@ func (s *SystemConfig) Equal(other *SystemConfigEntries) bool {
 			return false
 		}
 		leftVal, rightVal := leftKV.Value, rightKV.Value
-		if !leftVal.EqualData(rightVal) {
+		if !leftVal.EqualTagAndData(rightVal) {
 			return false
 		}
 		if leftVal.Timestamp != rightVal.Timestamp {

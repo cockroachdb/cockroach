@@ -3273,7 +3273,7 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			if foundVal == nil {
 				return nil
 			}
-			if foundVal.EqualData(*val) {
+			if foundVal.EqualTagAndData(*val) {
 				return nil
 			}
 		}

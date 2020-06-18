@@ -362,7 +362,7 @@ func (v *Value) ensureRawBytes(size int) {
 	v.setChecksum(checksumUninitialized)
 }
 
-// EqualData returns a boolean reporting whether the receiver and the parameter
+// EqualTagAndData returns a boolean reporting whether the receiver and the parameter
 // have equivalent byte values. This check ignores the optional checksum field
 // in the Values' byte slices, returning only whether the Values have the same
 // tag and encoded data.
@@ -370,7 +370,7 @@ func (v *Value) ensureRawBytes(size int) {
 // This method should be used whenever the raw bytes of two Values are being
 // compared instead of comparing the RawBytes slices directly because it ignores
 // the checksum header, which is optional.
-func (v Value) EqualData(o Value) bool {
+func (v Value) EqualTagAndData(o Value) bool {
 	return bytes.Equal(v.RawBytes[checksumSize:], o.RawBytes[checksumSize:])
 }
 

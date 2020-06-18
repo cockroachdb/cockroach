@@ -82,7 +82,7 @@ func (df *SystemConfigDeltaFilter) ForModified(
 				// Deleted key.
 				lastIdx++
 			case 0:
-				if !newKV.Value.EqualData(oldKV.Value) {
+				if !newKV.Value.EqualTagAndData(oldKV.Value) {
 					// Modified value.
 					fn(newKV)
 				}
