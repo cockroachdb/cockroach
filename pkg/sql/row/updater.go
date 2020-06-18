@@ -450,7 +450,7 @@ func (ru *Updater) UpdateRow(
 							log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
 						}
 						batch.Del(oldEntry.Key)
-					} else if !newEntry.Value.EqualData(oldEntry.Value) {
+					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
 						expValue = &oldEntry.Value
 					} else {
 						continue
