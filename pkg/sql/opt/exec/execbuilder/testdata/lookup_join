@@ -260,19 +260,19 @@ distinct                  ·             ·                  (name)             
  │                        distinct on   name               ·                                         ·
  └── render               ·             ·                  (name)                                    ·
       │                   render 0      name               ·                                         ·
-      └── lookup-join     ·             ·                  (name, book, title, shelf, title, shelf)  ·
+      └── lookup-join     ·             ·                  (title, shelf, name, book, title, shelf)  ·
            │              table         books2@primary     ·                                         ·
            │              type          inner              ·                                         ·
            │              equality      (title) = (title)  ·                                         ·
            │              pred          shelf != shelf     ·                                         ·
-           └── hash-join  ·             ·                  (name, book, title, shelf)                ·
+           └── hash-join  ·             ·                  (title, shelf, name, book)                ·
                 │         type          inner              ·                                         ·
-                │         equality      (book) = (title)   ·                                         ·
-                ├── scan  ·             ·                  (name, book)                              ·
-                │         table         authors@primary    ·                                         ·
+                │         equality      (title) = (book)   ·                                         ·
+                ├── scan  ·             ·                  (title, shelf)                            ·
+                │         table         books@primary      ·                                         ·
                 │         spans         FULL SCAN          ·                                         ·
-                └── scan  ·             ·                  (title, shelf)                            ·
-·                         table         books@primary      ·                                         ·
+                └── scan  ·             ·                  (name, book)                              ·
+·                         table         authors@primary    ·                                         ·
 ·                         spans         FULL SCAN          ·                                         ·
 
 # Verify data placement.
@@ -285,7 +285,7 @@ NULL       NULL     {5}       5
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyck19v2jAQwN_3KW73lEhuIX_opEiVggpTmVjoAGmTKh4ScoWswc5sR9qE-O6TEyoa1KRjbznf_c4_X-w9ql85BrgYT8d3SyhlDp_ns6_wOP7xMB1OIrBGk8Vy8W1qw7HExJPobglxqbdCqmse76iGEiGeFQwXkDisDtwqctlLMXy_H8_HYFmJc60znRPcQuLWnzYMoxFYL20Nb7LHQvuYTpxrtaX8CT5WZPVtr5AhFylF8Y4UBo_oIMMBrhgWUqxJKSHN8r4qmqS_MegzzHhRarO8YrgWkjDYY7UVBhiJK1H0BsgwJR1neVV2YChKfYKUjjeEwc2BvWrsdDdexklOc4pTkr1-oz0WMtvF8k94HAAyXBQxVwFcIcNZqQMIHRa62Obh_K-H87ZH9QNbLLxWC7fV4rR5yYVMSVJ6Pt_3S944yn2stl9Exkn23OZJcnrSVujatzLbbLUVOnZjkiz0WOi3nsS7ZJ5G4DhOr2OcRnAqxHNZwE-RcRA8gNAAswhC39zp8NPJsVXNv0RtlCmd8bXu-U2xjv6DRv933sqcVCG4on96LH3zByndUH0jlCjlmh6kWFfb1OGs4qqFlJSuszd1MOF1ygi-hp1O2GvAzjnsXgC757DXCfvd2n4nPOiGB51w_wxeHT78DQAA__8FW-lK
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2j4QwN__n8L_e0okF3ACnRSpUlBhKhMLHSBtUsVDQq6QNdiZ7UibEN99spOuDWrSsbecfb_zz3fxEdSPHAJYTefT2zUpZU4-LhefycP02_18PIuIM5mt1qsvc5fUKSaeRbdrEpd6L6Tq8fiAFZQI8aTIeEUSRqvAs5FHn5PJ17vpckocJ2E9nekcyQ1JvOrTJeNoQpznsoY3u3WiW28nrKf2mD-S_y1pv90NUOAixSg-oILgARhQGMGGQiHFFpUS0iwfbdIs_QnBgELGi1Kb5Q2FrZAIwRHsURBAJK5E0R8BhRR1nOU27URBlPoFUjreIQTXJ_qqMOsuvI6THJcYpyj7g0Z5KGR2iOWv0DYOKKyKmKuAXAGFRakDEjIa-tBmwf7Vgr1tUY-hxcNr9fBaPV6OL7mQKUpMz_v7fsobl7mL1f6TyDjKvte8S46P2gmZeyOz3V47oec27kBDn4bD1pv4l3TUCNQN9TvGagTnQjyVBfkuMk4ENy7GKiKhZ_7p8MMfx_ZhDy9Rm2RKZ3yr-8OmWMha648a9d95K0tUheAK_-qxDMwEMd1h9UcoUcot3kuxtcdU4cJydiFFpavd6yqY8WrLCL6GWSfsN2B2DnsXwN457HfCw27tYSc86oZHnfDgDN6c_vsdAAD__90i6Ug=
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name

@@ -563,37 +563,38 @@ project
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(3,4,6)
-      ├── inner-join (lookup t0@t0_c0_key)
+      ├── inner-join (cross)
       │    ├── columns: "?column?":3!null t0.c0:4!null t1.c0:6!null
-      │    ├── key columns: [6] = [4]
-      │    ├── lookup columns are key
       │    ├── cardinality: [0 - 0]
+      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    ├── immutable
       │    ├── fd: ()-->(3), (4)==(6), (6)==(4)
       │    ├── limit hint: 1.00
-      │    ├── inner-join (cross)
-      │    │    ├── columns: "?column?":3!null t1.c0:6
-      │    │    ├── cardinality: [0 - 0]
-      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    ├── immutable
-      │    │    ├── fd: ()-->(3)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: t0.c0:4!null t1.c0:6!null
+      │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    ├── fd: (4)==(6), (6)==(4)
+      │    │    ├── scan t0
+      │    │    │    ├── columns: t0.c0:4
+      │    │    │    └── lax-key: (4)
       │    │    ├── scan t1
       │    │    │    └── columns: t1.c0:6
-      │    │    ├── project
-      │    │    │    ├── columns: "?column?":3!null
+      │    │    └── filters
+      │    │         └── t0.c0:4 = t1.c0:6 [outer=(4,6), fd=(4)==(6), (6)==(4)]
+      │    ├── project
+      │    │    ├── columns: "?column?":3!null
+      │    │    ├── cardinality: [0 - 0]
+      │    │    ├── immutable
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(3)
+      │    │    ├── limit
       │    │    │    ├── cardinality: [0 - 0]
       │    │    │    ├── immutable
       │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(3)
-      │    │    │    ├── limit
-      │    │    │    │    ├── cardinality: [0 - 0]
-      │    │    │    │    ├── immutable
-      │    │    │    │    ├── key: ()
-      │    │    │    │    ├── scan t1
-      │    │    │    │    │    └── limit hint: 1.00
-      │    │    │    │    └── -1
-      │    │    │    └── projections
-      │    │    │         └── 0 [as="?column?":3]
-      │    │    └── filters (true)
+      │    │    │    ├── scan t1
+      │    │    │    │    └── limit hint: 1.00
+      │    │    │    └── -1
+      │    │    └── projections
+      │    │         └── 0 [as="?column?":3]
       │    └── filters (true)
       └── -1
