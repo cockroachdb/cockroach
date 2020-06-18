@@ -24,6 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+var binaryOpIntMethod = map[tree.BinaryOperator]string{
+	tree.LShift: "LShift",
+	tree.RShift: "RShift",
+}
+
 var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Plus:     "Add",
 	tree.Minus:    "Sub",
@@ -173,6 +178,13 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Concat] = map[typePair]*types.T{
 		{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}:                                       types.Bytes,
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
+	}
+
+	for _, binOp := range []tree.BinaryOperator{tree.LShift, tree.RShift} {
+		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
+		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.IntFamily, anyWidth}] = types.Int
+		}
 	}
 
 	binOpOutputTypes[tree.JSONFetchVal] = map[typePair]*types.T{
@@ -456,6 +468,17 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{{.Target}} = {{.Left}} %s {{.Right}}
 			}
 		`, op.overloadBase.OpStr)))
+
+		case tree.LShift, tree.RShift:
+			t = template.Must(template.New("").Parse(fmt.Sprintf(`
+			{
+				if {{.Right}} < 0 || {{.Right}} >= 64 {
+					telemetry.Inc(sqltelemetry.Large%sArgumentCounter)
+					colexecerror.ExpectedError(tree.ErrShiftArgOutOfRange)
+				}
+				{{.Target}} = {{.Left}} {{.Op}} {{.Right}}
+			}
+			`, binaryOpIntMethod[binOp])))
 
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.OpStr))

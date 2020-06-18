@@ -297,6 +297,57 @@ NULL
 11
 1111
 
+query T
+EXPLAIN (VEC) SELECT _int << 1 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projLShiftInt64Int64ConstOp
+    └ *colexec.colBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _int >> 1 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projRShiftInt64Int64ConstOp
+    └ *colexec.colBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _int << 1 FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projLShiftInt64Int64ConstOp
+    └ *colexec.colBatchScan
+
+query I rowsort
+SELECT _int2 >> 1 FROM many_types
+----
+NULL
+61
+228
+
+query I rowsort
+SELECT _int4 >> 3 FROM many_types
+----
+NULL
+15
+57
+
+statement error shift argument out of range
+SELECT _int << 64 FROM many_types
+
+statement error shift argument out of range
+SELECT _int << -10 FROM many_types
+
+query I rowsort
+SELECT _int >> 63 FROM many_types
+----
+NULL
+0
+0
+
 statement ok
 INSERT
   INTO many_types
