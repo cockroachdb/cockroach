@@ -89,6 +89,9 @@ var leakDetectorDisabled uint32
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
 func AfterTest(t testing.TB) func() {
+	if reason, ok := skipList[t.Name()]; ok {
+		t.Skip(reason)
+	}
 	if atomic.LoadUint32(&leakDetectorDisabled) != 0 {
 		return func() {}
 	}
