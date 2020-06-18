@@ -247,6 +247,10 @@ define AntiJoin {
 define JoinPrivate {
     # Flags modify what type of join we choose.
     Flags JoinFlags
+
+    # WasReordered indicates whether reorderings of the join tree rooted at this
+    # join have already been considered.
+    WasReordered bool
 }
 
 # IndexJoin represents an inner join between an input expression and a primary
