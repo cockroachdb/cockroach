@@ -129,7 +129,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		physPlan, err := e.dsp.createValuesPlan(
 			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
 		)
-		return planMaybePhysical{physPlan: physPlan, distribution: localPlan}, err
+		return planMaybePhysical{physPlan: physPlan}, err
 	}
 
 	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
@@ -190,13 +190,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.LimitHint = softLimit
 	}
 
-	planCtx := e.getPlanCtx(recommendation)
-	distribution := fullyDistributedPlan
-	if planCtx.isLocal {
-		distribution = localPlan
-	}
 	err = e.dsp.planTableReaders(
-		planCtx,
+		e.getPlanCtx(recommendation),
 		&p,
 		&tableReaderPlanningInfo{
 			spec:                   trSpec,
@@ -213,7 +208,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &p, distribution: distribution}, err
+	return planMaybePhysical{physPlan: &p}, err
 }
 
 func (e *distSQLSpecExecFactory) ConstructFilter(
@@ -228,6 +223,7 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	if physPlan.IsLastStageDistributed() {
 		recommendation = shouldDistribute
 	}
+	gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
 	if err := checkExpr(filter); err != nil {
 		recommendation = cannotDistribute
 		if physPlan.IsLastStageDistributed() {
@@ -235,25 +231,20 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 			// cannot be distributed, so we need to merge the streams on a
 			// single node. We could do so on one of the nodes that streams
 			// originate from, but for now we choose the gateway.
-			gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
 			physPlan.AddSingleGroupStage(
 				gatewayNodeID,
 				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 				execinfrapb.PostProcessSpec{},
 				physPlan.ResultTypes,
+				gatewayNodeID,
 			)
 		}
 	}
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
-	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
+	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, gatewayNodeID); err != nil {
 		return nil, err
 	}
-	distribution := localPlan
-	if physPlan.IsLastStageDistributed() {
-		distribution = fullyDistributedPlan
-	}
-	plan.distribution = plan.distribution.compose(distribution)
 	return plan, nil
 }
 

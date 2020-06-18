@@ -133,12 +133,37 @@ type PhysicalPlan struct {
 	// TotalEstimatedScannedRows is the sum of the row count estimate of all the
 	// table readers in the plan.
 	TotalEstimatedScannedRows uint64
+
+	// Distribution is the indicator of the distribution of the physical plan.
+	Distribution PlanDistribution
 }
 
-// NewStageID creates a stage identifier that can be used in processor specs.
-func (p *PhysicalPlan) NewStageID() int32 {
+// NewStage updates the distribution of the plan given the fact whether the new
+// stage contains at least one processor planned on a remote node and returns a
+// stage identifier of the new stage that can be used in processor specs.
+func (p *PhysicalPlan) NewStage(containsRemoteProcessor bool) int32 {
+	newStageDistribution := LocalPlan
+	if containsRemoteProcessor {
+		newStageDistribution = FullyDistributedPlan
+	}
+	if p.stageCounter == 0 {
+		// This is the first stage of the plan, so we simply use the
+		// distribution as is.
+		p.Distribution = newStageDistribution
+	} else {
+		p.Distribution = p.Distribution.compose(newStageDistribution)
+	}
 	p.stageCounter++
 	return p.stageCounter
+}
+
+// NewStageOnNodes is the same as NewStage but takes in the information about
+// the nodes participating in the new stage and the gateway.
+func (p *PhysicalPlan) NewStageOnNodes(nodes []roachpb.NodeID, gatewayNodeID roachpb.NodeID) int32 {
+	// We have a remote processor either when we have multiple nodes
+	// participating in the stage or the single processor is scheduled not on
+	// the gateway.
+	return p.NewStage(len(nodes) > 1 || nodes[0] != gatewayNodeID /* containsRemoteProcessor */)
 }
 
 // AddProcessor adds a processor to a PhysicalPlan and returns the index that
@@ -168,8 +193,9 @@ func (p *PhysicalPlan) AddNoInputStage(
 	post execinfrapb.PostProcessSpec,
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
+	gatewayNodeID roachpb.NodeID,
 ) {
-	stageID := p.NewStageID()
+	stageID := p.NewStageOnNodes(nodes, gatewayNodeID)
 	p.ResultRouters = make([]ProcessorIdx, len(cores))
 	for i := range p.ResultRouters {
 		proc := Processor{
@@ -200,12 +226,14 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 	post execinfrapb.PostProcessSpec,
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
+	gatewayNodeID roachpb.NodeID,
 ) {
 	p.AddNoGroupingStageWithCoreFunc(
 		func(_ int, _ *Processor) execinfrapb.ProcessorCoreUnion { return core },
 		post,
 		outputTypes,
 		newOrdering,
+		gatewayNodeID,
 	)
 }
 
@@ -216,8 +244,22 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 	post execinfrapb.PostProcessSpec,
 	outputTypes []*types.T,
 	newOrdering execinfrapb.Ordering,
+	gatewayNodeID roachpb.NodeID,
 ) {
-	stageID := p.NewStageID()
+	// New stage has the same distribution as the previous one, so we need to
+	// figure out whether the last stage contains a remote processor.
+	containsRemoteProcessor := len(p.ResultRouters) > 1
+	if len(p.ResultRouters) == 1 {
+		// We need to check explicitly whether the single processor is planned
+		// on a remote node.
+		for _, resultProc := range p.ResultRouters {
+			if p.Processors[resultProc].Node != gatewayNodeID {
+				containsRemoteProcessor = true
+				break
+			}
+		}
+	}
+	stageID := p.NewStage(containsRemoteProcessor)
 	for i, resultProc := range p.ResultRouters {
 		prevProc := &p.Processors[resultProc]
 
@@ -287,6 +329,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	outputTypes []*types.T,
+	gatewayNodeID roachpb.NodeID,
 ) {
 	proc := Processor{
 		Node: nodeID,
@@ -300,7 +343,10 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 			}},
-			StageID: p.NewStageID(),
+			// We're planning a single processor on the node nodeID, so we'll
+			// have a remote processor only when the node is different from the
+			// gateway.
+			StageID: p.NewStage(nodeID != gatewayNodeID),
 		},
 	}
 
@@ -470,7 +516,11 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []*types.T,
+	exprs []tree.TypedExpr,
+	exprCtx ExprContext,
+	indexVarMap []int,
+	outTypes []*types.T,
+	gatewayNodeID roachpb.NodeID,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -516,6 +566,7 @@ func (p *PhysicalPlan) AddRendering(
 			post,
 			p.ResultTypes,
 			p.MergeOrdering,
+			gatewayNodeID,
 		)
 	}
 
@@ -640,7 +691,7 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
-	expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int,
+	expr tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, gatewayNodeID roachpb.NodeID,
 ) error {
 	if expr == nil {
 		return errors.Errorf("nil filter")
@@ -660,6 +711,7 @@ func (p *PhysicalPlan) AddFilter(
 			post,
 			p.ResultTypes,
 			p.MergeOrdering,
+			gatewayNodeID,
 		)
 	}
 
@@ -691,9 +743,9 @@ func (p *PhysicalPlan) AddFilter(
 	return nil
 }
 
-// emptyPlan creates a plan with a single processor that generates no rows; the
-// output stream has the given types.
-func emptyPlan(types []*types.T, node roachpb.NodeID) PhysicalPlan {
+// emptyPlan creates a plan with a single processor on the gateway that
+// generates no rows; the output stream has the given types.
+func emptyPlan(types []*types.T, gatewayNodeID roachpb.NodeID) PhysicalPlan {
 	s := execinfrapb.ValuesCoreSpec{
 		Columns: make([]execinfrapb.DatumInfo, len(types)),
 	}
@@ -704,7 +756,7 @@ func emptyPlan(types []*types.T, node roachpb.NodeID) PhysicalPlan {
 
 	return PhysicalPlan{
 		Processors: []Processor{{
-			Node: node,
+			Node: gatewayNodeID,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:   execinfrapb.ProcessorCoreUnion{Values: &s},
 				Output: make([]execinfrapb.OutputRouterSpec, 1),
@@ -712,6 +764,7 @@ func emptyPlan(types []*types.T, node roachpb.NodeID) PhysicalPlan {
 		}},
 		ResultRouters: []ProcessorIdx{0},
 		ResultTypes:   types,
+		Distribution:  LocalPlan,
 	}
 }
 
@@ -721,7 +774,7 @@ func emptyPlan(types []*types.T, node roachpb.NodeID) PhysicalPlan {
 //
 // For no limit, count should be MaxInt64.
 func (p *PhysicalPlan) AddLimit(
-	count int64, offset int64, exprCtx ExprContext, node roachpb.NodeID,
+	count int64, offset int64, exprCtx ExprContext, gatewayNodeID roachpb.NodeID,
 ) error {
 	if count < 0 {
 		return errors.Errorf("negative limit")
@@ -739,7 +792,7 @@ func (p *PhysicalPlan) AddLimit(
 	limitZero := false
 	if count == 0 {
 		if len(p.LocalProcessors) == 0 {
-			*p = emptyPlan(p.ResultTypes, node)
+			*p = emptyPlan(p.ResultTypes, gatewayNodeID)
 			return nil
 		}
 		count = 1
@@ -762,7 +815,7 @@ func (p *PhysicalPlan) AddLimit(
 					// Even though we know there will be no results, we don't elide the
 					// plan if there are local processors. See comment above limitZero
 					// for why.
-					*p = emptyPlan(p.ResultTypes, node)
+					*p = emptyPlan(p.ResultTypes, gatewayNodeID)
 					return nil
 				}
 				count = 1
@@ -789,7 +842,7 @@ func (p *PhysicalPlan) AddLimit(
 		}
 		p.SetLastStagePost(post, p.ResultTypes)
 		if limitZero {
-			if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
+			if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil, gatewayNodeID); err != nil {
 				return err
 			}
 		}
@@ -817,13 +870,14 @@ func (p *PhysicalPlan) AddLimit(
 		post.Limit = uint64(count)
 	}
 	p.AddSingleGroupStage(
-		node,
+		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 		post,
 		p.ResultTypes,
+		gatewayNodeID,
 	)
 	if limitZero {
-		if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil); err != nil {
+		if err := p.AddFilter(tree.DBoolFalse, exprCtx, nil, gatewayNodeID); err != nil {
 			return err
 		}
 	}
@@ -988,9 +1042,10 @@ func (p *PhysicalPlan) AddJoinStage(
 	leftTypes, rightTypes []*types.T,
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
+	gatewayNodeID roachpb.NodeID,
 ) {
 	pIdxStart := ProcessorIdx(len(p.Processors))
-	stageID := p.NewStageID()
+	stageID := p.NewStageOnNodes(nodes, gatewayNodeID)
 
 	for _, n := range nodes {
 		inputs := make([]execinfrapb.InputSyncSpec, 0, 2)
@@ -1060,6 +1115,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	leftTypes, rightTypes []*types.T,
 	leftMergeOrd, rightMergeOrd execinfrapb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
+	gatewayNodeID roachpb.NodeID,
 ) {
 	const numSides = 2
 	inputResultTypes := [numSides][]*types.T{leftTypes, rightTypes}
@@ -1076,7 +1132,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	distinctProcs := make(map[roachpb.NodeID][]ProcessorIdx)
 
 	for side, types := range inputResultTypes {
-		distinctStageID := p.NewStageID()
+		distinctStageID := p.NewStageOnNodes(nodes, gatewayNodeID)
 		for _, n := range nodes {
 			proc := Processor{
 				Node: n,
@@ -1124,7 +1180,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 
 	// Create a join stage, where the distinct processors on the same node are
 	// connected to a join processor.
-	joinStageID := p.NewStageID()
+	joinStageID := p.NewStageOnNodes(nodes, gatewayNodeID)
 	p.ResultRouters = p.ResultRouters[:0]
 
 	for _, n := range nodes {
@@ -1221,4 +1277,55 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
 // distributed.
 func (p *PhysicalPlan) IsLastStageDistributed() bool {
 	return len(p.ResultRouters) > 1
+}
+
+// PlanDistribution describes the distribution of the physical plan.
+type PlanDistribution int
+
+const (
+	// LocalPlan indicates that the whole plan is executed on the gateway node.
+	LocalPlan PlanDistribution = iota
+
+	// PartiallyDistributedPlan indicates that some parts of the plan are
+	// distributed while other parts are not (due to limitations of DistSQL).
+	// Note that such plans can only be created by distSQLSpecExecFactory.
+	//
+	// An example of such plan is the plan with distributed scans that have a
+	// filter which operates with an OID type (DistSQL currently doesn't
+	// support distributed operations with such type). As a result, we end
+	// up planning a noop processor on the gateway node that receives all
+	// scanned rows from the remote nodes while performing the filtering
+	// locally.
+	PartiallyDistributedPlan
+
+	// FullyDistributedPlan indicates the the whole plan is distributed.
+	FullyDistributedPlan
+)
+
+// WillDistribute is a small helper that returns whether at least a part of the
+// plan is distributed.
+func (a PlanDistribution) WillDistribute() bool {
+	return a != LocalPlan
+}
+
+func (a PlanDistribution) String() string {
+	switch a {
+	case LocalPlan:
+		return "local"
+	case PartiallyDistributedPlan:
+		return "partial"
+	case FullyDistributedPlan:
+		return "full"
+	default:
+		panic(fmt.Sprintf("unsupported PlanDistribution %d", a))
+	}
+}
+
+// compose returns the distribution indicator of a plan given indicators for
+// two parts of it.
+func (a PlanDistribution) compose(b PlanDistribution) PlanDistribution {
+	if a != b {
+		return PartiallyDistributedPlan
+	}
+	return a
 }

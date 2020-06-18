@@ -201,6 +201,10 @@ func DistIngest(
 	for i := range inputSpecs {
 		cores[i].ReadImport = inputSpecs[i]
 	}
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
 	p.AddNoInputStage(
 		nodes,
 		cores,
@@ -208,6 +212,7 @@ func DistIngest(
 		// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 		[]*types.T{types.Bytes, types.Bytes},
 		execinfrapb.Ordering{},
+		gatewayNodeID,
 	)
 
 	p.PlanToStreamColMap = []int{0, 1}

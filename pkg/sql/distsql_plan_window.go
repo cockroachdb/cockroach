@@ -13,6 +13,7 @@ package sql
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -210,7 +211,8 @@ func (s *windowPlanState) addRenderingOrProjection() error {
 		outputType := renderExprs[i].ResolvedType()
 		renderTypes = append(renderTypes, outputType)
 	}
-	return s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes)
+	gatewayNodeID := roachpb.NodeID(s.planCtx.planner.execCfg.NodeID.SQLInstanceID())
+	return s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes, gatewayNodeID)
 }
 
 // replaceWindowFuncsVisitor is used to populate render expressions containing

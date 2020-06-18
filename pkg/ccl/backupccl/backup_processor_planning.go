@@ -81,9 +81,16 @@ func distBackup(
 		i++
 	}
 
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return err
+	}
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
-	p.AddNoInputStage(nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
+	p.AddNoInputStage(
+		nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{},
+		execinfrapb.Ordering{}, gatewayNodeID,
+	)
 	p.PlanToStreamColMap = []int{}
 
 	dsp.FinalizePlan(planCtx, &p)

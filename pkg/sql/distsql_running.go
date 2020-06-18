@@ -879,7 +879,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if maybeDistribute {
 		distributeSubquery = getPlanDistribution(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
-		).willDistribute()
+		).WillDistribute()
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributeSubquery)
 	subqueryPlanCtx.planner = planner
@@ -1183,7 +1183,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if maybeDistribute {
 		distributePostquery = getPlanDistribution(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
-		).willDistribute()
+		).WillDistribute()
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributePostquery)
 	postqueryPlanCtx.planner = planner

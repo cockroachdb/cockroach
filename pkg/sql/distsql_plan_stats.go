@@ -155,6 +155,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		execinfrapb.PostProcessSpec{},
 		outTypes,
 		execinfrapb.Ordering{},
+		dsp.nodeDesc.NodeID,
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
@@ -198,6 +199,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
 		execinfrapb.PostProcessSpec{},
 		[]*types.T{},
+		dsp.nodeDesc.NodeID,
 	)
 
 	return p, nil
