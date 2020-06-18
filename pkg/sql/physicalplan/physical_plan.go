@@ -158,6 +158,45 @@ func (p *PhysicalPlan) SetMergeOrdering(o execinfrapb.Ordering) {
 	}
 }
 
+// ProcessorCorePlacement indicates on which node a particular processor core
+// needs to be planned.
+type ProcessorCorePlacement struct {
+	NodeID roachpb.NodeID
+	Core   execinfrapb.ProcessorCoreUnion
+}
+
+// AddNoInputStage creates a stage of processors that don't have any input from
+// the other stages (if such exist). nodes and cores must be a one-to-one
+// mapping so that a particular processor core is planned on the appropriate
+// node.
+func (p *PhysicalPlan) AddNoInputStage(
+	corePlacements []ProcessorCorePlacement,
+	post execinfrapb.PostProcessSpec,
+	outputTypes []*types.T,
+	newOrdering execinfrapb.Ordering,
+) {
+	stageID := p.NewStageID()
+	p.ResultRouters = make([]ProcessorIdx, len(corePlacements))
+	for i := range p.ResultRouters {
+		proc := Processor{
+			Node: corePlacements[i].NodeID,
+			Spec: execinfrapb.ProcessorSpec{
+				Core: corePlacements[i].Core,
+				Post: post,
+				Output: []execinfrapb.OutputRouterSpec{{
+					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				}},
+				StageID: stageID,
+			},
+		}
+
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+	p.ResultTypes = outputTypes
+	p.SetMergeOrdering(newOrdering)
+}
+
 // AddNoGroupingStage adds a processor for each result router, on the same node
 // with the source of the stream; all processors have the same core. This is for
 // stages that correspond to logical blocks that don't require any grouping
