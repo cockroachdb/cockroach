@@ -1,0 +1,44 @@
+# The goal of these tests is to catch when a code change significantly
+# increases the number of round trips necessary to execute a given DDL
+# statement.
+#
+# NOTE: If the count (number of kv batch operations) increase is expected or
+# insignificant or the count decreases, update the test counts.
+# The rewrite option can be used to overwrite all the counts.
+
+exec
+CREATE USER TEST
+----
+
+exec
+CREATE TABLE t0()
+----
+
+count
+GRANT ALL ON * TO TEST
+----
+10
+
+
+exec
+CREATE TABLE t1();
+CREATE TABLE t2();
+CREATE TABLE t3();
+CREATE TABLE t4();
+CREATE TABLE t5();
+CREATE TABLE t6();
+CREATE TABLE t7();
+CREATE TABLE t8();
+CREATE TABLE t9();
+CREATE TABLE t10();
+----
+
+count
+GRANT ALL ON * TO TEST
+----
+160
+
+count
+CREATE ROLE rolea
+----
+6
