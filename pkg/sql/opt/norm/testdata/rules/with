@@ -310,7 +310,7 @@ with &1 (foo)
            ├── key: ()
            ├── fd: ()-->(3-6)
            ├── prune: (3-6)
-           ├── join-size: 4
+           ├── join-size: 3
            ├── cte-uses
            │    ├── &1: count=2 used-columns=(1)
            │    └── &2: count=2 used-columns=(2)
@@ -323,7 +323,7 @@ with &1 (foo)
            │    ├── key: ()
            │    ├── fd: ()-->(3-5)
            │    ├── prune: (3-5)
-           │    ├── join-size: 3
+           │    ├── join-size: 2
            │    ├── cte-uses
            │    │    ├── &1: count=1 used-columns=(1)
            │    │    └── &2: count=2 used-columns=(2)
@@ -336,7 +336,6 @@ with &1 (foo)
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(3,4)
            │    │    ├── prune: (3,4)
-           │    │    ├── join-size: 2
            │    │    ├── cte-uses
            │    │    │    ├── &1: count=1 used-columns=(1)
            │    │    │    └── &2: count=1 used-columns=(2)

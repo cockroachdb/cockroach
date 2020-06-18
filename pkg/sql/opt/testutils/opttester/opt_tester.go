@@ -199,6 +199,7 @@ type Flags struct {
 func New(catalog cat.Catalog, sql string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
+		Flags:   Flags{JoinLimit: -1},
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
@@ -376,7 +377,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 	}
 
-	if ot.Flags.JoinLimit != 0 {
+	if ot.Flags.JoinLimit >= 0 {
 		defer func(oldValue int) {
 			ot.evalCtx.SessionData.ReorderJoinsLimit = oldValue
 		}(ot.evalCtx.SessionData.ReorderJoinsLimit)
