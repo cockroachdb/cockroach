@@ -40,9 +40,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 		return PhysicalPlan{}, err
 	}
 
-	var p PhysicalPlan
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		tr := &execinfrapb.TableReaderSpec{}
 		*tr = *spec
@@ -51,21 +49,12 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 			tr.Spans[j].Span = sp.Spans[j]
 		}
 
-		proc := physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].Core.TableReader = tr
 	}
 
-	// Set the plan's result types to be ScrubTypes.
-	p.ResultTypes = rowexec.ScrubTypes
+	var p PhysicalPlan
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, rowexec.ScrubTypes, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(rowexec.ScrubTypes)))
 
 	dsp.FinalizePlan(planCtx, &p)

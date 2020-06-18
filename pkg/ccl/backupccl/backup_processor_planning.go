@@ -73,27 +73,18 @@ func distBackup(
 	var p sql.PhysicalPlan
 
 	// Setup a one-stage plan with one proc per input spec.
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(backupSpecs))
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
 	i := 0
 	for node, spec := range backupSpecs {
-		proc := physicalplan.Processor{
-			Node: node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{BackupData: spec},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+		corePlacement[i].NodeID = node
+		corePlacement[i].Core.BackupData = spec
 		i++
 	}
 
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = []int{}
-	p.ResultTypes = []*types.T{}
 
 	dsp.FinalizePlan(planCtx, &p)
 
