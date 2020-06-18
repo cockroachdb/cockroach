@@ -486,13 +486,7 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 }
 
 func set(family types.Family, target, i, new string) string {
-	switch family {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
-	case types.DecimalFamily:
-		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
-	}
-	return fmt.Sprintf("%s[%s] = %s", target, i, new)
+	return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 }
 
 // Set is a function that should only be used in templates.
