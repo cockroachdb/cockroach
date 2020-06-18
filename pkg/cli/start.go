@@ -694,7 +694,7 @@ If problems persist, please see %s.`
 	if err != nil {
 		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
 	} else {
-		log.Infof(ctx, "GEOS initialized at %s", loc)
+		log.Infof(ctx, "GEOS loaded from directory %s", loc)
 	}
 
 	// Beyond this point, the configuration is set and the server is
