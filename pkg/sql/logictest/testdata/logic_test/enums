@@ -848,17 +848,16 @@ statement ok
 ROLLBACK
 
 # Test CTAS from a VALUES clause.
-# TODO(radu): test skipped because of #50164.
-#statement ok
-#CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
-#
-#query TT
-#SELECT * FROM enum_ctas
-#----
-#howdy cockroach
-#
-#statement ok
-#DROP TABLE enum_ctas;
+statement ok
+CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, ('how' || 'dy')::greeting, 'cockroach'::dbs)
+
+query TTT
+SELECT * FROM enum_ctas
+----
+howdy howdy cockroach
+
+statement ok
+DROP TABLE enum_ctas;
 
 # Test CTAS from a VALUES clause in a transaction.
 statement ok
