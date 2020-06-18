@@ -24,6 +24,7 @@ var BinaryOpName = map[tree.BinaryOperator]string{
 	tree.Div:          "Div",
 	tree.FloorDiv:     "FloorDiv",
 	tree.Mod:          "Mod",
+	tree.Pow:          "Pow",
 	tree.Concat:       "Concat",
 	tree.JSONFetchVal: "JSONFetchVal",
 }
