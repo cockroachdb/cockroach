@@ -533,24 +533,38 @@ message InvertedJoinerSpec {
 // InvertedFiltererSpec is the specification of a processor that does filtering
 // on a table by evaluating an invertedexpr.SpanExpressionProto on an inverted
 // index of the table. The input consists of the inverted index rows from
-// SpanExpressionProto.SpansToRead.
+// InvertedExpr.SpansToRead.  It is acceptable for a filter on the primary key
+// to be pushed down between the scan and the inverted filterer.
+//
+// TODO(sumeer): pushing the PK filter down before the inverted filtering
+// would usually be better than the OnExpr evaluated here since the former can
+// always be distributed. The only case where doing the OnExpr here (which
+// gets evaluated after the InvertedExpr) is if the PK filter is expensive to
+// evaluate, has high selectivity, and evaluating it on duplicates of the same
+// PK is more expensive than the de-duplicated evaluation that happens here.
+// Should we remove the OnExpr from here or keep it for now?
 //
 // Example:
 // Table columns: | a | b | c | d |
-// where a, b are the primary key and d is the column with the inverted index.
-// Inverted index columns: | d' | a | b |
-// where d' is derived from d. For instance, if d is an array, d' will be
+// where a, d are the primary key and b is the column with the inverted index.
+// Inverted index columns: | a | b' | d |
+// where b' is derived from b. For instance, if b is an array, b' will be
 // elements of the array.
 //
-// Internal columns are | a | b |.
+// Internal columns are | a | d |. The output omits the inverted column, while
+// leaving the relative position of the PK columns unchanged.
 message InvertedFiltererSpec {
-  // The expression to evaluate.
-  optional opt.invertedexpr.SpanExpressionProto inverted_expr = 1 [(gogoproto.nullable) = false];
+  // The index in the input row of the inverted column.
+  optional uint32 inverted_col_idx = 1 [(gogoproto.nullable) = false];
+
+  // The expression to evaluate. The SpansToRead are ignored since they
+  // have already been used to setup the input.
+  optional opt.invertedexpr.SpanExpressionProto inverted_expr = 2 [(gogoproto.nullable) = false];
 
   // Optional expression involving the primary key columns, where
   // @1 refers to the first PK column, and so on. The inverted index
   // column is not part of this numbering.
-  optional Expression on_expr = 2 [(gogoproto.nullable) = false];
+  optional Expression on_expr = 3 [(gogoproto.nullable) = false];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core

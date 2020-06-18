@@ -42,8 +42,9 @@ const (
 
 type invertedFilterer struct {
 	execinfra.ProcessorBase
-	runningState invertedFiltererState
-	input        execinfra.RowSource
+	runningState   invertedFiltererState
+	input          execinfra.RowSource
+	invertedColIdx uint32
 
 	diskMonitor *mon.BytesMonitor
 	rc          *rowcontainer.DiskBackedNumberedRowContainer
@@ -55,6 +56,9 @@ type invertedFilterer struct {
 	resultIdx int
 
 	onExprHelper execinfra.ExprHelper
+
+	// Scratch space for constructing the PK row to feed to rc.
+	keyRow sqlbase.EncDatumRow
 }
 
 var _ execinfra.Processor = &invertedFilterer{}
@@ -73,7 +77,8 @@ func newInvertedFilterer(
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	ifr := &invertedFilterer{
-		input: input,
+		input:          input,
+		invertedColIdx: spec.InvertedColIdx,
 		invertedEval: batchedInvertedExprEvaluator{
 			exprs: []*invertedexpr.SpanExpressionProto{&spec.InvertedExpr},
 		},
@@ -87,10 +92,15 @@ func newInvertedFilterer(
 	ifr.invertedEval.init()
 
 	// The output columns are the PK columns, that are the columns
-	// after the first inverted column.
+	// other than the inverted column.
 	inputTypes := input.OutputTypes()
-	outputColTypes := make([]*types.T, len(inputTypes)-1)
-	copy(outputColTypes, inputTypes[1:])
+	outputColTypes := make([]*types.T, 0, len(inputTypes)-1)
+	for i := range inputTypes {
+		if i != int(ifr.invertedColIdx) {
+			outputColTypes = append(outputColTypes, inputTypes[i])
+		}
+	}
+	ifr.keyRow = make(sqlbase.EncDatumRow, len(outputColTypes))
 
 	// Initialize ProcessorBase.
 	if err := ifr.ProcessorBase.Init(
@@ -181,22 +191,28 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		ifr.evalResult = evalResult[0]
 		return ifrEmittingRows, nil
 	}
-	// Replace missing values with nulls to appease the row container.
+	// Replace missing values with nulls to appease the row container. And
+	// transform to keyRow.
+	var j int
 	for i := range row {
 		if row[i].IsUnset() {
 			row[i].Datum = tree.DNull
+		}
+		if i != int(ifr.invertedColIdx) {
+			ifr.keyRow[j] = row[i]
+			j++
 		}
 	}
 	// Add the primary key in the row to the row container. The first column in
 	// the inverted index is the value that was indexed, and the remaining are
 	// the primary key columns.
-	keyIndex, err := ifr.rc.AddRow(ifr.Ctx, row[1:])
+	keyIndex, err := ifr.rc.AddRow(ifr.Ctx, ifr.keyRow)
 	if err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
 	// Add to the evaluator.
-	ifr.invertedEval.addIndexRow(row[0].EncodedBytes(), keyIndex)
+	ifr.invertedEval.addIndexRow(row[ifr.invertedColIdx].EncodedBytes(), keyIndex)
 	return ifrReadingInput, nil
 }
 
