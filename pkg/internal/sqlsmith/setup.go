@@ -11,6 +11,7 @@
 package sqlsmith
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -62,14 +63,25 @@ func randTables(r *rand.Rand) string {
 	sb.WriteString(`
 		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
+		SET experimental_enable_enums = true;
 	`)
 
+	// Create the random tables.
 	stmts := sqlbase.RandCreateTables(r, "table", r.Intn(5)+1,
 		mutations.ForeignKeyMutator,
 		mutations.StatisticsMutator,
 	)
 
 	for _, stmt := range stmts {
+		sb.WriteString(stmt.String())
+		sb.WriteString(";\n")
+	}
+
+	// Create some random types as well.
+	numTypes := r.Intn(5) + 1
+	for i := 0; i < numTypes; i++ {
+		name := fmt.Sprintf("rand_typ_%d", i)
+		stmt := sqlbase.RandCreateType(r, name, letters)
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}
