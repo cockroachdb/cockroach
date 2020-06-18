@@ -1373,7 +1373,7 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 			return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
 				"secondary index key failed to round-trip encode. expected %#v, got: %#v",
 				rf.rowReadyTable.lastKV.Key, indexEntry.Key))
-		} else if !indexEntry.Value.EqualData(table.lastKV.Value) {
+		} else if !indexEntry.Value.EqualTagAndData(table.lastKV.Value) {
 			return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 				"secondary index value failed to round-trip encode. expected %#v, got: %#v",
 				rf.rowReadyTable.lastKV.Value, indexEntry.Value))
