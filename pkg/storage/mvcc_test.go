@@ -3251,7 +3251,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 			}
 
 			// Check nothing is written if the value doesn't match.
-			err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, &value1, CPutFailIfMissing, nil)
+			err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, value1.TagAndDataBytes(), CPutFailIfMissing, nil)
 			if err == nil {
 				t.Errorf("unexpected success on conditional put")
 			}
@@ -3261,7 +3261,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 
 			// But if value does match the most recently written version, we'll get
 			// a write too old error but still write updated value.
-			err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, &value2, CPutFailIfMissing, nil)
+			err = MVCCConditionalPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value3, value2.TagAndDataBytes(), CPutFailIfMissing, nil)
 			if err == nil {
 				t.Errorf("unexpected success on conditional put")
 			}

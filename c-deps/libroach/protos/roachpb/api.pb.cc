@@ -4863,7 +4863,7 @@ void ConditionalPutRequest::InitAsDefaultInstance() {
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
   ::cockroach::roachpb::_ConditionalPutRequest_default_instance_._instance.get_mutable()->value_ = const_cast< ::cockroach::roachpb::Value*>(
       ::cockroach::roachpb::Value::internal_default_instance());
-  ::cockroach::roachpb::_ConditionalPutRequest_default_instance_._instance.get_mutable()->exp_value_ = const_cast< ::cockroach::roachpb::Value*>(
+  ::cockroach::roachpb::_ConditionalPutRequest_default_instance_._instance.get_mutable()->deprecated_exp_value_ = const_cast< ::cockroach::roachpb::Value*>(
       ::cockroach::roachpb::Value::internal_default_instance());
 }
 void ConditionalPutRequest::clear_value() {
@@ -4872,16 +4872,17 @@ void ConditionalPutRequest::clear_value() {
   }
   value_ = NULL;
 }
-void ConditionalPutRequest::clear_exp_value() {
-  if (GetArenaNoVirtual() == NULL && exp_value_ != NULL) {
-    delete exp_value_;
+void ConditionalPutRequest::clear_deprecated_exp_value() {
+  if (GetArenaNoVirtual() == NULL && deprecated_exp_value_ != NULL) {
+    delete deprecated_exp_value_;
   }
-  exp_value_ = NULL;
+  deprecated_exp_value_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ConditionalPutRequest::kHeaderFieldNumber;
 const int ConditionalPutRequest::kValueFieldNumber;
-const int ConditionalPutRequest::kExpValueFieldNumber;
+const int ConditionalPutRequest::kDeprecatedExpValueFieldNumber;
+const int ConditionalPutRequest::kExpBytesFieldNumber;
 const int ConditionalPutRequest::kBlindFieldNumber;
 const int ConditionalPutRequest::kAllowIfDoesNotExistFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -4897,6 +4898,10 @@ ConditionalPutRequest::ConditionalPutRequest(const ConditionalPutRequest& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  exp_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.exp_bytes().size() > 0) {
+    exp_bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.exp_bytes_);
+  }
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
   } else {
@@ -4907,10 +4912,10 @@ ConditionalPutRequest::ConditionalPutRequest(const ConditionalPutRequest& from)
   } else {
     value_ = NULL;
   }
-  if (from.has_exp_value()) {
-    exp_value_ = new ::cockroach::roachpb::Value(*from.exp_value_);
+  if (from.has_deprecated_exp_value()) {
+    deprecated_exp_value_ = new ::cockroach::roachpb::Value(*from.deprecated_exp_value_);
   } else {
-    exp_value_ = NULL;
+    deprecated_exp_value_ = NULL;
   }
   ::memcpy(&blind_, &from.blind_,
     static_cast<size_t>(reinterpret_cast<char*>(&allow_if_does_not_exist_) -
@@ -4919,6 +4924,7 @@ ConditionalPutRequest::ConditionalPutRequest(const ConditionalPutRequest& from)
 }
 
 void ConditionalPutRequest::SharedCtor() {
+  exp_bytes_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&header_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&allow_if_does_not_exist_) -
       reinterpret_cast<char*>(&header_)) + sizeof(allow_if_does_not_exist_));
@@ -4930,9 +4936,10 @@ ConditionalPutRequest::~ConditionalPutRequest() {
 }
 
 void ConditionalPutRequest::SharedDtor() {
+  exp_bytes_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete header_;
   if (this != internal_default_instance()) delete value_;
-  if (this != internal_default_instance()) delete exp_value_;
+  if (this != internal_default_instance()) delete deprecated_exp_value_;
 }
 
 void ConditionalPutRequest::SetCachedSize(int size) const {
@@ -4950,6 +4957,7 @@ void ConditionalPutRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  exp_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
@@ -4958,10 +4966,10 @@ void ConditionalPutRequest::Clear() {
     delete value_;
   }
   value_ = NULL;
-  if (GetArenaNoVirtual() == NULL && exp_value_ != NULL) {
-    delete exp_value_;
+  if (GetArenaNoVirtual() == NULL && deprecated_exp_value_ != NULL) {
+    delete deprecated_exp_value_;
   }
-  exp_value_ = NULL;
+  deprecated_exp_value_ = NULL;
   ::memset(&blind_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&allow_if_does_not_exist_) -
       reinterpret_cast<char*>(&blind_)) + sizeof(allow_if_does_not_exist_));
@@ -5006,12 +5014,12 @@ bool ConditionalPutRequest::MergePartialFromCodedStream(
         break;
       }
 
-      // .cockroach.roachpb.Value exp_value = 3;
+      // .cockroach.roachpb.Value deprecated_exp_value = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_exp_value()));
+               input, mutable_deprecated_exp_value()));
         } else {
           goto handle_unusual;
         }
@@ -5040,6 +5048,18 @@ bool ConditionalPutRequest::MergePartialFromCodedStream(
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
                  input, &allow_if_does_not_exist_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bytes exp_bytes = 6;
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_exp_bytes()));
         } else {
           goto handle_unusual;
         }
@@ -5082,10 +5102,10 @@ void ConditionalPutRequest::SerializeWithCachedSizes(
       2, this->_internal_value(), output);
   }
 
-  // .cockroach.roachpb.Value exp_value = 3;
-  if (this->has_exp_value()) {
+  // .cockroach.roachpb.Value deprecated_exp_value = 3;
+  if (this->has_deprecated_exp_value()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      3, this->_internal_exp_value(), output);
+      3, this->_internal_deprecated_exp_value(), output);
   }
 
   // bool blind = 4;
@@ -5096,6 +5116,12 @@ void ConditionalPutRequest::SerializeWithCachedSizes(
   // bool allow_if_does_not_exist = 5;
   if (this->allow_if_does_not_exist() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteBool(5, this->allow_if_does_not_exist(), output);
+  }
+
+  // bytes exp_bytes = 6;
+  if (this->exp_bytes().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      6, this->exp_bytes(), output);
   }
 
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
@@ -5109,6 +5135,13 @@ size_t ConditionalPutRequest::ByteSizeLong() const {
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
+  // bytes exp_bytes = 6;
+  if (this->exp_bytes().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->exp_bytes());
+  }
+
   if (this->has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -5121,11 +5154,11 @@ size_t ConditionalPutRequest::ByteSizeLong() const {
         *value_);
   }
 
-  // .cockroach.roachpb.Value exp_value = 3;
-  if (this->has_exp_value()) {
+  // .cockroach.roachpb.Value deprecated_exp_value = 3;
+  if (this->has_deprecated_exp_value()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *exp_value_);
+        *deprecated_exp_value_);
   }
 
   // bool blind = 4;
@@ -5155,14 +5188,18 @@ void ConditionalPutRequest::MergeFrom(const ConditionalPutRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (from.exp_bytes().size() > 0) {
+
+    exp_bytes_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.exp_bytes_);
+  }
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
   if (from.has_value()) {
     mutable_value()->::cockroach::roachpb::Value::MergeFrom(from.value());
   }
-  if (from.has_exp_value()) {
-    mutable_exp_value()->::cockroach::roachpb::Value::MergeFrom(from.exp_value());
+  if (from.has_deprecated_exp_value()) {
+    mutable_deprecated_exp_value()->::cockroach::roachpb::Value::MergeFrom(from.deprecated_exp_value());
   }
   if (from.blind() != 0) {
     set_blind(from.blind());
@@ -5189,9 +5226,11 @@ void ConditionalPutRequest::Swap(ConditionalPutRequest* other) {
 }
 void ConditionalPutRequest::InternalSwap(ConditionalPutRequest* other) {
   using std::swap;
+  exp_bytes_.Swap(&other->exp_bytes_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
   swap(header_, other->header_);
   swap(value_, other->value_);
-  swap(exp_value_, other->exp_value_);
+  swap(deprecated_exp_value_, other->deprecated_exp_value_);
   swap(blind_, other->blind_);
   swap(allow_if_does_not_exist_, other->allow_if_does_not_exist_);
   _internal_metadata_.Swap(&other->_internal_metadata_);

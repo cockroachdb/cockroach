@@ -441,7 +441,7 @@ func runMVCCConditionalPut(
 	defer eng.Close()
 
 	b.SetBytes(int64(valueSize))
-	var expected *roachpb.Value
+	var expected []byte
 	if createFirst {
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
@@ -450,7 +450,7 @@ func runMVCCConditionalPut(
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
-		expected = &value
+		expected = value.TagAndDataBytes()
 	}
 
 	b.ResetTimer()

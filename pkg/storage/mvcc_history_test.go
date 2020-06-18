@@ -549,10 +549,10 @@ func cmdCPut(e *evalCtx) error {
 	key := e.getKey()
 	val := e.getVal()
 	// Condition val is optional.
-	var expVal *roachpb.Value
+	var expVal []byte
 	if e.hasArg("cond") {
 		rexpVal := e.getValInternal("cond")
-		expVal = &rexpVal
+		expVal = rexpVal.TagAndDataBytes()
 	}
 	behavior := CPutFailIfMissing
 	if e.hasArg("allow_missing") {

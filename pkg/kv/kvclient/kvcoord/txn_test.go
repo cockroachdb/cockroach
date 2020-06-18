@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -700,8 +701,10 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 	defer s.Stop()
 
 	txn := s.DB.NewTxn(ctx, "test txn")
-	expVal := roachpb.MakeValueFromString("dummy")
-	err := txn.CPut(ctx, "a", "val", &expVal)
+	// Note: Since we're expecting the CPut to fail, the massaging done by
+	// StrToCPutExistingValue() is not actually necessary.
+	expVal := kvclientutils.StrToCPutExistingValue("dummy")
+	err := txn.CPut(ctx, "a", "val", expVal)
 	require.IsType(t, &roachpb.ConditionFailedError{}, err)
 
 	require.NoError(t, txn.Put(ctx, "a", "b'"))

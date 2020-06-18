@@ -1618,6 +1618,20 @@ class ConditionalPutRequest : public ::google::protobuf::MessageLite /* @@protoc
 
   // accessors -------------------------------------------------------
 
+  // bytes exp_bytes = 6;
+  void clear_exp_bytes();
+  static const int kExpBytesFieldNumber = 6;
+  const ::std::string& exp_bytes() const;
+  void set_exp_bytes(const ::std::string& value);
+  #if LANG_CXX11
+  void set_exp_bytes(::std::string&& value);
+  #endif
+  void set_exp_bytes(const char* value);
+  void set_exp_bytes(const void* value, size_t size);
+  ::std::string* mutable_exp_bytes();
+  ::std::string* release_exp_bytes();
+  void set_allocated_exp_bytes(::std::string* exp_bytes);
+
   bool has_header() const;
   void clear_header();
   static const int kHeaderFieldNumber = 1;
@@ -1640,17 +1654,17 @@ class ConditionalPutRequest : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::Value* mutable_value();
   void set_allocated_value(::cockroach::roachpb::Value* value);
 
-  // .cockroach.roachpb.Value exp_value = 3;
-  bool has_exp_value() const;
-  void clear_exp_value();
-  static const int kExpValueFieldNumber = 3;
+  // .cockroach.roachpb.Value deprecated_exp_value = 3;
+  bool has_deprecated_exp_value() const;
+  void clear_deprecated_exp_value();
+  static const int kDeprecatedExpValueFieldNumber = 3;
   private:
-  const ::cockroach::roachpb::Value& _internal_exp_value() const;
+  const ::cockroach::roachpb::Value& _internal_deprecated_exp_value() const;
   public:
-  const ::cockroach::roachpb::Value& exp_value() const;
-  ::cockroach::roachpb::Value* release_exp_value();
-  ::cockroach::roachpb::Value* mutable_exp_value();
-  void set_allocated_exp_value(::cockroach::roachpb::Value* exp_value);
+  const ::cockroach::roachpb::Value& deprecated_exp_value() const;
+  ::cockroach::roachpb::Value* release_deprecated_exp_value();
+  ::cockroach::roachpb::Value* mutable_deprecated_exp_value();
+  void set_allocated_deprecated_exp_value(::cockroach::roachpb::Value* deprecated_exp_value);
 
   // bool blind = 4;
   void clear_blind();
@@ -1668,9 +1682,10 @@ class ConditionalPutRequest : public ::google::protobuf::MessageLite /* @@protoc
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr exp_bytes_;
   ::cockroach::roachpb::RequestHeader* header_;
   ::cockroach::roachpb::Value* value_;
-  ::cockroach::roachpb::Value* exp_value_;
+  ::cockroach::roachpb::Value* deprecated_exp_value_;
   bool blind_;
   bool allow_if_does_not_exist_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -17706,52 +17721,105 @@ inline void ConditionalPutRequest::set_allocated_value(::cockroach::roachpb::Val
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ConditionalPutRequest.value)
 }
 
-// .cockroach.roachpb.Value exp_value = 3;
-inline bool ConditionalPutRequest::has_exp_value() const {
-  return this != internal_default_instance() && exp_value_ != NULL;
+// .cockroach.roachpb.Value deprecated_exp_value = 3;
+inline bool ConditionalPutRequest::has_deprecated_exp_value() const {
+  return this != internal_default_instance() && deprecated_exp_value_ != NULL;
 }
-inline const ::cockroach::roachpb::Value& ConditionalPutRequest::_internal_exp_value() const {
-  return *exp_value_;
+inline const ::cockroach::roachpb::Value& ConditionalPutRequest::_internal_deprecated_exp_value() const {
+  return *deprecated_exp_value_;
 }
-inline const ::cockroach::roachpb::Value& ConditionalPutRequest::exp_value() const {
-  const ::cockroach::roachpb::Value* p = exp_value_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutRequest.exp_value)
+inline const ::cockroach::roachpb::Value& ConditionalPutRequest::deprecated_exp_value() const {
+  const ::cockroach::roachpb::Value* p = deprecated_exp_value_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutRequest.deprecated_exp_value)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Value*>(
       &::cockroach::roachpb::_Value_default_instance_);
 }
-inline ::cockroach::roachpb::Value* ConditionalPutRequest::release_exp_value() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.ConditionalPutRequest.exp_value)
+inline ::cockroach::roachpb::Value* ConditionalPutRequest::release_deprecated_exp_value() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ConditionalPutRequest.deprecated_exp_value)
   
-  ::cockroach::roachpb::Value* temp = exp_value_;
-  exp_value_ = NULL;
+  ::cockroach::roachpb::Value* temp = deprecated_exp_value_;
+  deprecated_exp_value_ = NULL;
   return temp;
 }
-inline ::cockroach::roachpb::Value* ConditionalPutRequest::mutable_exp_value() {
+inline ::cockroach::roachpb::Value* ConditionalPutRequest::mutable_deprecated_exp_value() {
   
-  if (exp_value_ == NULL) {
+  if (deprecated_exp_value_ == NULL) {
     auto* p = CreateMaybeMessage<::cockroach::roachpb::Value>(GetArenaNoVirtual());
-    exp_value_ = p;
+    deprecated_exp_value_ = p;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutRequest.exp_value)
-  return exp_value_;
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutRequest.deprecated_exp_value)
+  return deprecated_exp_value_;
 }
-inline void ConditionalPutRequest::set_allocated_exp_value(::cockroach::roachpb::Value* exp_value) {
+inline void ConditionalPutRequest::set_allocated_deprecated_exp_value(::cockroach::roachpb::Value* deprecated_exp_value) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   if (message_arena == NULL) {
-    delete reinterpret_cast< ::google::protobuf::MessageLite*>(exp_value_);
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deprecated_exp_value_);
   }
-  if (exp_value) {
+  if (deprecated_exp_value) {
     ::google::protobuf::Arena* submessage_arena = NULL;
     if (message_arena != submessage_arena) {
-      exp_value = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, exp_value, submessage_arena);
+      deprecated_exp_value = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deprecated_exp_value, submessage_arena);
     }
     
   } else {
     
   }
-  exp_value_ = exp_value;
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ConditionalPutRequest.exp_value)
+  deprecated_exp_value_ = deprecated_exp_value;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ConditionalPutRequest.deprecated_exp_value)
+}
+
+// bytes exp_bytes = 6;
+inline void ConditionalPutRequest::clear_exp_bytes() {
+  exp_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ConditionalPutRequest::exp_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+  return exp_bytes_.GetNoArena();
+}
+inline void ConditionalPutRequest::set_exp_bytes(const ::std::string& value) {
+  
+  exp_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+}
+#if LANG_CXX11
+inline void ConditionalPutRequest::set_exp_bytes(::std::string&& value) {
+  
+  exp_bytes_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+}
+#endif
+inline void ConditionalPutRequest::set_exp_bytes(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  exp_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+}
+inline void ConditionalPutRequest::set_exp_bytes(const void* value, size_t size) {
+  
+  exp_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+}
+inline ::std::string* ConditionalPutRequest::mutable_exp_bytes() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+  return exp_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ConditionalPutRequest::release_exp_bytes() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
+  
+  return exp_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ConditionalPutRequest::set_allocated_exp_bytes(::std::string* exp_bytes) {
+  if (exp_bytes != NULL) {
+    
+  } else {
+    
+  }
+  exp_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), exp_bytes);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ConditionalPutRequest.exp_bytes)
 }
 
 // bool blind = 4;

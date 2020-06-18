@@ -48,11 +48,6 @@ import (
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
 
-func strToValue(s string) *roachpb.Value {
-	v := roachpb.MakeValueFromBytes([]byte(s))
-	return &v
-}
-
 func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -1579,11 +1574,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	if err := db.Put(ctx, keyB, &origVal); err != nil {
 		t.Fatal(err)
 	}
-	// After using origVal as an arg to CPut, we're not allowed to modify it.
-	// Passing it back to CPut again (which is the whole point of keeping it
-	// around) will clear and re-init the checksum, so defensively copy it before
-	// we save it.
-	origVal = roachpb.Value{RawBytes: append([]byte(nil), origVal.RawBytes...)}
+	origBytes := origVal.TagAndDataBytes()
 
 	// The following txn creates a batch request that is split into three
 	// requests: Put, CPut, and Put. The CPut operation will get a
@@ -1611,7 +1602,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 		b := txn.NewBatch()
 		b.Put(keyA, "val")
-		b.CPut(keyB, "new_val", &origVal)
+		b.CPut(keyB, "new_val", origBytes)
 		b.Put(keyC, "val2")
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
@@ -1867,7 +1858,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("put")) // cput to advance txn ts, set update span
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put")) // cput to advance txn ts, set update span
 			},
 		},
 		{
@@ -1880,7 +1871,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("put")) // cput to advance txn ts, set update span
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put")) // cput to advance txn ts, set update span
 			},
 			tsLeaked:    true,
 			clientRetry: true,
@@ -1931,7 +1922,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, 1pc commit.
@@ -2166,7 +2157,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("put"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put"))
 			},
 			txnCoordRetry: false,              // fails on first attempt at cput
 			expFailure:    "unexpected value", // the failure we get is a condition failed error
@@ -2180,7 +2171,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
 			expFailure:    "unexpected value", // the failure we get is a condition failed error
@@ -2194,7 +2185,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 		},
 		{
@@ -2206,7 +2197,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			priorReads:    true,
 			txnCoordRetry: true,
@@ -2430,7 +2421,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("put"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("put"))
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
 			// No client-side retries, 1PC commit. On the server-side, the batch is
@@ -2451,7 +2442,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
 			expFailure: "unexpected value", // The CPut cannot succeed.
@@ -2481,7 +2472,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("value"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
 			},
@@ -2500,7 +2491,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("value"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
 			},
@@ -2518,7 +2509,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				b.DelRange("a", "b", false /* returnKeys */)
-				b.CPut("c", "cput", strToValue("value"))
+				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
 			txnCoordRetry: true,
@@ -2546,7 +2537,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
@@ -2563,7 +2554,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
@@ -2614,7 +2605,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("a"))),
 			txnCoordRetry: true,
@@ -2625,7 +2616,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
 			clientRetry: true,
@@ -2646,7 +2637,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if _, err := txn.Get(ctx, "ac"); err != nil {
 					return err
 				}
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("ac"))),
 			txnCoordRetry: true,
@@ -2684,7 +2675,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("c", "cput", strToValue("value"))
+				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
@@ -2706,7 +2697,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("value"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
@@ -2720,7 +2711,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				b.Put("a", "put")
-				b.CPut("c", "cput", strToValue("value"))
+				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
@@ -3027,8 +3018,8 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			require.NoError(t, err)
 
 			b := txn.NewBatch()
-			b.CPut(keyA, "a", &origValA)
-			b.CPut(keyB, "b", &origValB)
+			b.CPut(keyA, "a", origValA.TagAndDataBytes())
+			b.CPut(keyB, "b", origValB.TagAndDataBytes())
 
 			var secondAttemptRejectKey roachpb.Key
 			if tc.sideRejectedOnSecondAttempt == left {
