@@ -29,7 +29,7 @@ func TestInitGEOS(t *testing.T) {
 	})
 
 	t.Run("test valid initGEOS paths", func(t *testing.T) {
-		ret, loc, err := initGEOS(findGEOSLocations(""))
+		ret, loc, err := initGEOS(findLibraryDirectories(""))
 		require.NoError(t, err)
 		require.NotEmpty(t, loc)
 		require.NotNil(t, ret)

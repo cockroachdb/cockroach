@@ -60,8 +60,10 @@ var geosOnce struct {
 
 // EnsureInit attempts to start GEOS if it has not been opened already
 // and returns the location if found, and an error if the CR_GEOS is not valid.
-func EnsureInit(errDisplay EnsureInitErrorDisplay, flagGEOSLocationValue string) (string, error) {
-	_, err := ensureInit(errDisplay, flagGEOSLocationValue)
+func EnsureInit(
+	errDisplay EnsureInitErrorDisplay, flagLibraryDirectoryValue string,
+) (string, error) {
+	_, err := ensureInit(errDisplay, flagLibraryDirectoryValue)
 	return geosOnce.loc, err
 }
 
@@ -75,10 +77,10 @@ func ensureInitInternal() (*C.CR_GEOS, error) {
 // ensureInits behaves as described in EnsureInit, but also returns the GEOS
 // C object which should be hidden from the public eye.
 func ensureInit(
-	errDisplay EnsureInitErrorDisplay, flagGEOSLocationValue string,
+	errDisplay EnsureInitErrorDisplay, flagLibraryDirectoryValue string,
 ) (*C.CR_GEOS, error) {
 	geosOnce.once.Do(func() {
-		geosOnce.geos, geosOnce.loc, geosOnce.err = initGEOS(findGEOSLocations(flagGEOSLocationValue))
+		geosOnce.geos, geosOnce.loc, geosOnce.err = initGEOS(findLibraryDirectories(flagLibraryDirectoryValue))
 	})
 	if geosOnce.err != nil && errDisplay == EnsureInitErrorDisplayPublic {
 		return nil, errors.Newf("geos: this operation is not available")
@@ -86,31 +88,37 @@ func ensureInit(
 	return geosOnce.geos, geosOnce.err
 }
 
-// findGEOSLocations returns the default locations where GEOS is installed.
-func findGEOSLocations(flagGEOSLocationValue string) []string {
-	var ext string
+// appendLibraryExt appends the extension expected for the running OS.
+func getLibraryExt(base string) string {
 	switch runtime.GOOS {
 	case "darwin":
-		ext = "dylib"
+		return base + ".dylib"
 	case "windows":
-		ext = "dll"
+		return base + ".dll"
 	default:
-		ext = "so"
+		return base + ".so"
 	}
-	locs := []string{
-		filepath.Join(flagGEOSLocationValue, "libgeos_c."+ext),
-	}
+}
+
+const (
+	libgeosFileName  = "libgeos"
+	libgeoscFileName = "libgeos_c"
+)
+
+// findLibraryDirectories returns the default locations where GEOS is installed.
+func findLibraryDirectories(flagLibraryDirectoryValue string) []string {
 	// For CI, they are always in a parenting directory where libgeos_c is set.
 	// For now, this will need to look at every given location
 	// TODO(otan): fix CI to always use a fixed location OR initialize GEOS
 	// correctly for each test suite that may need GEOS.
-	locs = append(locs, findGEOSLocationsInParentingDirectories(ext)...)
+	locs := append(findLibraryDirectoriesInParentingDirectories(), flagLibraryDirectoryValue)
 	return locs
 }
 
-// findGEOSLocationsInParentingDirectories attempts to find GEOS by looking at
-// parenting folders and looking inside `lib/lib_geos_c.*`.
-func findGEOSLocationsInParentingDirectories(ext string) []string {
+// findLibraryDirectoriesInParentingDirectories attempts to find GEOS by looking at
+// parenting folders and looking inside `lib/libgeos_c.*`.
+// This is basically only useful for CI runs.
+func findLibraryDirectoriesInParentingDirectories() []string {
 	locs := []string{}
 
 	// Add the CI path by trying to find all parenting paths and appending
@@ -121,9 +129,19 @@ func findGEOSLocationsInParentingDirectories(ext string) []string {
 	}
 
 	for {
-		nextPath := filepath.Join(cwd, "lib", "libgeos_c."+ext)
-		if _, err := os.Stat(nextPath); err == nil {
-			locs = append(locs, nextPath)
+		dir := filepath.Join(cwd, "lib")
+		found := true
+		for _, file := range []string{
+			filepath.Join(dir, getLibraryExt(libgeoscFileName)),
+			filepath.Join(dir, getLibraryExt(libgeosFileName)),
+		} {
+			if _, err := os.Stat(file); err != nil {
+				found = false
+				break
+			}
+		}
+		if found {
+			locs = append(locs, dir)
 		}
 		nextCWD := filepath.Dir(cwd)
 		if nextCWD == cwd {
@@ -136,19 +154,23 @@ func findGEOSLocationsInParentingDirectories(ext string) []string {
 
 // initGEOS initializes the CR_GEOS by attempting to dlopen all
 // the paths as parsed in by locs.
-func initGEOS(locs []string) (*C.CR_GEOS, string, error) {
+func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 	var err error
-	for _, loc := range locs {
+	for _, dir := range dirs {
 		var ret *C.CR_GEOS
-		errStr := C.CR_GEOS_Init(goToCSlice([]byte(loc)), &ret)
+		errStr := C.CR_GEOS_Init(
+			goToCSlice([]byte(filepath.Join(dir, getLibraryExt(libgeoscFileName)))),
+			goToCSlice([]byte(filepath.Join(dir, getLibraryExt(libgeosFileName)))),
+			&ret,
+		)
 		if errStr.data == nil {
-			return ret, loc, nil
+			return ret, dir, nil
 		}
 		err = errors.CombineErrors(
 			err,
 			errors.Newf(
-				"geos: cannot load GEOS from %s: %s",
-				loc,
+				"geos: cannot load GEOS from dir %q: %s",
+				dir,
 				string(cSliceToUnsafeGoBytes(errStr)),
 			),
 		)

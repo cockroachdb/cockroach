@@ -134,7 +134,7 @@ func initCLIDefaults() {
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
-	startCtx.geoLibsDir = "/usr/local/lib"
+	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
 
 	quitCtx.drainWait = 10 * time.Minute
 
@@ -174,7 +174,7 @@ func initCLIDefaults() {
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
-	demoCtx.geoLibsDir = "/usr/local/lib"
+	demoCtx.geoLibsDir = "/usr/local/lib/cockroach"
 
 	authCtx.validityPeriod = 1 * time.Hour
 
