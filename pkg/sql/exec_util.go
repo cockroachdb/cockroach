@@ -771,6 +771,10 @@ type ExecutorTestingKnobs struct {
 	// OnTempObjectsCleanupDone will trigger when the temporary objects cleanup
 	// job is done.
 	OnTempObjectsCleanupDone func()
+
+	// WithStatementTrace is called after the statement is executed in
+	// execStmtInOpenState.
+	WithStatementTrace func(span opentracing.Span, stmt string)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
