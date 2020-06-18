@@ -32,7 +32,8 @@ import (
 )
 
 const (
-	opTxnCoordSender = "txn coordinator send"
+	// OpTxnCoordSender represents a txn coordinator send operation.
+	OpTxnCoordSender = "txn coordinator send"
 )
 
 // txnState represents states relating to whether an EndTxn request needs
@@ -468,7 +469,7 @@ func (tc *TxnCoordSender) Send(
 
 	startNs := tc.clock.PhysicalNow()
 
-	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
+	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
 
 	// Associate the txnID with the trace.
