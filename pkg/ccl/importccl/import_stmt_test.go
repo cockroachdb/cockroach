@@ -4298,3 +4298,57 @@ func TestDisallowsInvalidFormatOptions(t *testing.T) {
 		}
 	}
 }
+
+func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id int64) {
+	// Force newly created job to be adopted and verify it succeeds.
+	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	testutils.SucceedsSoon(t, func() error {
+		var unused int64
+		return tc.ServerConn(0).QueryRow(
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			id, jobs.StatusSucceeded).Scan(&unused)
+	})
+}
+
+func TestDetachedImport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const nodes = 3
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	rawDB := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+
+	query := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+	queryDetached := query + " DETACHED"
+
+	// DETACHED import w/out transaction is okay.
+	var jobID int64
+	sqlDB.QueryRow(t, queryDetached, simpleOcf).Scan(&jobID)
+	waitForSuccessfulJob(t, tc, jobID)
+
+	sqlDB.Exec(t, "DROP table simple")
+
+	// Running import under transaction requires DETACHED option.
+	txn, err := rawDB.Begin()
+	require.NoError(t, err)
+	err = txn.QueryRow(query, simpleOcf).Scan(&jobID)
+	require.True(t,
+		testutils.IsError(err, "IMPORT cannot be used inside a transaction without DETACHED option"))
+	require.NoError(t, txn.Rollback())
+
+	// We can execute IMPORT under transaction with detached option
+	txn, err = rawDB.Begin()
+	require.NoError(t, err)
+	err = txn.QueryRow(queryDetached, simpleOcf).Scan(&jobID)
+	require.NoError(t, err)
+	require.NoError(t, txn.Commit())
+	waitForSuccessfulJob(t, tc, jobID)
+}

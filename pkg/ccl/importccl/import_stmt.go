@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -237,8 +238,8 @@ func importPlanHook(
 			return err
 		}
 
-		if !p.ExtendedEvalContext().TxnImplicit {
-			return errors.Errorf("IMPORT cannot be used inside a transaction")
+		if !(p.ExtendedEvalContext().TxnImplicit || importStmt.Detached) {
+			return errors.Errorf("IMPORT cannot be used inside a transaction without DETACHED option")
 		}
 
 		opts, err := optsFn()
@@ -729,6 +730,12 @@ func importPlanHook(
 			Progress:    jobspb.ImportProgress{},
 		}
 
+		if importStmt.Detached {
+			// When running in detached mode, we simply create the job record.
+			// We do not wait for the job to finish.
+			return utilccl.StartAsyncJob(ctx, p, &jr, resultsCh)
+		}
+
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
@@ -755,7 +762,11 @@ func importPlanHook(
 		}
 		return sj.Run(ctx)
 	}
-	return fn, backupccl.RestoreHeader, nil, false, nil
+
+	if importStmt.Detached {
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+	}
+	return fn, utilccl.JobExecutionResultHeader, nil, false, nil
 }
 
 func parseAvroOptions(

@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -285,15 +284,6 @@ func backupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	header := sqlbase.ResultColumns{
-		{Name: "job_id", Typ: types.Int},
-		{Name: "status", Typ: types.String},
-		{Name: "fraction_completed", Typ: types.Float},
-		{Name: "rows", Typ: types.Int},
-		{Name: "index_entries", Typ: types.Int},
-		{Name: "bytes", Typ: types.Int},
-	}
-
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -309,8 +299,8 @@ func backupPlanHook(
 			return err
 		}
 
-		if !p.ExtendedEvalContext().TxnImplicit {
-			return errors.Errorf("BACKUP cannot be used inside a transaction")
+		if !(p.ExtendedEvalContext().TxnImplicit || backupStmt.Detached) {
+			return errors.Errorf("BACKUP cannot be used inside a transaction without DETACHED option")
 		}
 
 		to, err := toFn()
@@ -676,40 +666,7 @@ func backupPlanHook(
 			backupDetails.ProtectedTimestampRecord = &protectedtsID
 		}
 
-		jr := jobs.Record{
-			Description: description,
-			Username:    p.User(),
-			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
-				for _, sqlDesc := range backupManifest.Descriptors {
-					sqlDescIDs = append(sqlDescIDs, sqlDesc.GetID())
-				}
-				return sqlDescIDs
-			}(),
-			Details:  backupDetails,
-			Progress: jobspb.BackupProgress{},
-		}
-		var sj *jobs.StartableJob
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
-			if err != nil {
-				return err
-			}
-			if len(spans) > 0 {
-				tsToProtect := endTime
-				rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, *sj.ID(), tsToProtect, spans)
-				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
-			}
-			return nil
-		}); err != nil {
-			if sj != nil {
-				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-				}
-			}
-		}
-
-		// Collect telemetry.
-		{
+		collectTelemetry := func() {
 			telemetry.Count("backup.total.started")
 			if startTime.IsEmpty() {
 				telemetry.Count("backup.span.full")
@@ -734,13 +691,63 @@ func backupPlanHook(
 			}
 		}
 
+		jr := jobs.Record{
+			Description: description,
+			Username:    p.User(),
+			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+				for _, sqlDesc := range backupManifest.Descriptors {
+					sqlDescIDs = append(sqlDescIDs, sqlDesc.GetID())
+				}
+				return sqlDescIDs
+			}(),
+			Details:  backupDetails,
+			Progress: jobspb.BackupProgress{},
+		}
+
+		if backupStmt.Detached {
+			// When running in detached mode, we simply create the job record.
+			// We do not wait for the job to finish.
+			if err := utilccl.StartAsyncJob(ctx, p, &jr, resultsCh); err != nil {
+				return err
+			}
+			collectTelemetry()
+			return nil
+		}
+
+		var sj *jobs.StartableJob
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			if err != nil {
+				return err
+			}
+			if len(spans) > 0 {
+				tsToProtect := endTime
+				rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, *sj.ID(), tsToProtect, spans)
+				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+			}
+			return nil
+		}); err != nil {
+			if sj != nil {
+				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				}
+			}
+		}
+
+		collectTelemetry()
+
 		errCh, err := sj.Start(ctx)
 		if err != nil {
 			return err
 		}
 		return <-errCh
 	}
-	return fn, header, nil, false, nil
+
+	if backupStmt.Detached {
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+	}
+	return fn, utilccl.JobExecutionResultHeader, nil, false, nil
+
 }
 
 // checkForNewTables returns an error if any new tables were introduced with the

@@ -3354,51 +3354,46 @@ func TestFileIOLimits(t *testing.T) {
 	)
 }
 
-func TestBackupRestoreNotInTxn(t *testing.T) {
+func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id int64) {
+	// Force newly created job to be adopted and verify it succeeds.
+	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	testutils.SucceedsSoon(t, func() error {
+		var unused int64
+		return tc.ServerConn(0).QueryRow(
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			id, jobs.StatusSucceeded).Scan(&unused)
+	})
+}
+
+func TestDetachedBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	defer cleanupFn()
 
+	// Okay to run DETACHED backup, even w/out transaction.
+	var jobID int64
+	sqlDB.QueryRow(t, `BACKUP DATABASE data TO $1 DETACHED`, localFoo).Scan(&jobID)
+	waitForSuccessfulJob(t, tc, jobID)
+
+	// running backup under transaction requires DETACHED
 	db := sqlDB.DB.(*gosql.DB)
 	tx, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`BACKUP DATABASE data TO 'blah'`); !testutils.IsError(err, "cannot be used inside a transaction") {
-		t.Fatal(err)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	err = tx.QueryRow(`BACKUP DATABASE data TO $1`, localFoo).Scan(&jobID)
+	require.True(t, testutils.IsError(err, "BACKUP cannot be used inside a transaction without DETACHED option"))
+	require.NoError(t, tx.Rollback())
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 	sqlDB.Exec(t, `DROP DATABASE data`)
 	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, LocalFoo)
 
 	tx, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`RESTORE DATABASE data FROM 'blah'`); !testutils.IsError(err, "cannot be used inside a transaction") {
-		t.Fatal(err)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
-
-	// TODO(dt): move to importccl.
-	tx, err = db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`IMPORT TABLE t (id INT PRIMARY KEY) CSV DATA ('blah')`); !testutils.IsError(err, "cannot be used inside a transaction") {
-		t.Fatal(err)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, tx.QueryRow(`RESTORE DATABASE data FROM $1 DETACHED`, localFoo).Scan(&jobID))
+	require.NoError(t, tx.Commit())
+	waitForSuccessfulJob(t, tc, jobID)
 }
 
 func TestBackupRestoreSequence(t *testing.T) {

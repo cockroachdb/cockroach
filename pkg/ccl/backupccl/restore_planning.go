@@ -807,16 +807,6 @@ func restoreJobDescription(
 	return tree.AsStringWithFQNames(r, ann), nil
 }
 
-// RestoreHeader is the header for RESTORE stmt results.
-var RestoreHeader = sqlbase.ResultColumns{
-	{Name: "job_id", Typ: types.Int},
-	{Name: "status", Typ: types.String},
-	{Name: "fraction_completed", Typ: types.Float},
-	{Name: "rows", Typ: types.Int},
-	{Name: "index_entries", Typ: types.Int},
-	{Name: "bytes", Typ: types.Int},
-}
-
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -855,8 +845,8 @@ func restorePlanHook(
 			return err
 		}
 
-		if !p.ExtendedEvalContext().TxnImplicit {
-			return errors.Errorf("RESTORE cannot be used inside a transaction")
+		if !(p.ExtendedEvalContext().TxnImplicit || restoreStmt.Detached) {
+			return errors.Errorf("RESTORE cannot be used inside a transaction without DETACHED option")
 		}
 
 		from := make([][]string, len(fromFns))
@@ -881,7 +871,11 @@ func restorePlanHook(
 		}
 		return doRestorePlan(ctx, restoreStmt, p, from, endTime, opts, resultsCh)
 	}
-	return fn, RestoreHeader, nil, false, nil
+
+	if restoreStmt.Detached {
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+	}
+	return fn, utilccl.JobExecutionResultHeader, nil, false, nil
 }
 
 func doRestorePlan(
@@ -1001,14 +995,14 @@ func doRestorePlan(
 	}
 
 	// Collect telemetry.
-	{
+	collectTelemetry := func() {
 		telemetry.Count("restore.total.started")
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 			telemetry.Count("restore.full-cluster")
 		}
 	}
 
-	_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
+	jr := jobs.Record{
 		Description: description,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
@@ -1028,10 +1022,23 @@ func doRestorePlan(
 			Encryption:         encryption,
 		},
 		Progress: jobspb.RestoreProgress{},
-	})
+	}
+
+	if restoreStmt.Detached {
+		// When running in detached mode, we simply create the job record.
+		// We do not wait for the job to finish.
+		if err := utilccl.StartAsyncJob(ctx, p, &jr, resultsCh); err != nil {
+			return err
+		}
+		collectTelemetry()
+		return nil
+	}
+
+	_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jr)
 	if err != nil {
 		return err
 	}
+	collectTelemetry()
 	return <-errCh
 }
 
