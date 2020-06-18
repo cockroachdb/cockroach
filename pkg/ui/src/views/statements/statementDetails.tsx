@@ -477,7 +477,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             >
               Stats By Node
               <div className={cx("numeric-stats-table__tooltip")}>
-                <ToolTipWrapper text="text">
+                <ToolTipWrapper text="Execution statistics for this statement per gateway node.">
                   <div className={cx("numeric-stats-table__tooltip-hover-area")}>
                     <div className={cx("numeric-stats-table__info-icon")}>i</div>
                   </div>
