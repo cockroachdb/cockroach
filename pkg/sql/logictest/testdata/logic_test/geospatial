@@ -69,14 +69,14 @@ CREATE INVERTED INDEX geom_idx ON geo_table(geom)
 
 statement ok
 INSERT INTO geo_table VALUES
-  (3, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)', 'POINT(3.0 3.0)')
+  (3, 'POINT(-1.25 3.375)', 'POINT(2.220 -2.445)', 'POINT(3.0 -3.710)')
 
 query ITTT rowsort
 SELECT * FROM geo_table
 ----
 1  0101000020E6100000000000000000F03F000000000000F03F                                          010100000000000000000000400000000000000040  0101000020E610000000000000000008400000000000000840
 2  0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040  0101000000000000000000F03F000000000000F03F  0101000020E610000000000000000008400000000000000840
-3  0101000020E6100000000000000000F03F000000000000F03F                                          010100000000000000000000400000000000000040  0101000020E610000000000000000008400000000000000840
+3  0101000020E6100000000000000000F4BF0000000000000B40                                          0101000000C3F5285C8FC201408FC2F5285C8F03C0  0101000020E61000000000000000000840AE47E17A14AE0DC0
 
 statement ok
 CREATE TABLE geo_array_table(id int, geog geography array, geom geometry array)
@@ -222,7 +222,7 @@ SRID=4004;POINT (1 1)  SRID=4004;POINT (1 1)
 
 statement ok
 INSERT INTO parse_test (geom, geog) VALUES
-  (ST_GeomFromText('POINT(1.0 2.0)'), ST_GeogFromText('POINT(1.0 2.0)')),
+  (ST_GeomFromText('POINT(1.555 -2.0)'), ST_GeogFromText('POINT(1.555 -2.0)')),
   (ST_GeomFromText('SRID=4326;POINT(1.0 2.0)'), ST_GeogFromText('SRID=4326;POINT(1.0 2.0)')),
   (ST_GeometryFromText('SRID=4004;POINT(1.0 2.0)'), ST_GeographyFromText('POINT(1.0 2.0)')),
   (ST_GeomFromGeoJSON('{"type":"Point","coordinates":[1,2]}'), ST_GeogFromGeoJSON('{"type":"Point","coordinates":[1,2]}')),
@@ -249,21 +249,21 @@ SELECT
   ST_AsKML(geom)
 FROM parse_test ORDER BY id ASC
 ----
-POINT (1 2)                                    POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1.555 -2)                                    POINT (1.555 -2)  [1 1 0 0 0 225 122 20 174 71 225 248 63 0 0 0 0 0 0 0 192]  [1 1 0 0 0 225 122 20 174 71 225 248 63 0 0 0 0 0 0 0 192]  [0 0 0 0 1 63 248 225 71 174 20 122 225 192 0 0 0 0 0 0 0]  [1 1 0 0 0 225 122 20 174 71 225 248 63 0 0 0 0 0 0 0 192]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1.555,-2</coordinates></Point>
+POINT (1 2)                                         SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                         SRID=4004;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 164 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    SRID=4004;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 164 15 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                         POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                         POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>
-POINT (1 1)                                    POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 1)                                         POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>
-POINT (1 1)                                    POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 1)                                         POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>
-NULL                                           NULL  NULL  NULL  NULL  NULL  NULL
+NULL                                                NULL  NULL  NULL  NULL  NULL  NULL
 
 
 query TTT
@@ -273,7 +273,7 @@ SELECT
   ST_AsGeoJSON(geom, 6, 5)
 FROM parse_test ORDER BY id ASC
 ----
-{"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"coordinates":[1,2]}
+{"type":"Point","coordinates":[1.555,-2]}                                                     {"type":"Point","coordinates":[1.555,-2]}                                                     {"type":"Point","bbox":[1.555,-2,1.555,-2],"coordinates":[1.555,-2]}
 {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
 {"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,2]}  {"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4004"}},"coordinates":[1,2]}
 {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"coordinates":[1,2]}
@@ -281,6 +281,24 @@ FROM parse_test ORDER BY id ASC
 {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}
 {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}
 NULL                                                                                          NULL                                                                                          NULL
+
+# test out of bounds precisions
+query TTTT
+SELECT
+  ST_AsText(geom, 123123123),
+  ST_AsText(geom, -1),
+  ST_AsGeoJSON(geom, 123123123),
+  ST_AsGeoJSON(geom, -1)
+FROM parse_test ORDER BY id ASC
+----
+POINT (1.5549999999999999378275106209912337362766265869140625 -2)  POINT (1.555 -2)  {"type":"Point","coordinates":[1.5549999999999999378275106209912337362766265869140625,-2]}    {"type":"Point","coordinates":[1.555,-2]}
+POINT (1 2)                                                        POINT (1 2)       {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}
+POINT (1 2)                                                        POINT (1 2)       {"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,2]}  {"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,2]}
+POINT (1 2)                                                        POINT (1 2)       {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}
+POINT (1 2)                                                        POINT (1 2)       {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}
+POINT (1 1)                                                        POINT (1 1)       {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}
+POINT (1 1)                                                        POINT (1 1)       {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}
+NULL                                                               NULL              NULL                                                                                          NULL
 
 query TTTT
 SELECT
@@ -290,7 +308,7 @@ SELECT
   ST_AsHexEWKB(geom, 'xdr')
 FROM parse_test ORDER BY id ASC
 ----
-0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040          00000000013FF00000000000004000000000000000
+0101000000E17A14AE47E1F83F00000000000000C0  0101000000E17A14AE47E1F83F00000000000000C0          0101000000E17A14AE47E1F83F00000000000000C0          00000000013FF8E147AE147AE1C000000000000000
 0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
 0101000000000000000000F03F0000000000000040  0101000020A40F0000000000000000F03F0000000000000040  0101000020A40F0000000000000000F03F0000000000000040  002000000100000FA43FF00000000000004000000000000000
 0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040          00000000013FF00000000000004000000000000000
@@ -310,21 +328,21 @@ SELECT
   ST_AsKML(geog)
 FROM parse_test ORDER BY id ASC
 ----
-POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1.555 -2)                                    SRID=4326;POINT (1.555 -2)  [1 1 0 0 0 225 122 20 174 71 225 248 63 0 0 0 0 0 0 0 192]  [1 1 0 0 0 225 122 20 174 71 225 248 63 0 0 0 0 0 0 0 192]  [0 0 0 0 1 63 248 225 71 174 20 122 225 192 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 225 122 20 174 71 225 248 63 0 0 0 0 0 0 0 192]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates>1.555,-2</coordinates></Point>
+POINT (1 2)                                         SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                         SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                         SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 2)                                         SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,2</coordinates></Point>
-POINT (1 2)                                    SRID=4326;POINT (1 2)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  [0 0 0 0 1 63 240 0 0 0 0 0 0 64 0 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]  <?xml version="1.0" encoding="UTF-8"?>
-<Point><coordinates>1,2</coordinates></Point>
-POINT (1 1)                                    SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 1)                                         SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>
-POINT (1 1)                                    SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
+POINT (1 1)                                         SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>
-NULL                                           NULL  NULL  NULL  NULL  NULL  NULL
+NULL                                                NULL  NULL  NULL  NULL  NULL  NULL
 
 query TTT
 SELECT
@@ -333,14 +351,14 @@ SELECT
   ST_AsGeoJSON(geog, 6, 5)
 FROM parse_test ORDER BY id ASC
 ----
-{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
-{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
-{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
-{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
-{"type":"Point","coordinates":[1,2]}  {"type":"Point","coordinates":[1,2]}  {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
-{"type":"Point","coordinates":[1,1]}  {"type":"Point","coordinates":[1,1]}  {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
-{"type":"Point","coordinates":[1,1]}  {"type":"Point","coordinates":[1,1]}  {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
-NULL                                  NULL                                  NULL
+{"type":"Point","coordinates":[1.555,-2]}  {"type":"Point","coordinates":[1.555,-2]}  {"type":"Point","bbox":[1.555,-2,1.555,-2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1.555,-2]}
+{"type":"Point","coordinates":[1,2]}       {"type":"Point","coordinates":[1,2]}       {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}       {"type":"Point","coordinates":[1,2]}       {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}       {"type":"Point","coordinates":[1,2]}       {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,2]}       {"type":"Point","coordinates":[1,2]}       {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
+{"type":"Point","coordinates":[1,1]}       {"type":"Point","coordinates":[1,1]}       {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
+{"type":"Point","coordinates":[1,1]}       {"type":"Point","coordinates":[1,1]}       {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
+NULL                                       NULL                                       NULL
 
 query TTTT
 SELECT
@@ -350,7 +368,7 @@ SELECT
   ST_AsHexEWKB(geog, 'xdr')
 FROM parse_test ORDER BY id ASC
 ----
-0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
+0101000000E17A14AE47E1F83F00000000000000C0  0101000020E6100000E17A14AE47E1F83F00000000000000C0  0101000020E6100000E17A14AE47E1F83F00000000000000C0  0020000001000010E63FF8E147AE147AE1C000000000000000
 0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
 0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
 0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
