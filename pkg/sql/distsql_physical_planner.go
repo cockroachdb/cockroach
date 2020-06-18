@@ -1158,13 +1158,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		spanPartitions = []SpanPartition{{nodeID, info.spans}}
 	}
 
-	stageID := p.NewStageID()
-
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
-	p.Processors = make([]physicalplan.Processor, 0, len(spanPartitions))
-
-	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		var tr *execinfrapb.TableReaderSpec
 		if i == 0 {
@@ -1190,29 +1184,11 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			p.MaxEstimatedRowCount = info.estimatedRowCount
 		}
 
-		proc := physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].Core.TableReader = tr
 	}
 
-	if len(p.ResultRouters) > 1 && len(info.reqOrdering) > 0 {
-		// Make a note of the fact that we have to maintain a certain ordering
-		// between the parallel streams.
-		//
-		// This information is taken into account by the AddProjection call below:
-		// specifically, it will make sure these columns are kept even if they are
-		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdrinalMap))
-	}
-
+	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
 	var typs []*types.T
 	if returnMutations {
 		typs = make([]*types.T, 0, len(info.desc.Columns)+len(info.desc.MutationColumns()))
@@ -1227,7 +1203,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			typs = append(typs, col.Type)
 		}
 	}
-	p.SetLastStagePost(info.post, typs)
+
+	p.AddNoInputStage(
+		corePlacement, info.post, typs, dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdrinalMap),
+	)
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdrinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
@@ -2109,15 +2088,6 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		colOffset += len(side.scan.desc.Columns)
 	}
 
-	// Figure out the node where this zigzag joiner goes.
-	//
-	// TODO(itsbilal): Add support for restricting the Zigzag joiner
-	// to a certain set of spans (similar to the InterleavedReaderJoiner)
-	// on one side. Once that's done, we can split this processor across
-	// multiple nodes here. Until then, schedule on the current node.
-	nodeID := dsp.nodeDesc.NodeID
-
-	stageID := plan.NewStageID()
 	// Set the ON condition.
 	if n.onCond != nil {
 		// Note that the ON condition refers to the *internal* columns of the
@@ -2134,24 +2104,19 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 	}
 
-	// Build the PhysicalPlan.
-	proc := physicalplan.Processor{
-		Node: nodeID,
-		Spec: execinfrapb.ProcessorSpec{
-			Core:    execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
-			Post:    post,
-			Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-			StageID: stageID,
-		},
-	}
+	// Figure out the node where this zigzag joiner goes.
+	//
+	// TODO(itsbilal): Add support for restricting the Zigzag joiner
+	// to a certain set of spans (similar to the InterleavedReaderJoiner)
+	// on one side. Once that's done, we can split this processor across
+	// multiple nodes here. Until then, schedule on the current node.
+	corePlacement := []physicalplan.ProcessorCorePlacement{{
+		NodeID: dsp.nodeDesc.NodeID,
+		Core:   execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
+	}}
 
-	plan.Processors = append(plan.Processors, proc)
-
-	// Each result router correspond to each of the processors we appended.
-	plan.ResultRouters = []physicalplan.ProcessorIdx{physicalplan.ProcessorIdx(0)}
-
+	plan.AddNoInputStage(corePlacement, post, types, execinfrapb.Ordering{})
 	plan.PlanToStreamColMap = planToStreamColMap
-	plan.ResultTypes = types
 
 	return plan, nil
 }

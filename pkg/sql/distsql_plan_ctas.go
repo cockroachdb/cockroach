@@ -46,7 +46,6 @@ func PlanAndRunCTAS(
 
 	// The bulk row writers will emit a binary encoded BulkOpSummary.
 	physPlan.PlanToStreamColMap = []int{0}
-	physPlan.ResultTypes = rowexec.CTASPlanResultTypes
 
 	// Make copy of evalCtx as Run might modify it.
 	evalCtxCopy := planner.ExtendedEvalContextCopy()
