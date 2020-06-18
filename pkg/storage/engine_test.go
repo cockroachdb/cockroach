@@ -1133,11 +1133,13 @@ func TestIngestDelayLimit(t *testing.T) {
 		stats Stats
 	}{
 		{0, Stats{}},
-		{0, Stats{L0FileCount: 19}},
-		{0, Stats{L0FileCount: 20}},
-		{ramp, Stats{L0FileCount: 21}},
-		{ramp * 2, Stats{L0FileCount: 22}},
-		{max, Stats{L0FileCount: 55}},
+		{0, Stats{L0FileCount: 19, L0SublevelCount: -1}},
+		{0, Stats{L0FileCount: 20, L0SublevelCount: -1}},
+		{ramp, Stats{L0FileCount: 21, L0SublevelCount: -1}},
+		{ramp * 2, Stats{L0FileCount: 22, L0SublevelCount: -1}},
+		{ramp * 2, Stats{L0FileCount: 22, L0SublevelCount: 22}},
+		{ramp * 2, Stats{L0FileCount: 55, L0SublevelCount: 22}},
+		{max, Stats{L0FileCount: 55, L0SublevelCount: -1}},
 	} {
 		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.stats))
 	}
