@@ -9,12 +9,13 @@
 // licenses/APL.txt.
 
 @require "~styl/base/palette.styl"
+@require '~src/components/core/index.styl'
 
 .summary--card
   border-radius 3px
-  box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
-  background-color $adminui-white
-  padding 25px
+  box-shadow 0px 0px 1px rgba(67, 90, 111, 0.415)
+  background-color $colors--neutral-0
+  padding 22px
   margin-bottom 15px
   &__divider
     width 100%
@@ -30,18 +31,17 @@
     margin-bottom 25px
   &__counting
     &--value
-      font-family SourceSansPro-Regular
-      font-size 20pt
-      line-height 1.6
-      letter-spacing -0.2px
-      color $text-color
+      font-family $font-family--bold
+      font-size $font-size--x-large
+      line-height $line-height--x-large
+      color $colors--neutral-7
       margin-bottom 15px
     &--label
-      font-family SourceSansPro-Regular
-      font-size 14pt
-      line-height 1.67
-      letter-spacing 0.3px
-      color $secondary-text-color
+      font-family $font-family--base
+      font-size $font-size--medium
+      line-height 22px
+      letter-spacing 0.1px
+      color $colors--neutral-6
       margin-bottom 0
   &__item
     display flex;

@@ -16,6 +16,7 @@ import "react-select/dist/react-select.css";
 import "antd/es/tooltip/style/css";
 import "styl/app.styl";
 import "./styles.css";
+import "src/views/app/containers/layout/layout.styl";
 
 const req = require.context("../src/", true, /.stories.tsx$/);
 
