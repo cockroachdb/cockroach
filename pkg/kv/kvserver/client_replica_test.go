@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -57,11 +58,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
 )
-
-func strToValue(s string) *roachpb.Value {
-	v := roachpb.MakeValueFromBytes([]byte(s))
-	return &v
-}
 
 // TestRangeCommandClockUpdate verifies that followers update their
 // clocks when executing a command, even if the lease holder's clock is far
@@ -281,7 +277,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 
 			updatedVal := []byte("updatedVal")
-			if err := txn.CPut(ctx, key, updatedVal, strToValue("initVal")); err != nil {
+			if err := txn.CPut(ctx, key, updatedVal, kvclientutils.StrToCPutExistingValue("initVal")); err != nil {
 				log.Errorf(context.Background(), "failed put value: %+v", err)
 				return err
 			}

@@ -373,17 +373,20 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// CPut conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
+// CPut conditionally sets the value for a key if the existing value is equal to
+// expValue. To conditionally set a value only if the key doesn't currently
+// exist, pass an empty expValue.
 //
 // Returns an error if the existing value is not equal to expValue.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc). A nil value
 // means delete the key.
-func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
+//
+// An empty expValue means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
+func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue []byte) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
 	return getOneErr(db.Run(ctx, b), b)

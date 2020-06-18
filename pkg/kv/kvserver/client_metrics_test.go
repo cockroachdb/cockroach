@@ -302,7 +302,7 @@ func TestStoreMetrics(t *testing.T) {
 		b := txn.NewBatch()
 		var expVal roachpb.Value
 		expVal.SetInt(6)
-		b.CPut(dataKey, 7, &expVal)
+		b.CPut(dataKey, 7, expVal.TagAndDataBytes())
 		return txn.Run(ctx, b)
 	}); err == nil {
 		t.Fatal("Expected transaction error, but none received")

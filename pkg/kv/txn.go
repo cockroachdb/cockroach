@@ -400,20 +400,23 @@ func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 	return getOneErr(txn.Run(ctx, b), b)
 }
 
-// CPut conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
+// CPut conditionally sets the value for a key if the existing value is equal to
+// expValue. To conditionally set a value only if the key doesn't currently
+// exist, pass an empty expValue.
 //
 // Returns a ConditionFailedError if the existing value is not equal to expValue.
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 //
+// An empty expValue means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
+//
 // Note that, as an exception to the general rule, it's ok to send more requests
 // after getting a ConditionFailedError. See comments on ConditionalPutRequest
 // for more info.
-func (txn *Txn) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
+func (txn *Txn) CPut(ctx context.Context, key, value interface{}, expValue []byte) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
 	return getOneErr(txn.Run(ctx, b), b)

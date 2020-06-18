@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -129,10 +130,9 @@ func TestSavepoints(t *testing.T) {
 			// "nil".
 			case "cput":
 				expS := td.CmdArgs[2].Key
-				var expVal *roachpb.Value
+				var expVal []byte
 				if expS != "nil" {
-					val := roachpb.MakeValueFromBytes([]byte(expS))
-					expVal = &val
+					expVal = kvclientutils.StrToCPutExistingValue(expS)
 				}
 				if err := txn.CPut(ctx,
 					roachpb.Key(td.CmdArgs[0].Key),
