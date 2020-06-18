@@ -65,6 +65,7 @@ type Smither struct {
 	indexes          map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	nameCounts       map[string]int
 	activeSavepoints []string
+	types            *typeInfo
 
 	stmtWeights, alterWeights          []statementWeight
 	stmtSampler, alterSampler          *statementSampler
