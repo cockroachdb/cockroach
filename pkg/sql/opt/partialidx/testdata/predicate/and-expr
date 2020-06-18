@@ -128,3 +128,27 @@ predtest vars=(int, bool)
 @1 > 10 AND @1 < 100 AND @2
 ----
 false
+
+# Disjunction Filters
+
+predtest vars=(bool)
+@1 OR @1
+=>
+@1 AND @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(bool, bool)
+@1 OR @2
+=>
+@1 AND @2
+----
+false
+
+predtest vars=(bool, bool)
+@1 OR @2
+=>
+@2 AND @1
+----
+false
