@@ -158,6 +158,39 @@ func (p *PhysicalPlan) SetMergeOrdering(o execinfrapb.Ordering) {
 	}
 }
 
+// AddNoInputStage creates a stage of processors that don't have any input from
+// the other stages (if such exist). nodes and cores must be a one-to-one
+// mapping so that a particular processor core is planned on the appropriate
+// node.
+func (p *PhysicalPlan) AddNoInputStage(
+	nodes []roachpb.NodeID,
+	cores []execinfrapb.ProcessorCoreUnion,
+	post execinfrapb.PostProcessSpec,
+	outputTypes []*types.T,
+	newOrdering execinfrapb.Ordering,
+) {
+	stageID := p.NewStageID()
+	p.ResultRouters = make([]ProcessorIdx, len(cores))
+	for i := range p.ResultRouters {
+		proc := Processor{
+			Node: nodes[i],
+			Spec: execinfrapb.ProcessorSpec{
+				Core: cores[i],
+				Post: post,
+				Output: []execinfrapb.OutputRouterSpec{{
+					Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+				}},
+				StageID: stageID,
+			},
+		}
+
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+	p.ResultTypes = outputTypes
+	p.SetMergeOrdering(newOrdering)
+}
+
 // AddNoGroupingStage adds a processor for each result router, on the same node
 // with the source of the stream; all processors have the same core. This is for
 // stages that correspond to logical blocks that don't require any grouping

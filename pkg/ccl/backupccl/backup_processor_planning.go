@@ -15,7 +15,6 @@ import (
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -73,27 +72,17 @@ func distBackup(
 	var p sql.PhysicalPlan
 
 	// Setup a one-stage plan with one proc per input spec.
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(backupSpecs))
-	i := 0
+	nodes := make([]roachpb.NodeID, 0, len(backupSpecs))
+	cores := make([]execinfrapb.ProcessorCoreUnion, 0, len(backupSpecs))
 	for node, spec := range backupSpecs {
-		proc := physicalplan.Processor{
-			Node: node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{BackupData: spec},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
-		i++
+		nodes = append(nodes, node)
+		cores = append(cores, execinfrapb.ProcessorCoreUnion{BackupData: spec})
 	}
 
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
+	p.AddNoInputStage(nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = []int{}
-	p.ResultTypes = []*types.T{}
 
 	dsp.FinalizePlan(planCtx, &p)
 

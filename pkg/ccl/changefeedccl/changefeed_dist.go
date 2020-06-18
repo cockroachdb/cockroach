@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -127,7 +126,8 @@ func distChangefeedFlow(
 		}
 	}
 
-	changeAggregatorProcs := make([]physicalplan.Processor, 0, len(spanPartitions))
+	nodes := make([]roachpb.NodeID, 0, len(spanPartitions))
+	cores := make([]execinfrapb.ProcessorCoreUnion, 0, len(spanPartitions))
 	for _, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
@@ -139,16 +139,11 @@ func distChangefeedFlow(
 			}
 		}
 
-		changeAggregatorProcs = append(changeAggregatorProcs, physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core: execinfrapb.ProcessorCoreUnion{
-					ChangeAggregator: &execinfrapb.ChangeAggregatorSpec{
-						Watches: watches,
-						Feed:    details,
-					},
-				},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+		nodes = append(nodes, sp.Node)
+		cores = append(cores, execinfrapb.ProcessorCoreUnion{
+			ChangeAggregator: &execinfrapb.ChangeAggregatorSpec{
+				Watches: watches,
+				Feed:    details,
 			},
 		})
 	}
@@ -163,15 +158,9 @@ func distChangefeedFlow(
 	}
 
 	var p sql.PhysicalPlan
-
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(changeAggregatorProcs))
-	for i, proc := range changeAggregatorProcs {
-		proc.Spec.StageID = stageID
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
-	}
-
+	p.AddNoInputStage(
+		nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{},
+	)
 	p.AddSingleGroupStage(
 		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
@@ -179,7 +168,6 @@ func distChangefeedFlow(
 		changefeedResultTypes,
 	)
 
-	p.ResultTypes = changefeedResultTypes
 	p.PlanToStreamColMap = []int{1, 2, 3}
 	dsp.FinalizePlan(planCtx, &p)
 

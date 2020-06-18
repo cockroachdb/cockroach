@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -198,24 +197,20 @@ func DistIngest(
 	var p PhysicalPlan
 
 	// Setup a one-stage plan with one proc per input spec.
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(inputSpecs))
-	for i, rcs := range inputSpecs {
-		proc := physicalplan.Processor{
-			Node: nodes[i],
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{ReadImport: rcs},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+	cores := make([]execinfrapb.ProcessorCoreUnion, len(inputSpecs))
+	for i := range inputSpecs {
+		cores[i] = execinfrapb.ProcessorCoreUnion{ReadImport: inputSpecs[i]}
 	}
+	p.AddNoInputStage(
+		nodes,
+		cores,
+		execinfrapb.PostProcessSpec{},
+		// The direct-ingest readers will emit a binary encoded BulkOpSummary.
+		[]*types.T{types.Bytes, types.Bytes},
+		execinfrapb.Ordering{},
+	)
 
-	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []*types.T{types.Bytes, types.Bytes}
 
 	dsp.FinalizePlan(planCtx, &p)
 
