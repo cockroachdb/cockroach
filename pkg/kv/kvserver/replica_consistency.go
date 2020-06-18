@@ -423,16 +423,21 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 		r.mu.checksums[id] = c
 	}
 	r.mu.Unlock()
-	// Wait
-	select {
-	case <-r.store.Stopper().ShouldQuiesce():
-		return ReplicaChecksum{},
-			errors.Errorf("store quiescing while waiting for compute checksum (ID = %s)", id)
-	case <-ctx.Done():
-		return ReplicaChecksum{},
-			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
-	case <-c.notify:
+
+	// Wait for the checksum to compute or at least to start
+	computed, err := r.checksumInitialWait(ctx, id, c)
+	if err != nil {
+		return ReplicaChecksum{}, err
 	}
+	// If the checksum started, but has not completed commit
+	// to waiting the full deadline
+	if !computed {
+		_, err = r.checksumWait(ctx, id, c, nil)
+		if err != nil {
+			return ReplicaChecksum{}, err
+		}
+	}
+
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
@@ -446,6 +451,53 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 		return ReplicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
 	}
 	return c, nil
+}
+
+// Waits for the checksum to be available or for the checksum to start computing.
+// If we waited for 10% of the deadline and it has not started, then it's
+// unlikely to start because this replica is most likely being restored from
+// snapshots.
+func (r *Replica) checksumInitialWait(
+	ctx context.Context, id uuid.UUID, c ReplicaChecksum,
+) (bool, error) {
+	d, dOk := ctx.Deadline()
+	var initialWait <-chan time.Time
+	if dOk {
+		duration := time.Duration(timeutil.Until(d).Nanoseconds() / 10)
+		initialWait = time.After(duration)
+	} else {
+		initialWait = time.After(5 * time.Second)
+	}
+	return r.checksumWait(ctx, id, c, initialWait)
+}
+
+// Waits for the checksum to be available or for the computation to start
+// within the initialWait time.
+func (r *Replica) checksumWait(
+	ctx context.Context, id uuid.UUID, c ReplicaChecksum, initialWait <-chan time.Time,
+) (bool, error) {
+	// Wait
+	select {
+	case <-r.store.Stopper().ShouldQuiesce():
+		return false,
+			errors.Errorf("store quiescing while waiting for compute checksum (ID = %s)", id)
+	case <-ctx.Done():
+		return false,
+			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+	case <-initialWait:
+		{
+			r.mu.Lock()
+			started := r.mu.checksums[id].started
+			r.mu.Unlock()
+			if !started {
+				return false,
+					errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
+			}
+			return false, nil
+		}
+	case <-c.notify:
+		return true, nil
+	}
 }
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
