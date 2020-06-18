@@ -78,6 +78,8 @@ type ClientOperationConfig struct {
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
 	PutExisting int
+	// Scan is an operation that Scans a key range that may contain values.
+	Scan int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -134,6 +136,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		GetExisting: 1,
 		PutMissing:  1,
 		PutExisting: 1,
+		Scan:        1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -355,6 +358,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 	}
+	addOpGen(allowed, randScan, c.Scan)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -381,6 +385,16 @@ func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	value := g.getNextValue()
 	key := randMapKey(rng, g.keys)
 	return put(key, value)
+}
+
+func randScan(g *generator, rng *rand.Rand) Operation {
+	key, endKey := randKey(rng), randKey(rng)
+	if endKey < key {
+		key, endKey = endKey, key
+	} else if endKey == key {
+		endKey = string(roachpb.Key(key).Next())
+	}
+	return scan(key, endKey)
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -554,6 +568,10 @@ func get(key string) Operation {
 
 func put(key, value string) Operation {
 	return Operation{Put: &PutOperation{Key: []byte(key), Value: []byte(value)}}
+}
+
+func scan(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey)}}
 }
 
 func split(key string) Operation {
