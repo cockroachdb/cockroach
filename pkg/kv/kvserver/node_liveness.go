@@ -801,7 +801,7 @@ func (nl *NodeLiveness) SelfEx() (LivenessRecord, error) {
 	defer nl.mu.RUnlock()
 
 	rec, err := nl.getLivenessLocked(nl.gossip.NodeID.Get())
-	if err != ErrNoLivenessRecord {
+	if !errors.Is(err, ErrNoLivenessRecord) {
 		rec.Liveness.AssertValid()
 	}
 	return rec, err

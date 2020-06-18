@@ -128,10 +128,18 @@ func CommissionStatusFromBooleanForm(decommissioning bool) CommissionStatus {
 	return CommissionStatus_COMMISSIONED
 }
 
-func (c CommissionStatus) Unknown() bool         { return c == CommissionStatus_UNKNOWN }
+// Unknown is a shorthand to check if the commission status is UNKNOWN.
+func (c CommissionStatus) Unknown() bool { return c == CommissionStatus_UNKNOWN }
+
+// Decommissioning is a shorthand to check if the commission status is DECOMMISSIONING.
 func (c CommissionStatus) Decommissioning() bool { return c == CommissionStatus_DECOMMISSIONING }
-func (c CommissionStatus) Decommissioned() bool  { return c == CommissionStatus_DECOMMISSIONED }
-func (c CommissionStatus) Commissioned() bool    { return c == CommissionStatus_COMMISSIONED }
+
+// Decommissioned is a shorthand to check if the commission status is DECOMMISSIONED.
+func (c CommissionStatus) Decommissioned() bool { return c == CommissionStatus_DECOMMISSIONED }
+
+// Commissioned is a shorthand to check if the commission status is COMMISSIONED.
+func (c CommissionStatus) Commissioned() bool { return c == CommissionStatus_COMMISSIONED }
+
 func (c CommissionStatus) String() string {
 	switch c {
 	case CommissionStatus_UNKNOWN:
@@ -178,19 +186,19 @@ func ValidateTransition(old, new Liveness) error {
 	if new.CommissionStatus.Commissioned() && !old.CommissionStatus.Decommissioning() {
 		err := errors.Newf("can only recommission a decommissioning node; n%d found to be %s",
 			new.NodeID, old.CommissionStatus.String())
-		return errors.Wrapf(err, ErrIllegalCommissionStatusTransition.Error())
+		return errors.Wrap(err, ErrIllegalCommissionStatusTransition.Error())
 	}
 	if new.CommissionStatus.Decommissioning() && !old.CommissionStatus.Commissioned() {
 		// NB: This code-path is actually inaccessible, given the no-op
 		// conditions above. We keep it for clarity.
 		err := errors.Newf("can only decommission a commissioned node, found %s",
 			old.CommissionStatus.String())
-		return errors.Wrapf(err, ErrIllegalCommissionStatusTransition.Error())
+		return errors.Wrap(err, ErrIllegalCommissionStatusTransition.Error())
 	}
 	if new.CommissionStatus.Decommissioned() && !old.CommissionStatus.Decommissioning() {
 		err := errors.Newf("can only fully decommission a decommissioning node, found %s",
 			old.CommissionStatus.String())
-		return errors.Wrapf(err, ErrIllegalCommissionStatusTransition.Error())
+		return errors.Wrap(err, ErrIllegalCommissionStatusTransition.Error())
 	}
 
 	return nil

@@ -767,6 +767,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	//
 	// This is done to verify that node status works when a new node is started
 	// with an address belonging to an old decommissioned node.
+	t.l.Printf("wiping fifth node and adding it back to the cluster as a new node\n")
 	{
 		c.Wipe(ctx, c.Node(5))
 		c.Start(ctx, t, c.Node(5), startArgs(fmt.Sprintf("-a=--join %s",
@@ -788,6 +789,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		t.Fatal(err)
 	}
 
+	t.l.Printf("verifying events posted to system.eventlog\n")
 	if err := retry.ForDuration(time.Minute, func() error {
 		// Verify the event log has recorded exactly one decommissioned or
 		// recommissioned event for each commissioning operation.
@@ -846,6 +848,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	//
 	// Specify wait=none because the command would block forever (the replicas have
 	// nowhere to go).
+	t.l.Printf("verifying it's not possible to decommission into unavailability\n")
 	if _, err := commission(ctx, 6, c.All(), "decommission", "--wait=none"); err != nil {
 		t.Fatalf("decommission failed: %v", err)
 	}
@@ -871,8 +874,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 				`decommissioning`,
 				`decommissioning`,
 				`decommissioning`,
+				`commissioned`,
 			},
-			9, numCols)
+			10, numCols)
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
@@ -887,6 +891,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 
 	// Recommission all nodes.
+	t.l.Printf("verifying cancellation of cluster wide decommissioning process\n")
 	if _, err := commission(ctx, 6, c.Range(6, 9), "recommission"); err != nil {
 		t.Fatalf("recommission failed: %v", err)
 	}
@@ -915,15 +920,16 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 				`decommissioned`,
 				`decommissioned`,
 				`decommissioned`,
+				`decommissioned`,
 				`commissioned`,
 				`commissioned`,
 				`commissioned`,
 				`commissioned`,
 			},
-			9, numCols)
+			10, numCols)
+
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
 	}
-
 }
