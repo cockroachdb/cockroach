@@ -771,6 +771,10 @@ type ExecutorTestingKnobs struct {
 	// OnTempObjectsCleanupDone will trigger when the temporary objects cleanup
 	// job is done.
 	OnTempObjectsCleanupDone func()
+
+	// BeforePlan is run before the statement is planned and executed in
+	// execStmtInOpenState.
+	BeforePlan func(span opentracing.Span, stmt string)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

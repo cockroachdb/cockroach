@@ -1,0 +1,48 @@
+# The goal of these tests are to find cases where the number of round trips
+# for a given DDL statement increases significantly. These tests allow us
+# correlate changes in round trips to a given commit.
+#
+# NOTE: If the count increase is expected or insignificant, update the test
+# counts. The rewrite option can be used to overwrite all the counts.
+
+exec
+CREATE USER TEST
+----
+
+exec
+CREATE TABLE t0()
+----
+
+count
+GRANT ALL ON * TO TEST
+----
+10
+
+
+exec
+CREATE TABLE t1();
+CREATE TABLE t2();
+CREATE TABLE t3();
+CREATE TABLE t4();
+CREATE TABLE t5();
+CREATE TABLE t6();
+CREATE TABLE t7();
+CREATE TABLE t8();
+CREATE TABLE t9();
+CREATE TABLE t10();
+----
+
+count
+GRANT ALL ON * TO TEST
+----
+160
+
+count
+CREATE ROLE roleb
+----
+6
+
+count
+CREATE ROLE rolea
+----
+6
