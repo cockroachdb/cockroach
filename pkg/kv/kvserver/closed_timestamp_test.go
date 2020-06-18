@@ -182,8 +182,6 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50091")
-
 	ctx := context.Background()
 	tc, _, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
 	defer tc.Stopper().Stop(ctx)
@@ -524,6 +522,26 @@ func pickRandomTarget(
 	}
 }
 
+// aggressiveResolvedTimestampPushKnobs returns store testing knobs short
+// rangefeed push age and interval.
+func aggressiveResolvedTimestampPushKnobs() *kvserver.StoreTestingKnobs {
+	if !util.RaceEnabled {
+		return &kvserver.StoreTestingKnobs{
+			RangeFeedPushTxnsInterval: 10 * time.Millisecond,
+			RangeFeedPushTxnsAge:      20 * time.Millisecond,
+		}
+	} else {
+		// Under race (particularly on an overloaded machine) it's easy to get
+		// transactions to retry continuously with these settings too low because,
+		// by the time a transaction finishes a refresh, it gets pushed again (and
+		// thus forced to refresh again).
+		return &kvserver.StoreTestingKnobs{
+			RangeFeedPushTxnsInterval: 500 * time.Millisecond,
+			RangeFeedPushTxnsAge:      time.Second,
+		}
+	}
+}
+
 // This function creates a test cluster that is prepared to exercise follower
 // reads. The returned test cluster has follower reads enabled using the above
 // targetDuration and closeFraction. In addition to the newly minted test
@@ -539,29 +557,27 @@ func setupTestClusterForClosedTimestampTesting(
 	kvTableDesc roachpb.RangeDescriptor,
 	repls []*kvserver.Replica,
 ) {
-	if util.RaceEnabled {
-		// These tests run into infinite txn restarts under heavy load. See:
-		t.Skip("https://github.com/cockroachdb/cockroach/issues/50091")
-	}
-
 	tc = serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					RangeFeedPushTxnsInterval: 10 * time.Millisecond,
-					RangeFeedPushTxnsAge:      20 * time.Millisecond,
-				},
+				Store: aggressiveResolvedTimestampPushKnobs(),
 			},
 		},
 	})
 	db0 = tc.ServerConn(0)
 
 	if _, err := db0.Exec(fmt.Sprintf(`
+-- Set a timeout to get nicer test failures from these statements. Because of
+-- the aggressiveResolvedTimestampPushKnobs() these statements can restart
+-- forever under high load (testrace under high concurrency).
+SET statement_timeout='30s';
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.close_fraction = %.3f;
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 CREATE DATABASE cttest;
 CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
+-- Reset the timeout set above.
+RESET statement_timeout;
 `, targetDuration, closeFraction)); err != nil {
 		t.Fatal(err)
 	}
