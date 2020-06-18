@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/redact"
@@ -447,6 +448,26 @@ func (sc StoreCapacity) FractionUsed() float64 {
 		return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
 	}
 	return float64(sc.Used) / float64(sc.Available+sc.Used)
+}
+
+// AddressForLocality returns the network address that nodes in the specified
+// locality should use when connecting to the node described by the descriptor.
+func (n *NodeDescriptor) AddressForLocality(loc Locality) *util.UnresolvedAddr {
+	// If the provided locality has any tiers that are an exact exact match (key
+	// and value) with a tier in the node descriptor's custom LocalityAddress
+	// list, return the corresponding address. Otherwise, return the default
+	// address.
+	//
+	// O(n^2), but we expect very few locality tiers in practice.
+	for i := range n.LocalityAddress {
+		nLoc := &n.LocalityAddress[i]
+		for _, loc := range loc.Tiers {
+			if loc == nLoc.LocalityTier {
+				return &nLoc.Address
+			}
+		}
+	}
+	return &n.Address
 }
 
 // String returns a string representation of the Tier.

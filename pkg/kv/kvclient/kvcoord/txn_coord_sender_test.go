@@ -221,19 +221,17 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 		return resp, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	ds := NewDistSender(
-		DistSenderConfig{
-			AmbientCtx: ambient,
-			Clock:      s.Clock,
-			RPCContext: s.Cfg.RPCContext,
-			TestingKnobs: ClientTestingKnobs{
-				TransportFactory: adaptSimpleTransport(sendFn),
-			},
-			RangeDescriptorDB: descDB,
-			Settings:          cluster.MakeTestingClusterSettings(),
+	ds := NewDistSender(DistSenderConfig{
+		AmbientCtx: ambient,
+		Clock:      s.Clock,
+		NodeDescs:  s.Gossip,
+		RPCContext: s.Cfg.RPCContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(sendFn),
 		},
-		s.Gossip,
-	)
+		RangeDescriptorDB: descDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	})
 	tsf := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
