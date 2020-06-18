@@ -11,6 +11,8 @@
 package sqlsmith
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -18,12 +20,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func typeFromName(name string) *types.T {
+func (s *Smither) typeFromName(name string) (*types.T, error) {
 	typRef, err := parser.ParseType(name)
 	if err != nil {
-		panic(errors.AssertionFailedf("failed to parse type: %v", name))
+		return nil, errors.AssertionFailedf("failed to parse type: %v", name)
 	}
-	return tree.MustBeStaticallyKnownType(typRef)
+	typ, err := tree.ResolveType(context.Background(), typRef, s)
+	if err != nil {
+		return nil, err
+	}
+	return typ, nil
 }
 
 // pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
@@ -41,11 +47,11 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 }
 
 func (s *Smither) randScalarType() *types.T {
-	return sqlbase.RandScalarType(s.rnd)
+	return sqlbase.RandTypeFromSlice(s.rnd, s.types.scalarTypes)
 }
 
 func (s *Smither) randType() *types.T {
-	return sqlbase.RandType(s.rnd)
+	return sqlbase.RandTypeFromSlice(s.rnd, s.types.seedTypes)
 }
 
 func (s *Smither) makeDesiredTypes() []*types.T {
@@ -57,4 +63,29 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 		}
 	}
 	return typs
+}
+
+type typeInfo struct {
+	udts        map[string]*types.T
+	seedTypes   []*types.T
+	scalarTypes []*types.T
+}
+
+// ResolveType implements the tree.TypeReferenceResolver interface.
+func (s *Smither) ResolveType(
+	_ context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	if name.NumParts > 1 {
+		return nil, errors.AssertionFailedf("smither cannot resolve qualified names %s", name)
+	}
+	res, ok := s.types.udts[name.Object()]
+	if !ok {
+		return nil, errors.Newf("type name %s not found by smither", name.Object())
+	}
+	return res, nil
+}
+
+// ResolveTypeByID implements the tree.TypeReferenceResolver interface.
+func (s *Smither) ResolveTypeByID(context.Context, uint32) (*types.T, error) {
+	return nil, errors.AssertionFailedf("smither cannot resolve types by ID")
 }

@@ -629,10 +629,10 @@ SET experimental_enable_enums=true;
 CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 
-query ITTITT
+query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements
 ----
-52  test  public  61  enum1  CREATE TYPE test.public.enum1 AS ENUM ('hello', 'hi')
-52  test  public  63  enum2  CREATE TYPE test.public.enum2 AS ENUM ()
+52  test  public  61  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi') {hello,hi}
+52  test  public  63  enum2  CREATE TYPE public.enum2 AS ENUM ()              {}
 
 # Test the virtual index as well.
