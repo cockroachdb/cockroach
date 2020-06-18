@@ -157,13 +157,15 @@ func distChangefeedFlow(
 
 	var p sql.PhysicalPlan
 	p.AddNoInputStage(
-		nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{},
+		nodes, cores, execinfrapb.PostProcessSpec{}, []*types.T{},
+		execinfrapb.Ordering{}, gatewayNodeID,
 	)
 	p.AddSingleGroupStage(
 		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
 		execinfrapb.PostProcessSpec{},
 		changefeedResultTypes,
+		gatewayNodeID,
 	)
 
 	p.PlanToStreamColMap = []int{1, 2, 3}

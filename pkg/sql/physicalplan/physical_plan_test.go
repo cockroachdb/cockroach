@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -205,6 +206,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]*types.T{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
+					roachpb.NodeID(0),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -229,6 +231,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]*types.T{strToType("B"), strToType("D"), strToType("C")},
+					roachpb.NodeID(0),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -260,6 +263,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					fakeExprContext{},
 					[]int{0, 1, 2},
 					[]*types.T{strToType("X")},
+					roachpb.NodeID(0),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -294,6 +298,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
 					[]*types.T{strToType("X"), strToType("A")},
+					roachpb.NodeID(0),
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -314,6 +319,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
 			},
 			ResultRouters: []ProcessorIdx{0, 1},
+			Distribution:  LocalPlan,
 		}
 
 		if tc.ordering != "" {

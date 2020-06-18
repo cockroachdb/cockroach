@@ -41,7 +41,7 @@ func PlanAndRunCTAS(
 		return
 	}
 	physPlan.AddNoGroupingStage(
-		out, execinfrapb.PostProcessSpec{}, rowexec.CTASPlanResultTypes, execinfrapb.Ordering{},
+		out, execinfrapb.PostProcessSpec{}, rowexec.CTASPlanResultTypes, execinfrapb.Ordering{}, dsp.nodeDesc.NodeID,
 	)
 
 	// The bulk row writers will emit a binary encoded BulkOpSummary.
