@@ -175,6 +175,14 @@ func registerBinOpOutputTypes() {
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
 	}
 
+	for _, binOp := range []tree.BinaryOperator{tree.LShift, tree.RShift} {
+		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
+		populateBinOpIntOutputTypeOnIntArgs(binOp)
+		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
+		}
+	}
+
 	binOpOutputTypes[tree.JSONFetchVal] = map[typePair]*types.T{
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BytesFamily, anyWidth}: types.Any,
 	}
@@ -456,6 +464,17 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{{.Target}} = {{.Left}} %s {{.Right}}
 			}
 		`, op.overloadBase.OpStr)))
+
+		case tree.LShift, tree.RShift:
+			t = template.Must(template.New("").Parse(fmt.Sprintf(`
+			{
+				if {{.Right}} < 0 || {{.Right}} >= 64 {
+					telemetry.Inc(sqltelemetry.Large%sArgumentCounter)
+					colexecerror.ExpectedError(tree.ErrShiftArgOutOfRange)
+				}
+				{{.Target}} = {{.Left}} {{.Op}} {{.Right}}
+			}
+			`, execgen.BinaryOpName[binOp])))
 
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.OpStr))
