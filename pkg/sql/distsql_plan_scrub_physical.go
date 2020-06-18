@@ -11,8 +11,8 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,9 +40,8 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 		return PhysicalPlan{}, err
 	}
 
-	var p PhysicalPlan
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
+	nodes := make([]roachpb.NodeID, len(spanPartitions))
+	cores := make([]execinfrapb.ProcessorCoreUnion, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		tr := &execinfrapb.TableReaderSpec{}
 		*tr = *spec
@@ -51,21 +50,12 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 			tr.Spans[j].Span = sp.Spans[j]
 		}
 
-		proc := physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+		nodes[i] = sp.Node
+		cores[i].TableReader = tr
 	}
 
-	// Set the plan's result types to be ScrubTypes.
-	p.ResultTypes = rowexec.ScrubTypes
+	var p PhysicalPlan
+	p.AddNoInputStage(nodes, cores, execinfrapb.PostProcessSpec{}, rowexec.ScrubTypes, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(rowexec.ScrubTypes)))
 
 	dsp.FinalizePlan(planCtx, &p)
