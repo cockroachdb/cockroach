@@ -61,90 +61,75 @@ sort
       │    │    ├── immutable
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:3!null in_sc_id:5!null co_id:6!null co_in_id:9!null s_symb:15!null s_co_id:20!null tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null b_id:37!null b_name:39!null
-      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       │    │    │    ├── fd: ()-->(1,2,5), (6)-->(9), (15)-->(20), (37)-->(39), (39)-->(37), (36)==(37), (37)==(36), (15)==(33), (33)==(15), (6)==(20), (20)==(6), (3)==(9), (9)==(3), (1)==(5), (5)==(1)
-      │    │    │    ├── inner-join (hash)
-      │    │    │    │    ├── columns: in_id:3!null in_sc_id:5!null co_id:6!null co_in_id:9!null s_symb:15!null s_co_id:20!null tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null b_id:37!null b_name:39!null
-      │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      │    │    │    │    ├── fd: (3)-->(5), (6)-->(9), (15)-->(20), (37)-->(39), (39)-->(37), (36)==(37), (37)==(36), (15)==(33), (33)==(15), (6)==(20), (20)==(6), (3)==(9), (9)==(3)
-      │    │    │    │    ├── scan industry@industry_auto_index_fk_in_sc_id_ref_sector
-      │    │    │    │    │    ├── columns: in_id:3!null in_sc_id:5!null
-      │    │    │    │    │    ├── key: (3)
-      │    │    │    │    │    └── fd: (3)-->(5)
-      │    │    │    │    ├── inner-join (hash)
-      │    │    │    │    │    ├── columns: co_id:6!null co_in_id:9!null s_symb:15!null s_co_id:20!null tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null b_id:37!null b_name:39!null
-      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      │    │    │    │    │    ├── fd: (6)-->(9), (15)-->(20), (37)-->(39), (39)-->(37), (36)==(37), (37)==(36), (15)==(33), (33)==(15), (6)==(20), (20)==(6)
-      │    │    │    │    │    ├── scan company@company_auto_index_fk_co_in_id_ref_industry
-      │    │    │    │    │    │    ├── columns: co_id:6!null co_in_id:9!null
+      │    │    │    ├── scan broker@secondary
+      │    │    │    │    ├── columns: b_id:37!null b_name:39!null
+      │    │    │    │    ├── constraint: /39
+      │    │    │    │    │    ├── [/'Broker1' - /'Broker1']
+      │    │    │    │    │    ├── [/'Broker10' - /'Broker10']
+      │    │    │    │    │    ├── [/'Broker11' - /'Broker11']
+      │    │    │    │    │    ├── [/'Broker12' - /'Broker12']
+      │    │    │    │    │    ├── [/'Broker13' - /'Broker13']
+      │    │    │    │    │    ├── [/'Broker14' - /'Broker14']
+      │    │    │    │    │    ├── [/'Broker15' - /'Broker15']
+      │    │    │    │    │    ├── [/'Broker16' - /'Broker16']
+      │    │    │    │    │    ├── [/'Broker17' - /'Broker17']
+      │    │    │    │    │    ├── [/'Broker18' - /'Broker18']
+      │    │    │    │    │    ├── [/'Broker19' - /'Broker19']
+      │    │    │    │    │    ├── [/'Broker2' - /'Broker2']
+      │    │    │    │    │    ├── [/'Broker20' - /'Broker20']
+      │    │    │    │    │    ├── [/'Broker21' - /'Broker21']
+      │    │    │    │    │    ├── [/'Broker22' - /'Broker22']
+      │    │    │    │    │    ├── [/'Broker23' - /'Broker23']
+      │    │    │    │    │    ├── [/'Broker24' - /'Broker24']
+      │    │    │    │    │    ├── [/'Broker25' - /'Broker25']
+      │    │    │    │    │    ├── [/'Broker26' - /'Broker26']
+      │    │    │    │    │    ├── [/'Broker27' - /'Broker27']
+      │    │    │    │    │    ├── [/'Broker28' - /'Broker28']
+      │    │    │    │    │    ├── [/'Broker29' - /'Broker29']
+      │    │    │    │    │    ├── [/'Broker3' - /'Broker3']
+      │    │    │    │    │    ├── [/'Broker30' - /'Broker30']
+      │    │    │    │    │    ├── [/'Broker4' - /'Broker4']
+      │    │    │    │    │    ├── [/'Broker5' - /'Broker5']
+      │    │    │    │    │    ├── [/'Broker6' - /'Broker6']
+      │    │    │    │    │    ├── [/'Broker7' - /'Broker7']
+      │    │    │    │    │    ├── [/'Broker8' - /'Broker8']
+      │    │    │    │    │    └── [/'Broker9' - /'Broker9']
+      │    │    │    │    ├── cardinality: [0 - 30]
+      │    │    │    │    ├── key: (37)
+      │    │    │    │    └── fd: (37)-->(39), (39)-->(37)
+      │    │    │    ├── inner-join (lookup trade_request@secondary)
+      │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:3!null in_sc_id:5!null co_id:6!null co_in_id:9!null s_symb:15!null s_co_id:20!null tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null
+      │    │    │    │    ├── key columns: [15] = [33]
+      │    │    │    │    ├── fd: ()-->(1,2,5), (6)-->(9), (15)-->(20), (15)==(33), (33)==(15), (6)==(20), (20)==(6), (3)==(9), (9)==(3), (1)==(5), (5)==(1)
+      │    │    │    │    ├── inner-join (lookup security@secondary)
+      │    │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:3!null in_sc_id:5!null co_id:6!null co_in_id:9!null s_symb:15!null s_co_id:20!null
+      │    │    │    │    │    ├── key columns: [6] = [20]
+      │    │    │    │    │    ├── key: (15)
+      │    │    │    │    │    ├── fd: ()-->(1,2,5), (6)-->(9), (15)-->(20), (6)==(20), (20)==(6), (3)==(9), (9)==(3), (1)==(5), (5)==(1)
+      │    │    │    │    │    ├── inner-join (lookup company@company_auto_index_fk_co_in_id_ref_industry)
+      │    │    │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:3!null in_sc_id:5!null co_id:6!null co_in_id:9!null
+      │    │    │    │    │    │    ├── key columns: [3] = [9]
       │    │    │    │    │    │    ├── key: (6)
-      │    │    │    │    │    │    └── fd: (6)-->(9)
-      │    │    │    │    │    ├── inner-join (hash)
-      │    │    │    │    │    │    ├── columns: s_symb:15!null s_co_id:20!null tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null b_id:37!null b_name:39!null
-      │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      │    │    │    │    │    │    ├── fd: (15)-->(20), (37)-->(39), (39)-->(37), (36)==(37), (37)==(36), (15)==(33), (33)==(15)
-      │    │    │    │    │    │    ├── scan security@secondary
-      │    │    │    │    │    │    │    ├── columns: s_symb:15!null s_co_id:20!null
-      │    │    │    │    │    │    │    ├── key: (15)
-      │    │    │    │    │    │    │    └── fd: (15)-->(20)
-      │    │    │    │    │    │    ├── inner-join (hash)
-      │    │    │    │    │    │    │    ├── columns: tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null b_id:37!null b_name:39!null
-      │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    │    │    │    │    │    ├── fd: (37)-->(39), (39)-->(37), (36)==(37), (37)==(36)
-      │    │    │    │    │    │    │    ├── scan trade_request@secondary
-      │    │    │    │    │    │    │    │    └── columns: tr_s_symb:33!null tr_qty:34!null tr_bid_price:35!null tr_b_id:36!null
-      │    │    │    │    │    │    │    ├── scan broker@secondary
-      │    │    │    │    │    │    │    │    ├── columns: b_id:37!null b_name:39!null
-      │    │    │    │    │    │    │    │    ├── constraint: /39
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker1' - /'Broker1']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker10' - /'Broker10']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker11' - /'Broker11']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker12' - /'Broker12']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker13' - /'Broker13']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker14' - /'Broker14']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker15' - /'Broker15']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker16' - /'Broker16']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker17' - /'Broker17']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker18' - /'Broker18']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker19' - /'Broker19']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker2' - /'Broker2']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker20' - /'Broker20']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker21' - /'Broker21']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker22' - /'Broker22']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker23' - /'Broker23']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker24' - /'Broker24']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker25' - /'Broker25']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker26' - /'Broker26']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker27' - /'Broker27']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker28' - /'Broker28']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker29' - /'Broker29']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker3' - /'Broker3']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker30' - /'Broker30']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker4' - /'Broker4']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker5' - /'Broker5']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker6' - /'Broker6']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker7' - /'Broker7']
-      │    │    │    │    │    │    │    │    │    ├── [/'Broker8' - /'Broker8']
-      │    │    │    │    │    │    │    │    │    └── [/'Broker9' - /'Broker9']
-      │    │    │    │    │    │    │    │    ├── cardinality: [0 - 30]
-      │    │    │    │    │    │    │    │    ├── key: (37)
-      │    │    │    │    │    │    │    │    └── fd: (37)-->(39), (39)-->(37)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── tr_b_id:36 = b_id:37 [outer=(36,37), constraints=(/36: (/NULL - ]; /37: (/NULL - ]), fd=(36)==(37), (37)==(36)]
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── s_symb:15 = tr_s_symb:33 [outer=(15,33), constraints=(/15: (/NULL - ]; /33: (/NULL - ]), fd=(15)==(33), (33)==(15)]
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── co_id:6 = s_co_id:20 [outer=(6,20), constraints=(/6: (/NULL - ]; /20: (/NULL - ]), fd=(6)==(20), (20)==(6)]
-      │    │    │    │    └── filters
-      │    │    │    │         └── in_id:3 = co_in_id:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
-      │    │    │    ├── scan sector@secondary
-      │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null
-      │    │    │    │    ├── constraint: /2: [/'Energy' - /'Energy']
-      │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    ├── key: ()
-      │    │    │    │    └── fd: ()-->(1,2)
+      │    │    │    │    │    │    ├── fd: ()-->(1,2,5), (6)-->(9), (3)==(9), (9)==(3), (1)==(5), (5)==(1)
+      │    │    │    │    │    │    ├── inner-join (lookup industry@industry_auto_index_fk_in_sc_id_ref_sector)
+      │    │    │    │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null in_id:3!null in_sc_id:5!null
+      │    │    │    │    │    │    │    ├── key columns: [1] = [5]
+      │    │    │    │    │    │    │    ├── key: (3)
+      │    │    │    │    │    │    │    ├── fd: ()-->(1,2,5), (1)==(5), (5)==(1)
+      │    │    │    │    │    │    │    ├── scan sector@secondary
+      │    │    │    │    │    │    │    │    ├── columns: sc_id:1!null sc_name:2!null
+      │    │    │    │    │    │    │    │    ├── constraint: /2: [/'Energy' - /'Energy']
+      │    │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    │    │    └── fd: ()-->(1,2)
+      │    │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    └── filters (true)
+      │    │    │    │    └── filters (true)
       │    │    │    └── filters
-      │    │    │         └── sc_id:1 = in_sc_id:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    │    │         └── tr_b_id:36 = b_id:37 [outer=(36,37), constraints=(/36: (/NULL - ]; /37: (/NULL - ]), fd=(36)==(37), (37)==(36)]
       │    │    └── projections
       │    │         └── tr_qty:34::INT8 * tr_bid_price:35::DECIMAL [as=column42:42, outer=(34,35), immutable]
       │    └── aggregations
@@ -337,14 +322,14 @@ project
       │    ├── sort
       │    │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:16!null th_dts:17!null th_st_id:18!null
       │    │    ├── key: (16,18)
-      │    │    ├── fd: ()-->(9), (16,18)-->(17), (1)-->(2,6,7), (1)==(16), (16)==(1)
+      │    │    ├── fd: ()-->(9), (1)-->(2,6,7), (16,18)-->(17), (1)==(16), (16)==(1)
       │    │    ├── ordering: -17 opt(9) [actual: -17]
       │    │    ├── limit hint: 100.00
       │    │    └── inner-join (lookup trade_history)
       │    │         ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null th_t_id:16!null th_dts:17!null th_st_id:18!null
       │    │         ├── key columns: [1] = [16]
       │    │         ├── key: (16,18)
-      │    │         ├── fd: ()-->(9), (16,18)-->(17), (1)-->(2,6,7), (1)==(16), (16)==(1)
+      │    │         ├── fd: ()-->(9), (1)-->(2,6,7), (16,18)-->(17), (1)==(16), (16)==(1)
       │    │         ├── scan trade@secondary
       │    │         │    ├── columns: t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null
       │    │         │    ├── constraint: /9/-2/1: [/0 - /0]
@@ -769,70 +754,60 @@ project
  ├── immutable
  ├── key: ()
  ├── fd: ()-->(4,7-9,12,14,17-19,21,22,24,25,27-30,32,33,35-39,42-45,47-53)
- ├── inner-join (hash)
+ ├── inner-join (lookup zip_code)
  │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30 zca.zc_code:31!null zca.zc_town:32!null zca.zc_div:33!null ex_id:34!null ex_name:35!null ex_num_symb:36!null ex_open:37!null ex_close:38!null ex_desc:39 ex_ad_id:40!null ea.ad_id:41!null ea.ad_line1:42 ea.ad_line2:43 ea.ad_zc_code:44!null ea.ad_ctry:45 zea.zc_code:46!null zea.zc_town:47!null zea.zc_div:48!null
+ │    ├── key columns: [44] = [46]
+ │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(exactly-one)
  │    ├── key: ()
  │    ├── fd: ()-->(1,4-19,21-48)
- │    ├── inner-join (hash)
- │    │    ├── columns: ex_id:34!null ex_name:35!null ex_num_symb:36!null ex_open:37!null ex_close:38!null ex_desc:39 ex_ad_id:40!null ea.ad_id:41!null ea.ad_line1:42 ea.ad_line2:43 ea.ad_zc_code:44!null ea.ad_ctry:45 zea.zc_code:46!null zea.zc_town:47!null zea.zc_div:48!null
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    ├── key: (34)
- │    │    ├── fd: (34)-->(35-40), (41)-->(42-45), (46)-->(47,48), (44)==(46), (46)==(44), (40)==(41), (41)==(40)
- │    │    ├── scan exchange
- │    │    │    ├── columns: ex_id:34!null ex_name:35!null ex_num_symb:36!null ex_open:37!null ex_close:38!null ex_desc:39 ex_ad_id:40!null
- │    │    │    ├── key: (34)
- │    │    │    └── fd: (34)-->(35-40)
- │    │    ├── inner-join (hash)
- │    │    │    ├── columns: ea.ad_id:41!null ea.ad_line1:42 ea.ad_line2:43 ea.ad_zc_code:44!null ea.ad_ctry:45 zea.zc_code:46!null zea.zc_town:47!null zea.zc_div:48!null
- │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    │    ├── key: (41)
- │    │    │    ├── fd: (41)-->(42-45), (46)-->(47,48), (44)==(46), (46)==(44)
- │    │    │    ├── scan ea
- │    │    │    │    ├── columns: ea.ad_id:41!null ea.ad_line1:42 ea.ad_line2:43 ea.ad_zc_code:44!null ea.ad_ctry:45
- │    │    │    │    ├── key: (41)
- │    │    │    │    └── fd: (41)-->(42-45)
- │    │    │    ├── scan zea
- │    │    │    │    ├── columns: zea.zc_code:46!null zea.zc_town:47!null zea.zc_div:48!null
- │    │    │    │    ├── key: (46)
- │    │    │    │    └── fd: (46)-->(47,48)
- │    │    │    └── filters
- │    │    │         └── ea.ad_zc_code:44 = zea.zc_code:46 [outer=(44,46), constraints=(/44: (/NULL - ]; /46: (/NULL - ]), fd=(44)==(46), (46)==(44)]
- │    │    └── filters
- │    │         └── ea.ad_id:41 = ex_ad_id:40 [outer=(40,41), constraints=(/40: (/NULL - ]; /41: (/NULL - ]), fd=(40)==(41), (41)==(40)]
- │    ├── inner-join (lookup zip_code)
- │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30 zca.zc_code:31!null zca.zc_town:32!null zca.zc_div:33!null
- │    │    ├── key columns: [29] = [31]
+ │    ├── inner-join (lookup address)
+ │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30 zca.zc_code:31!null zca.zc_town:32!null zca.zc_div:33!null ex_id:34!null ex_name:35!null ex_num_symb:36!null ex_open:37!null ex_close:38!null ex_desc:39 ex_ad_id:40!null ea.ad_id:41!null ea.ad_line1:42 ea.ad_line2:43 ea.ad_zc_code:44!null ea.ad_ctry:45
+ │    │    ├── key columns: [40] = [41]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,4-19,21-33)
- │    │    ├── inner-join (lookup address)
- │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30
- │    │    │    ├── key columns: [23] = [26]
+ │    │    ├── fd: ()-->(1,4-19,21-45)
+ │    │    ├── inner-join (lookup exchange)
+ │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30 zca.zc_code:31!null zca.zc_town:32!null zca.zc_div:33!null ex_id:34!null ex_name:35!null ex_num_symb:36!null ex_open:37!null ex_close:38!null ex_desc:39 ex_ad_id:40!null
+ │    │    │    ├── key columns: [5] = [34]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,4-19,21-30)
- │    │    │    ├── inner-join (lookup company)
- │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null
- │    │    │    │    ├── key columns: [6] = [17]
+ │    │    │    ├── fd: ()-->(1,4-19,21-40)
+ │    │    │    ├── inner-join (lookup zip_code)
+ │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30 zca.zc_code:31!null zca.zc_town:32!null zca.zc_div:33!null
+ │    │    │    │    ├── key columns: [29] = [31]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,4-19,21-25)
- │    │    │    │    ├── scan security
- │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null
- │    │    │    │    │    ├── constraint: /1: [/'SYMB' - /'SYMB']
+ │    │    │    │    ├── fd: ()-->(1,4-19,21-33)
+ │    │    │    │    ├── inner-join (lookup address)
+ │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null ca.ad_id:26!null ca.ad_line1:27 ca.ad_line2:28 ca.ad_zc_code:29!null ca.ad_ctry:30
+ │    │    │    │    │    ├── key columns: [23] = [26]
+ │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(1,4-16)
+ │    │    │    │    │    ├── fd: ()-->(1,4-19,21-30)
+ │    │    │    │    │    ├── inner-join (lookup company)
+ │    │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:17!null co_st_id:18!null co_name:19!null co_sp_rate:21!null co_ceo:22!null co_ad_id:23!null co_desc:24!null co_open_date:25!null
+ │    │    │    │    │    │    ├── key columns: [6] = [17]
+ │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    ├── fd: ()-->(1,4-19,21-25)
+ │    │    │    │    │    │    ├── scan security
+ │    │    │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null
+ │    │    │    │    │    │    │    ├── constraint: /1: [/'SYMB' - /'SYMB']
+ │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    │    └── fd: ()-->(1,4-16)
+ │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    └── filters (true)
  │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
  │    │    └── filters (true)
- │    └── filters
- │         └── ex_id:34 = s_ex_id:5 [outer=(5,34), constraints=(/5: (/NULL - ]; /34: (/NULL - ]), fd=(5)==(34), (34)==(5)]
+ │    └── filters (true)
  └── projections
       ├── security.s_pe:10::FLOAT8 [as=s_pe:49, outer=(10), immutable]
       ├── security.s_52wk_high:11::FLOAT8 [as=s_52wk_high:50, outer=(11), immutable]
@@ -3128,66 +3103,58 @@ opt
 ORDER BY t_dts DESC
    LIMIT 50
 ----
-sort
+project
  ├── columns: t_id:1!null t_dts:2!null st_name:17!null tt_name:19!null t_s_symb:6!null t_qty:7!null t_exec_name:10!null t_chrg:45!null s_name:25!null ex_name:39!null
  ├── cardinality: [0 - 50]
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,6,7,10,17,19,25,39,45), (6)-->(25,39)
  ├── ordering: -2
- └── project
-      ├── columns: t_chrg:45!null t_id:1!null t_dts:2!null t_s_symb:6!null t_qty:7!null t_exec_name:10!null st_name:17!null tt_name:19!null s_name:25!null ex_name:39!null
-      ├── cardinality: [0 - 50]
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,6,7,10,17,19,25,39,45), (6)-->(25,39)
-      ├── inner-join (hash)
-      │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null tt_id:18!null tt_name:19!null s_symb:22!null s_name:25!null s_ex_id:26!null ex_id:38!null ex_name:39!null
-      │    ├── cardinality: [0 - 50]
-      │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      │    ├── key: (1)
-      │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (16)-->(17), (3)==(16), (16)==(3), (18)-->(19), (4)==(18), (18)==(4), (22)-->(25,26), (38)-->(39), (26)==(38), (38)==(26), (6)==(22), (22)==(6)
-      │    ├── inner-join (hash)
-      │    │    ├── columns: s_symb:22!null s_name:25!null s_ex_id:26!null ex_id:38!null ex_name:39!null
-      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-      │    │    ├── key: (22)
-      │    │    ├── fd: (22)-->(25,26), (38)-->(39), (26)==(38), (38)==(26)
-      │    │    ├── scan security@secondary
-      │    │    │    ├── columns: s_symb:22!null s_name:25!null s_ex_id:26!null
-      │    │    │    ├── key: (22)
-      │    │    │    └── fd: (22)-->(25,26)
-      │    │    ├── scan exchange
-      │    │    │    ├── columns: ex_id:38!null ex_name:39!null
-      │    │    │    ├── key: (38)
-      │    │    │    └── fd: (38)-->(39)
-      │    │    └── filters
-      │    │         └── ex_id:38 = s_ex_id:26 [outer=(26,38), constraints=(/26: (/NULL - ]; /38: (/NULL - ]), fd=(26)==(38), (38)==(26)]
-      │    ├── inner-join (lookup trade_type)
-      │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null tt_id:18!null tt_name:19!null
-      │    │    ├── key columns: [4] = [18]
-      │    │    ├── lookup columns are key
-      │    │    ├── cardinality: [0 - 50]
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (16)-->(17), (3)==(16), (16)==(3), (18)-->(19), (4)==(18), (18)==(4)
-      │    │    ├── inner-join (lookup status_type)
-      │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null
-      │    │    │    ├── key columns: [3] = [16]
-      │    │    │    ├── lookup columns are key
-      │    │    │    ├── cardinality: [0 - 50]
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (16)-->(17), (3)==(16), (16)==(3)
-      │    │    │    ├── scan trade@secondary
-      │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null
-      │    │    │    │    ├── constraint: /9/-2/1: [/0 - /0]
-      │    │    │    │    ├── limit: 50
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: ()-->(9), (1)-->(2-4,6,7,10,12)
-      │    │    │    └── filters (true)
-      │    │    └── filters (true)
-      │    └── filters
-      │         └── s_symb:22 = t_s_symb:6 [outer=(6,22), constraints=(/6: (/NULL - ]; /22: (/NULL - ]), fd=(6)==(22), (22)==(6)]
-      └── projections
-           └── trade.t_chrg:12::FLOAT8 [as=t_chrg:45, outer=(12), immutable]
+ ├── inner-join (lookup exchange)
+ │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null tt_id:18!null tt_name:19!null s_symb:22!null s_name:25!null s_ex_id:26!null ex_id:38!null ex_name:39!null
+ │    ├── key columns: [26] = [38]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 50]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (16)-->(17), (3)==(16), (16)==(3), (18)-->(19), (4)==(18), (18)==(4), (22)-->(25,26), (38)-->(39), (26)==(38), (38)==(26), (6)==(22), (22)==(6)
+ │    ├── ordering: -2 opt(9) [actual: -2]
+ │    ├── inner-join (lookup security)
+ │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null tt_id:18!null tt_name:19!null s_symb:22!null s_name:25!null s_ex_id:26!null
+ │    │    ├── key columns: [6] = [22]
+ │    │    ├── lookup columns are key
+ │    │    ├── cardinality: [0 - 50]
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(9), (16)-->(17), (18)-->(19), (1)-->(2-4,6,7,10,12), (22)-->(25,26), (6)==(22), (22)==(6), (4)==(18), (18)==(4), (3)==(16), (16)==(3)
+ │    │    ├── ordering: -2 opt(9) [actual: -2]
+ │    │    ├── inner-join (lookup trade_type)
+ │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null tt_id:18!null tt_name:19!null
+ │    │    │    ├── key columns: [4] = [18]
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── cardinality: [0 - 50]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (16)-->(17), (3)==(16), (16)==(3), (18)-->(19), (4)==(18), (18)==(4)
+ │    │    │    ├── ordering: -2 opt(9) [actual: -2]
+ │    │    │    ├── inner-join (lookup status_type)
+ │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null st_id:16!null st_name:17!null
+ │    │    │    │    ├── key columns: [3] = [16]
+ │    │    │    │    ├── lookup columns are key
+ │    │    │    │    ├── cardinality: [0 - 50]
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (16)-->(17), (3)==(16), (16)==(3)
+ │    │    │    │    ├── ordering: -2 opt(9) [actual: -2]
+ │    │    │    │    ├── scan trade@secondary
+ │    │    │    │    │    ├── columns: t_id:1!null t_dts:2!null t_st_id:3!null t_tt_id:4!null t_s_symb:6!null t_qty:7!null t_ca_id:9!null t_exec_name:10!null trade.t_chrg:12!null
+ │    │    │    │    │    ├── constraint: /9/-2/1: [/0 - /0]
+ │    │    │    │    │    ├── limit: 50
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12)
+ │    │    │    │    │    └── ordering: -2 opt(9) [actual: -2]
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters (true)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── projections
+      └── trade.t_chrg:12::FLOAT8 [as=t_chrg:45, outer=(12), immutable]
 
 # Q1 Version 2
 #
