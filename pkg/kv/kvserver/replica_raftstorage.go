@@ -704,7 +704,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // Otherwise, the range-id local keys, range local keys, and user keys are all
 // deleted. If mustClearRange is true, ClearRange will always be used to remove
 // the keys. Otherwise, ClearRangeWithHeuristic will be used, which chooses
-// ClearRange or ClearIterRange depending on how many keys there are in the
+// ClearRange or ClearIterMVCCRangeAndIntents depending on how many keys there are in the
 // range.
 func clearRangeData(
 	desc *roachpb.RangeDescriptor,
@@ -722,7 +722,7 @@ func clearRangeData(
 	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
 		clearRangeFn = func(reader storage.Reader, writer storage.Writer, start, end roachpb.Key) error {
-			return writer.ClearRange(storage.MakeMVCCMetadataKey(start), storage.MakeMVCCMetadataKey(end))
+			return writer.ClearNonMVCCRange(start, end)
 		}
 	} else {
 		clearRangeFn = storage.ClearRangeWithHeuristic
@@ -836,7 +836,7 @@ func (r *Replica) applySnapshot(
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
 	unreplicatedStart := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey)
 	unreplicatedEnd := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
-	if err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd); err != nil {
+	if err = unreplicatedSST.ClearNonMVCCRange(unreplicatedStart.Key, unreplicatedEnd.Key); err != nil {
 		return errors.Wrapf(err, "error clearing range of unreplicated SST writer")
 	}
 
@@ -1022,14 +1022,16 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
-	getKeyRanges := func(desc *roachpb.RangeDescriptor) [2]rditer.KeyRange {
-		return [...]rditer.KeyRange{
-			rditer.MakeRangeLocalKeyRange(desc),
-			rditer.MakeUserKeyRange(desc),
-		}
+	getKeyRanges := func(desc *roachpb.RangeDescriptor) []rditer.KeyRange {
+		ranges := make([]rditer.KeyRange, 0, 4)
+		ranges = append(ranges, rditer.MakeRangeLocalKeyRange(desc))
+		ltKeys := rditer.MakeRangeLockTableKeyRanges(desc)
+		ranges = append(ranges, ltKeys[:]...)
+		ranges = append(ranges, rditer.MakeUserKeyRange(desc))
+		return ranges
 	}
 	keyRanges := getKeyRanges(desc)
-	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges[:]...)
+	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges...)
 	for _, sr := range subsumedRepls {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}

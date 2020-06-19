@@ -76,11 +76,11 @@ func (sc *AbortSpan) max() roachpb.Key {
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *AbortSpan) ClearData(e storage.Engine) error {
-	iter := e.NewIterator(storage.IterOptions{UpperBound: sc.max()})
+	iter := e.NewIterator(storage.IterOptions{UpperBound: sc.max()}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
 	defer b.Close()
-	err := b.ClearIterRange(iter, sc.min(), sc.max())
+	err := b.ClearIterMVCCRangeAndIntents(iter, sc.min(), sc.max())
 	if err != nil {
 		return err
 	}

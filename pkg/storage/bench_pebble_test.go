@@ -289,7 +289,7 @@ func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
 
 // DeleteRange benchmarks below (using on-disk data).
 //
-// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterRange}_Pebble
+// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterMVCCRangeAndIntents}_Pebble
 // give nonsensical results (DeleteRange is absurdly slow and ClearRange
 // reports a processing speed of 481 million MB/s!). We need to take a look at
 // what these benchmarks are trying to measure, and fix them.
@@ -315,9 +315,9 @@ func BenchmarkClearRange_Pebble(b *testing.B) {
 func BenchmarkClearIterRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 		defer iter.Close()
-		return batch.ClearIterRange(iter, start.Key, end.Key)
+		return batch.ClearIterMVCCRangeAndIntents(iter, start.Key, end.Key)
 	})
 }
 

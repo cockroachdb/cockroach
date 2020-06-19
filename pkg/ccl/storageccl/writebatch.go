@@ -83,7 +83,7 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.Iterate(start, end, func(_ storage.MVCCKeyValue) (bool, error) {
+		if err := batch.Iterate(start, end, true, func(_ storage.MVCCKeyValue) (bool, error) {
 			isEmpty = false
 			return true, nil // stop right away
 		}); err != nil {
@@ -95,7 +95,7 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(storage.IterOptions{UpperBound: end})
+	iter := batch.NewIterator(storage.IterOptions{UpperBound: end}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	iter.SeekGE(storage.MakeMVCCMetadataKey(start))
@@ -112,14 +112,14 @@ func clearExistingData(
 
 	log.Eventf(ctx, "target key range not empty, will clear existing data: %+v", existingStats)
 	// If this is a Iterator, we have to unwrap it because
-	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
+	// ClearIterMVCCRangeAndIntents needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
 	if ssi, ok := iter.(*spanset.Iterator); ok {
 		iter = ssi.Iterator()
 	}
-	// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't
+	// TODO(dan): Ideally, this would use `batch.ClearMVCCRangeAndIntents` but it doesn't
 	// yet work with read-write batches (or IngestExternalData).
-	if err := batch.ClearIterRange(iter, start, end); err != nil {
+	if err := batch.ClearIterMVCCRangeAndIntents(iter, start, end); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return existingStats, nil

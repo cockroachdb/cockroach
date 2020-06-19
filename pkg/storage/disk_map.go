@@ -121,7 +121,7 @@ func (r *rocksDBMap) NewIterator() diskmap.SortedDiskMapIterator {
 	return &rocksDBMapIterator{
 		iter: r.store.NewIterator(IterOptions{
 			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
-		}),
+		}, MVCCKeyAndIntentsIterKind),
 		makeKey: r.makeKey,
 		prefix:  r.prefix,
 	}
@@ -148,9 +148,9 @@ func (r *rocksDBMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDis
 
 // Clear implements the SortedDiskMap interface.
 func (r *rocksDBMap) Clear() error {
-	if err := r.store.ClearRange(
-		MVCCKey{Key: r.prefix},
-		MVCCKey{Key: roachpb.Key(r.prefix).PrefixEnd()},
+	if err := r.store.ClearNonMVCCRange(
+		r.prefix,
+		roachpb.Key(r.prefix).PrefixEnd(),
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear range with prefix %v", r.prefix)
 	}

@@ -64,9 +64,6 @@ import (
 // Since there is no delete across all sstables that deletes k@t#n1, there is
 // no delete in the subset of sstables used by timeBoundIter that deletes
 // k@t#n1, so the timeBoundIter will see k@t.
-//
-// NOTE: This is not used by CockroachDB and has been preserved to serve as an
-// oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
 	iter Iterator
 
@@ -107,6 +104,19 @@ type MVCCIncrementalIterOptions struct {
 // TODO(pbardea): Add validation here and in C++ implementation that the
 //  timestamp hints are not more restrictive than incremental iterator's
 //  (startTime, endTime] interval.
+//
+// TODO: update the following incomplete comment.
+// The construction is happening while holding read latches at timestamp
+// t_e for the interval (t_s, t_e]. So no concurrent writes (including intent
+// resolution can occur at <= t_e). Intent resolution without holding
+// latches can be allowed in the future. Say the iterators are constructed as
+// - lockIter at t1
+// - valueIter at t2
+// - timeBoundIter at t3
+// k@t exists at t3. Say it is recently committed:
+// - valueIter sees k@t
+// - lockIter has an intent referring to k@t' where t' <= t. If there is
+//   any intent <= t_e in the lockIter we will report an error.
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
@@ -117,10 +127,10 @@ func NewMVCCIncrementalIterator(
 		// iterator visits every required version of every key that has changed.
 		iter = reader.NewIterator(IterOptions{
 			UpperBound: opts.IterOptions.UpperBound,
-		})
-		timeBoundIter = reader.NewIterator(opts.IterOptions)
+		}, MVCCKeyAndIntentsIterKind)
+		timeBoundIter = reader.NewIterator(opts.IterOptions, MVCCKeyIterKind)
 	} else {
-		iter = reader.NewIterator(opts.IterOptions)
+		iter = reader.NewIterator(opts.IterOptions, MVCCKeyAndIntentsIterKind)
 	}
 
 	return &MVCCIncrementalIterator{
@@ -353,7 +363,7 @@ func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() MVCCKey {
+func (i *MVCCIncrementalIterator) MVCCKey() MVCCKey {
 	return i.iter.Key()
 }
 
@@ -366,6 +376,10 @@ func (i *MVCCIncrementalIterator) Value() []byte {
 // next call to {Next,Reset,Close}.
 func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 	return i.iter.UnsafeKey()
+}
+
+func (i *MVCCIncrementalIterator) UnsafeStorageKey() StorageKey {
+	return i.iter.UnsafeStorageKey()
 }
 
 // UnsafeValue returns the same value as Value, but the memory is invalidated on

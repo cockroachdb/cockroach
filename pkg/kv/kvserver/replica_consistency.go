@@ -575,7 +575,7 @@ func (r *Replica) sha512(
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
-	iter := snap.NewIterator(storage.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
+	iter := snap.NewIterator(storage.IterOptions{UpperBound: desc.EndKey.AsRawKey()}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator

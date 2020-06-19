@@ -36,9 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
+
+// IGNORE ANY CHANGES TO THIS FILE: it will be deleted soon because of
+// RocksDB removal.
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
 
@@ -197,6 +201,50 @@ type RocksDB struct {
 		syncutil.Mutex
 		m map[*rocksDBIterator][]byte
 	}
+}
+
+func (r *RocksDB) ClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) ClearMVCCMeta(
+	key roachpb.Key, state PrecedingIntentState, precedingPossiblyUpdated bool, txnUUID uuid.UUID,
+) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) SingleClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) ClearNonMVCCRange(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) ClearMVCCRange(start, end MVCCKey) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) ClearIterMVCCRangeAndIntents(iter Iterator, start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) PutKeyWithEmptyTimestamp(key roachpb.Key, value []byte) error {
+	panic("implement me")
+}
+
+func (r *RocksDB) PutMVCCMeta(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	precedingPossiblyUpdated bool,
+	txnUUID uuid.UUID,
+) error {
+	panic("implement me")
 }
 
 var _ Engine = &RocksDB{}
@@ -511,6 +559,10 @@ func (r *RocksDB) Put(key MVCCKey, value []byte) error {
 	return dbPut(r.rdb, key, value)
 }
 
+func (r *RocksDB) PutStorage(key StorageKey, value []byte) error {
+	panic("unimplemented")
+}
+
 // Merge implements the RocksDB merge operator using the function goMergeInit
 // to initialize missing values and goMerge to merge the old and the given
 // value into a new value, which is then stored under key.
@@ -563,11 +615,19 @@ func (r *RocksDB) Clear(key MVCCKey) error {
 	return dbClear(r.rdb, key)
 }
 
+func (r *RocksDB) ClearStorageKey(key StorageKey) error {
+	return errors.AssertionFailedf("unimplemented")
+}
+
 // SingleClear removes the most recent item from the db with the given key.
 //
 // It is safe to modify the contents of the arguments after SingleClear returns.
 func (r *RocksDB) SingleClear(key MVCCKey) error {
 	return dbSingleClear(r.rdb, key)
+}
+
+func (r *RocksDB) SingleClearStorage(key StorageKey) error {
+	return errors.AssertionFailedf("unimplemented")
 }
 
 // ClearRange removes a set of entries, from start (inclusive) to end
@@ -578,10 +638,14 @@ func (r *RocksDB) ClearRange(start, end MVCCKey) error {
 	return dbClearRange(r.rdb, start, end)
 }
 
-// ClearIterRange removes a set of entries, from start (inclusive) to end
+func (r *RocksDB) ClearRangeStorage(start, end StorageKey) error {
+	return errors.AssertionFailedf("unimplemented")
+}
+
+// ClearIterMVCCRangeAndIntents removes a set of entries, from start (inclusive) to end
 // (exclusive).
 //
-// It is safe to modify the contents of the arguments after ClearIterRange
+// It is safe to modify the contents of the arguments after ClearIterMVCCRangeAndIntents
 // returns.
 func (r *RocksDB) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	return dbClearIterRange(r.rdb, iter, start, end)
@@ -589,8 +653,10 @@ func (r *RocksDB) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
-	return iterateOnReader(r, start, end, f)
+func (r *RocksDB) Iterate(
+	start, end roachpb.Key, seeIntents bool, f func(MVCCKeyValue) (stop bool, err error),
+) error {
+	return iterateOnReader(r, start, end, MVCCKeyAndIntentsIterKind, f)
 }
 
 // Capacity queries the underlying file system for disk capacity information.
@@ -628,7 +694,7 @@ func (r *RocksDB) Flush() error {
 }
 
 // NewIterator returns an iterator over this rocksdb engine.
-func (r *RocksDB) NewIterator(opts IterOptions) Iterator {
+func (r *RocksDB) NewIterator(opts IterOptions, iterKind IterKind) Iterator {
 	return newRocksDBIterator(r.rdb, opts, r, r)
 }
 
@@ -663,6 +729,54 @@ type rocksDBReadOnly struct {
 	normalIter reusableIterator
 	isClosed   bool
 }
+
+func (r *rocksDBReadOnly) ClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) ClearMVCCMeta(
+	key roachpb.Key, state PrecedingIntentState, precedingPossiblyUpdated bool, txnUUID uuid.UUID,
+) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) SingleClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) ClearNonMVCCRange(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) ClearMVCCRange(start, end MVCCKey) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) ClearIterMVCCRangeAndIntents(
+	iter Iterator, start, end roachpb.Key,
+) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) PutKeyWithEmptyTimestamp(key roachpb.Key, value []byte) error {
+	panic("implement me")
+}
+
+func (r *rocksDBReadOnly) PutMVCCMeta(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	precedingPossiblyUpdated bool,
+	txnUUID uuid.UUID,
+) error {
+	panic("implement me")
+}
+
+var _ ReadWriter = &rocksDBReadOnly{}
 
 func (r *rocksDBReadOnly) Close() {
 	if r.isClosed {
@@ -710,19 +824,19 @@ func (r *rocksDBReadOnly) GetProto(
 }
 
 func (r *rocksDBReadOnly) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
+	start, end roachpb.Key, seeIntents bool, f func(MVCCKeyValue) (stop bool, err error),
 ) error {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
-	return iterateOnReader(r, start, end, f)
+	return iterateOnReader(r, start, end, MVCCKeyAndIntentsIterKind, f)
 }
 
 // NewIterator returns an iterator over the underlying engine. Note
 // that the returned iterator is cached and re-used for the lifetime of the
 // rocksDBReadOnly. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same rocksDBReadOnly.
-func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
+func (r *rocksDBReadOnly) NewIterator(opts IterOptions, iterKind IterKind) Iterator {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
@@ -758,11 +872,23 @@ func (r *rocksDBReadOnly) Clear(key MVCCKey) error {
 	panic("not implemented")
 }
 
+func (r *rocksDBReadOnly) ClearStorageKey(key StorageKey) error {
+	panic("not implemented")
+}
+
 func (r *rocksDBReadOnly) SingleClear(key MVCCKey) error {
 	panic("not implemented")
 }
 
+func (r *rocksDBReadOnly) SingleClearStorage(key StorageKey) error {
+	panic("not implemented")
+}
+
 func (r *rocksDBReadOnly) ClearRange(start, end MVCCKey) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) ClearRangeStorage(start, end StorageKey) error {
 	panic("not implemented")
 }
 
@@ -775,6 +901,10 @@ func (r *rocksDBReadOnly) Merge(key MVCCKey, value []byte) error {
 }
 
 func (r *rocksDBReadOnly) Put(key MVCCKey, value []byte) error {
+	panic("not implemented")
+}
+
+func (r *rocksDBReadOnly) PutStorage(key StorageKey, value []byte) error {
 	panic("not implemented")
 }
 
@@ -1039,14 +1169,14 @@ func (r *rocksDBSnapshot) GetProto(
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
 func (r *rocksDBSnapshot) Iterate(
-	start, end roachpb.Key, f func(MVCCKeyValue) (bool, error),
+	start, end roachpb.Key, seeIntents bool, f func(MVCCKeyValue) (stop bool, err error),
 ) error {
-	return iterateOnReader(r, start, end, f)
+	return iterateOnReader(r, start, end, MVCCKeyAndIntentsIterKind, f)
 }
 
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
-func (r *rocksDBSnapshot) NewIterator(opts IterOptions) Iterator {
+func (r *rocksDBSnapshot) NewIterator(opts IterOptions, iterKind IterKind) Iterator {
 	return newRocksDBIterator(r.handle, opts, r, r.parent)
 }
 
@@ -1083,7 +1213,7 @@ func (r *distinctBatch) Close() {
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
-func (r *distinctBatch) NewIterator(opts IterOptions) Iterator {
+func (r *distinctBatch) NewIterator(opts IterOptions, iterKind IterKind) Iterator {
 	if opts.MinTimestampHint != (hlc.Timestamp{}) {
 		// Iterators that specify timestamp bounds cannot be cached.
 		if r.writeOnly {
@@ -1133,14 +1263,20 @@ func (r *distinctBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *distinctBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+func (r *distinctBatch) Iterate(
+	start, end roachpb.Key, seeIntents bool, f func(MVCCKeyValue) (stop bool, err error),
+) error {
 	r.ensureBatch()
-	return iterateOnReader(r, start, end, f)
+	return iterateOnReader(r, start, end, MVCCKeyAndIntentsIterKind, f)
 }
 
 func (r *distinctBatch) Put(key MVCCKey, value []byte) error {
 	r.builder.Put(key, value)
 	return nil
+}
+
+func (r *distinctBatch) PutStorage(key StorageKey, value []byte) error {
+	panic("unimplemented")
 }
 
 func (r *distinctBatch) Merge(key MVCCKey, value []byte) error {
@@ -1158,9 +1294,17 @@ func (r *distinctBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
+func (r *distinctBatch) ClearStorageKey(key StorageKey) error {
+	panic("unimplemented")
+}
+
 func (r *distinctBatch) SingleClear(key MVCCKey) error {
 	r.builder.SingleClear(key)
 	return nil
+}
+
+func (r *distinctBatch) SingleClearStorage(key StorageKey) error {
+	panic("unimplemented")
 }
 
 func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
@@ -1171,6 +1315,10 @@ func (r *distinctBatch) ClearRange(start, end MVCCKey) error {
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	r.ensureBatch()
 	return dbClearRange(r.batch, start, end)
+}
+
+func (r *distinctBatch) ClearRangeStorage(start, end StorageKey) error {
+	panic("unimplemented")
 }
 
 func (r *distinctBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
@@ -1206,6 +1354,12 @@ type batchIterator struct {
 	batch *rocksDBBatch
 }
 
+func (r *batchIterator) IsCurMetaSeparated() bool {
+	panic("implement me")
+}
+
+var _ Iterator = &batchIterator{}
+
 func (r *batchIterator) SupportsPrev() bool {
 	return false
 }
@@ -1227,9 +1381,17 @@ func (r *batchIterator) SeekGE(key MVCCKey) {
 	r.iter.SeekGE(key)
 }
 
+func (r *batchIterator) SeekStorageGE(key StorageKey) {
+	panic("unimplemented")
+}
+
 func (r *batchIterator) SeekLT(key MVCCKey) {
 	r.batch.flushMutations()
 	r.iter.SeekLT(key)
+}
+
+func (r *batchIterator) SeekStorageLT(key StorageKey) {
+	panic("unimplemented")
 }
 
 func (r *batchIterator) Valid() (bool, error) {
@@ -1291,6 +1453,10 @@ func (r *batchIterator) Key() MVCCKey {
 	return r.iter.Key()
 }
 
+func (r *batchIterator) StorageKey() StorageKey {
+	panic("unimplemented")
+}
+
 func (r *batchIterator) Value() []byte {
 	return r.iter.Value()
 }
@@ -1303,8 +1469,12 @@ func (r *batchIterator) UnsafeKey() MVCCKey {
 	return r.iter.UnsafeKey()
 }
 
-func (r *batchIterator) UnsafeRawKey() []byte {
-	return r.iter.UnsafeRawKey()
+func (r *batchIterator) UnsafeStorageKey() StorageKey {
+	panic("unimplemented")
+}
+
+func (r *batchIterator) UnsafeRawKeyDangerous() []byte {
+	return r.iter.UnsafeRawKeyDangerous()
 }
 
 func (r *batchIterator) UnsafeValue() []byte {
@@ -1357,11 +1527,57 @@ type rocksDBBatch struct {
 	commitWG           sync.WaitGroup
 }
 
+func (r *rocksDBBatch) ClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) ClearMVCCMeta(
+	key roachpb.Key, state PrecedingIntentState, precedingPossiblyUpdated bool, txnUUID uuid.UUID,
+) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) SingleClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) ClearNonMVCCRange(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) ClearMVCCRange(start, end MVCCKey) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) ClearIterMVCCRangeAndIntents(iter Iterator, start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) PutKeyWithEmptyTimestamp(key roachpb.Key, value []byte) error {
+	panic("implement me")
+}
+
+func (r *rocksDBBatch) PutMVCCMeta(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	precedingPossiblyUpdated bool,
+	txnUUID uuid.UUID,
+) error {
+	panic("implement me")
+}
+
 var batchPool = sync.Pool{
 	New: func() interface{} {
 		return &rocksDBBatch{}
 	},
 }
+
+var _ Batch = &rocksDBBatch{}
 
 func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
 	// Get a new batch from the pool. Batches in the pool may have their closed
@@ -1450,6 +1666,10 @@ func (r *rocksDBBatch) Put(key MVCCKey, value []byte) error {
 	return nil
 }
 
+func (r *rocksDBBatch) PutStorage(key StorageKey, value []byte) error {
+	panic("unimplemented")
+}
+
 func (r *rocksDBBatch) Merge(key MVCCKey, value []byte) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
@@ -1504,7 +1724,9 @@ func (r *rocksDBBatch) GetProto(
 	return dbGetProto(r.batch, key, msg)
 }
 
-func (r *rocksDBBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (bool, error)) error {
+func (r *rocksDBBatch) Iterate(
+	start, end roachpb.Key, seeIntents bool, f func(MVCCKeyValue) (stop bool, err error),
+) error {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
@@ -1513,7 +1735,7 @@ func (r *rocksDBBatch) Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (boo
 	}
 	r.flushMutations()
 	r.ensureBatch()
-	return iterateOnReader(r, start, end, f)
+	return iterateOnReader(r, start, end, MVCCKeyAndIntentsIterKind, f)
 }
 
 func (r *rocksDBBatch) Clear(key MVCCKey) error {
@@ -1525,6 +1747,10 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 	return nil
 }
 
+func (r *rocksDBBatch) ClearStorageKey(key StorageKey) error {
+	panic("unimplemented")
+}
+
 func (r *rocksDBBatch) SingleClear(key MVCCKey) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
@@ -1532,6 +1758,10 @@ func (r *rocksDBBatch) SingleClear(key MVCCKey) error {
 	r.distinctNeedsFlush = true
 	r.builder.SingleClear(key)
 	return nil
+}
+
+func (r *rocksDBBatch) SingleClearStorage(key StorageKey) error {
+	panic("unimplemented")
 }
 
 func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
@@ -1542,6 +1772,10 @@ func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
 	r.flushes++ // make sure that Repr() doesn't take a shortcut
 	r.ensureBatch()
 	return dbClearRange(r.batch, start, end)
+}
+
+func (r *rocksDBBatch) ClearRangeStorage(start, end StorageKey) error {
+	panic("unimplemented")
 }
 
 func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
@@ -1562,7 +1796,7 @@ func (r *rocksDBBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpD
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
-func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
+func (r *rocksDBBatch) NewIterator(opts IterOptions, iterKind IterKind) Iterator {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
@@ -1864,6 +2098,12 @@ type rocksDBIterator struct {
 	value  C.DBSlice
 }
 
+func (r *rocksDBIterator) IsCurMetaSeparated() bool {
+	panic("implement me")
+}
+
+var _ MVCCIterator = &rocksDBIterator{}
+
 // TODO(peter): Is this pool useful now that rocksDBBatch.NewIterator doesn't
 // allocate by returning internal pointers?
 var iterPool = sync.Pool{
@@ -1973,6 +2213,10 @@ func (r *rocksDBIterator) SeekGE(key MVCCKey) {
 	}
 }
 
+func (r *rocksDBIterator) SeekStorageGE(key StorageKey) {
+	panic("unimplemented")
+}
+
 func (r *rocksDBIterator) SeekLT(key MVCCKey) {
 	r.checkEngineOpen()
 	if len(key.Key) == 0 {
@@ -1985,6 +2229,10 @@ func (r *rocksDBIterator) SeekLT(key MVCCKey) {
 			r.Prev()
 		}
 	}
+}
+
+func (r *rocksDBIterator) SeekStorageLT(key StorageKey) {
+	panic("unimplemented")
 }
 
 func (r *rocksDBIterator) Valid() (bool, error) {
@@ -2020,6 +2268,10 @@ func (r *rocksDBIterator) Key() MVCCKey {
 	return cToGoKey(r.key)
 }
 
+func (r *rocksDBIterator) StorageKey() StorageKey {
+	panic("unimplemented")
+}
+
 func (r *rocksDBIterator) Value() []byte {
 	return cSliceToGoBytes(r.value)
 }
@@ -2035,7 +2287,11 @@ func (r *rocksDBIterator) UnsafeKey() MVCCKey {
 	return cToUnsafeGoKey(r.key)
 }
 
-func (r *rocksDBIterator) UnsafeRawKey() []byte {
+func (r *rocksDBIterator) UnsafeStorageKey() StorageKey {
+	panic("unimplemented")
+}
+
+func (r *rocksDBIterator) UnsafeRawKeyDangerous() []byte {
 	panic("unimplemented; only meant to be used with Pebble")
 }
 
@@ -2365,7 +2621,7 @@ func goToCKey(key MVCCKey) C.DBKey {
 }
 
 func cToGoKey(key C.DBKey) MVCCKey {
-	// When converting a C.DBKey to an MVCCKey, give the underlying slice an
+	// When converting a C.DBKey to an Key, give the underlying slice an
 	// extra byte of capacity in anticipation of roachpb.Key.Next() being
 	// called. The extra byte is trivial extra space, but allows callers to avoid
 	// an allocation and copy when calling roachpb.Key.Next(). Note that it is
@@ -2677,7 +2933,7 @@ func (fr *RocksDBSstFileReader) Iterate(
 	if fr.rocksDB == nil {
 		return errors.New("cannot call Iterate on a closed reader")
 	}
-	return fr.rocksDB.Iterate(start, end, f)
+	return fr.rocksDB.Iterate(start, end, true, f)
 }
 
 // NewIterator returns an iterator over this sst reader.
@@ -2700,6 +2956,52 @@ type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
 	// dataSize tracks the total key and value bytes added so far.
 	dataSize int64
+}
+
+func (fw *RocksDBSstFileWriter) ClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) ClearMVCCMeta(
+	key roachpb.Key, state PrecedingIntentState, precedingPossiblyUpdated bool, txnUUID uuid.UUID,
+) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) SingleClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) ClearNonMVCCRange(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) ClearMVCCRange(start, end MVCCKey) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) ClearIterMVCCRangeAndIntents(
+	iter Iterator, start, end roachpb.Key,
+) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) PutKeyWithEmptyTimestamp(key roachpb.Key, value []byte) error {
+	panic("implement me")
+}
+
+func (fw *RocksDBSstFileWriter) PutMVCCMeta(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	precedingPossiblyUpdated bool,
+	txnUUID uuid.UUID,
+) error {
+	panic("implement me")
 }
 
 var _ Writer = &RocksDBSstFileWriter{}
@@ -2736,6 +3038,10 @@ func (fw *RocksDBSstFileWriter) Clear(key MVCCKey) error {
 	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(key)))
 }
 
+func (fw *RocksDBSstFileWriter) ClearStorageKey(key StorageKey) error {
+	panic("unimplemented")
+}
+
 // DataSize returns the total key and value bytes added so far.
 func (fw *RocksDBSstFileWriter) DataSize() int64 {
 	return fw.dataSize
@@ -2743,6 +3049,10 @@ func (fw *RocksDBSstFileWriter) DataSize() int64 {
 
 // SingleClear implements the Writer interface.
 func (fw *RocksDBSstFileWriter) SingleClear(key MVCCKey) error {
+	panic("unimplemented")
+}
+
+func (fw *RocksDBSstFileWriter) SingleClearStorage(key StorageKey) error {
 	panic("unimplemented")
 }
 
@@ -2757,13 +3067,17 @@ func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
 	return statusToError(C.DBSstFileWriterDeleteRange(fw.fw, goToCKey(start), goToCKey(end)))
 }
 
-// ClearIterRange implements the Writer interface.
+func (fw *RocksDBSstFileWriter) ClearRangeStorage(start, end StorageKey) error {
+	panic("unimplemented")
+}
+
+// ClearIterMVCCRangeAndIntents implements the Writer interface.
 //
 // NOTE: This method is fairly expensive as it performs a Cgo call for every
 // key deleted.
 func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
 	if fw.fw == nil {
-		return errors.New("cannot call ClearIterRange on a closed writer")
+		return errors.New("cannot call ClearIterMVCCRangeAndIntents on a closed writer")
 	}
 	mvccEndKey := MakeMVCCMetadataKey(end)
 	iter.SeekGE(MakeMVCCMetadataKey(start))
@@ -2798,6 +3112,10 @@ func (fw *RocksDBSstFileWriter) Put(key MVCCKey, value []byte) error {
 	}
 	fw.dataSize += int64(len(key.Key)) + int64(len(value))
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(key), goToCSlice(value)))
+}
+
+func (fw *RocksDBSstFileWriter) PutStorage(key StorageKey, value []byte) error {
+	panic("unimplemented")
 }
 
 // LogData implements the Writer interface.

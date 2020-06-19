@@ -510,7 +510,7 @@ func (rsl StateLoader) SetGCThreshold(
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
 	prefix := rsl.RaftLogPrefix()
-	iter := reader.NewIterator(storage.IterOptions{LowerBound: prefix})
+	iter := reader.NewIterator(storage.IterOptions{LowerBound: prefix}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	var lastIndex uint64

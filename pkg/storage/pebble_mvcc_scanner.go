@@ -436,7 +436,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// about to advance. If this proves to be a problem later, we can extend
 			// addAndAdvance to take an MVCCKey explicitly.
 			p.curKey.Timestamp = metaTS
-			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curKey)
+			p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], p.curKey)
 			return p.addAndAdvance(p.keyBuf, value)
 		}
 		// 11. If no value in the intent history has a sequence number equal to
@@ -604,7 +604,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 // the next user key.
 func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool) bool {
 	key := MVCCKey{Key: p.curKey.Key, Timestamp: ts}
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
 	origKey := p.keyBuf[:len(p.curKey.Key)]
 
 	for i := 0; i < p.itersBeforeSeek; i++ {
@@ -646,7 +646,9 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		return false
 	}
 
-	p.curRawKey = p.parent.UnsafeRawKey()
+	// TODO: Change this. This will expose the real lock table key without
+	// transformation.
+	p.curRawKey = p.parent.UnsafeRawKeyDangerous()
 
 	var err error
 	p.curKey, err = DecodeMVCCKey(p.curRawKey)

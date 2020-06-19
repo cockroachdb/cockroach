@@ -15,6 +15,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 )
@@ -27,6 +28,8 @@ type SSTWriter struct {
 	DataSize int64
 	scratch  []byte
 }
+
+var _ Writer = &SSTWriter{}
 
 // writeCloseSyncer interface copied from pebble.sstable.
 type writeCloseSyncer interface {
@@ -71,14 +74,22 @@ func (fw *SSTWriter) Finish() error {
 	return nil
 }
 
-// ClearRange implements the Writer interface.
-func (fw *SSTWriter) ClearRange(start, end MVCCKey) error {
+// ClearMVCCRange implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
 	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], start)
-	return fw.fw.DeleteRange(fw.scratch, EncodeKey(end))
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], start)
+	return fw.fw.DeleteRange(fw.scratch, EncodeMVCCKey(end))
+}
+
+func (fw *SSTWriter) ClearNonMVCCRange(start, end roachpb.Key) error {
+	return fw.ClearMVCCRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+}
+
+func (fw *SSTWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+	panic("not supported")
 }
 
 // Put puts a kv entry into the sstable being built. An error is returned if it
@@ -89,7 +100,30 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Put on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
+	return fw.fw.Set(fw.scratch, value)
+}
+
+func (fw *SSTWriter) PutKeyWithEmptyTimestamp(key roachpb.Key, value []byte) error {
+	return fw.Put(MVCCKey{Key: key}, value)
+}
+
+func (fw *SSTWriter) PutMVCCMeta(
+	key roachpb.Key,
+	value []byte,
+	state PrecedingIntentState,
+	precedingPossiblyUpdated bool,
+	txnUUID uuid.UUID,
+) error {
+	panic("not supported")
+}
+
+func (fw *SSTWriter) PutStorage(key StorageKey, value []byte) error {
+	if fw.fw == nil {
+		return errors.New("cannot call PutStorage on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -103,7 +137,26 @@ func (fw *SSTWriter) Clear(key MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
+	fw.DataSize += int64(len(key.Key))
+	return fw.fw.Delete(fw.scratch)
+}
+
+func (fw *SSTWriter) ClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	return fw.Clear(MVCCKey{Key: key})
+}
+
+func (fw *SSTWriter) ClearMVCCMeta(
+	key roachpb.Key, state PrecedingIntentState, precedingPossiblyUpdated bool, txnUUID uuid.UUID,
+) error {
+	panic("not supported")
+}
+
+func (fw *SSTWriter) ClearStorageKey(key StorageKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Clear on a closed writer")
+	}
+	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
 	fw.DataSize += int64(len(key.Key))
 	return fw.fw.Delete(fw.scratch)
 }
@@ -113,14 +166,22 @@ func (fw *SSTWriter) SingleClear(key MVCCKey) error {
 	panic("unimplemented")
 }
 
-// ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error {
+func (fw *SSTWriter) SingleClearKeyWithEmptyTimestamp(key roachpb.Key) error {
+	panic("unimplemented")
+}
+
+func (fw *SSTWriter) SingleClearStorage(key StorageKey) error {
+	panic("unimplemented")
+}
+
+// ClearIterMVCCRangeAndIntents implements the Writer interface.
+func (fw *SSTWriter) ClearIterMVCCRangeAndIntents(iter Iterator, start, end roachpb.Key) error {
 	if fw.fw == nil {
-		return errors.New("cannot call ClearIterRange on a closed writer")
+		return errors.New("cannot call ClearIterMVCCRangeAndIntents on a closed writer")
 	}
 
 	// Set an upper bound on the iterator. This is okay because all calls to
-	// ClearIterRange are with throwaway iterators, so there should be no new
+	// ClearIterMVCCRangeAndIntents are with throwaway iterators, so there should be no new
 	// side effects.
 	iter.SetUpperBound(end)
 	iter.SeekGE(MakeMVCCMetadataKey(start))
@@ -128,7 +189,7 @@ func (fw *SSTWriter) ClearIterRange(iter Iterator, start, end roachpb.Key) error
 	valid, err := iter.Valid()
 	for valid && err == nil {
 		key := iter.UnsafeKey()
-		fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+		fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 		fw.DataSize += int64(len(key.Key))
 		if err := fw.fw.Delete(fw.scratch); err != nil {
 			return err
@@ -146,7 +207,7 @@ func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Merge on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Merge(fw.scratch, value)
 }
 

@@ -202,7 +202,7 @@ func (k *mvccKey) Set(value string) error {
 		}
 		newK, err := storage.DecodeMVCCKey(b)
 		if err != nil {
-			encoded := gohex.EncodeToString(storage.EncodeKey(storage.MakeMVCCMetadataKey(roachpb.Key(b))))
+			encoded := gohex.EncodeToString(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(roachpb.Key(b))))
 			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
 				"encoded MVCCKey (i.e. with a timestamp component); here's one with a zero timestamp: %s",
 				encoded)
