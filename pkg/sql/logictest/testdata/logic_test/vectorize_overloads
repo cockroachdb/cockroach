@@ -313,14 +313,6 @@ EXPLAIN (VEC) SELECT _int >> 1 FROM many_types
   └ *colexec.projRShiftInt64Int64ConstOp
     └ *colexec.colBatchScan
 
-query T
-EXPLAIN (VEC) SELECT _int << 1 FROM many_types
-----
-│
-└ Node 1
-  └ *colexec.projLShiftInt64Int64ConstOp
-    └ *colexec.colBatchScan
-
 query I rowsort
 SELECT _int2 >> 1 FROM many_types
 ----
