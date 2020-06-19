@@ -191,5 +191,5 @@ func (m *LeaseManager) ReleaseLease(ctx context.Context, l *Lease) error {
 	}
 	defer func() { <-l.val.sem }()
 
-	return m.db.CPut(ctx, l.key, nil, &l.val.leaseRaw)
+	return m.db.CPut(ctx, l.key, nil /* value - delete the lease */, &l.val.leaseRaw)
 }

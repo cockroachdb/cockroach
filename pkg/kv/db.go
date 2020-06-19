@@ -381,7 +381,8 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 // Returns an error if the existing value is not equal to expValue.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc). A nil value
+// means delete the key.
 func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue *roachpb.Value) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
