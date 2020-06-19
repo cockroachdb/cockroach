@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -221,7 +222,6 @@ func (p *planner) truncateTable(
 	}
 
 	for _, table := range tables {
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if err := p.writeSchemaChange(
 			ctx, table, sqlbase.InvalidMutationID, "updating reference for truncated table",
 		); err != nil {
@@ -251,10 +251,10 @@ func (p *planner) truncateTable(
 	// as the commit timestamp for the new descriptor. See the comment on
 	// sqlbase.Descriptor.Table().
 	newTableDesc.ModificationTime = hlc.Timestamp{}
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
 	if err := p.createDescriptorWithID(
 		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings,
-		"creating new descriptor for truncated table",
+		fmt.Sprintf("creating new descriptor %d for truncated table %s with id %d",
+			newID, newTableDesc.Name, id),
 	); err != nil {
 		return err
 	}

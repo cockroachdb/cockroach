@@ -1383,9 +1383,10 @@ func runSchemaChangesInTxn(
 					// Write the other table descriptor here if it's not the current table
 					// we're already modifying.
 					if !selfReference {
-						// TODO (lucy): Have more consistent/informative names for dependent jobs.
 						if err := planner.writeSchemaChange(
-							ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
+							ctx, referencedTableDesc, sqlbase.InvalidMutationID,
+							fmt.Sprintf("updating referenced FK table %s(%d) table %s(%d)",
+								referencedTableDesc.Name, referencedTableDesc.ID, tableDesc.Name, tableDesc.ID),
 						); err != nil {
 							return err
 						}
@@ -1497,7 +1498,11 @@ func runSchemaChangesInTxn(
 							ancestorIdx.InterleavedBy = append(
 								ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
 							foundAncestor = true
-							if err := planner.writeSchemaChange(ctx, ancestor, sqlbase.InvalidMutationID, ""); err != nil {
+							if err := planner.writeSchemaChange(ctx, ancestor, sqlbase.InvalidMutationID,
+								fmt.Sprintf("remove interleaved backreference from table %s(%d) "+
+									"for primary key swap of table %s(%d)",
+									ancestor.Name, ancestor.ID, tableDesc.Name, tableDesc.ID,
+								)); err != nil {
 								return err
 							}
 						}
