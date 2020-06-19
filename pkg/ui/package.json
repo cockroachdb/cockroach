@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "analytics-node": "^3.4.0-beta.1",
-    "antd": "^3.25.2",
+    "antd": "^3.26.17",
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
