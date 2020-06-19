@@ -343,7 +343,7 @@ upsert mno
       ├── columns: upsert_m:11(int) upsert_n:12(int) upsert_o:13(int) m:4(int!null) n:5(int) o:6(int) m:7(int) n:8(int) o:9(int) o_new:10(int!null)
       ├── stats: [rows=2000]
       ├── key: (4,7)
-      ├── fd: ()-->(10), (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7), (4,7)-->(11), (5,7,8)-->(12), (6,7)-->(13)
+      ├── fd: ()-->(10), (4)-->(5,6), (5,6)~~>(4), (7)-->(8,9), (8,9)~~>(7), (4,7)-->(11), (5,7)-->(12), (6,7)-->(13)
       ├── project
       │    ├── columns: o_new:10(int!null) m:4(int!null) n:5(int) o:6(int) m:7(int) n:8(int) o:9(int)
       │    ├── stats: [rows=2000]

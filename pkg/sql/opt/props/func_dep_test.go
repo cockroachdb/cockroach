@@ -454,7 +454,7 @@ func TestFuncDeps_AddConstants(t *testing.T) {
 	abcde.AddConstants(c(2))
 	verifyFD(t, abcde, "key(1); ()-->(2), (1)-->(3-5), (2,3)~~>(1,4,5)")
 	abcde.MakeNotNull(c(2, 3))
-	verifyFD(t, abcde, "key(1); ()-->(2), (1)-->(3-5), (2,3)-->(1,4,5)")
+	verifyFD(t, abcde, "key(1); ()-->(2), (1)-->(3-5), (3)-->(1,4,5)")
 	testColsAreStrictKey(t, abcde, c(3), true)
 
 	// CREATE TABLE wxyz (w INT, x INT, y INT, z INT, PRIMARY KEY(w, x, y, z))
@@ -549,6 +549,12 @@ func TestFuncDeps_AddSynthesizedCol(t *testing.T) {
 	anb1.ProjectCols(c(1, 11, 100))
 	verifyFD(t, &anb1, "key(1,11); (1)-->(100)")
 	testColsAreStrictKey(t, &anb1, c(1, 11, 100), true)
+
+	// Test that we are reducing the "from" columns.
+	fd := &props.FuncDepSet{}
+	fd.AddStrictKey(opt.MakeColSet(1), opt.MakeColSet(1, 2))
+	fd.AddSynthesizedCol(opt.MakeColSet(1, 2), 3)
+	verifyFD(t, fd, "key(1); (1)-->(2,3)")
 }
 
 func TestFuncDeps_ProjectCols(t *testing.T) {
@@ -596,7 +602,7 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	abcde := makeAbcdeFD(t)
 	abcde.AddConstants(c(2))
 	abcde.MakeNotNull(c(2, 3))
-	verifyFD(t, abcde, "key(1); ()-->(2), (1)-->(3-5), (2,3)-->(1,4,5)")
+	verifyFD(t, abcde, "key(1); ()-->(2), (1)-->(3-5), (3)-->(1,4,5)")
 	abcde.ProjectCols(c(1, 3, 4, 5))
 	verifyFD(t, abcde, "key(1); (1)-->(3-5), (3)-->(1,4,5)")
 
@@ -945,9 +951,9 @@ func TestFuncDeps_MakeLeftOuter(t *testing.T) {
 	roj.MakeProduct(makeMnpqFD(t))
 	roj.AddConstants(c(2, 3, 12))
 	roj.MakeNotNull(c(2, 3, 12))
-	verifyFD(t, &roj, "key(10,11); ()-->(2,3,12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(13)")
+	verifyFD(t, &roj, "key(10,11); ()-->(1-5,12), (10,11)-->(13)")
 	roj.MakeLeftOuter(mnpq, &props.FuncDepSet{}, preservedCols, nullExtendedCols, c(1, 2, 3, 10, 11, 12))
-	verifyFD(t, &roj, "key(10,11); ()-->(12), (1)-->(4,5), (2,3)-->(1,4,5), (10,11)-->(1-5,13)")
+	verifyFD(t, &roj, "key(10,11); ()-->(12), (10,11)-->(1-5,13)")
 
 	// Add constants on both sides of outer join. None of the resulting columns
 	// are constant, because rows are added back after filtering on the
