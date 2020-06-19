@@ -29,7 +29,7 @@
     "popper.js": "^1.14.4",
     "raw-loader": "^0.5.1",
     "rc-form": "^2.4.11",
-    "rc-progress": "^2.2.1",
+    "rc-progress": "^2.6.1",
     "react": "^16.12.0",
     "react-copy-to-clipboard": "^5.0.1",
     "react-dom": "^16.12.0",

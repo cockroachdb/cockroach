@@ -10157,11 +10157,12 @@ rc-pagination@~1.20.5:
     prop-types "^15.5.7"
     react-lifecycles-compat "^3.0.4"
 
-rc-progress@^2.2.1:
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/rc-progress/-/rc-progress-2.2.1.tgz#3fdefb16bf94f43c187cdbbdeb9fc5010b367ef9"
+rc-progress@^2.6.1:
+  version "2.6.1"
+  resolved "https://registry.yarnpkg.com/rc-progress/-/rc-progress-2.6.1.tgz#2e0babcb3fa48234267b5e6a3f67f14e53032ba6"
+  integrity sha512-GR+rWDv5b61VkGs7SxDvsaJo6vzTZ4j1Z1sX0C3kG4kPli9nUCXurx5jREJ2SllUKLrhesr914DuvBBtXOSr6g==
   dependencies:
-    babel-runtime "^6.23.0"
+    babel-runtime "6.x"
     prop-types "^15.5.8"
 
 rc-progress@~2.5.0:
