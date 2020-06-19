@@ -160,4 +160,5 @@ export const statementDetailsPropsFixture: StatementDetailsProps = {
   nodesSummary: undefined,
   refreshStatements: (() => {}) as (typeof refreshStatements),
   refreshStatementDiagnosticsRequests: (() => {}) as (typeof refreshStatementDiagnosticsRequests),
+  navigateBack: () => {},
 };
