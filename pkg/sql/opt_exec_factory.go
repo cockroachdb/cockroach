@@ -229,7 +229,7 @@ func (ef *execFactory) ConstructFilter(
 	// Push the filter into the scanNode. We cannot do this if the scanNode has a
 	// limit (it would make the limit apply AFTER the filter).
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
-		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+		s.filter = s.filterVars.Rebind(filter)
 		// Note: if the filter statically evaluates to true, s.filter stays nil.
 		s.reqOrdering = ReqOrdering(reqOrdering)
 		return s, nil
@@ -240,7 +240,7 @@ func (ef *execFactory) ConstructFilter(
 		source: src,
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.columns))
-	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	f.filter = f.ivarHelper.Rebind(filter)
 	if f.filter == nil {
 		// Filter statically evaluates to true. Just return the input plan.
 		return n, nil
@@ -330,8 +330,7 @@ func (ef *execFactory) ConstructRender(
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 	for i, expr := range exprs {
-		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		exprs[i] = expr
+		exprs[i] = rb.r.ivarHelper.Rebind(expr)
 	}
 	rb.setOutput(exprs, columns)
 	return rb.res, nil
@@ -380,9 +379,7 @@ func (ef *execFactory) ConstructHashJoin(
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	pred.onCond = pred.iVarHelper.Rebind(
-		extraOnCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred.onCond = pred.iVarHelper.Rebind(extraOnCond)
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
 }
@@ -400,9 +397,7 @@ func (ef *execFactory) ConstructApplyJoin(
 	if err != nil {
 		return nil, err
 	}
-	pred.onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
 }
 
@@ -422,9 +417,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	if err != nil {
 		return nil, err
 	}
-	pred.onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
@@ -755,9 +748,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	if err != nil {
 		return nil, err
 	}
-	pred.onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	n := &vTableLookupJoinNode{
 		input:             input.(planNode),
 		joinType:          joinType,
