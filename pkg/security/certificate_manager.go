@@ -62,6 +62,31 @@ var (
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
+
+	metaTenantServerCAExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.ca-server-tenant",
+		Help:        "Expiration for the Tenant Server CA certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
+	metaTenantServerExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.server-tenant",
+		Help:        "Expiration for the Tenant Server certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
+	metaTenantClientCAExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.ca-client-tenant",
+		Help:        "Expiration for the Tenant Client CA certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
+	metaTenantClientExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.client-tenant",
+		Help:        "Expiration for the Tenant Client certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 )
 
 // CertificateManager lives for the duration of the process and manages certificates and keys.
@@ -127,12 +152,16 @@ type CertificateManager struct {
 // These are initialized when the certificate manager is created and updated
 // on reload.
 type CertificateMetrics struct {
-	CAExpiration         *metric.Gauge
-	ClientCAExpiration   *metric.Gauge
-	UICAExpiration       *metric.Gauge
-	NodeExpiration       *metric.Gauge
-	NodeClientExpiration *metric.Gauge
-	UIExpiration         *metric.Gauge
+	CAExpiration             *metric.Gauge
+	ClientCAExpiration       *metric.Gauge
+	UICAExpiration           *metric.Gauge
+	NodeExpiration           *metric.Gauge
+	NodeClientExpiration     *metric.Gauge
+	UIExpiration             *metric.Gauge
+	TenantServerCAExpiration *metric.Gauge
+	TenantServerExpiration   *metric.Gauge
+	TenantClientCAExpiration *metric.Gauge
+	TenantClientExpiration   *metric.Gauge
 }
 
 func makeCertificateManager(certsDir string, opts ...func(*cmOptions)) *CertificateManager {
@@ -145,12 +174,16 @@ func makeCertificateManager(certsDir string, opts ...func(*cmOptions)) *Certific
 	return &CertificateManager{
 		cmOptions: o,
 		certMetrics: CertificateMetrics{
-			CAExpiration:         metric.NewGauge(metaCAExpiration),
-			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
-			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
-			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
-			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
-			UIExpiration:         metric.NewGauge(metaUIExpiration),
+			CAExpiration:             metric.NewGauge(metaCAExpiration),
+			ClientCAExpiration:       metric.NewGauge(metaClientCAExpiration),
+			UICAExpiration:           metric.NewGauge(metaUICAExpiration),
+			NodeExpiration:           metric.NewGauge(metaNodeExpiration),
+			NodeClientExpiration:     metric.NewGauge(metaNodeClientExpiration),
+			UIExpiration:             metric.NewGauge(metaUIExpiration),
+			TenantServerCAExpiration: metric.NewGauge(metaTenantServerCAExpiration),
+			TenantServerExpiration:   metric.NewGauge(metaTenantServerExpiration),
+			TenantClientCAExpiration: metric.NewGauge(metaTenantClientCAExpiration),
+			TenantClientExpiration:   metric.NewGauge(metaTenantClientExpiration),
 		},
 	}
 }
