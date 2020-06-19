@@ -283,6 +283,9 @@ var validCasts = []castInfo{
 	{from: types.StringFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
 	{from: types.EnumFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
 	{from: types.BytesFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
+
+	// Casts to TupleFamily.
+	{from: types.UnknownFamily, to: types.TupleFamily, volatility: VolatilityImmutable},
 }
 
 type castsMapKey struct {
