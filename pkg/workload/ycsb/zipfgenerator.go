@@ -17,10 +17,10 @@ package ycsb
 import (
 	"fmt"
 	"math"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/rand"
 )
 
 const (
