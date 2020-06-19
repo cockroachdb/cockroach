@@ -92,6 +92,7 @@ require (
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jaegertracing/jaeger v1.17.0
 	github.com/jcmturner/gofork v1.0.0 // indirect
+	github.com/jordanlewis/gcassert v0.0.0-20200630054945-8ff878e72753
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.2.0
 	github.com/kisielk/gotool v1.0.0
@@ -138,13 +139,14 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.1
 	github.com/twpayne/go-geom v1.3.0
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59
 	golang.org/x/exp v0.0.0-20200513190911-00229845015e
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
+	golang.org/x/mod v0.3.0 // indirect
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
@@ -152,7 +154,7 @@ require (
 	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae
 	golang.org/x/text v0.3.2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20200509030707-2212a7e161a5
+	golang.org/x/tools v0.0.0-20200626171337-aa94e735be7f
 	google.golang.org/api v0.1.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
 	google.golang.org/grpc v1.29.1
