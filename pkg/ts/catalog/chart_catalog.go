@@ -80,6 +80,30 @@ var charts = []sectionDescription{
 				Aggregator:  DescribeAggregator_MAX,
 				Metrics:     []string{"security.certificate.expiration.ui-ca"},
 			},
+			{
+				Title:       "Tenant Server CA Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.ca-server-tenant"},
+			},
+			{
+				Title:       "Tenant Server Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.server-tenant"},
+			},
+			{
+				Title:       "Tenant Client CA Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.ca-client-tenant"},
+			},
+			{
+				Title:       "Tenant Client Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.client-tenant"},
+			},
 		},
 	},
 	{
