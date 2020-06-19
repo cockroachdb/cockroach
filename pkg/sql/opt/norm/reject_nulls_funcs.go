@@ -11,9 +11,12 @@
 package norm
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -21,7 +24,7 @@ import (
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
 func (c *CustomFuncs) RejectNullCols(in memo.RelExpr) opt.ColSet {
-	return DeriveRejectNullCols(in)
+	return DeriveRejectNullCols(c.f.evalCtx, in)
 }
 
 // HasNullRejectingFilter returns true if the filter causes some of the columns
@@ -63,7 +66,7 @@ func (c *CustomFuncs) NullRejectAggVar(
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
-func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
+func DeriveRejectNullCols(evalCtx *tree.EvalContext, in memo.RelExpr) opt.ColSet {
 	// Lazily calculate and store the RejectNullCols value.
 	relProps := in.Relational()
 	if relProps.IsAvailable(props.RejectNullCols) {
@@ -76,17 +79,17 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		// Pass through null-rejecting columns from both inputs.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr)))
 		}
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(1).(memo.RelExpr)))
 		}
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Pass through null-rejection columns from left input, and request null-
 		// rejection on right columns.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr)))
 		}
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(1).(memo.RelExpr).Relational().OutputCols)
 
@@ -95,24 +98,30 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		// rejection on left columns.
 		relProps.Rule.RejectNullCols = in.Child(0).(memo.RelExpr).Relational().OutputCols
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(1).(memo.RelExpr)))
 		}
 
 	case opt.FullJoinOp:
 		// Request null-rejection on all output columns.
-		relProps.Rule.RejectNullCols = relProps.OutputCols
+		relProps.Rule.RejectNullCols.UnionWith(relProps.OutputCols)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		relProps.Rule.RejectNullCols = deriveGroupByRejectNullCols(in)
+		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(evalCtx, in))
 
 	case opt.ProjectOp:
 		// Pass through all null-rejection columns that the Project passes through.
 		// The PushSelectIntoProject rule is able to push the IS NOT NULL filter
 		// below the Project for these columns.
-		rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+		rejectNullCols := DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr))
 		relProps.Rule.RejectNullCols = relProps.OutputCols.Intersection(rejectNullCols)
-	}
 
+	case opt.ScanOp:
+		relProps.Rule.RejectNullCols.UnionWith(relProps.OutputCols)
+	case opt.SelectOp:
+		relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(evalCtx, in.Child(0).(memo.RelExpr)))
+
+	}
+	relProps.Rule.RejectNullCols.DifferenceWith(relProps.NotNullCols)
 	return relProps.Rule.RejectNullCols
 }
 
@@ -133,7 +142,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 //      ignored because all rows in each group must have the same value for this
 //      column, so it doesn't matter which rows are filtered.
 //
-func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
+func deriveGroupByRejectNullCols(evalCtx *tree.EvalContext, in memo.RelExpr) opt.ColSet {
 	input := in.Child(0).(memo.RelExpr)
 	aggs := *in.Child(1).(*memo.AggregationsExpr)
 
@@ -164,7 +173,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 		savedInColID = inColID
 
-		if !DeriveRejectNullCols(input).Contains(inColID) {
+		if !DeriveRejectNullCols(evalCtx, input).Contains(inColID) {
 			// Input has not requested null rejection on the input column.
 			return opt.ColSet{}
 		}
@@ -175,4 +184,147 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		rejectNullCols.Add(aggs[i].Col)
 	}
 	return rejectNullCols
+}
+
+// IsAddingNullRejectionFiltersPossible checks the given join operator to see if it is
+// possible to derive not-null columns by on-condition and populate on condition with
+// null rejection filters that will not change the output result and will be later pushed
+// down by other rules
+func (c *CustomFuncs) IsAddingNullRejectionFiltersPossible(
+	joinOperator opt.Operator, on memo.FiltersExpr, left memo.RelExpr, right memo.RelExpr,
+) bool {
+	// NullRejectCols coming from outer join operator may not reflect null rejection
+	// filters that has been pushed in some situation, such lost of information can lead
+	// lead to an infinite recursion, so we give up the chance to push down null rejection
+	// filters if it is the case
+	leftIsImpossible := false
+	rightIsImpossible := false
+	switch left.Op() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.FullJoinOp:
+		leftIsImpossible = true
+	}
+	switch right.Op() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.FullJoinOp:
+		rightIsImpossible = true
+	}
+
+	nullRejection := c.derivePushableNullRejectionForJoin(joinOperator, on, left, right)
+	leftOutputCols := left.Relational().OutputCols
+	rightOutputCols := right.Relational().OutputCols
+	leftRowCount := left.Relational().Stats.RowCount
+	rightRowCount := right.Relational().Stats.RowCount
+	leftReducedSelectivity := c.estimateReducedSelectivity(left, nullRejection.Intersection(leftOutputCols))
+	rightReducedSelectivity := c.estimateReducedSelectivity(right, nullRejection.Intersection(rightOutputCols))
+
+	switch joinOperator {
+	case opt.InnerJoinOp:
+		if leftIsImpossible || rightIsImpossible || nullRejection.Empty() {
+			return false
+		}
+		// for detail of coefficient, see computeHashJoinCost in coster.go
+		return 0 < leftRowCount*(1.25*leftReducedSelectivity-1)+rightRowCount*(1.75*rightReducedSelectivity-1)
+	case opt.LeftJoinOp:
+		if rightIsImpossible || nullRejection.Empty() {
+			return false
+		}
+		return 0 < rightReducedSelectivity*1.75-1
+	case opt.RightJoinOp:
+		if leftIsImpossible || nullRejection.Empty() {
+			return false
+		}
+		return 0 < leftReducedSelectivity*1.25-1
+	default:
+		return false
+	}
+}
+
+// derivePushableNullRejectionForJoin derive null rejections that can be pushed down to
+// inputs without change output result. It returns columns from input that can be made not-null
+func (c *CustomFuncs) derivePushableNullRejectionForJoin(
+	joinOperator opt.Operator, on memo.FiltersExpr, left memo.RelExpr, right memo.RelExpr,
+) opt.ColSet {
+
+	leftRejectNullCols := c.RejectNullCols(left)
+	rightRejectNullCols := c.RejectNullCols(right)
+	notNullColsInFilters := extractAllImplicitNotNullColsFromFilters(c.f.evalCtx, on)
+	var notNullCols opt.ColSet
+	switch joinOperator {
+	case opt.InnerJoinOp:
+		notNullCols = notNullColsInFilters.Intersection(leftRejectNullCols.Union(rightRejectNullCols))
+	case opt.LeftJoinOp:
+		notNullCols = notNullColsInFilters.Intersection(rightRejectNullCols)
+	case opt.RightJoinOp:
+		notNullCols = notNullColsInFilters.Intersection(leftRejectNullCols)
+	}
+	return notNullCols
+}
+
+// DerivePushableNullRejectionFiltersForJoin derive null rejection filters that can be pushed down to
+// inputs without change output result.
+func (c *CustomFuncs) DerivePushableNullRejectionFiltersForJoin(
+	joinOperator opt.Operator, on memo.FiltersExpr, left memo.RelExpr, right memo.RelExpr,
+) memo.FiltersExpr {
+	return c.nullRejectionFilters(c.derivePushableNullRejectionForJoin(joinOperator, on, left, right))
+}
+
+// nullRejectionFilters use the given columns set to construct null-rejection filters.
+//
+func (c *CustomFuncs) nullRejectionFilters(colToRejectNull opt.ColSet) memo.FiltersExpr {
+	var filters memo.FiltersExpr
+	colToRejectNull.ForEach(func(col opt.ColumnID) {
+		filterItem := c.f.ConstructFiltersItem(
+			c.f.ConstructIsNot(
+				c.f.ConstructVariable(col),
+				c.f.ConstructNull(c.AnyType()),
+			))
+		filters = append(filters, filterItem)
+	})
+	return filters
+}
+
+func (c *CustomFuncs) estimateReducedSelectivity(
+	expr memo.RelExpr, colsToRejectNull opt.ColSet,
+) float64 {
+
+	stats := expr.Relational().Stats
+	if colsToRejectNull.Empty() || stats.RowCount == 0 {
+		return 0
+	}
+
+	// This is just a rough estimation, we only consider possible minimum value
+	// and we also don't take columns already made not null into account, even though
+	// there may be some correlation between them.
+	reducedSelectivity := float64(0)
+	colsToRejectNull.ForEach(func(col opt.ColumnID) {
+		colStat, ok := c.mem.RequestColStat(expr, opt.MakeColSet(col))
+		if !ok {
+			return
+		}
+		nullCount := colStat.NullCount
+		reducedSelectivity = math.Max(reducedSelectivity, nullCount/stats.RowCount)
+	})
+	return reducedSelectivity
+}
+
+// extractAllImplicitNotNullColsFromFilters extract all not null columns implied
+// by null rejection filters contained in given filters expression
+func extractAllImplicitNotNullColsFromFilters(
+	evalCtx *tree.EvalContext, filters memo.FiltersExpr,
+) (notNullCols opt.ColSet) {
+	for i := range filters {
+		filterItem := filters[i]
+		if isNotExpr, ok := filterItem.Condition.(*memo.IsNotExpr); ok {
+			if _, isVariable := isNotExpr.Left.(*memo.VariableExpr); isVariable {
+				if _, isNullExpr := isNotExpr.Right.(*memo.NullExpr); isNullExpr {
+					continue
+				}
+			}
+		}
+		constraints := filterItem.ScalarProps().Constraints
+		if constraints == nil {
+			continue
+		}
+		notNullCols = notNullCols.Union(constraints.ExtractNotNullCols(evalCtx))
+	}
+	return
 }

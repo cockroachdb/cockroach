@@ -764,3 +764,283 @@ select
  │              └── z:5
  └── filters
       └── sum:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+
+# --------------------------------------------------
+# AddNullRejectionForJoin
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE t1(a INT, b INT, c INT)
+----
+
+exec-ddl
+CREATE TABLE t2(x INT, y INT, z INT)
+----
+
+exec-ddl
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2020-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000,
+    "null_count":200000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2020-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000,
+    "null_count":200000
+  }
+]'
+----
+
+norm disable=AddNullRejectionForJoin format=show-all
+SELECT * FROM t1 JOIN t2 ON t1.a = t2.x
+----
+inner-join (hash)
+ ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── stats: [rows=2e-15, distinct(1)=2e-15, null(1)=0, distinct(5)=2e-15, null(5)=0]
+ ├── cost: 434000.05
+ ├── fd: (1)==(5), (5)==(1)
+ ├── prune: (2,3,6,7)
+ ├── reject-nulls: (2,3,6,7)
+ ├── scan t.public.t1
+ │    ├── columns: t.public.t1.a:1(int) t.public.t1.b:2(int) t.public.t1.c:3(int)
+ │    ├── stats: [rows=200000, distinct(1)=200000, null(1)=200000]
+ │    ├── cost: 214000.02
+ │    ├── prune: (1-3)
+ │    ├── reject-nulls: (1-3)
+ │    └── unfiltered-cols: (1-4)
+ ├── scan t.public.t2
+ │    ├── columns: t.public.t2.x:5(int) t.public.t2.y:6(int) t.public.t2.z:7(int)
+ │    ├── stats: [rows=200000, distinct(5)=200000, null(5)=200000]
+ │    ├── cost: 214000.02
+ │    ├── prune: (5-7)
+ │    ├── reject-nulls: (5-7)
+ │    └── unfiltered-cols: (5-8)
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: t.public.t1.a:1 [type=int]
+           └── variable: t.public.t2.x:5 [type=int]
+
+norm format=show-all expect=AddNullRejectionForJoin
+SELECT * FROM t1 JOIN t2 ON t1.a = t2.x AND t1.b > t2.y
+----
+inner-join (hash)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ ├── stats: [rows=1.330668e-10, distinct(1)=1.330668e-10, null(1)=0, distinct(2)=1.330668e-10, null(2)=0, distinct(5)=1.330668e-10, null(5)=0, distinct(6)=1.330668e-10, null(6)=0]
+ ├── cost: 432000.08
+ ├── fd: (1)==(5), (5)==(1)
+ ├── prune: (3,7)
+ ├── reject-nulls: (3,7)
+ ├── select
+ │    ├── columns: t.public.t1.a:1(int!null) t.public.t1.b:2(int!null) t.public.t1.c:3(int)
+ │    ├── stats: [rows=1.998e-05, distinct(1)=1.998e-05, null(1)=0, distinct(2)=1.998e-05, null(2)=0, distinct(1,2)=1.998e-05, null(1,2)=0]
+ │    ├── cost: 216000.03
+ │    ├── prune: (3)
+ │    ├── reject-nulls: (3)
+ │    ├── scan t.public.t1
+ │    │    ├── columns: t.public.t1.a:1(int) t.public.t1.b:2(int) t.public.t1.c:3(int)
+ │    │    ├── stats: [rows=200000, distinct(1)=200000, null(1)=200000, distinct(2)=20000, null(2)=2000, distinct(1,2)=200000, null(1,2)=2000]
+ │    │    ├── cost: 214000.02
+ │    │    ├── prune: (1-3)
+ │    │    └── reject-nulls: (1-3)
+ │    └── filters
+ │         ├── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ │         │    ├── variable: t.public.t1.a:1 [type=int]
+ │         │    └── null
+ │         └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │              ├── variable: t.public.t1.b:2 [type=int]
+ │              └── null
+ ├── select
+ │    ├── columns: t.public.t2.x:5(int!null) t.public.t2.y:6(int!null) t.public.t2.z:7(int)
+ │    ├── stats: [rows=1.998e-05, distinct(5)=1.998e-05, null(5)=0, distinct(6)=1.998e-05, null(6)=0, distinct(5,6)=1.998e-05, null(5,6)=0]
+ │    ├── cost: 216000.03
+ │    ├── prune: (7)
+ │    ├── reject-nulls: (7)
+ │    ├── scan t.public.t2
+ │    │    ├── columns: t.public.t2.x:5(int) t.public.t2.y:6(int) t.public.t2.z:7(int)
+ │    │    ├── stats: [rows=200000, distinct(5)=200000, null(5)=200000, distinct(6)=20000, null(6)=2000, distinct(5,6)=200000, null(5,6)=2000]
+ │    │    ├── cost: 214000.02
+ │    │    ├── prune: (5-7)
+ │    │    └── reject-nulls: (5-7)
+ │    └── filters
+ │         ├── is-not [type=bool, outer=(5), constraints=(/5: (/NULL - ]; tight)]
+ │         │    ├── variable: t.public.t2.x:5 [type=int]
+ │         │    └── null
+ │         └── is-not [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+ │              ├── variable: t.public.t2.y:6 [type=int]
+ │              └── null
+ └── filters
+      ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    ├── variable: t.public.t1.a:1 [type=int]
+      │    └── variable: t.public.t2.x:5 [type=int]
+      └── gt [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+           ├── variable: t.public.t1.b:2 [type=int]
+           └── variable: t.public.t2.y:6 [type=int]
+
+# do not push down null rejection if columns are already not null
+norm expect-not=AddNullRejectionForJoin
+SELECT * FROM (SELECT * FROM t1 WHERE t1.a > 0) AS t1 JOIN (SELECT * FROM t2 WHERE t2.x > 1) AS t2 ON t1.a=t2.x
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:5!null y:6 z:7
+ ├── fd: (1)==(5), (5)==(1)
+ ├── select
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── scan t1
+ │    │    └── columns: a:1 b:2 c:3
+ │    └── filters
+ │         └── a:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ ├── select
+ │    ├── columns: x:5!null y:6 z:7
+ │    ├── scan t2
+ │    │    └── columns: x:5 y:6 z:7
+ │    └── filters
+ │         └── x:5 > 1 [outer=(5), constraints=(/5: [/2 - ]; tight)]
+ └── filters
+      └── a:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# do not add null rejection filters for left input but right input in LEFT OUTER JOIN
+norm
+SELECT * FROM t1 LEFT JOIN t2 ON t1.a = t2.x
+----
+left-join (hash)
+ ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── scan t1
+ │    └── columns: a:1 b:2 c:3
+ ├── select
+ │    ├── columns: x:5!null y:6 z:7
+ │    ├── scan t2
+ │    │    └── columns: x:5 y:6 z:7
+ │    └── filters
+ │         └── x:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
+ └── filters
+      └── a:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# do not add null rejection filters for right input but left input in RIGHT OUTER JOIN
+norm
+SELECT * from t1 RIGHT JOIN t2 ON t1.a = t2.x
+----
+left-join (hash)
+ ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── scan t2
+ │    └── columns: x:5 y:6 z:7
+ ├── select
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── scan t1
+ │    │    └── columns: a:1 b:2 c:3
+ │    └── filters
+ │         └── a:1 IS NOT NULL [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ └── filters
+      └── a:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# do not add null rejection filters if input is outer join
+norm expect-not=AddNullRejectionForJoin
+SELECT * from (t1 LEFT JOIN t2 ON t1.a>0) as t1_ JOIN t2 ON t1_.a = t2.x
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:5 y:6 z:7 x:9!null y:10 z:11
+ ├── fd: (1)==(9), (9)==(1)
+ ├── left-join (cross)
+ │    ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan t1
+ │    │    └── columns: a:1 b:2 c:3
+ │    ├── scan t2
+ │    │    └── columns: x:5 y:6 z:7
+ │    └── filters
+ │         └── a:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ ├── scan t2
+ │    └── columns: x:9 y:10 z:11
+ └── filters
+      └── a:1 = x:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# do not add null rejection filters if input is outer join
+norm expect-not=AddNullRejectionForJoin
+SELECT * from t1 LEFT JOIN (t1 LEFT JOIN t2 ON t1.a>0) as t2_ ON t1.a = t2_.x
+----
+left-join (hash)
+ ├── columns: a:1 b:2 c:3 a:5 b:6 c:7 x:9 y:10 z:11
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── scan t1
+ │    └── columns: a:1 b:2 c:3
+ ├── left-join (cross)
+ │    ├── columns: a:5 b:6 c:7 x:9 y:10 z:11
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan t1
+ │    │    └── columns: a:5 b:6 c:7
+ │    ├── scan t2
+ │    │    └── columns: x:9 y:10 z:11
+ │    └── filters
+ │         └── a:5 > 0 [outer=(5), constraints=(/5: [/1 - ]; tight)]
+ └── filters
+      └── a:1 = x:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# do not add null rejection filters if input is outer join
+norm expect-not=AddNullRejectionForJoin
+SELECT * from (t1 LEFT JOIN t2 ON t1.a>0) as t1_ RIGHT JOIN t2 ON t1_.a = t2.x
+----
+left-join (hash)
+ ├── columns: a:1 b:2 c:3 x:5 y:6 z:7 x:9 y:10 z:11
+ ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ ├── scan t2
+ │    └── columns: x:9 y:10 z:11
+ ├── left-join (cross)
+ │    ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan t1
+ │    │    └── columns: a:1 b:2 c:3
+ │    ├── scan t2
+ │    │    └── columns: x:5 y:6 z:7
+ │    └── filters
+ │         └── a:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── filters
+      └── a:1 = x:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+exec-ddl
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2020-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 100000,
+    "null_count":10
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2020-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 100000,
+    "null_count":10
+  }
+]'
+----
+
+# do not add null rejection filters if it may lead to higher cost
+norm expect-not=AddNullRejectionForJoin
+SELECT * FROM t1 JOIN t2 ON t1.a = t2.x
+----
+inner-join (hash)
+ ├── columns: a:1!null b:2 c:3 x:5!null y:6 z:7
+ ├── fd: (1)==(5), (5)==(1)
+ ├── scan t1
+ │    └── columns: a:1 b:2 c:3
+ ├── scan t2
+ │    └── columns: x:5 y:6 z:7
+ └── filters
+      └── a:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
