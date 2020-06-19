@@ -29,6 +29,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
+	"github.com/jordanlewis/gcassert"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -1619,6 +1620,18 @@ func TestLint(t *testing.T) {
 			if out := stderr.String(); len(out) > 0 {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
+		}
+	})
+
+	t.Run("TestGCAssert", func(t *testing.T) {
+		t.Parallel()
+		var buf strings.Builder
+		if err := gcassert.GCAssert("../../sql/colexec", &buf); err != nil {
+			t.Fatal(err)
+		}
+		output := buf.String()
+		if len(output) > 0 {
+			t.Fatalf("failed gcassert:\n%s", output)
 		}
 	})
 

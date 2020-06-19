@@ -173,9 +173,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -206,7 +206,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -239,7 +239,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -301,7 +301,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -334,7 +334,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -452,9 +452,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -478,7 +478,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -503,7 +503,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -557,7 +557,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -582,7 +582,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -692,9 +692,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -718,7 +718,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -743,7 +743,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -797,7 +797,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -822,7 +822,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -931,9 +931,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -967,7 +967,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1003,7 +1003,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1068,7 +1068,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1104,7 +1104,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1221,9 +1221,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -1257,7 +1257,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1293,7 +1293,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1358,7 +1358,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1394,7 +1394,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1512,9 +1512,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -1548,7 +1548,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1584,7 +1584,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1649,7 +1649,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1685,7 +1685,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1806,9 +1806,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -1850,7 +1850,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1894,7 +1894,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -1967,7 +1967,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2011,7 +2011,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2140,9 +2140,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -2173,7 +2173,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2205,7 +2205,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2266,7 +2266,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2298,7 +2298,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2415,9 +2415,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -2441,7 +2441,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2466,7 +2466,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2520,7 +2520,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2545,7 +2545,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2903,9 +2903,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -2936,7 +2936,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -2965,7 +2965,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3027,7 +3027,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3057,7 +3057,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3168,9 +3168,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -3194,7 +3194,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3215,7 +3215,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3269,7 +3269,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3291,7 +3291,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3394,9 +3394,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -3420,7 +3420,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3441,7 +3441,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3495,7 +3495,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3517,7 +3517,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3619,9 +3619,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -3655,7 +3655,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3687,7 +3687,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3752,7 +3752,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3785,7 +3785,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3895,9 +3895,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -3931,7 +3931,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -3963,7 +3963,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4028,7 +4028,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4061,7 +4061,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4172,9 +4172,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -4208,7 +4208,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4240,7 +4240,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4305,7 +4305,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4338,7 +4338,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4452,9 +4452,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -4496,7 +4496,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4536,7 +4536,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4609,7 +4609,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4650,7 +4650,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4772,9 +4772,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -4805,7 +4805,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4833,7 +4833,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4894,7 +4894,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -4923,7 +4923,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5033,9 +5033,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -5059,7 +5059,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5080,7 +5080,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5134,7 +5134,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5156,7 +5156,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5502,9 +5502,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -5531,7 +5531,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5564,7 +5564,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5623,7 +5623,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5656,7 +5656,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5767,9 +5767,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -5789,7 +5789,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5814,7 +5814,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5865,7 +5865,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5890,7 +5890,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -5993,9 +5993,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -6015,7 +6015,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6040,7 +6040,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6091,7 +6091,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6116,7 +6116,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6218,9 +6218,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -6250,7 +6250,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6286,7 +6286,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6348,7 +6348,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6384,7 +6384,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6494,9 +6494,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -6526,7 +6526,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6562,7 +6562,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6624,7 +6624,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6660,7 +6660,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6771,9 +6771,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -6803,7 +6803,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6839,7 +6839,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6901,7 +6901,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -6937,7 +6937,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7051,9 +7051,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -7091,7 +7091,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7135,7 +7135,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7205,7 +7205,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7249,7 +7249,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7371,9 +7371,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -7400,7 +7400,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7432,7 +7432,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7490,7 +7490,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7522,7 +7522,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7632,9 +7632,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -7654,7 +7654,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7679,7 +7679,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7730,7 +7730,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -7755,7 +7755,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8092,9 +8092,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -8121,7 +8121,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8150,7 +8150,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8209,7 +8209,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8239,7 +8239,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8343,9 +8343,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -8365,7 +8365,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8386,7 +8386,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8437,7 +8437,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8459,7 +8459,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8555,9 +8555,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -8577,7 +8577,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8598,7 +8598,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8649,7 +8649,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8671,7 +8671,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8766,9 +8766,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -8798,7 +8798,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8830,7 +8830,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8892,7 +8892,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -8925,7 +8925,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9028,9 +9028,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -9060,7 +9060,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9092,7 +9092,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9154,7 +9154,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9187,7 +9187,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9291,9 +9291,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -9323,7 +9323,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9355,7 +9355,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9417,7 +9417,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9450,7 +9450,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9557,9 +9557,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -9597,7 +9597,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9637,7 +9637,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9707,7 +9707,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9748,7 +9748,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9863,9 +9863,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -9892,7 +9892,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9920,7 +9920,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -9978,7 +9978,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10007,7 +10007,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10110,9 +10110,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -10132,7 +10132,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10153,7 +10153,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10204,7 +10204,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10226,7 +10226,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10642,9 +10642,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -10675,7 +10675,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10708,7 +10708,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10770,7 +10770,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10803,7 +10803,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10921,9 +10921,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -10947,7 +10947,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -10972,7 +10972,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11026,7 +11026,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11051,7 +11051,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11161,9 +11161,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -11187,7 +11187,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11212,7 +11212,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11266,7 +11266,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11291,7 +11291,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11400,9 +11400,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -11436,7 +11436,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11472,7 +11472,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11537,7 +11537,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11573,7 +11573,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11690,9 +11690,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -11726,7 +11726,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11762,7 +11762,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11827,7 +11827,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11863,7 +11863,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -11981,9 +11981,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -12017,7 +12017,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12053,7 +12053,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12118,7 +12118,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12154,7 +12154,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12275,9 +12275,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -12319,7 +12319,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12363,7 +12363,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12436,7 +12436,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12480,7 +12480,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12609,9 +12609,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -12642,7 +12642,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12674,7 +12674,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12735,7 +12735,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12767,7 +12767,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12884,9 +12884,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -12910,7 +12910,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12935,7 +12935,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -12989,7 +12989,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13014,7 +13014,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13372,9 +13372,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -13405,7 +13405,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13434,7 +13434,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13496,7 +13496,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13526,7 +13526,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13637,9 +13637,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -13663,7 +13663,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13684,7 +13684,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13738,7 +13738,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13760,7 +13760,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13863,9 +13863,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -13889,7 +13889,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13910,7 +13910,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13964,7 +13964,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -13986,7 +13986,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14088,9 +14088,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -14124,7 +14124,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14156,7 +14156,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14221,7 +14221,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14254,7 +14254,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14364,9 +14364,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -14400,7 +14400,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14432,7 +14432,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14497,7 +14497,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14530,7 +14530,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14641,9 +14641,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -14677,7 +14677,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14709,7 +14709,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14774,7 +14774,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14807,7 +14807,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -14921,9 +14921,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -14965,7 +14965,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15005,7 +15005,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15078,7 +15078,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15119,7 +15119,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15241,9 +15241,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -15274,7 +15274,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15302,7 +15302,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15363,7 +15363,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15392,7 +15392,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15502,9 +15502,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -15528,7 +15528,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15549,7 +15549,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15603,7 +15603,7 @@ EqLoop:
 											}
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15625,7 +15625,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -15971,9 +15971,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -16000,7 +16000,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16033,7 +16033,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16092,7 +16092,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16125,7 +16125,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16236,9 +16236,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -16258,7 +16258,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16283,7 +16283,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16334,7 +16334,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16359,7 +16359,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16462,9 +16462,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -16484,7 +16484,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16509,7 +16509,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16560,7 +16560,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16585,7 +16585,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16687,9 +16687,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -16719,7 +16719,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16755,7 +16755,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16817,7 +16817,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16853,7 +16853,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -16963,9 +16963,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -16995,7 +16995,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17031,7 +17031,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17093,7 +17093,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17129,7 +17129,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17240,9 +17240,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -17272,7 +17272,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17308,7 +17308,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17370,7 +17370,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17406,7 +17406,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17520,9 +17520,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -17560,7 +17560,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17604,7 +17604,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17674,7 +17674,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17718,7 +17718,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17840,9 +17840,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -17869,7 +17869,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17901,7 +17901,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17959,7 +17959,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -17991,7 +17991,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18101,9 +18101,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -18123,7 +18123,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18148,7 +18148,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18199,7 +18199,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18224,7 +18224,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18561,9 +18561,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -18590,7 +18590,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18619,7 +18619,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18678,7 +18678,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18708,7 +18708,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18812,9 +18812,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -18834,7 +18834,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18855,7 +18855,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18906,7 +18906,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -18928,7 +18928,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19024,9 +19024,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -19046,7 +19046,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19067,7 +19067,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19118,7 +19118,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19140,7 +19140,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19235,9 +19235,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -19267,7 +19267,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19299,7 +19299,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19361,7 +19361,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19394,7 +19394,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19497,9 +19497,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -19529,7 +19529,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19561,7 +19561,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19623,7 +19623,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19656,7 +19656,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19760,9 +19760,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -19792,7 +19792,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19824,7 +19824,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19886,7 +19886,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -19919,7 +19919,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20026,9 +20026,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -20066,7 +20066,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20106,7 +20106,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20176,7 +20176,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20217,7 +20217,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20332,9 +20332,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -20361,7 +20361,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20389,7 +20389,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20447,7 +20447,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20476,7 +20476,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20579,9 +20579,9 @@ EqLoop:
 								{
 
 									lSelIdx = lSel[curLIdx]
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -20601,7 +20601,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20622,7 +20622,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20673,7 +20673,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = lSel[curLIdx]
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -20695,7 +20695,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21111,9 +21111,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -21144,7 +21144,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21177,7 +21177,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21239,7 +21239,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21272,7 +21272,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21390,9 +21390,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -21416,7 +21416,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21441,7 +21441,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21495,7 +21495,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21520,7 +21520,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21630,9 +21630,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -21656,7 +21656,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21681,7 +21681,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21735,7 +21735,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21760,7 +21760,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21869,9 +21869,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -21905,7 +21905,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -21941,7 +21941,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22006,7 +22006,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22042,7 +22042,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22159,9 +22159,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -22195,7 +22195,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22231,7 +22231,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22296,7 +22296,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22332,7 +22332,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22450,9 +22450,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -22486,7 +22486,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22522,7 +22522,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22587,7 +22587,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22623,7 +22623,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22744,9 +22744,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -22788,7 +22788,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22832,7 +22832,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22905,7 +22905,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -22949,7 +22949,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23078,9 +23078,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -23111,7 +23111,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23143,7 +23143,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23204,7 +23204,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23236,7 +23236,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23353,9 +23353,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -23379,7 +23379,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23404,7 +23404,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23458,7 +23458,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23483,7 +23483,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23841,9 +23841,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -23874,7 +23874,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23903,7 +23903,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23965,7 +23965,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -23995,7 +23995,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24106,9 +24106,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -24132,7 +24132,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24153,7 +24153,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24207,7 +24207,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24229,7 +24229,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24332,9 +24332,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -24358,7 +24358,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24379,7 +24379,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24433,7 +24433,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24455,7 +24455,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24557,9 +24557,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -24593,7 +24593,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24625,7 +24625,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24690,7 +24690,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24723,7 +24723,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24833,9 +24833,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -24869,7 +24869,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24901,7 +24901,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24966,7 +24966,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -24999,7 +24999,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25110,9 +25110,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -25146,7 +25146,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25178,7 +25178,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25243,7 +25243,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25276,7 +25276,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25390,9 +25390,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -25434,7 +25434,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25474,7 +25474,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25547,7 +25547,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25588,7 +25588,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25710,9 +25710,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -25743,7 +25743,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25771,7 +25771,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25832,7 +25832,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25861,7 +25861,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -25971,9 +25971,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -25997,7 +25997,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26018,7 +26018,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26072,7 +26072,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26094,7 +26094,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26440,9 +26440,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -26469,7 +26469,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26502,7 +26502,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26561,7 +26561,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26594,7 +26594,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26705,9 +26705,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -26727,7 +26727,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26752,7 +26752,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26803,7 +26803,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26828,7 +26828,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26931,9 +26931,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -26953,7 +26953,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -26978,7 +26978,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27029,7 +27029,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27054,7 +27054,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27156,9 +27156,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -27188,7 +27188,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27224,7 +27224,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27286,7 +27286,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27322,7 +27322,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27432,9 +27432,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -27464,7 +27464,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27500,7 +27500,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27562,7 +27562,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27598,7 +27598,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27709,9 +27709,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -27741,7 +27741,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27777,7 +27777,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27839,7 +27839,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27875,7 +27875,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -27989,9 +27989,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -28029,7 +28029,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28073,7 +28073,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28143,7 +28143,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28187,7 +28187,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28309,9 +28309,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -28338,7 +28338,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28370,7 +28370,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28428,7 +28428,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28460,7 +28460,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28570,9 +28570,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -28592,7 +28592,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28617,7 +28617,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28668,7 +28668,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -28693,7 +28693,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29030,9 +29030,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -29059,7 +29059,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29088,7 +29088,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29147,7 +29147,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29177,7 +29177,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29281,9 +29281,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -29303,7 +29303,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29324,7 +29324,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29375,7 +29375,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29397,7 +29397,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29493,9 +29493,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -29515,7 +29515,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29536,7 +29536,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29587,7 +29587,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29609,7 +29609,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29704,9 +29704,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -29736,7 +29736,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29768,7 +29768,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29830,7 +29830,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29863,7 +29863,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -29966,9 +29966,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -29998,7 +29998,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30030,7 +30030,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30092,7 +30092,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30125,7 +30125,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30229,9 +30229,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -30261,7 +30261,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30293,7 +30293,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30355,7 +30355,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30388,7 +30388,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30495,9 +30495,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -30535,7 +30535,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30575,7 +30575,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30645,7 +30645,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30686,7 +30686,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30801,9 +30801,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -30830,7 +30830,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30858,7 +30858,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30916,7 +30916,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -30945,7 +30945,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31048,9 +31048,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = rSel[curRIdx]
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -31070,7 +31070,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31091,7 +31091,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31142,7 +31142,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31164,7 +31164,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = rSel[curRIdx]
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31580,9 +31580,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -31613,7 +31613,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31646,7 +31646,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31708,7 +31708,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31741,7 +31741,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31859,9 +31859,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -31885,7 +31885,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31910,7 +31910,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31964,7 +31964,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -31989,7 +31989,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32099,9 +32099,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -32125,7 +32125,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32150,7 +32150,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32204,7 +32204,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32229,7 +32229,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32338,9 +32338,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -32374,7 +32374,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32410,7 +32410,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32475,7 +32475,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32511,7 +32511,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32628,9 +32628,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -32664,7 +32664,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32700,7 +32700,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32765,7 +32765,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32801,7 +32801,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32919,9 +32919,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -32955,7 +32955,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -32991,7 +32991,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33056,7 +33056,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33092,7 +33092,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33213,9 +33213,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -33257,7 +33257,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33301,7 +33301,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33374,7 +33374,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33418,7 +33418,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33547,9 +33547,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -33580,7 +33580,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33612,7 +33612,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33673,7 +33673,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33705,7 +33705,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33822,9 +33822,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -33848,7 +33848,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33873,7 +33873,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33927,7 +33927,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -33952,7 +33952,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34310,9 +34310,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -34343,7 +34343,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34372,7 +34372,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34434,7 +34434,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34464,7 +34464,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34575,9 +34575,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -34601,7 +34601,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34622,7 +34622,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34676,7 +34676,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34698,7 +34698,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34801,9 +34801,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -34827,7 +34827,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34848,7 +34848,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34902,7 +34902,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -34924,7 +34924,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35026,9 +35026,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -35062,7 +35062,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35094,7 +35094,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35159,7 +35159,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35192,7 +35192,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35302,9 +35302,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -35338,7 +35338,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35370,7 +35370,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35435,7 +35435,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35468,7 +35468,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35579,9 +35579,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -35615,7 +35615,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35647,7 +35647,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35712,7 +35712,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35745,7 +35745,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35859,9 +35859,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -35903,7 +35903,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -35943,7 +35943,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36016,7 +36016,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36057,7 +36057,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36179,9 +36179,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -36212,7 +36212,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36240,7 +36240,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36301,7 +36301,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36330,7 +36330,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36440,9 +36440,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -36466,7 +36466,7 @@ EqLoop:
 												break
 											}
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36487,7 +36487,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36541,7 +36541,7 @@ EqLoop:
 											}
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36563,7 +36563,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36909,9 +36909,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -36938,7 +36938,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -36971,7 +36971,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37030,7 +37030,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37063,7 +37063,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37174,9 +37174,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -37196,7 +37196,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37221,7 +37221,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37272,7 +37272,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37297,7 +37297,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37400,9 +37400,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -37422,7 +37422,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37447,7 +37447,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37498,7 +37498,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37523,7 +37523,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37625,9 +37625,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -37657,7 +37657,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37693,7 +37693,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37755,7 +37755,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37791,7 +37791,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37901,9 +37901,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -37933,7 +37933,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -37969,7 +37969,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38031,7 +38031,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38067,7 +38067,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38178,9 +38178,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -38210,7 +38210,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38246,7 +38246,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38308,7 +38308,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38344,7 +38344,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38458,9 +38458,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -38498,7 +38498,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38542,7 +38542,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38612,7 +38612,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38656,7 +38656,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38778,9 +38778,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -38807,7 +38807,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38839,7 +38839,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38897,7 +38897,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -38929,7 +38929,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39039,9 +39039,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -39061,7 +39061,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39086,7 +39086,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39137,7 +39137,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39162,7 +39162,7 @@ EqLoop:
 												break
 											}
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39499,9 +39499,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if !lVal && rVal {
 										cmp = -1
@@ -39528,7 +39528,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39557,7 +39557,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39616,7 +39616,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39646,7 +39646,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39750,9 +39750,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys.Get(lSelIdx)
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys.Get(rSelIdx)
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = bytes.Compare(lVal, rVal)
 
 								}
@@ -39772,7 +39772,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39793,7 +39793,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39844,7 +39844,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys.Get(lSelIdx)
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39866,7 +39866,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys.Get(rSelIdx)
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -39962,9 +39962,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = tree.CompareDecimals(&lVal, &rVal)
 
 								}
@@ -39984,7 +39984,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40005,7 +40005,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40056,7 +40056,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40078,7 +40078,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40173,9 +40173,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -40205,7 +40205,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40237,7 +40237,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40299,7 +40299,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40332,7 +40332,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40435,9 +40435,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -40467,7 +40467,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40499,7 +40499,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40561,7 +40561,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40594,7 +40594,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40698,9 +40698,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := int64(lVal), int64(rVal)
@@ -40730,7 +40730,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40762,7 +40762,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40824,7 +40824,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40857,7 +40857,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -40964,9 +40964,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									{
 										a, b := float64(lVal), float64(rVal)
@@ -41004,7 +41004,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41044,7 +41044,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41114,7 +41114,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41155,7 +41155,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41270,9 +41270,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 
 									if lVal.Before(rVal) {
 										cmp = -1
@@ -41299,7 +41299,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41327,7 +41327,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41385,7 +41385,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41414,7 +41414,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41517,9 +41517,9 @@ EqLoop:
 								{
 
 									lSelIdx = curLIdx
-									lVal = lKeys[lSelIdx]
+									lVal = lKeys.Get(lSelIdx) //gcassert:inline
 									rSelIdx = curRIdx
-									rVal = rKeys[rSelIdx]
+									rVal = rKeys.Get(rSelIdx) //gcassert:inline
 									cmp = lVal.Compare(rVal)
 
 								}
@@ -41539,7 +41539,7 @@ EqLoop:
 									for curLIdx < curLEndIdx {
 										{
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41560,7 +41560,7 @@ EqLoop:
 									for curRIdx < curREndIdx {
 										{
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41611,7 +41611,7 @@ EqLoop:
 										for curLIdx < curLEndIdx {
 
 											lSelIdx = curLIdx
-											newLVal := lKeys[lSelIdx]
+											newLVal := lKeys.Get(lSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41633,7 +41633,7 @@ EqLoop:
 										o.groups.addRightOuterGroup(curLIdx, curRIdx-1)
 										for curRIdx < curREndIdx {
 											rSelIdx = curRIdx
-											newRVal := rKeys[rSelIdx]
+											newRVal := rKeys.Get(rSelIdx) //gcassert:inline
 
 											{
 												var cmpResult int
@@ -41993,7 +41993,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42058,7 +42058,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol.Get(srcStartIdx)
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol.Set(outStartIdx, val)
 													outStartIdx++
@@ -42123,7 +42123,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx].Set(&val)
 													outStartIdx++
@@ -42187,7 +42187,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42248,7 +42248,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42310,7 +42310,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42375,7 +42375,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42440,7 +42440,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42505,7 +42505,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42638,7 +42638,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42700,7 +42700,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol.Get(srcStartIdx)
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol.Set(outStartIdx, val)
 													outStartIdx++
@@ -42762,7 +42762,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx].Set(&val)
 													outStartIdx++
@@ -42823,7 +42823,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42881,7 +42881,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -42940,7 +42940,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43002,7 +43002,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43064,7 +43064,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43126,7 +43126,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43260,7 +43260,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43324,7 +43324,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol.Get(srcStartIdx)
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol.Set(outStartIdx, val)
 													outStartIdx++
@@ -43388,7 +43388,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx].Set(&val)
 													outStartIdx++
@@ -43451,7 +43451,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43511,7 +43511,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43572,7 +43572,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43636,7 +43636,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43700,7 +43700,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43764,7 +43764,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 												out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 												outStartIdx += toAppend
 											} else {
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43895,7 +43895,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -43956,7 +43956,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol.Get(srcStartIdx)
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol.Set(outStartIdx, val)
 													outStartIdx++
@@ -44017,7 +44017,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx].Set(&val)
 													outStartIdx++
@@ -44077,7 +44077,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -44134,7 +44134,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -44192,7 +44192,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -44253,7 +44253,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -44314,7 +44314,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -44375,7 +44375,7 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 											outStartIdx += toAppend
 										} else {
 											{
-												val = srcCol[srcStartIdx]
+												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
 													outCol[outStartIdx] = val
 													outStartIdx++
@@ -44539,7 +44539,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -44588,7 +44588,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol.Get(srcStartIdx)
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol.Set(outStartIdx, val)
 										outStartIdx++
@@ -44637,7 +44637,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx].Set(&val)
 										outStartIdx++
@@ -44685,7 +44685,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -44730,7 +44730,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -44776,7 +44776,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -44825,7 +44825,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -44874,7 +44874,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -44923,7 +44923,7 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = srcCol[srcStartIdx]
+									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
 										outCol[outStartIdx] = val
 										outStartIdx++
@@ -45112,7 +45112,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45182,7 +45182,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx])
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol.Set(outStartIdx, v)
 												}
 											} else {
@@ -45252,7 +45252,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx].Set(&v)
 												}
 											} else {
@@ -45321,7 +45321,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45387,7 +45387,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45454,7 +45454,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45524,7 +45524,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45594,7 +45594,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45664,7 +45664,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(sel[o.builderState.right.curSrcStartIdx]) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45808,7 +45808,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -45876,7 +45876,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx])
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol.Set(outStartIdx, v)
 												}
 											} else {
@@ -45944,7 +45944,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx].Set(&v)
 												}
 											} else {
@@ -46011,7 +46011,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46075,7 +46075,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46140,7 +46140,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46208,7 +46208,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46276,7 +46276,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46344,7 +46344,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[sel[o.builderState.right.curSrcStartIdx]]
+													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46490,7 +46490,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46560,7 +46560,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol.Get(o.builderState.right.curSrcStartIdx)
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol.Set(outStartIdx, v)
 												}
 											} else {
@@ -46630,7 +46630,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx].Set(&v)
 												}
 											} else {
@@ -46699,7 +46699,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46765,7 +46765,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46832,7 +46832,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46902,7 +46902,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -46972,7 +46972,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47042,7 +47042,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 												if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 													out.Nulls().SetNull(outStartIdx)
 												} else {
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47186,7 +47186,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47254,7 +47254,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol.Get(o.builderState.right.curSrcStartIdx)
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol.Set(outStartIdx, v)
 												}
 											} else {
@@ -47322,7 +47322,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx].Set(&v)
 												}
 											} else {
@@ -47389,7 +47389,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47453,7 +47453,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47518,7 +47518,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47586,7 +47586,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47654,7 +47654,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47722,7 +47722,7 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											// instead of copy.
 											if toAppend == 1 {
 												{
-													v := srcCol[o.builderState.right.curSrcStartIdx]
+													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 													outCol[outStartIdx] = v
 												}
 											} else {
@@ -47897,7 +47897,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {
@@ -47926,7 +47926,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol.Get(o.builderState.right.curSrcStartIdx)
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol.Set(outStartIdx, v)
 									}
 								} else {
@@ -47955,7 +47955,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx].Set(&v)
 									}
 								} else {
@@ -47983,7 +47983,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {
@@ -48008,7 +48008,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {
@@ -48034,7 +48034,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {
@@ -48063,7 +48063,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {
@@ -48092,7 +48092,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {
@@ -48121,7 +48121,7 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := srcCol[o.builderState.right.curSrcStartIdx]
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
 										outCol[outStartIdx] = v
 									}
 								} else {

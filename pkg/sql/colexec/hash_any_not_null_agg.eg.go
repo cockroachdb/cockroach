@@ -138,7 +138,7 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -150,7 +150,7 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -168,7 +168,7 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -189,7 +189,7 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -207,7 +207,7 @@ func (a *anyNotNullBoolHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -310,7 +310,7 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col.Get(inputLen - 1)
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -322,7 +322,7 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col.Get(i)
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = append(a.curAgg[:0], val...)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -340,7 +340,7 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col.Get(i)
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = append(a.curAgg[:0], val...)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -361,7 +361,7 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col.Get(i)
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = append(a.curAgg[:0], val...)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -379,7 +379,7 @@ func (a *anyNotNullBytesHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col.Get(i)
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = append(a.curAgg[:0], val...)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -482,7 +482,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -494,7 +494,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -512,7 +512,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -533,7 +533,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -551,7 +551,7 @@ func (a *anyNotNullDecimalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -654,7 +654,7 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -666,7 +666,7 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -684,7 +684,7 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -705,7 +705,7 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -723,7 +723,7 @@ func (a *anyNotNullInt16HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -826,7 +826,7 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -838,7 +838,7 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -856,7 +856,7 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -877,7 +877,7 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -895,7 +895,7 @@ func (a *anyNotNullInt32HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -998,7 +998,7 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -1010,7 +1010,7 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1028,7 +1028,7 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1049,7 +1049,7 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1067,7 +1067,7 @@ func (a *anyNotNullInt64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1170,7 +1170,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -1182,7 +1182,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1200,7 +1200,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1221,7 +1221,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1239,7 +1239,7 @@ func (a *anyNotNullFloat64HashAgg) Compute(b coldata.Batch, inputIdxs []uint32) 
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1342,7 +1342,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -1354,7 +1354,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1372,7 +1372,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1393,7 +1393,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1411,7 +1411,7 @@ func (a *anyNotNullTimestampHashAgg) Compute(b coldata.Batch, inputIdxs []uint32
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1514,7 +1514,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = col[inputLen-1]
+			_ = col.Get(inputLen - 1) //gcassert:inline
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
@@ -1526,7 +1526,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1544,7 +1544,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1565,7 +1565,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there
@@ -1583,7 +1583,7 @@ func (a *anyNotNullIntervalHashAgg) Compute(b coldata.Batch, inputIdxs []uint32)
 							// If we haven't seen any non-nulls for the current group yet, and the
 							// current value is non-null, then we can pick the current value to be
 							// the output.
-							val := col[i]
+							val := col.Get(i) //gcassert:inline
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 							// We have already seen non-null for the current group, and since there

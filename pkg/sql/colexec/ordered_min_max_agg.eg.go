@@ -164,12 +164,12 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -211,12 +211,12 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -260,12 +260,12 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -307,12 +307,12 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -447,12 +447,12 @@ func (a *minBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -488,12 +488,12 @@ func (a *minBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -529,12 +529,12 @@ func (a *minBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -570,12 +570,12 @@ func (a *minBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -702,12 +702,12 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -741,12 +741,12 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -782,12 +782,12 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -821,12 +821,12 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -953,12 +953,12 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1003,12 +1003,12 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1055,12 +1055,12 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1105,12 +1105,12 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1248,12 +1248,12 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1298,12 +1298,12 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1350,12 +1350,12 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1400,12 +1400,12 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1543,12 +1543,12 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1593,12 +1593,12 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1645,12 +1645,12 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1695,12 +1695,12 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1838,12 +1838,12 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1896,12 +1896,12 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -1956,12 +1956,12 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2014,12 +2014,12 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2165,12 +2165,12 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2211,12 +2211,12 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2259,12 +2259,12 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2305,12 +2305,12 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2444,12 +2444,12 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2483,12 +2483,12 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2524,12 +2524,12 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2563,12 +2563,12 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -2954,12 +2954,12 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3001,12 +3001,12 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3050,12 +3050,12 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3097,12 +3097,12 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3237,12 +3237,12 @@ func (a *maxBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3278,12 +3278,12 @@ func (a *maxBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3319,12 +3319,12 @@ func (a *maxBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3360,12 +3360,12 @@ func (a *maxBytesOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col.Get(i)
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = append(a.curAgg[:0], val...)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col.Get(i)
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3492,12 +3492,12 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3531,12 +3531,12 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3572,12 +3572,12 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3611,12 +3611,12 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg.Set(&val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3743,12 +3743,12 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3793,12 +3793,12 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3845,12 +3845,12 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -3895,12 +3895,12 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4038,12 +4038,12 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4088,12 +4088,12 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4140,12 +4140,12 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4190,12 +4190,12 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4333,12 +4333,12 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4383,12 +4383,12 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4435,12 +4435,12 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4485,12 +4485,12 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = int64(val)
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4628,12 +4628,12 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4686,12 +4686,12 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4746,12 +4746,12 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4804,12 +4804,12 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -4955,12 +4955,12 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5001,12 +5001,12 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5049,12 +5049,12 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5095,12 +5095,12 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5234,12 +5234,12 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5273,12 +5273,12 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = nulls.NullAt(i)
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5314,12 +5314,12 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
@@ -5353,12 +5353,12 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 						isNull = false
 						if !isNull {
 							if !a.foundNonNullForCurrentGroup {
-								val := col[i]
+								val := col.Get(i) //gcassert:inline
 								a.curAgg = val
 								a.foundNonNullForCurrentGroup = true
 							} else {
 								var cmp bool
-								candidate := col[i]
+								candidate := col.Get(i) //gcassert:inline
 
 								{
 									var cmpResult int
