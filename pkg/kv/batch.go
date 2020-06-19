@@ -384,6 +384,11 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) Put(key, value interface{}) {
+	if value == nil {
+		// Empty values are used as deletion tombstones, so one can't write an empty
+		// value. If the intention was indeed to delete the key, use Del() instead.
+		panic("can't Put an empty Value; did you mean to Del() instead?")
+	}
 	b.put(key, value, false)
 }
 
@@ -397,6 +402,9 @@ func (b *Batch) Put(key, value interface{}) {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
+//
+// A nil value can be used to delete the respective key, since there is no
+// DelInline(). This is different from Put().
 func (b *Batch) PutInline(key, value interface{}) {
 	b.put(key, value, true)
 }

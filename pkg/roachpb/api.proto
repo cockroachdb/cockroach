@@ -162,7 +162,6 @@ message PutResponse {
 //
 // - Returns true and sets value if exp_value equals existing value.
 // - If key doesn't exist and exp_value is nil, sets value.
-// - If key exists, but value is empty and exp_value is not nil but empty, sets value.
 // - Otherwise, returns a ConditionFailedError containing the actual value of the key.
 //
 // Note that the client is free to send more requests after a
@@ -179,8 +178,7 @@ message ConditionalPutRequest {
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
   // Set exp_value.bytes empty to test for non-existence. Specify as nil
-  // to indicate there should be no existing entry. This is different
-  // from the expectation that the value exists but is empty.
+  // to indicate there should be no existing entry.
   Value exp_value = 3;
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
