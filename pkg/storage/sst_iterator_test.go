@@ -142,13 +142,13 @@ func TestCockroachComparer(t *testing.T) {
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	}
 
-	if x := MVCCComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)); x != -1 {
+	if x := StorageKeyComparer.Compare(EncodeMVCCKey(keyAMetadata), EncodeMVCCKey(keyA1)); x != -1 {
 		t.Errorf("expected key metadata to sort first got: %d", x)
 	}
-	if x := MVCCComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)); x != -1 {
+	if x := StorageKeyComparer.Compare(EncodeMVCCKey(keyA2), EncodeMVCCKey(keyA1)); x != -1 {
 		t.Errorf("expected higher timestamp to sort first got: %d", x)
 	}
-	if x := MVCCComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)); x != -1 {
+	if x := StorageKeyComparer.Compare(EncodeMVCCKey(keyA2), EncodeMVCCKey(keyB2)); x != -1 {
 		t.Errorf("expected lower key to sort first got: %d", x)
 	}
 }

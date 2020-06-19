@@ -93,7 +93,7 @@ func (w *worker) run(wg *sync.WaitGroup) {
 			for j := 0; j < 5; j++ {
 				block := randBlock(60, 80)
 				key := encoding.EncodeUint32Ascending(buf, rand.Uint32())
-				if err := b.Put(storage.MakeMVCCMetadataKey(key), block); err != nil {
+				if err := b.PutKeyWithEmptyTimestamp(key, block); err != nil {
 					log.Fatalf(ctx, "%v", err)
 				}
 				buf = key[:0]

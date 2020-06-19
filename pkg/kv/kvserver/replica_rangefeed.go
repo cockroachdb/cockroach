@@ -211,7 +211,7 @@ func (r *Replica) RangeFeed(
 				// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
 				// workable. See #35122 for details.
 				// MinTimestampHint: args.Timestamp,
-			})
+			}, storage.MVCCKeyAndIntentsIterKind)
 			catchUpIter := iteratorWithCloser{
 				SimpleIterator: innerIter,
 				close:          iterSemRelease,
@@ -356,7 +356,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			// This is safe because we know that there are no unresolved intents
 			// at times before a resolved timestamp.
 			// MinTimestampHint: r.ResolvedTimestamp,
-		})
+		}, storage.MVCCKeyAndIntentsIterKind)
 	}
 	p.Start(r.store.Stopper(), rtsIter)
 

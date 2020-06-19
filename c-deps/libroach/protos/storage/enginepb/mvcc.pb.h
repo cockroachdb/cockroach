@@ -383,6 +383,12 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   bool deleted() const;
   void set_deleted(bool value);
 
+  bool has_txn_did_not_update_meta() const;
+  void clear_txn_did_not_update_meta();
+  static const int kTxnDidNotUpdateMetaFieldNumber = 9;
+  bool txn_did_not_update_meta() const;
+  void set_txn_did_not_update_meta(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.MVCCMetadata)
  private:
   void set_has_txn();
@@ -399,6 +405,8 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   void clear_has_raw_bytes();
   void set_has_merge_timestamp();
   void clear_has_merge_timestamp();
+  void set_has_txn_did_not_update_meta();
+  void clear_has_txn_did_not_update_meta();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -411,6 +419,7 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
   bool deleted_;
+  bool txn_did_not_update_meta_;
   friend struct ::protobuf_storage_2fenginepb_2fmvcc_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1440,6 +1449,29 @@ inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::
   }
   merge_timestamp_ = merge_timestamp;
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.enginepb.MVCCMetadata.merge_timestamp)
+}
+
+inline bool MVCCMetadata::has_txn_did_not_update_meta() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void MVCCMetadata::set_has_txn_did_not_update_meta() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void MVCCMetadata::clear_has_txn_did_not_update_meta() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void MVCCMetadata::clear_txn_did_not_update_meta() {
+  txn_did_not_update_meta_ = false;
+  clear_has_txn_did_not_update_meta();
+}
+inline bool MVCCMetadata::txn_did_not_update_meta() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCMetadata.txn_did_not_update_meta)
+  return txn_did_not_update_meta_;
+}
+inline void MVCCMetadata::set_txn_did_not_update_meta(bool value) {
+  set_has_txn_did_not_update_meta();
+  txn_did_not_update_meta_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCMetadata.txn_did_not_update_meta)
 }
 
 // -------------------------------------------------------------------

@@ -233,7 +233,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, true, func(kv storage.MVCCKeyValue) (bool, error) {
 		done, err := printer(kv)
 		if done || err != nil {
 			return done, err
@@ -389,7 +389,7 @@ func loadRangeDescriptor(
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	if err := db.Iterate(start, end, handleKV); err != nil {
+	if err := db.Iterate(start, end, false, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -410,7 +410,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := keys.LocalRangePrefix
 	end := keys.LocalRangeMax
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.Iterate(start, end, true, func(kv storage.MVCCKeyValue) (bool, error) {
 		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 			return false, nil
 		}
@@ -537,10 +537,10 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	end := keys.RaftLogPrefix(rangeID).PrefixEnd()
 	fmt.Printf("Printing keys %s -> %s (RocksDB keys: %#x - %#x )\n",
 		start, end,
-		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(start))),
-		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(end))))
+		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(start))),
+		string(storage.EncodeMVCCKey(storage.MakeMVCCMetadataKey(end))))
 
-	return db.Iterate(start, end, func(kv storage.MVCCKeyValue) (bool, error) {
+	return db.Iterate(start, end, false, func(kv storage.MVCCKeyValue) (bool, error) {
 		kvserver.PrintKeyValue(kv)
 		return false, nil
 	})
@@ -1250,7 +1250,7 @@ func init() {
 
 	// Note: we hook up FormatValue here in order to avoid a circular dependency
 	// between kvserver and storage.
-	storage.MVCCComparer.FormatValue = func(key, value []byte) fmt.Formatter {
+	storage.StorageKeyComparer.FormatValue = func(key, value []byte) fmt.Formatter {
 		decoded, err := storage.DecodeMVCCKey(key)
 		if err != nil {
 			return mvccValueFormatter{err: err}
@@ -1261,8 +1261,8 @@ func init() {
 	// To be able to read Cockroach-written RocksDB manifests/SSTables, comparator
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
-	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.MVCCComparer))
+	pebbleTool := tool.New(tool.Mergers(storage.StorageMerger),
+		tool.DefaultComparer(storage.StorageKeyComparer))
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 

@@ -567,6 +567,12 @@ type lockTable interface {
 	//     txn.WriteTimestamp.
 	UpdateLocks(*roachpb.LockUpdate) error
 
+	// Informs the lock table that a transaction is finalized. This is used
+	// by the lock table in a best-effort manner to avoid waiting on locks
+	// of finalized transactions and telling the caller via
+	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
+	TransactionIsFinalized(*roachpb.Transaction)
+
 	// String returns a debug string representing the state of the lockTable.
 	String() string
 }
@@ -588,6 +594,10 @@ type lockTableGuard interface {
 
 	// CurState returns the latest waiting state.
 	CurState() waitingState
+
+	// When ShouldWait() returns false, this method must be called to get
+	// list of locks to resolve before evaluation.
+	ResolveBeforeEvaluation() []roachpb.LockUpdate
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held
@@ -646,11 +656,6 @@ type lockTableWaiter interface {
 	// and, in turn, remove this method. This will likely fall out of pulling
 	// all replicated locks into the lockTable.
 	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
-
-	// ClearCaches wipes all caches maintained by the lockTableWaiter. This is
-	// primarily used to recover memory when a replica loses a lease. However,
-	// it is also used in tests to reset the state of the lockTableWaiter.
-	ClearCaches()
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.

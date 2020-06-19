@@ -469,7 +469,7 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 				lastWriteIdxByKey[string(o.Key)] = idx
 			}
 			mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
-			if err := batch.Delete(storage.EncodeKey(mvccKey), nil); err != nil {
+			if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
 				panic(err)
 			}
 		}
@@ -503,7 +503,7 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
 			}
-			if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
+			if err := batch.Set(storage.EncodeMVCCKey(mvccKey), o.Value.RawBytes, nil); err != nil {
 				panic(err)
 			}
 		case *observedRead:
@@ -679,7 +679,7 @@ func validReadTime(b *pebble.Batch, key roachpb.Key, value []byte) timeSpan {
 
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
@@ -732,7 +732,7 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: span.Key}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {

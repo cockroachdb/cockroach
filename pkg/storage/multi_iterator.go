@@ -86,6 +86,10 @@ func (f *multiIterator) UnsafeKey() MVCCKey {
 	return f.iters[f.currentIdx].UnsafeKey()
 }
 
+func (f *multiIterator) UnsafeStorageKey() StorageKey {
+	return f.iters[f.currentIdx].UnsafeStorageKey()
+}
+
 // UnsafeValue returns the current value as a byte slice, but the memory is
 // invalidated on the next call to {NextKey,Seek}.
 func (f *multiIterator) UnsafeValue() []byte {

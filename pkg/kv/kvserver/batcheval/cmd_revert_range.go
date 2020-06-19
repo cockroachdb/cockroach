@@ -51,7 +51,7 @@ func isEmptyKeyTimeRange(
 	iter := readWriter.NewIterator(storage.IterOptions{
 		LowerBound: from, UpperBound: to,
 		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
-	})
+	}, storage.MVCCKeyIterKind)
 	defer iter.Close()
 	iter.SeekGE(storage.MVCCKey{Key: from})
 	ok, err := iter.Valid()

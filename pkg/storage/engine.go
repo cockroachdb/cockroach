@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -40,6 +41,16 @@ func init() {
 // SimpleIterator is an interface for iterating over key/value pairs in an
 // engine. SimpleIterator implementations are thread safe unless otherwise
 // noted. SimpleIterator is a subset of the functionality offered by Iterator.
+//
+// Implementations of SimpleIterator have one of the following behaviors:
+// - Only look at the MVCC key space (including inline-meta).
+// - Look at the MVCC key space and make separated intents/locks appear
+//   interleaved with MVCC keys (the lock keys will be transformed to look
+//   like MVCC keys). Unlike Iterator, a SimpleIterator cannot be used to
+//   distinguish between an intent that was interleaved or separated, so
+//   should not be used when reads are being used to guide writes.
+// Which of these behaviors will depend on whether separated intents are
+// possible, and on parameters specified when creating the iterator.
 type SimpleIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
@@ -58,7 +69,7 @@ type SimpleIterator interface {
 	// iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the last key.
 	Next()
-	// NextKey advances the iterator to the next MVCC key. This operation is
+	// NextKey advances the iterator to the next MVCC/storage key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
 	// for a key.
@@ -66,6 +77,9 @@ type SimpleIterator interface {
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeKey() MVCCKey
+	// UnsafeStorageKey returns the same value as StorageKey, but the memory is
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
+	UnsafeStorageKey() StorageKey
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
@@ -80,20 +94,56 @@ type IteratorStats struct {
 // Iterator is an interface for iterating over key/value pairs in an
 // engine. Iterator implementations are thread safe unless otherwise
 // noted.
+//
+// Implementations of Iterator have one of the following behaviors:
+// - Only look at the MVCC key space (including inline-meta)
+// - Look at the MVCC key space and make separated intents/locks appear
+//   interleaved with MVCC keys (the lock keys will be transformed to look
+//   like MVCC keys). The IsCurMetaSeparated() method can be used to
+//   observe when such a transformation has been done.
+// - Look at all parts of the key space as StorageKeys which encompass
+//   both MVCC keys and lock table keys (using the *Storage* methods
+//   for absolute positioning and for observing the key-value at the current
+//   position). The caller must not call any of the methods with MVCCKey
+//   parameters or return values in this case since the iterator may
+//   not be able to represent the key as an MVCCKey.
+// Which of these behaviors will depend on whether separated intents are
+// possible, and on parameters specified when creating the iterator.
+// TODO: add forward reference to the NewIterator parameters.
+// TODO: separate into MVCCIterator and StorageIterator. Former is for
+// real MVCC (including those who want to see separated intents as
+// interleaved) and for the existing users that never have any "versions"
+// (e.g. raft log). Latter is for that need to deal with lock table keys
+// that are representable as MVCCKey.
 type Iterator interface {
 	SimpleIterator
-
+	// SeekStorageGE advances the iterator to the first key in the engine which
+	// is >= the provided key.
+	SeekStorageGE(key StorageKey)
 	// SeekLT advances the iterator to the first key in the engine which
 	// is < the provided key.
 	SeekLT(key MVCCKey)
+	// SeekStorageLT advances the iterator to the first key in the engine which
+	// is < the provided key.
+	SeekStorageLT(key StorageKey)
 	// Prev moves the iterator backward to the previous key/value
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
 	// Key returns the current key.
 	Key() MVCCKey
-	// UnsafeRawKey returns the current raw key (i.e. the encoded MVCC key).
-	UnsafeRawKey() []byte
+	// StorageKey returns the current key.
+	StorageKey() StorageKey
+	// When Key() is positioned on an MVCCMetadata value, returns true iff
+	// this MVCCMetadata is a separated lock/intent. Most users of Iterator
+	// should not care about this function -- it is useful for implementing
+	// functionality in mvcc.go etc.
+	IsCurMetaSeparated() bool
+
+	// UnsafeRawKeyDangerous returns the current raw key (i.e. the encoded storage key).
+	// This is a dangerous method since it does not hide the difference between
+	// interleaved and separated intents.
+	UnsafeRawKeyDangerous() []byte
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
@@ -158,7 +208,7 @@ type MVCCIterator interface {
 // For performance, every Iterator must specify either Prefix or UpperBound.
 type IterOptions struct {
 	// If Prefix is true, Seek will use the user-key prefix of
-	// the supplied MVCC key to restrict which sstables are searched,
+	// the supplied MVCC/Storage key to restrict which sstables are searched,
 	// but iteration (using Next) over keys without the same user-key
 	// prefix will not work correctly (keys may be skipped).
 	Prefix bool
@@ -184,8 +234,28 @@ type IterOptions struct {
 	// iterators with time bounds hints will frequently return keys outside of the
 	// [start, end] time range. If you must guarantee that you never see a key
 	// outside of the time bounds, perform your own filtering.
+	//
+	// Specifying these hints constructs an Iterator that will only look at the
+	// MVCC key space and not observe any separated intents.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
+
+// IterKind is used to inform Reader on the kind of iteration desired
+// by the caller.
+type IterKind int
+
+const (
+	// Intents appear interleaved with keys.
+	MVCCKeyAndIntentsIterKind IterKind = iota
+	// Separated intents will not be seen. Any interleaved intents may be
+	// seen, but the behavior is not guaranteed since no correctness
+	// properties are derivable from such partial knowledge of intents.
+	MVCCKeyIterKind
+	// Iteration will happen over storage keys so no attempt is made
+	// to pretend that separated intents are interleaved. In fact, the
+	// iteration keys may not be representable as MVCC keys.
+	StorageKeyIterKind
+)
 
 // Reader is the read interface to an engine's data.
 type Reader interface {
@@ -216,6 +286,9 @@ type Reader interface {
 	// returned sst. If it is the case that the versions of the last key will lead
 	// to an SST that exceeds maxSize, an error will be returned. This parameter
 	// exists to prevent creating SSTs which are too large to be used.
+	//
+	// This function looks at MVCC versions and intents (pretending that separated
+	// intents are interleaved), and returns an error if an intent is found.
 	ExportToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64,
@@ -224,6 +297,12 @@ type Reader interface {
 	// Get returns the value for the given key, nil otherwise.
 	//
 	// Deprecated: use MVCCGet instead.
+	//
+	// If separated intents can exist, this function will fall back to also
+	// searching the lock table key space, since it does not know what the
+	// caller desires (e.g. is the key for inline meta). This is not
+	// efficient, but since this function is deprecated and only used in
+	// tests, it is acceptable.
 	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
@@ -231,6 +310,12 @@ type Reader interface {
 	// key and the value.
 	//
 	// Deprecated: use Iterator.ValueProto instead.
+	//
+	// If separated intents can exist, this function will fall back to also
+	// searching the lock table key space, since it does not know what the
+	// caller desires (e.g. is the key for inline meta). This is not
+	// efficient, but since this function is deprecated and only used in
+	// tests, it is acceptable.
 	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
@@ -239,12 +324,28 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	Iterate(start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error)) error
+	//
+	// TODO: validate that all callers are correctly setting seeIntents.
+	Iterate(start, end roachpb.Key, seeIntents bool, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
-	NewIterator(opts IterOptions) Iterator
+	//
+	// TODO: validate that all callers are correctly setting iterKind.
+	NewIterator(opts IterOptions, iterKind IterKind) Iterator
 }
+
+// NB: In this file "intent" refers to non-inline meta. We also refer to it as
+// MVCC-meta.
+type PrecedingIntentState int
+
+// When an intent is being written, the PutMVCCMeta needs to know the state of the intent
+// that was there before this write.
+const (
+	ExistingIntentInterleaved PrecedingIntentState = iota
+	ExistingIntentSeparated
+	NoExistingIntent
+)
 
 // Writer is the write interface to an engine's data.
 type Writer interface {
@@ -259,44 +360,67 @@ type Writer interface {
 	ApplyBatchRepr(repr []byte, sync bool) error
 	// Clear removes the item from the db with the given key. Note that clear
 	// actually removes entries from the storage engine, rather than inserting
-	// tombstones.
+	// tombstones. Only use for a key with a non-empty timestamp.
 	//
 	// It is safe to modify the contents of the arguments after Clear returns.
 	Clear(key MVCCKey) error
+	// ClearKeyWithEmptyTimestamp is a clear method for use with inline-meta
+	// or other non-MVCC keys that have an empty timestamp.
+	ClearKeyWithEmptyTimestamp(key roachpb.Key) error
+
+	// TODO: make this package internal
+	// ClearMVCCMeta is a higher-level clear method for clearing MVCC intents/locks that
+	// could be separated or interleaved. This method will use "single clear"
+	// under the covers when possible.
+	// REQUIRES: state is ExistingIntentInterleaved or ExistingIntentSeparated
+	ClearMVCCMeta(key roachpb.Key, state PrecedingIntentState, precedingPossiblyUpdated bool, txnUUID uuid.UUID) error
+
 	// SingleClear removes the most recent write to the item from the db with
 	// the given key. Whether older version of the item will come back to life
 	// if not also removed with SingleClear is undefined. See the following:
 	//   https://github.com/facebook/rocksdb/wiki/Single-Delete
 	// for details on the SingleDelete operation that this method invokes. Note
 	// that clear actually removes entries from the storage engine, rather than
-	// inserting tombstones.
+	// inserting tombstones. Only use for a key with a non-empty timestamp.
 	//
 	// It is safe to modify the contents of the arguments after SingleClear
 	// returns.
 	SingleClear(key MVCCKey) error
-	// ClearRange removes a set of entries, from start (inclusive) to end
+	// SingleClearKeyWithEmptyTimestamp is a clear method for use with inline-meta
+	// or other non-MVCC keys that have an empty timestamp.
+	SingleClearKeyWithEmptyTimestamp(key roachpb.Key) error
+	// Clear*Range removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear, this method actually removes entries from
 	// the storage engine.
 	//
 	// Note that when used on batches, subsequent reads may not reflect the result
 	// of the ClearRange.
 	//
-	// It is safe to modify the contents of the arguments after ClearRange
+	// It is safe to modify the contents of the arguments after Clear*Range
 	// returns.
-	//
-	// TODO(peter): Most callers want to pass roachpb.Key, except for
-	// MVCCClearTimeRange. That function actually does what to clear records
-	// between specific versions.
-	ClearRange(start, end MVCCKey) error
-	// ClearIterRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear and ClearRange, this method actually removes
+
+	// ClearNonMVCCRange is an optimization over ClearMVCCRangeAndIntents in
+	// that by knowing that there are no intents, we can avoid clearing a part
+	// of the keyspace that is empty. Package internal users of this method
+	// may use this to clear keys that are physically in the MVCC key range,
+	// and for clearing separated intents.
+	ClearNonMVCCRange(start, end roachpb.Key) error
+	// ClearMVCCRangeAndIntents also clear intents (interleaved or separated).
+	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
+	// ClearMVCCRange assumes there are no intents (interleaved or separated),
+	// and is used for doing clears over a subset of versions (since the
+	// parameters are complete MVCCKeys and not just roachpb.Keys).
+	ClearMVCCRange(start, end MVCCKey) error
+
+	// ClearIterMVCCRangeAndIntents removes a set of entries, from start (inclusive) to end
+	// (exclusive). Similar to ClearMVCCRangeAndIntents, this method actually removes
 	// entries from the storage engine. Unlike ClearRange, the entries to remove
 	// are determined by iterating over iter and per-key tombstones are
 	// generated.
 	//
-	// It is safe to modify the contents of the arguments after ClearIterRange
+	// It is safe to modify the contents of the arguments after ClearIterMVCCRangeAndIntents
 	// returns.
-	ClearIterRange(iter Iterator, start, end roachpb.Key) error
+	ClearIterMVCCRangeAndIntents(iter Iterator, start, end roachpb.Key) error
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"
@@ -314,10 +438,25 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Merge returns.
 	Merge(key MVCCKey, value []byte) error
-	// Put sets the given key to the value provided.
+	// Put sets the given key to the value provided. Only use for a key with a non-empty timestamp.
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	Put(key MVCCKey, value []byte) error
+	// PutKeyWithEmptyTimestamp is for non-intent keys that have an empty timestamp.
+	// Package internal users of this method may also use it for interleaved intents.
+	PutKeyWithEmptyTimestamp(key roachpb.Key, value []byte) error
+
+	// TODO: make this package internal and add comment for each parameter.
+	// PutMVCCMeta is a high-level method for updating/adding an intent for
+	// a key.
+	PutMVCCMeta(
+		key roachpb.Key, value []byte, state PrecedingIntentState, precedingPossiblyUpdated bool,
+		txnUUID uuid.UUID) error
+
+	// PutStorage is a low-level interface for users who understand the key space layout.
+	// Use sparingly.
+	PutStorage(key StorageKey, value []byte) error
+
 	// LogData adds the specified data to the RocksDB WAL. The data is
 	// uninterpreted by RocksDB (i.e. not added to the memtable or sstables).
 	//
@@ -630,7 +769,7 @@ func PutProto(
 // Specify max=0 for unbounded scans.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
-	err := reader.Iterate(start, end, func(kv MVCCKeyValue) (bool, error) {
+	err := reader.Iterate(start, end, true, func(kv MVCCKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
 			return true, nil
 		}
@@ -657,9 +796,10 @@ func WriteSyncNoop(ctx context.Context, eng Engine) error {
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
 // (exclusive). Depending on the number of keys, it will either use ClearRange
-// or ClearIterRange.
+// or ClearIterMVCCRangeAndIntents (even though this may not be clearing a
+// key representable as an MVCCKey -- this is a mess!).
 func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
-	iter := reader.NewIterator(IterOptions{UpperBound: end})
+	iter := reader.NewIterator(IterOptions{UpperBound: end}, MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	// It is expensive for there to be many range deletion tombstones in the same
@@ -675,7 +815,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	// clearRangeMinKeys, so it will be fairly cheap even for large
 	// ranges.
 	//
-	// TODO(bdarnell): Move this into ClearIterRange so we don't have
+	// TODO(bdarnell): Move this into ClearIterMVCCRangeAndIntents so we don't have
 	// to do this scan twice.
 	count := 0
 	iter.SeekGE(MakeMVCCMetadataKey(start))
@@ -695,9 +835,9 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	}
 	var err error
 	if count > clearRangeMinKeys {
-		err = writer.ClearRange(MakeMVCCMetadataKey(start), MakeMVCCMetadataKey(end))
+		err = writer.ClearMVCCRangeAndIntents(start, end)
 	} else {
-		err = writer.ClearIterRange(iter, start, end)
+		err = writer.ClearIterMVCCRangeAndIntents(iter, start, end)
 	}
 	if err != nil {
 		return err
@@ -770,7 +910,10 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 
 // Helper function to implement Reader.Iterate().
 func iterateOnReader(
-	reader Reader, start, end roachpb.Key, f func(MVCCKeyValue) (stop bool, err error),
+	reader Reader,
+	start, end roachpb.Key,
+	iterKind IterKind,
+	f func(MVCCKeyValue) (stop bool, err error),
 ) error {
 	if reader.Closed() {
 		return errors.New("cannot call Iterate on a closed batch")
@@ -778,8 +921,11 @@ func iterateOnReader(
 	if start.Compare(end) >= 0 {
 		return nil
 	}
+	if iterKind == StorageKeyIterKind {
+		panic("unsupported")
+	}
 
-	it := reader.NewIterator(IterOptions{UpperBound: end})
+	it := reader.NewIterator(IterOptions{UpperBound: end}, iterKind)
 	defer it.Close()
 
 	it.SeekGE(MakeMVCCMetadataKey(start))

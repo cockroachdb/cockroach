@@ -116,6 +116,11 @@ func EvalAddSSTable(
 			dataIter.UnsafeKey(), mvccStartKey.Key, mvccEndKey.Key)
 	}
 
+	// TODO: When intents can be separated
+	// - ensure that sstable has them as in the store (i.e., not transformed separated
+	//   to interleaved).
+	// - the stats computation below expects them to nbe interleaved. Fix.
+
 	// The above MVCCStats represents what is in this new SST.
 	//
 	// *If* the keys in the SST do not conflict with keys currently in this range,
@@ -192,7 +197,7 @@ func EvalAddSSTable(
 			// NB: This is *not* a general transformation of any arbitrary SST to a
 			// WriteBatch: it assumes every key in the SST is a simple Set. This is
 			// already assumed elsewhere in this RPC though, so that's OK here.
-			if err := readWriter.Put(dataIter.UnsafeKey(), dataIter.UnsafeValue()); err != nil {
+			if err := readWriter.PutStorage(dataIter.UnsafeStorageKey(), dataIter.UnsafeValue()); err != nil {
 				return result.Result{}, err
 			}
 			dataIter.Next()
@@ -225,7 +230,7 @@ func checkForKeyCollisions(
 	emptyMVCCStats := enginepb.MVCCStats{}
 
 	// Create iterator over the existing data.
-	existingDataIter := dbEngine.NewIterator(storage.IterOptions{UpperBound: mvccEndKey.Key})
+	existingDataIter := dbEngine.NewIterator(storage.IterOptions{UpperBound: mvccEndKey.Key}, storage.MVCCKeyAndIntentsIterKind)
 	defer existingDataIter.Close()
 	existingDataIter.SeekGE(mvccStartKey)
 	if ok, err := existingDataIter.Valid(); err != nil {

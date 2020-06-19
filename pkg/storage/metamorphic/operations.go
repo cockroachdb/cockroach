@@ -464,11 +464,12 @@ type iterOpenOp struct {
 
 func (i iterOpenOp) run(ctx context.Context) string {
 	rw := i.m.getReadWriter(i.rw)
+	// TODO(sumeer): also test other IterKind values.
 	iter := rw.NewIterator(storage.IterOptions{
 		Prefix:     false,
 		LowerBound: i.key,
 		UpperBound: i.endKey.Next(),
-	})
+	}, storage.MVCCKeyAndIntentsIterKind)
 
 	i.m.setIterInfo(i.id, iteratorInfo{
 		id:          i.id,
@@ -589,7 +590,7 @@ type clearRangeOp struct {
 func (c clearRangeOp) run(ctx context.Context) string {
 	// All ClearRange calls in Cockroach usually happen with metadata keys, so
 	// mimic the same behavior here.
-	err := c.m.engine.ClearRange(storage.MakeMVCCMetadataKey(c.key), storage.MakeMVCCMetadataKey(c.endKey))
+	err := c.m.engine.ClearMVCCRangeAndIntents(c.key, c.endKey)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err.Error())
 	}
