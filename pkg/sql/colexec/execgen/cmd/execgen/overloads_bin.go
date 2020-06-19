@@ -24,11 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var binaryOpIntMethod = map[tree.BinaryOperator]string{
-	tree.LShift: "LShift",
-	tree.RShift: "RShift",
-}
-
 var binaryOpDecMethod = map[tree.BinaryOperator]string{
 	tree.Plus:     "Add",
 	tree.Minus:    "Sub",
@@ -478,7 +473,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				}
 				{{.Target}} = {{.Left}} {{.Op}} {{.Right}}
 			}
-			`, binaryOpIntMethod[binOp])))
+			`, execgen.BinaryOpName[binOp])))
 
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.OpStr))
