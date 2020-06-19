@@ -122,7 +122,8 @@ const char* dlopenFailError = "failed to execute dlopen";
 }  // namespace
 
 struct CR_GEOS {
-  dlhandle dlHandle;
+  dlhandle geoscHandle;
+  dlhandle geosHandle;
 
   CR_GEOS_init_r GEOS_init_r;
   CR_GEOS_finish_r GEOS_finish_r;
@@ -183,11 +184,15 @@ struct CR_GEOS {
 
   CR_GEOS_ClipByRect_r GEOSClipByRect_r;
 
-  CR_GEOS(dlhandle h) : dlHandle(h) {}
+  CR_GEOS(dlhandle geoscHandle, dlhandle geosHandle)
+      : geoscHandle(geoscHandle), geosHandle(geosHandle) {}
 
   ~CR_GEOS() {
-    if (dlHandle != NULL) {
-      dlclose(dlHandle);
+    if (geoscHandle != NULL) {
+      dlclose(geoscHandle);
+    }
+    if (geosHandle != NULL) {
+      dlclose(geosHandle);
     }
   }
 
@@ -252,7 +257,7 @@ struct CR_GEOS {
   }
 
   template <typename T> char* InitSym(T* ptr, const char* symbol) {
-    *ptr = reinterpret_cast<T>(dlsym(dlHandle, symbol));
+    *ptr = reinterpret_cast<T>(dlsym(geoscHandle, symbol));
     if (ptr == nullptr) {
       return dlerror();
     }
@@ -277,14 +282,22 @@ CR_GEOS_String toGEOSString(const char* data, size_t len) {
   return result;
 }
 
-CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib) {
-  auto locStr = ToString(loc);
-  dlhandle dlHandle = dlopen(locStr.c_str(), RTLD_LAZY);
-  if (!dlHandle) {
+CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEOS** lib) {
+  // Open the libgeos.$(EXT) first, so that libgeos_c.$(EXT) can read it.
+  auto geosLocStr = ToString(geosLoc);
+  dlhandle geosHandle = dlopen(geosLocStr.c_str(), RTLD_LAZY);
+  if (!geosHandle) {
     return cStringToSlice((char*)dlopenFailError);
   }
 
-  std::unique_ptr<CR_GEOS> ret(new CR_GEOS(dlHandle));
+  auto geoscLocStr = ToString(geoscLoc);
+  dlhandle geoscHandle = dlopen(geoscLocStr.c_str(), RTLD_LAZY);
+  if (!geoscHandle) {
+    dlclose(geosHandle);
+    return cStringToSlice((char*)dlopenFailError);
+  }
+
+  std::unique_ptr<CR_GEOS> ret(new CR_GEOS(geoscHandle, geosHandle));
   auto error = ret->Init();
   if (error != nullptr) {
     return cStringToSlice(error);
