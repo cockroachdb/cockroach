@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -198,9 +199,10 @@ func (p *planner) dropViewImpl(
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if err := p.writeSchemaChange(
-			ctx, dependencyDesc, sqlbase.InvalidMutationID, "removing references for view",
+			ctx, dependencyDesc, sqlbase.InvalidMutationID,
+			fmt.Sprintf("removing references for view %s from table %s(%d)",
+				viewDesc.Name, dependencyDesc.Name, dependencyDesc.ID),
 		); err != nil {
 			return cascadeDroppedViews, err
 		}
@@ -215,7 +217,6 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
-			// TODO (lucy): Have more consistent/informative names for dependent jobs.
 			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
 			if err != nil {
 				return cascadeDroppedViews, err

@@ -309,7 +309,6 @@ func (p *planner) dropTableImpl(
 		if viewDesc.Dropped() {
 			continue
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, queueJob, "dropping dependent view", tree.DropCascade)
 		if err != nil {
 			return droppedViews, err
@@ -564,9 +563,11 @@ func (p *planner) removeInterleaveBackReference(
 		}
 	}
 	if t != tableDesc {
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		return p.writeSchemaChange(
-			ctx, t, sqlbase.InvalidMutationID, "removing reference for interleaved table",
+			ctx, t, sqlbase.InvalidMutationID,
+			fmt.Sprintf("removing reference for interleaved table %s(%d)",
+				t.Name, t.ID,
+			),
 		)
 	}
 	return nil

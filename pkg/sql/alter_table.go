@@ -836,10 +836,11 @@ func applyColumnMutation(
 				return err
 			}
 			for _, changedSeqDesc := range changedSeqDescs {
-				// TODO (lucy): Have more consistent/informative names for dependent jobs.
 				if err := params.p.writeSchemaChange(
-					params.ctx, changedSeqDesc, sqlbase.InvalidMutationID, "updating dependent sequence",
-				); err != nil {
+					params.ctx, changedSeqDesc, sqlbase.InvalidMutationID,
+					fmt.Sprintf("updating dependent sequence %s(%d) for table %s(%d)",
+						changedSeqDesc.Name, changedSeqDesc.ID, tableDesc.Name, tableDesc.ID,
+					)); err != nil {
 					return err
 				}
 			}
@@ -1085,9 +1086,10 @@ func (p *planner) updateFKBackReferenceName(
 		backref := &referencedTableDesc.InboundFKs[i]
 		if backref.Name == ref.Name && backref.OriginTableID == tableDesc.ID {
 			backref.Name = newName
-			// TODO (lucy): Have more consistent/informative names for dependent jobs.
 			return p.writeSchemaChange(
-				ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
+				ctx, referencedTableDesc, sqlbase.InvalidMutationID,
+				fmt.Sprintf("updating referenced FK table %s(%d) for table %s(%d)",
+					referencedTableDesc.Name, referencedTableDesc.ID, tableDesc.Name, tableDesc.ID),
 			)
 		}
 	}

@@ -350,9 +350,11 @@ func removeSequenceOwnerIfExists(
 		return errors.AssertionFailedf("couldn't find reference from column to this sequence")
 	}
 	col.OwnsSequenceIds = append(col.OwnsSequenceIds[:refIdx], col.OwnsSequenceIds[refIdx+1:]...)
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
 	if err := p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, "removing sequence owner",
+		ctx, tableDesc, sqlbase.InvalidMutationID,
+		fmt.Sprintf("removing sequence owner %s(%d) for sequence %d",
+			tableDesc.Name, tableDesc.ID, sequenceID,
+		),
 	); err != nil {
 		return err
 	}
@@ -392,9 +394,10 @@ func addSequenceOwner(
 
 	opts.SequenceOwner.OwnerColumnID = col.ID
 	opts.SequenceOwner.OwnerTableID = tableDesc.GetID()
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, "adding sequence owner",
+		ctx, tableDesc, sqlbase.InvalidMutationID, fmt.Sprintf(
+			"adding sequence owner %s(%d) for sequence %d",
+			tableDesc.Name, tableDesc.ID, sequenceID),
 	)
 }
 

@@ -186,12 +186,13 @@ func (n *createViewNode) startExec(params runParams) error {
 			dep.ID = newDesc.ID
 			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if err := params.p.writeSchemaChange(
 			params.ctx,
 			backRefMutable,
 			sqlbase.InvalidMutationID,
-			fmt.Sprintf("updating view reference %q", n.viewName),
+			fmt.Sprintf("updating view reference %q in table %s(%d)", n.viewName,
+				updated.desc.Name, updated.desc.ID,
+			),
 		); err != nil {
 			return err
 		}
@@ -312,7 +313,9 @@ func (p *planner) replaceViewDesc(
 				ctx,
 				desc,
 				sqlbase.InvalidMutationID,
-				fmt.Sprintf("updating view reference %q", n.viewName),
+				fmt.Sprintf("removing view reference for %q from %s(%d)", n.viewName,
+					desc.Name, desc.ID,
+				),
 			); err != nil {
 				return nil, err
 			}
