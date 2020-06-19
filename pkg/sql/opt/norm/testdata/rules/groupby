@@ -1170,7 +1170,7 @@ upsert xy
  └── project
       ├── columns: upsert_y:10 y:4 column5:5 x:6 y:7
       ├── lax-key: (4,6)
-      ├── fd: ()-->(4,5), (6)-->(7), (6)-->(10)
+      ├── fd: ()-->(4,5), (6)-->(7,10)
       ├── left-join (hash)
       │    ├── columns: y:4 column5:5 x:6 y:7
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)

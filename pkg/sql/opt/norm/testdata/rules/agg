@@ -55,7 +55,7 @@ scalar-group-by
  ├── project
  │    ├── columns: column7:7 column10:10 column11:11 column13:13 column15:15 k:1!null i:2
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,7,10,11,13), (2)-->(7), (1,2)-->(15)
+ │    ├── fd: (1)-->(2,7,10,11,13,15), (2)-->(7)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3
  │    │    ├── key: (1)

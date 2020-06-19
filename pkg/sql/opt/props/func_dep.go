@@ -1695,6 +1695,11 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 		return
 	}
 
+	if strict {
+		// Reducing the columns yields a "stronger" dependency.
+		from = f.ReduceCols(from)
+	}
+
 	// Delegate constant dependency.
 	if from.Empty() {
 		if !strict {
