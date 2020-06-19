@@ -213,7 +213,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     if (!this.props.statement) {
       return null;
     }
-    const { stats, statement, app, opt, failed, implicit_txn } = this.props.statement;
+    const { stats, statement, app, distSQL, opt, failed, implicit_txn } = this.props.statement;
 
     if (!stats) {
       const sourceApp = getMatchParamByName(this.props.match, appAttr);
@@ -282,7 +282,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Distributed execution?</h4>
-                  <p className="summary--card__item--value">{ renderBools(opt) }</p>
+                  <p className="summary--card__item--value">{ renderBools(distSQL) }</p>
                 </div>
                 <div className="summary--card__item">
                   <h4 className="summary--card__item--label">Used cost-based optimizer?</h4>
