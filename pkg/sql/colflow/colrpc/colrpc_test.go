@@ -286,7 +286,7 @@ func TestOutboxInbox(t *testing.T) {
 				// Accumulate batches to check for correctness.
 				// Copy batch since it's not safe to reuse after calling Next.
 				if outputBatch == coldata.ZeroBatch {
-					outputBatches.Add(coldata.ZeroBatch, typs)
+					outputBatches.Add(coldata.ZeroBatch)
 				} else {
 					batchCopy := testAllocator.NewMemBatchWithSize(typs, outputBatch.Length())
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
@@ -300,7 +300,7 @@ func TestOutboxInbox(t *testing.T) {
 						}
 					})
 					batchCopy.SetLength(outputBatch.Length())
-					outputBatches.Add(batchCopy, typs)
+					outputBatches.Add(batchCopy)
 				}
 			}
 			if outputBatch.Length() == 0 {

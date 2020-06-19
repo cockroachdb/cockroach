@@ -278,11 +278,12 @@ func BenchmarkDistinct(b *testing.B) {
 							func(b *testing.B) {
 								b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
 								b.ResetTimer()
+								source := newFiniteChunksSource(batch, typs, nBatches, nCols)
 								for n := 0; n < b.N; n++ {
+									source.Reset()
 									// Note that the source will be ordered on all nCols so that the
 									// number of distinct tuples doesn't vary between different
 									// distinct operator variations.
-									source := newFiniteChunksSource(batch, typs, nBatches, nCols)
 									distinct, err := distinctConstructor(testAllocator, source, distinctCols, numOrderedCols, typs)
 									if err != nil {
 										b.Fatal(err)

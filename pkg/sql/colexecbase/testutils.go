@@ -25,7 +25,8 @@ import (
 // interface. If there are no batches to return, Next will panic.
 type BatchBuffer struct {
 	ZeroInputNode
-	buffer []coldata.Batch
+	buffer     []coldata.Batch
+	origBuffer []coldata.Batch
 }
 
 var _ Operator = &BatchBuffer{}
@@ -38,8 +39,9 @@ func NewBatchBuffer() *BatchBuffer {
 }
 
 // Add adds a batch to the buffer.
-func (b *BatchBuffer) Add(batch coldata.Batch, _ []*types.T) {
+func (b *BatchBuffer) Add(batch coldata.Batch) {
 	b.buffer = append(b.buffer, batch)
+	b.origBuffer = b.buffer
 }
 
 // Init is part of the Operator interface.
@@ -47,9 +49,16 @@ func (b *BatchBuffer) Init() {}
 
 // Next is part of the Operator interface.
 func (b *BatchBuffer) Next(context.Context) coldata.Batch {
+	if len(b.buffer) == 0 {
+		return coldata.ZeroBatch
+	}
 	batch := b.buffer[0]
 	b.buffer = b.buffer[1:]
 	return batch
+}
+
+func (b *BatchBuffer) Reset() {
+	b.buffer = b.origBuffer
 }
 
 // RepeatableBatchSource is an Operator that returns the same batch forever.

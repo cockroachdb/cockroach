@@ -300,7 +300,7 @@ func TestRouterOutputNext(t *testing.T) {
 				out := newOpTestOutput(batches, tc.expected)
 				for {
 					b := <-batchChan
-					batches.Add(b, typs)
+					batches.Add(b)
 					if b.Length() == 0 {
 						break
 					}
@@ -546,7 +546,7 @@ func TestRouterOutputRandom(t *testing.T) {
 				go func() {
 					for {
 						b := o.Next(ctx)
-						actual.Add(coldatatestutils.CopyBatch(b, typs, testColumnFactory), typs)
+						actual.Add(coldatatestutils.CopyBatch(b, typs, testColumnFactory))
 						if b.Length() == 0 {
 							wg.Done()
 							return

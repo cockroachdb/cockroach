@@ -115,7 +115,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 		b := testAllocator.NewMemBatch(typs)
 		b.SetLength(0)
-		input.Add(b, typs)
+		input.Add(b)
 
 		// Close the csChan to unblock the Recv goroutine (we don't need it for this
 		// test).

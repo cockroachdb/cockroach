@@ -1220,67 +1220,32 @@ func (f *finiteBatchSource) reset(usableCount int) {
 	f.usableCount = usableCount
 }
 
-// finiteChunksSource is an Operator that returns a batch specified number of
-// times. The first matchLen columns of the batch are incremented every time
-// (except for the first) the batch is returned to emulate source that is
-// already ordered on matchLen columns.
-type finiteChunksSource struct {
-	colexecbase.ZeroInputNode
-	repeatableBatch *colexecbase.RepeatableBatchSource
-
-	usableCount int
-	matchLen    int
-	adjustment  []int64
-}
-
-var _ colexecbase.Operator = &finiteChunksSource{}
-
+// newFiniteChunksSource returns an operator that returns a batch specified
+// number of times. The first matchLen columns of the batch are incremented
+// every time(except for the first) the batch is returned to emulate source that
+// is already ordered on matchLen columns.
 func newFiniteChunksSource(
 	batch coldata.Batch, typs []*types.T, usableCount int, matchLen int,
-) *finiteChunksSource {
-	return &finiteChunksSource{
-		repeatableBatch: colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs),
-		usableCount:     usableCount,
-		matchLen:        matchLen,
+) *colexecbase.BatchBuffer {
+	buf := &colexecbase.BatchBuffer{}
+	buf.Add(batch)
+	adjustment := make([]int64, matchLen)
+	for i := 0; i < matchLen; i++ {
+		firstValue := batch.ColVec(i).Int64()[0]
+		lastValue := batch.ColVec(i).Int64()[batch.Length()-1]
+		adjustment[i] = lastValue - firstValue + 1
 	}
-}
-
-func (f *finiteChunksSource) Init() {
-	f.repeatableBatch.Init()
-	f.adjustment = make([]int64, f.matchLen)
-}
-
-func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
-	if f.usableCount > 0 {
-		f.usableCount--
-		batch := f.repeatableBatch.Next(ctx)
-		if f.matchLen > 0 && f.adjustment[0] == 0 {
-			// We need to calculate the difference between the first and the last
-			// tuples in batch in first matchLen columns so that in the following
-			// calls to Next() the batch is adjusted such that tuples in consecutive
-			// batches are ordered on the first matchLen columns.
-			for col := 0; col < f.matchLen; col++ {
-				firstValue := batch.ColVec(col).Int64()[0]
-				lastValue := batch.ColVec(col).Int64()[batch.Length()-1]
-				f.adjustment[col] = lastValue - firstValue + 1
-			}
-		} else {
-			for i := 0; i < f.matchLen; i++ {
-				int64Vec := batch.ColVec(i).Int64()
-				for j := range int64Vec {
-					int64Vec[j] += f.adjustment[i]
-				}
-				// We need to update the adjustments because RepeatableBatchSource
-				// returns the original batch that it was instantiated with, and we
-				// want to have constantly non-decreasing vectors.
-				firstValue := batch.ColVec(i).Int64()[0]
-				lastValue := batch.ColVec(i).Int64()[batch.Length()-1]
-				f.adjustment[i] += lastValue - firstValue + 1
+	for i := 1; i < usableCount; i++ {
+		newBatch := coldatatestutils.CopyBatch(batch, typs, testColumnFactory)
+		for j := 0; j < matchLen; j++ {
+			int64Vec := newBatch.ColVec(j).Int64()
+			for k := range int64Vec {
+				int64Vec[k] += adjustment[j] * int64(usableCount)
 			}
 		}
-		return batch
+		buf.Add(newBatch)
 	}
-	return coldata.ZeroBatch
+	return buf
 }
 
 func TestOpTestInputOutput(t *testing.T) {

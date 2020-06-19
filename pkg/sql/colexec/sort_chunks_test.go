@@ -288,8 +288,9 @@ func BenchmarkSortChunks(b *testing.B) {
 									}
 								}
 								b.ResetTimer()
+								source := newFiniteChunksSource(batch, typs, nBatches, matchLen)
 								for n := 0; n < b.N; n++ {
-									source := newFiniteChunksSource(batch, typs, nBatches, matchLen)
+									source.Reset()
 									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen)
 									if err != nil {
 										b.Fatal(err)
