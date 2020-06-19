@@ -26,7 +26,7 @@
     "mini-create-react-context": "^0.3.2",
     "moment": "^2.19.3",
     "nvd3": "^1.8.5",
-    "popper.js": "^1.14.4",
+    "popper.js": "^1.16.1",
     "raw-loader": "^0.5.1",
     "rc-form": "^2.4.11",
     "rc-progress": "^2.2.1",
