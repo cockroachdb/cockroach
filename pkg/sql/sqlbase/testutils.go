@@ -1562,8 +1562,16 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	numLabels := rng.Intn(6) + 1
 	labels := make([]string, numLabels)
+	labelsMap := make(map[string]struct{})
 	for i := 0; i < numLabels; i++ {
-		labels[i] = RandString(rng, rng.Intn(6)+1, alphabet)
+		for {
+			s := RandString(rng, rng.Intn(6)+1, alphabet)
+			if _, ok := labelsMap[s]; !ok {
+				labels[i] = s
+				labelsMap[s] = struct{}{}
+				break
+			}
+		}
 	}
 	un, err := tree.NewUnresolvedObjectName(1, [3]string{name}, 0)
 	if err != nil {
