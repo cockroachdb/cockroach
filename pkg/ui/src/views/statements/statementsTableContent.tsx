@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useHistory } from "react-router-dom";
 import classNames from "classnames/bind";
+import { Location } from "history";
 import { Anchor, Tooltip } from "src/components";
 import { statementDiagnostics, statementsRetries, statementsSql, statementsTimeInterval, transactionalPipelining } from "src/util/docs";
 import getHighlightedText from "src/util/highlightedText";
@@ -19,6 +20,7 @@ import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsMo
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { shortStatement } from "./statementsTable";
 import styles from "./statementsTableContent.module.styl";
+import { LocationState } from "oss/src/views/shared/hoc/withNavigationBack";
 
 export type NodeNames = { [nodeId: string]: string };
 
@@ -216,10 +218,20 @@ export const StatementTableCell = {
 };
 
 export const StatementLink = (props: { statement: string, app: string, implicitTxn: boolean, search: string }) => {
+  const history = useHistory();
   const summary = summarize(props.statement);
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
+  const targetLocation: Location<LocationState> = {
+    pathname: `${base}/${encodeURIComponent(props.statement)}`,
+    state: {
+      from: history.location,
+    },
+    search: undefined,
+    hash: undefined,
+  };
+
   return (
-    <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
+    <Link to={targetLocation}>
       <div>
         <Tooltip
           placement="bottom"

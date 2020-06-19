@@ -13,7 +13,9 @@ import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
+import { compose } from "redux";
 import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
+import { StaticContext } from "react-router";
 import { createSelector } from "reselect";
 
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
@@ -53,6 +55,7 @@ import { trackSubnavSelection } from "src/util/analytics";
 import styles from "./statementDetails.module.styl";
 import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
 import summaryCardStyles from "src/views/shared/components/summaryCard/summaryCard.module.styl";
+import { LocationState, withNavigationBack, WithNavigationBackProps } from "src/views/shared/hoc/withNavigationBack";
 
 const { TabPane } = Tabs;
 
@@ -107,7 +110,10 @@ interface StatementDetailsOwnProps {
   diagnosticsCount: number;
 }
 
-export type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
+export type StatementDetailsProps =
+  StatementDetailsOwnProps
+  & RouteComponentProps<{}, StaticContext, LocationState>
+  & WithNavigationBackProps;
 
 interface StatementDetailsState {
   sortSetting: SortSetting;
@@ -216,7 +222,9 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  prevPage = () => this.props.history.goBack();
+  prevPage = () => {
+    this.props.navigateBack();
+  }
 
   onTabChange = (tabId: string) => {
     const { history } = this.props;
@@ -652,9 +660,10 @@ const mapDispatchToProps = {
 };
 
 // tslint:disable-next-line:variable-name
-const StatementDetailsConnected = withRouter(connect(
-  mapStateToProps,
-  mapDispatchToProps,
-)(StatementDetails));
+const StatementDetailsConnected = compose(
+  withNavigationBack("/statements"),
+  withRouter,
+  connect(mapStateToProps, mapDispatchToProps),
+)(StatementDetails);
 
 export default StatementDetailsConnected;
