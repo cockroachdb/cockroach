@@ -356,10 +356,7 @@ func (ef *execFactory) ConstructHashJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
-	if err != nil {
-		return nil, err
-	}
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 
 	numEqCols := len(leftEqCols)
 	// Save some allocations by putting both sides in the same slice.
@@ -393,10 +390,7 @@ func (ef *execFactory) ConstructApplyJoin(
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
 	leftSrc := asDataSource(left)
-	pred, err := makePredicate(joinType, leftSrc.columns, rightColumns)
-	if err != nil {
-		return nil, err
-	}
+	pred := makePredicate(joinType, leftSrc.columns, rightColumns)
 	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
 }
@@ -413,10 +407,7 @@ func (ef *execFactory) ConstructMergeJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
-	if err != nil {
-		return nil, err
-	}
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
@@ -681,22 +672,16 @@ func (ef *execFactory) ConstructLookupJoin(
 		eqColsAreKey: eqColsAreKey,
 		reqOrdering:  ReqOrdering(reqOrdering),
 	}
-	if onCond != nil && onCond != tree.DBoolTrue {
-		n.onCond = onCond
-	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
 		n.eqCols[i] = int(c)
 	}
-	// Build the result columns.
-	inputCols := planColumns(input.(planNode))
-	var scanCols sqlbase.ResultColumns
-	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
-		scanCols = planColumns(tableScan)
+	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan))
+	if onCond != nil && onCond != tree.DBoolTrue {
+		n.onCond = pred.iVarHelper.Rebind(onCond)
 	}
-	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
-	n.columns = append(n.columns, inputCols...)
-	n.columns = append(n.columns, scanCols...)
+	n.columns = pred.cols
+
 	return n, nil
 }
 
@@ -744,10 +729,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	outputCols = append(outputCols, inputCols...)
 	outputCols = append(outputCols, projectedVtableCols...)
 	// joinType is either INNER or LEFT_OUTER.
-	pred, err := makePredicate(joinType, inputCols, projectedVtableCols)
-	if err != nil {
-		return nil, err
-	}
+	pred := makePredicate(joinType, inputCols, projectedVtableCols)
 	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	n := &vTableLookupJoinNode{
 		input:             input.(planNode),

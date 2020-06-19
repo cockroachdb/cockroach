@@ -68,7 +68,7 @@ lookup-join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
- │           pred          @5 > 1       ·                   ·
+ │           pred          e > 1        ·                   ·
  └── scan    ·             ·            (a, b, c)           ·
 ·            table         abc@primary  ·                   ·
 ·            spans         /2-          ·                   ·
@@ -83,7 +83,7 @@ lookup-join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (a) = (f)    ·                   ·
- │           pred          @6 > 1       ·                   ·
+ │           pred          f > 1        ·                   ·
  └── scan    ·             ·            (a, b, c)           ·
 ·            table         abc@primary  ·                   ·
 ·            spans         /2-          ·                   ·
@@ -98,7 +98,7 @@ lookup-join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
- │           pred          @1 >= @5     ·                   ·
+ │           pred          a >= e       ·                   ·
  └── scan    ·             ·            (a, b, c)           ·
 ·            table         abc@primary  ·                   ·
 ·            spans         FULL SCAN    ·                   ·
@@ -113,7 +113,7 @@ lookup-join  ·             ·            (a, b, c, d, e, f)  ·
  │           table         def@primary  ·                   ·
  │           type          inner        ·                   ·
  │           equality      (b) = (f)    ·                   ·
- │           pred          @1 >= @5     ·                   ·
+ │           pred          a >= e       ·                   ·
  └── scan    ·             ·            (a, b, c)           ·
 ·            table         abc@primary  ·                   ·
 ·            spans         FULL SCAN    ·                   ·
@@ -176,7 +176,7 @@ render            ·                      ·                            (a, b, c
       │           equality               (a, b, c, d) = (a, b, c, d)  ·                         ·
       │           equality cols are key  ·                            ·                         ·
       │           parallel               ·                            ·                         ·
-      │           pred                   @7 > 0                       ·                         ·
+      │           pred                   c > 0                        ·                         ·
       └── scan    ·                      ·                            (a, b, c, d)              ·
 ·                 table                  data@primary                 ·                         ·
 ·                 spans                  FULL SCAN                    ·                         ·
@@ -231,7 +231,7 @@ distinct               ·             ·                  (title)               
            │           table         books2@primary     ·                             ·
            │           type          inner              ·                             ·
            │           equality      (title) = (title)  ·                             ·
-           │           pred          @2 != @4           ·                             ·
+           │           pred          shelf != shelf     ·                             ·
            └── scan    ·             ·                  (title, shelf)                +title
 ·                      table         books@primary      ·                             ·
 ·                      spans         FULL SCAN          ·                             ·
@@ -263,7 +263,7 @@ distinct                  ·             ·                  (name)             
            │              table         books2@primary     ·                                         ·
            │              type          inner              ·                                         ·
            │              equality      (title) = (title)  ·                                         ·
-           │              pred          @4 != @6           ·                                         ·
+           │              pred          shelf != shelf     ·                                         ·
            └── hash-join  ·             ·                  (name, book, title, shelf)                ·
                 │         type          inner              ·                                         ·
                 │         equality      (book) = (title)   ·                                         ·
@@ -444,7 +444,7 @@ render            ·             ·              (a, b)     +a
       │           table         large@primary  ·          ·
       │           type          left outer     ·          ·
       │           equality      (a) = (a)      ·          ·
-      │           pred          (@3 % 6) = 0   ·          ·
+      │           pred          (b % 6) = 0    ·          ·
       └── scan    ·             ·              (a)        +a
 ·                 table         small@primary  ·          ·
 ·                 spans         FULL SCAN      ·          ·
@@ -507,7 +507,7 @@ render            ·             ·              (c, c)     ·
       │           table         large@bc       ·          ·
       │           type          left outer     ·          ·
       │           equality      (c) = (b)      ·          ·
-      │           pred          @3 < 20        ·          ·
+      │           pred          c < 20         ·          ·
       └── scan    ·             ·              (c)        ·
 ·                 table         small@primary  ·          ·
 ·                 spans         FULL SCAN      ·          ·
@@ -584,7 +584,7 @@ render            ·                      ·          (a)              ·
       │           equality               (d) = (d)  ·                ·
       │           equality cols are key  ·          ·                ·
       │           parallel               ·          ·                ·
-      │           pred                   @1 = @4    ·                ·
+      │           pred                   a = a      ·                ·
       └── scan    ·                      ·          (a, d, e)        ·
 ·                 table                  t@primary  ·                ·
 ·                 spans                  FULL SCAN  ·                ·
@@ -654,7 +654,7 @@ render            ·             ·          (a)              ·
       │           table         u@idx      ·                ·
       │           type          inner      ·                ·
       │           equality      (d) = (d)  ·                ·
-      │           pred          @1 = @4    ·                ·
+      │           pred          a = a      ·                ·
       └── scan    ·             ·          (a, d, e)        ·
 ·                 table         t@primary  ·                ·
 ·                 spans         FULL SCAN  ·                ·
@@ -775,30 +775,30 @@ lookup-join  ·                      ·                (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-·            distribution  full           ·          ·
-·            vectorized    true           ·          ·
-lookup-join  ·             ·              (a, b, c)  ·
- │           table         def@primary    ·          ·
- │           type          semi           ·          ·
- │           equality      (a) = (f)      ·          ·
- │           pred          (@4 + @2) > 1  ·          ·
- └── scan    ·             ·              (a, b, c)  ·
-·            table         abc@primary    ·          ·
-·            spans         FULL SCAN      ·          ·
+·            distribution  full         ·          ·
+·            vectorized    true         ·          ·
+lookup-join  ·             ·            (a, b, c)  ·
+ │           table         def@primary  ·          ·
+ │           type          semi         ·          ·
+ │           equality      (a) = (f)    ·          ·
+ │           pred          (d + b) > 1  ·          ·
+ └── scan    ·             ·            (a, b, c)  ·
+·            table         abc@primary  ·          ·
+·            spans         FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-·            distribution  full           ·          ·
-·            vectorized    true           ·          ·
-lookup-join  ·             ·              (a, b, c)  ·
- │           table         def@primary    ·          ·
- │           type          anti           ·          ·
- │           equality      (a) = (f)      ·          ·
- │           pred          (@4 + @2) > 1  ·          ·
- └── scan    ·             ·              (a, b, c)  ·
-·            table         abc@primary    ·          ·
-·            spans         FULL SCAN      ·          ·
+·            distribution  full         ·          ·
+·            vectorized    true         ·          ·
+lookup-join  ·             ·            (a, b, c)  ·
+ │           table         def@primary  ·          ·
+ │           type          anti         ·          ·
+ │           equality      (a) = (f)    ·          ·
+ │           pred          (d + b) > 1  ·          ·
+ └── scan    ·             ·            (a, b, c)  ·
+·            table         abc@primary  ·          ·
+·            spans         FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
@@ -1439,14 +1439,14 @@ limit                                               ·                      ·
                      │                              equality               (l_orderkey) = (o_orderkey)
                      │                              equality cols are key  ·
                      │                              parallel               ·
-                     │                              pred                   @11 = 'F'
+                     │                              pred                   o_orderstatus = 'F'
                      └── lookup-join                ·                      ·
                           │                         table                  nation@primary
                           │                         type                   inner
                           │                         equality               (s_nationkey) = (n_nationkey)
                           │                         equality cols are key  ·
                           │                         parallel               ·
-                          │                         pred                   @9 = 'SAUDI ARABIA'
+                          │                         pred                   n_name = 'SAUDI ARABIA'
                           └── lookup-join           ·                      ·
                                │                    table                  supplier@primary
                                │                    type                   inner
@@ -1457,7 +1457,7 @@ limit                                               ·                      ·
                                     │               table                  lineitem@primary
                                     │               type                   semi
                                     │               equality               (l_orderkey) = (l_orderkey)
-                                    │               pred                   @6 != @2
+                                    │               pred                   l_suppkey != l_suppkey
                                     └── merge-join  ·                      ·
                                          │          type                   anti
                                          │          equality               (l_orderkey) = (l_orderkey)
