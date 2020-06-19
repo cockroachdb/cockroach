@@ -44,7 +44,7 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 	var kvs []roachpb.KeyValue
 	testutils.SucceedsSoon(t, func() error {
 		kvs = nil
-		it := e.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+		it := e.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax}, storage.MVCCKeyAndIntentsIterKind)
 		defer it.Close()
 		for it.SeekGE(storage.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
 			ok, err := it.Valid()

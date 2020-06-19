@@ -144,7 +144,7 @@ func runSyncer(
 	}
 
 	fmt.Fprintf(stderr, "verifying existing sequence numbers...")
-	if err := db.Iterate(roachpb.KeyMin, roachpb.KeyMax, check); err != nil {
+	if err := db.Iterate(roachpb.KeyMin, roachpb.KeyMax, true, check); err != nil {
 		return 0, err
 	}
 	// We must not lose writes, but sometimes we get extra ones (i.e. we caught an

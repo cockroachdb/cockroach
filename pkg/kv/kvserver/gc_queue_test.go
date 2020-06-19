@@ -972,18 +972,17 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	// is initiated asynchronously from the GC queue.
 	testutils.SucceedsSoon(t, func() error {
 		meta := &enginepb.MVCCMetadata{}
-		return tc.store.Engine().Iterate(roachpb.KeyMin, roachpb.KeyMax,
-			func(kv storage.MVCCKeyValue) (bool, error) {
-				if !kv.Key.IsValue() {
-					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-						return false, err
-					}
-					if meta.Txn != nil {
-						return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-					}
+		return tc.store.Engine().Iterate(roachpb.KeyMin, roachpb.KeyMax, true, func(kv storage.MVCCKeyValue) (bool, error) {
+			if !kv.Key.IsValue() {
+				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+					return false, err
 				}
-				return false, nil
-			})
+				if meta.Txn != nil {
+					return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+				}
+			}
+			return false, nil
+		})
 	})
 }
 

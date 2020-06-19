@@ -42,8 +42,8 @@ func TestIterStats(t *testing.T) {
 	defer batch.Close()
 
 	testCases := []Iterator{
-		db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax, WithStats: true}),
-		batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax, WithStats: true}),
+		db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax, WithStats: true}, MVCCKeyAndIntentsIterKind),
+		batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax, WithStats: true}, MVCCKeyAndIntentsIterKind),
 	}
 
 	defer func() {

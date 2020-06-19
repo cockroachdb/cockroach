@@ -54,7 +54,7 @@ func (e *Engine) Close() {
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	iter := e.kvs.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key, Timestamp: ts}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key, Timestamp: ts}))
 	if !iter.Valid() {
 		return roachpb.Value{}
 	}
@@ -75,7 +75,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 // Put inserts a key/value/timestamp tuple. If an exact key/timestamp pair is
 // Put again, it overwrites the previous value.
 func (e *Engine) Put(key storage.MVCCKey, value []byte) {
-	if err := e.kvs.Set(storage.EncodeKey(key), value, nil); err != nil {
+	if err := e.kvs.Set(storage.EncodeMVCCKey(key), value, nil); err != nil {
 		panic(err)
 	}
 }

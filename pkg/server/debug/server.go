@@ -200,7 +200,7 @@ func analyzeLSM(dir string, writer io.Writer) error {
 
 	manifestPath := path.Join(dir, string(bytes.TrimSpace(manifestName)))
 
-	t := pebbletool.New(pebbletool.Comparers(storage.MVCCComparer))
+	t := pebbletool.New(pebbletool.Comparers(storage.StorageKeyComparer))
 
 	// TODO(yevgeniy): Consider exposing LSM tool directly.
 	var lsm *cobra.Command

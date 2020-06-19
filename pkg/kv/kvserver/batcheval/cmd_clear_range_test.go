@@ -142,11 +142,9 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			if err := batch.Commit(true /* commit */); err != nil {
 				t.Fatal(err)
 			}
-			if err := eng.Iterate(startKey, endKey,
-				func(kv storage.MVCCKeyValue) (bool, error) {
-					return true, errors.New("expected no data in underlying engine")
-				},
-			); err != nil {
+			if err := eng.Iterate(startKey, endKey, true, func(kv storage.MVCCKeyValue) (bool, error) {
+				return true, errors.New("expected no data in underlying engine")
+			}); err != nil {
 				t.Fatal(err)
 			}
 		})

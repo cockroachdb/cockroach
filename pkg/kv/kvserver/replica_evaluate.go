@@ -93,7 +93,7 @@ func optimizePuts(
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
 		UpperBound: maxKey.Next(),
-	})
+	}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	// If there are enough puts in the run to justify calling seek,

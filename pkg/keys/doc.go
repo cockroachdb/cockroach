@@ -155,8 +155,8 @@ package keys
 var _ = [...]interface{}{
 	MinKey,
 
-	// There are four types of local key data enumerated below: replicated
-	// range-ID, unreplicated range-ID, range local, and store-local keys.
+	// There are five types of local key data enumerated below: replicated
+	// range-ID, unreplicated range-ID, range local, range lock, and store-local keys.
 	// Local keys are constructed using a prefix, an optional infix, and a
 	// suffix. The prefix and infix are used to disambiguate between the four
 	// types of local keys listed above, and determines inter-group ordering.
@@ -167,12 +167,13 @@ var _ = [...]interface{}{
 	// 	  - RangeID unreplicated keys all share `LocalRangeIDPrefix` and
 	// 		`localRangeIDUnreplicatedInfix`.
 	// 	  - Range local keys all share `LocalRangePrefix`.
+	//    - Range lock (which are also local keys) all share `LocalRangeLockTablePrefix`.
 	//	  - Store keys all share `localStorePrefix`.
 	//
-	// `LocalRangeIDPrefix`, `localRangePrefix` and `localStorePrefix` all in
-	// turn share `localPrefix`. `localPrefix` was chosen arbitrarily. Local
-	// keys would work just as well with a different prefix, like 0xff, or even
-	// with a suffix.
+	// `LocalRangeIDPrefix`, `LocalRangePrefix`, `LocalRangeLockTablePrefix` and
+	// `localStorePrefix` all in turn share `localPrefix`. `localPrefix` was
+	// chosen arbitrarily. Local keys would work just as well with a different
+	// prefix, like 0xff, or even with a suffix.
 
 	//   1. Replicated range-ID local keys: These store metadata pertaining to a
 	//   range as a whole. Though they are replicated, they are unaddressable.
@@ -205,6 +206,13 @@ var _ = [...]interface{}{
 	RangeDescriptorJointKey, // "rdjt"
 	RangeDescriptorKey,      // "rdsc"
 	TransactionKey,          // "txn-"
+
+	//   4. Range lock keys for all replicated locks. Currently only exclusive
+	//   locks are supported which use a LocalRangeLockTableExclusiveTxnSuffix
+	//   before the txn id. All range locks share LocalRangeLockTablePrefix. Locks
+	//   can be acquired on global keys and on range local keys. The exclusive
+	//   locks additionally function as pointers to the provisional MVCC values.
+	LockTableKeyExclusive,
 
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the

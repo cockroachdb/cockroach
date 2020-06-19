@@ -95,17 +95,7 @@ type lockTableWaiterImpl struct {
 	stopper *stop.Stopper
 	ir      IntentResolver
 	lm      LockManager
-
-	// finalizedTxnCache is a small LRU cache that tracks transactions that
-	// were pushed and found to be finalized (COMMITTED or ABORTED). It is
-	// used as an optimization to avoid repeatedly pushing the transaction
-	// record when cleaning up the intents of an abandoned transaction.
-	//
-	// NOTE: it probably makes sense to maintain a single finalizedTxnCache
-	// across all Ranges on a Store instead of an individual cache per
-	// Range. For now, we don't do this because we don't share any state
-	// between separate concurrency.Manager instances.
-	finalizedTxnCache txnCache
+	lt      lockTable
 
 	// When set, WriteIntentError are propagated instead of pushing
 	// conflicting transactions.
@@ -135,6 +125,10 @@ type IntentResolver interface {
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
 ) (err *Error) {
+	toResolve := guard.ResolveBeforeEvaluation()
+	if len(toResolve) > 0 {
+		w.resolveDeferredIntents(ctx, &err, &toResolve)
+	}
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -217,54 +211,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// reason, continue waiting.
 				if !livenessPush && !deadlockPush {
 					continue
-				}
-
-				// If we know that a lock holder is already finalized (COMMITTED
-				// or ABORTED), there's no reason to push it again. Instead, we
-				// can skip directly to intent resolution.
-				//
-				// As an optimization, we defer the intent resolution until the
-				// we're done waiting on all conflicting locks in this function.
-				// This allows us to accumulate a group of intents to resolve
-				// and send them together as a batch.
-				//
-				// Remember that if the lock is held, there will be at least one
-				// waiter with livenessPush = true (the distinguished waiter),
-				// so at least one request will enter this branch and perform
-				// the cleanup on behalf of all other waiters.
-				if livenessPush {
-					if pusheeTxn, ok := w.finalizedTxnCache.get(state.txn.ID); ok {
-						resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: state.key})
-						deferredResolution = append(deferredResolution, resolve)
-
-						// Inform the LockManager that the lock has been updated with a
-						// finalized status so that it gets removed from the lockTable
-						// and we are allowed to proceed.
-						//
-						// For unreplicated locks, this is all that is needed - the
-						// lockTable is the source of truth so, once removed, the
-						// unreplicated lock is gone. It is perfectly valid for us to
-						// instruct the lock to be released because we know that the
-						// lock's owner is finalized.
-						//
-						// For replicated locks, this is a bit of a lie. The lock hasn't
-						// actually been updated yet, but we will be conducting intent
-						// resolution in the future (before we observe the corresponding
-						// MVCC state). This is safe because we already handle cases
-						// where locks exist only in the MVCC keyspace and not in the
-						// lockTable.
-						//
-						// In the future, we'd like to make this more explicit.
-						// Specifically, we'd like to augment the lockTable with an
-						// understanding of finalized but not yet resolved locks. These
-						// locks will allow conflicting transactions to proceed with
-						// evaluation without the need to first remove all traces of
-						// them via a round of replication. This is discussed in more
-						// detail in #41720. Specifically, see mention of "contention
-						// footprint" and COMMITTED_BUT_NOT_REMOVABLE.
-						w.lm.OnLockUpdated(ctx, &deferredResolution[len(deferredResolution)-1])
-						continue
-					}
 				}
 
 				// The request should push to detect abandoned locks due to
@@ -415,11 +361,6 @@ func (w *lockTableWaiterImpl) WaitOnLock(
 	})
 }
 
-// ClearCaches implements the lockTableWaiter interface.
-func (w *lockTableWaiterImpl) ClearCaches() {
-	w.finalizedTxnCache.clear()
-}
-
 // pushLockTxn pushes the holder of the provided lock.
 //
 // The method blocks until the lock holder transaction experiences a state
@@ -482,7 +423,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// avoids needing to push it again if we find another one of its locks and
 	// allows for batching of intent resolution.
 	if pusheeTxn.Status.IsFinalized() {
-		w.finalizedTxnCache.add(pusheeTxn)
+		w.lt.TransactionIsFinalized(pusheeTxn)
 	}
 
 	// If the push succeeded then the lock holder transaction must have

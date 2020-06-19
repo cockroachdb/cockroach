@@ -444,7 +444,7 @@ func resolveLocalLocks(
 
 	iter := readWriter.NewIterator(storage.IterOptions{
 		UpperBound: desc.EndKey.AsRawKey(),
-	})
+	}, storage.MVCCKeyAndIntentsIterKind)
 	iterAndBuf := storage.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
@@ -1063,7 +1063,7 @@ func mergeTrigger(
 	ms.Add(merge.RightMVCCStats)
 	{
 		ridPrefix := keys.MakeRangeIDReplicatedPrefix(merge.RightDesc.RangeID)
-		iter := batch.NewIterator(storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()})
+		iter := batch.NewIterator(storage.IterOptions{UpperBound: ridPrefix.PrefixEnd()}, storage.MVCCKeyAndIntentsIterKind)
 		defer iter.Close()
 		sysMS, err := iter.ComputeStats(ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 		if err != nil {

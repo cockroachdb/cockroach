@@ -53,7 +53,7 @@ func (rsds ReplicaSnapshotDiffSlice) SafeFormat(buf redact.SafePrinter, _ rune) 
 			prefix, d.Timestamp, d.Key,
 			prefix, d.Timestamp.GoTime(),
 			prefix, SprintKeyValue(storage.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
-			prefix, storage.EncodeKey(mvccKey), d.Value)
+			prefix, storage.EncodeMVCCKey(mvccKey), d.Value)
 	}
 }
 

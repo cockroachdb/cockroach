@@ -1279,7 +1279,7 @@ func IterateIDPrefixKeys(
 	rangeID := roachpb.RangeID(1)
 	iter := reader.NewIterator(storage.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
-	})
+	}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	for {

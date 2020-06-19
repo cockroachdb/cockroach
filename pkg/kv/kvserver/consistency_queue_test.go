@@ -438,7 +438,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		assert.NoError(t, err)
 		defer cpEng.Close()
 
-		iter := cpEng.NewIterator(storage.IterOptions{UpperBound: []byte("\xff")})
+		iter := cpEng.NewIterator(storage.IterOptions{UpperBound: []byte("\xff")}, storage.MVCCKeyAndIntentsIterKind)
 		defer iter.Close()
 
 		ms, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)

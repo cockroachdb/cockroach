@@ -2850,7 +2850,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
-			iter := tc.engine.NewIterator(storage.IterOptions{Prefix: true})
+			iter := tc.engine.NewIterator(storage.IterOptions{Prefix: true}, storage.MVCCKeyAndIntentsIterKind)
 			defer iter.Close()
 			mvccKey := storage.MakeMVCCMetadataKey(key)
 			iter.SeekGE(mvccKey)
