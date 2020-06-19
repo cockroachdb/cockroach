@@ -353,7 +353,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 	nodeInfo := sql.NodeInfo{
 		AdminURL:  cfg.AdminURL,
-		PGURL:     cfg.PGURL,
+		PGURL:     cfg.rpcContext.PGURL,
 		ClusterID: cfg.rpcContext.ClusterID.Get,
 		NodeID:    cfg.nodeIDContainer,
 	}
