@@ -281,14 +281,22 @@ func (v *Value) ClearChecksum() {
 // checksum of the value's contents. If the value's Checksum is not
 // set the verification is a noop.
 func (v Value) Verify(key []byte) error {
-	if n := len(v.RawBytes); n > 0 && n < headerSize {
-		return fmt.Errorf("%s: invalid header size: %d", Key(key), n)
+	if err := v.VerifyHeader(); err != nil {
+		return err
 	}
 	if sum := v.checksum(); sum != 0 {
 		if computedSum := v.computeChecksum(key); computedSum != sum {
 			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
 				Key(key), computedSum, v.RawBytes)
 		}
+	}
+	return nil
+}
+
+// VerifyHeader checks that, if the Value is not empty, it includes a header.
+func (v Value) VerifyHeader() error {
+	if n := len(v.RawBytes); n > 0 && n < headerSize {
+		return errors.Errorf("invalid header size: %d", n)
 	}
 	return nil
 }
