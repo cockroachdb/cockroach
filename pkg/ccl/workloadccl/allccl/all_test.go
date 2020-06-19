@@ -267,7 +267,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
 		`tpch`:       0xdd952207e22aa577,
-		`ycsb`:       0x85dd34d8c07fd808,
+		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 
 	var a bufalloc.ByteAllocator
