@@ -288,7 +288,7 @@ func (c *Compactor) fetchSuggestions(
 ) (suggestions []kvserverpb.SuggestedCompaction, totalBytes int64, err error) {
 	dataIter := c.eng.NewIterator(storage.IterOptions{
 		UpperBound: roachpb.KeyMax, // refined before every seek
-	})
+	}, storage.MVCCKeyIterKind)
 	defer dataIter.Close()
 
 	delBatch := c.eng.NewBatch()
@@ -297,6 +297,7 @@ func (c *Compactor) fetchSuggestions(
 	err = c.eng.Iterate(
 		keys.LocalStoreSuggestedCompactionsMin,
 		keys.LocalStoreSuggestedCompactionsMax,
+		false,
 		func(kv storage.MVCCKeyValue) (bool, error) {
 			var sc kvserverpb.SuggestedCompaction
 			var err error
@@ -324,7 +325,7 @@ func (c *Compactor) fetchSuggestions(
 				// purge it to avoid bogging down the compaction queue.
 				log.Infof(ctx, "purging suggested compaction for range %s - %s that contains live data",
 					sc.StartKey, sc.EndKey)
-				if err := delBatch.Clear(kv.Key); err != nil {
+				if err := delBatch.ClearKeyWithEmptyTimestamp(kv.Key.Key); err != nil {
 					log.Fatalf(ctx, "%v", err) // should never happen on a batch
 				}
 				c.Metrics.BytesSkipped.Inc(sc.Bytes)
@@ -334,8 +335,7 @@ func (c *Compactor) fetchSuggestions(
 			}
 
 			return false, nil // continue iteration
-		},
-	)
+		})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -402,7 +402,7 @@ func (c *Compactor) processCompaction(
 			c.Metrics.BytesSkipped.Inc(sc.Bytes)
 		}
 		key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
-		if err := delBatch.Clear(storage.MVCCKey{Key: key}); err != nil {
+		if err := delBatch.ClearKeyWithEmptyTimestamp(key); err != nil {
 			log.Fatalf(ctx, "%v", err) // should never happen on a batch
 		}
 	}
@@ -465,6 +465,7 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	if err := c.eng.Iterate(
 		keys.LocalStoreSuggestedCompactionsMin,
 		keys.LocalStoreSuggestedCompactionsMax,
+		false,
 		func(kv storage.MVCCKeyValue) (bool, error) {
 			var c kvserverpb.Compaction
 			if err := protoutil.Unmarshal(kv.Value, &c); err != nil {
@@ -472,8 +473,7 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 			}
 			totalBytes += c.Bytes
 			return false, nil // continue iteration
-		},
-	); err != nil {
+		}); err != nil {
 		return 0, err
 	}
 	c.Metrics.BytesQueued.Update(totalBytes)

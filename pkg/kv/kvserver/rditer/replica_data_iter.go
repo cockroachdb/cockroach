@@ -18,6 +18,7 @@ import (
 )
 
 // KeyRange is a helper struct for the ReplicaDataIterator.
+// This should not be MVCCKeys and should use roachpb.Keys!
 type KeyRange struct {
 	Start, End storage.MVCCKey
 }
@@ -43,11 +44,15 @@ type ReplicaDataIterator struct {
 
 // MakeAllKeyRanges returns all key ranges for the given Range.
 func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
-	return []KeyRange{
+	ranges := make([]KeyRange, 0, 5)
+	ranges = append(ranges,
 		MakeRangeIDLocalKeyRange(d.RangeID, false /* replicatedOnly */),
 		MakeRangeLocalKeyRange(d),
-		MakeUserKeyRange(d),
-	}
+	)
+	ltKeys := MakeRangeLockTableKeyRanges(d)
+	ranges = append(ranges, ltKeys[:]...)
+	ranges = append(ranges, MakeUserKeyRange(d))
+	return ranges
 }
 
 // MakeReplicatedKeyRanges returns all key ranges that are fully Raft
@@ -58,13 +63,24 @@ func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 //
 // 1. Replicated range-id local key range
 // 2. Range-local key range
-// 3. User key range
+// 3. Lock table key ranges
+// 4. User key range
+//
+
+// At least one caller (setTimestampCacheLowWaterMark) does not care about the
+// lock table range since it is not MVCC, but including the lock table range is
+// harmless for correctness. We should add a parameter that specifies what the
+// caller wants.
 func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
-	return []KeyRange{
+	ranges := make([]KeyRange, 0, 5)
+	ranges = append(ranges,
 		MakeRangeIDLocalKeyRange(d.RangeID, true /* replicatedOnly */),
 		MakeRangeLocalKeyRange(d),
-		MakeUserKeyRange(d),
-	}
+	)
+	ltKeys := MakeRangeLockTableKeyRanges(d)
+	ranges = append(ranges, ltKeys[:]...)
+	ranges = append(ranges, MakeUserKeyRange(d))
+	return ranges
 }
 
 // MakeRangeIDLocalKeyRange returns the range-id local key range. If
@@ -95,6 +111,24 @@ func MakeRangeLocalKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	}
 }
 
+// MakeRangeLockTableKeyRanges returns the 2 lock table key ranges.
+func MakeRangeLockTableKeyRanges(d *roachpb.RangeDescriptor) [2]KeyRange {
+	return [2]KeyRange{
+		// Need to handle doubly-local lock table keys since RangeDescriptorKey
+		// is a range local key that can have a replicated lock acquired on it.
+		{
+			Start: storage.MakeMVCCMetadataKey(keys.MakeLockTableKeyPrefix(
+				keys.MakeRangeKeyPrefix(d.StartKey))),
+			End: storage.MakeMVCCMetadataKey(keys.MakeLockTableKeyPrefix(
+				keys.MakeRangeKeyPrefix(d.EndKey))),
+		},
+		{
+			Start: storage.MakeMVCCMetadataKey(keys.MakeLockTableKeyPrefix(roachpb.Key(d.StartKey))),
+			End:   storage.MakeMVCCMetadataKey(keys.MakeLockTableKeyPrefix(roachpb.Key(d.EndKey))),
+		},
+	}
+}
+
 // MakeUserKeyRange returns the user key range.
 func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	// The first range in the keyspace starts at KeyMin, which includes the
@@ -114,7 +148,7 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, reader storage.Reader, replicatedOnly bool, seekEnd bool,
 ) *ReplicaDataIterator {
-	it := reader.NewIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	it := reader.NewIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()}, storage.StorageKeyIterKind)
 
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
@@ -204,6 +238,7 @@ func (ri *ReplicaDataIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
+// TODO: change to StorageKey.
 func (ri *ReplicaDataIterator) Key() storage.MVCCKey {
 	key := ri.it.UnsafeKey()
 	ri.a, key.Key = ri.a.Copy(key.Key, 0)
@@ -219,8 +254,14 @@ func (ri *ReplicaDataIterator) Value() []byte {
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
+// TODO: remove this method since one may have a StorageKey that is
+// not representable as an MVCCKey
 func (ri *ReplicaDataIterator) UnsafeKey() storage.MVCCKey {
 	return ri.it.UnsafeKey()
+}
+
+func (ri *ReplicaDataIterator) UnsafeStorageKey() storage.StorageKey {
+	return ri.it.UnsafeStorageKey()
 }
 
 // UnsafeValue returns the same value as Value, but the memory is invalidated on

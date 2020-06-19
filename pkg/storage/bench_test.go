@@ -410,7 +410,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 		_, _ = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 		iter.Close()
 	}
@@ -871,7 +871,7 @@ func runClearRange(
 	//
 	// TODO(benesch): when those hacks are removed, don't bother computing the
 	// first key and simply ClearRange(NilKey, MVCCKeyMax).
-	iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 	iter.SeekGE(NilKey)
 	if ok, err := iter.Valid(); !ok {
@@ -914,7 +914,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, emk engineMaker, val
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 		stats, err = iter.ComputeStats(roachpb.KeyMin, roachpb.KeyMax, 0)
 		iter.Close()
 		if err != nil {

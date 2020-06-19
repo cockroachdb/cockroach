@@ -84,9 +84,9 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 
 	if opts.LowerBound != nil {
 		// This is the same as
-		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound}) .
+		// p.options.LowerBound = EncodeMVCCKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound}) .
 		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
-		// the NUL byte instead of calling EncodeKey which will do the same thing.
+		// the NUL byte instead of calling EncodeMVCCKey which will do the same thing.
 		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0][:0], opts.LowerBound...)
 		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0], 0x00)
 		p.options.LowerBound = p.lowerBoundBuf[0]
@@ -150,9 +150,9 @@ func (p *pebbleIterator) setOptions(opts IterOptions) {
 	i := p.curBuf
 	if opts.LowerBound != nil {
 		// This is the same as
-		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[i][:0], MVCCKey{Key: opts.LowerBound}) .
+		// p.options.LowerBound = EncodeMVCCKeyToBuf(p.lowerBoundBuf[i][:0], MVCCKey{Key: opts.LowerBound}) .
 		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
-		// the NUL byte instead of calling EncodeKey which will do the same thing.
+		// the NUL byte instead of calling EncodeMVCCKey which will do the same thing.
 		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], opts.LowerBound...)
 		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i], 0x00)
 		p.options.LowerBound = p.lowerBoundBuf[i]
@@ -184,7 +184,17 @@ func (p *pebbleIterator) Close() {
 
 // SeekGE implements the Iterator interface.
 func (p *pebbleIterator) SeekGE(key MVCCKey) {
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
+	if p.prefix {
+		p.iter.SeekPrefixGE(p.keyBuf)
+	} else {
+		p.iter.SeekGE(p.keyBuf)
+	}
+}
+
+// SeekStorageGE implements the Iterator interface.
+func (p *pebbleIterator) SeekStorageGE(key StorageKey) {
+	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
 	if p.prefix {
 		p.iter.SeekPrefixGE(p.keyBuf)
 	} else {
@@ -212,13 +222,13 @@ func (p *pebbleIterator) NextKey() {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return
 	}
-	p.keyBuf = append(p.keyBuf[:0], p.UnsafeKey().Key...)
+	p.keyBuf = append(p.keyBuf[:0], p.UnsafeStorageKey().Key...)
 	if !p.iter.Next() {
 		return
 	}
-	if bytes.Equal(p.keyBuf, p.UnsafeKey().Key) {
+	if bytes.Equal(p.keyBuf, p.UnsafeStorageKey().Key) {
 		// This is equivalent to:
-		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
+		// p.iter.SeekGE(EncodeMVCCKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
 		p.iter.SeekGE(append(p.keyBuf, 0, 0))
 	}
 }
@@ -229,6 +239,8 @@ func (p *pebbleIterator) UnsafeKey() MVCCKey {
 		return MVCCKey{}
 	}
 
+	// TODO(sumeer): this is not unsafe. UnsafeKey should
+	// reuse an existing buffer.
 	mvccKey, err := DecodeMVCCKey(p.iter.Key())
 	if err != nil {
 		return MVCCKey{}
@@ -237,8 +249,22 @@ func (p *pebbleIterator) UnsafeKey() MVCCKey {
 	return mvccKey
 }
 
-// UnsafeRawKey returns the raw key from the underlying pebble.Iterator.
-func (p *pebbleIterator) UnsafeRawKey() []byte {
+// UnsafeStorageKey implements the Iterator interface.
+func (p *pebbleIterator) UnsafeStorageKey() StorageKey {
+	if valid, err := p.Valid(); err != nil || !valid {
+		return StorageKey{}
+	}
+
+	key, ok := DecodeStorageKey(p.iter.Key())
+	if !ok {
+		return StorageKey{}
+	}
+
+	return key
+}
+
+// UnsafeRawKeyDangerous implements the Iterator interface.
+func (p *pebbleIterator) UnsafeRawKeyDangerous() []byte {
 	return p.iter.Key()
 }
 
@@ -252,7 +278,13 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 
 // SeekLT implements the Iterator interface.
 func (p *pebbleIterator) SeekLT(key MVCCKey) {
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
+	p.iter.SeekLT(p.keyBuf)
+}
+
+// SeekStorageLT implements the Iterator interface.
+func (p *pebbleIterator) SeekStorageLT(key StorageKey) {
+	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
 	p.iter.SeekLT(p.keyBuf)
 }
 
@@ -268,6 +300,22 @@ func (p *pebbleIterator) Key() MVCCKey {
 	copy(keyCopy, key.Key)
 	key.Key = keyCopy
 	return key
+}
+
+// StorageKey implements the Iterator interface.
+func (p *pebbleIterator) StorageKey() StorageKey {
+	key := p.UnsafeStorageKey()
+	keyCopy := make([]byte, len(key.Key)+len(key.Suffix))
+	copy(keyCopy, key.Key)
+	key.Key = keyCopy[:len(key.Key)]
+	suffixCopy := keyCopy[len(key.Key):]
+	copy(suffixCopy, key.Suffix)
+	key.Suffix = suffixCopy
+	return key
+}
+
+func (p *pebbleIterator) IsCurMetaSeparated() bool {
+	return false
 }
 
 // Value implements the Iterator interface.
@@ -289,7 +337,7 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 func (p *pebbleIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	return ComputeStatsGo(p, start, end, nowNanos)
+	panic("do not call ComputeStats directly on pebbleIterator")
 }
 
 // Go-only version of IsValidSplitKey. Checks if the specified key is in
@@ -306,6 +354,12 @@ func isValidSplitKey(key roachpb.Key, noSplitSpans []roachpb.Span) bool {
 // FindSplitKey implements the Iterator interface.
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
+) (MVCCKey, error) {
+	return findSplitKeyUsingIterator(p, start, end, minSplitKey, targetSize)
+}
+
+func findSplitKeyUsingIterator(
+	iter Iterator, start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	const timestampLen = 12
 
@@ -332,9 +386,16 @@ func (p *pebbleIterator) FindSplitKey(
 	// terminate iteration because the iterator's upper bound has already been
 	// set to end.
 	mvccMinSplitKey := MakeMVCCMetadataKey(minSplitKey)
-	p.SeekGE(MakeMVCCMetadataKey(start))
-	for ; p.iter.Valid(); p.iter.Next() {
-		mvccKey, err := DecodeMVCCKey(p.iter.Key())
+	iter.SeekGE(MakeMVCCMetadataKey(start))
+	for ; ; iter.Next() {
+		valid, err := iter.Valid()
+		if err != nil {
+			return MVCCKey{}, err
+		}
+		if !valid {
+			break
+		}
+		mvccKey := iter.Key()
 		if err != nil {
 			return MVCCKey{}, err
 		}
@@ -378,7 +439,7 @@ func (p *pebbleIterator) FindSplitKey(
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
 		}
 
-		sizeSoFar += int64(len(p.iter.Value()))
+		sizeSoFar += int64(len(iter.Value()))
 		if mvccKey.IsValue() && bytes.Equal(prevKey.Key, mvccKey.Key) {
 			// We only advanced timestamps, but not new mvcc keys.
 			sizeSoFar += timestampLen

@@ -582,6 +582,7 @@ func TestCompactorThresholds(t *testing.T) {
 				return we.Iterate(
 					keys.LocalStoreSuggestedCompactionsMin,
 					keys.LocalStoreSuggestedCompactionsMax,
+					true,
 					func(kv storage.MVCCKeyValue) (bool, error) {
 						start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 						if err != nil {
@@ -596,8 +597,7 @@ func TestCompactorThresholds(t *testing.T) {
 						}
 						idx++
 						return false, nil // continue iteration
-					},
-				)
+					})
 			})
 		})
 	}

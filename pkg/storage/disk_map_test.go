@@ -51,7 +51,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 			// a type switch with implementation-specific code instead.
 			switch e := engine.(type) {
 			case *rocksDBTempEngine:
-				iter := e.db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := e.db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 				defer iter.Close()
 
 				for iter.SeekGE(NilKey); ; iter.Next() {

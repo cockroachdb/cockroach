@@ -35,7 +35,7 @@ func PrintKeyValue(kv storage.MVCCKeyValue) {
 
 // SprintKey pretty-prings the specified MVCCKey.
 func SprintKey(key storage.MVCCKey) string {
-	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
+	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeMVCCKey(key))
 }
 
 // DebugSprintKeyValueDecoders allows injecting alternative debug decoders.

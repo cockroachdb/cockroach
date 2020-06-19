@@ -30,13 +30,11 @@ import (
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	if err := reader.Iterate(start, end,
-		func(kv storage.MVCCKeyValue) (bool, error) {
-			h.Write(kv.Key.Key)
-			h.Write(kv.Value)
-			return false, nil
-		},
-	); err != nil {
+	if err := reader.Iterate(start, end, true, func(kv storage.MVCCKeyValue) (bool, error) {
+		h.Write(kv.Key.Key)
+		h.Write(kv.Value)
+		return false, nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return h.Sum(nil)
@@ -44,7 +42,7 @@ func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []by
 
 func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 	t.Helper()
-	iter := reader.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := reader.NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax}, storage.MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 	s, err := storage.ComputeStatsGo(iter, roachpb.KeyMin, roachpb.KeyMax, 1100)
 	if err != nil {

@@ -144,7 +144,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+	if err := msstw.currSST.ClearMVCCRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -209,13 +209,14 @@ func (msstw *multiSSTWriter) Close() {
 //
 // 1. Replicated range-id local key range
 // 2. Range-local key range
-// 3. User key range
+// 3. Lock table keys (two ranges)
+// 4. User key range
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
 
-	// At the moment we'll write at most three SSTs.
+	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
 	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
@@ -245,6 +246,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				if batchReader.BatchType() != storage.BatchTypeValue {
 					return noSnap, crdberrors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
 				}
+				// TODO: once we've removed RocksDB, switch this to reading StorageKey.
 				key, err := batchReader.MVCCKey()
 				if err != nil {
 					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
@@ -333,12 +335,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			break
 		}
 		kvs++
-		unsafeKey := iter.UnsafeKey()
+		unsafeKey := iter.UnsafeStorageKey()
 		unsafeValue := iter.UnsafeValue()
 		if b == nil {
 			b = kvSS.newBatch()
 		}
-		if err := b.Put(unsafeKey, unsafeValue); err != nil {
+		if err := b.PutStorage(unsafeKey, unsafeValue); err != nil {
 			return 0, err
 		}
 

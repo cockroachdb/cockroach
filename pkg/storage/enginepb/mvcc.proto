@@ -72,6 +72,16 @@ message MVCCMetadata {
   // This provides a measure of protection against replays caused by
   // Raft duplicating merge commands.
   optional util.hlc.LegacyTimestamp merge_timestamp = 7;
+
+  // Set to true iff we can guarantee that the transaction did not do more
+  // than one Put without an intervening Delete. We assume that it is
+  // common for this to be true. The default is false to accommodate code
+  // that did not track this state.
+  // This is used as an optimization when writing MVCCMetadata to the
+  // separated lock key space, where the key for MVCCMetadata is unique per
+  // transaction. In that case, when this is true, one can optimize removal of
+  // the MVCCMetadata by doing a SingleDelete instead of Delete.
+  optional bool txn_did_not_update_meta = 9  [(gogoproto.nullable) = false];
 }
 
 // A mirror of MVCCMetadata intended for serializing non-MVCC data that is

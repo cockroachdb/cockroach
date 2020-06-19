@@ -188,14 +188,14 @@ func TestReadOnlyBasics(t *testing.T) {
 			successTestCases := []func(){
 				func() { _, _ = ro.Get(a) },
 				func() { _, _, _, _ = ro.GetProto(a, getVal) },
-				func() { _ = ro.Iterate(a.Key, a.Key, func(MVCCKeyValue) (bool, error) { return true, nil }) },
-				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}).Close() },
+				func() { _ = ro.Iterate(a.Key, a.Key, true, func(MVCCKeyValue) (bool, error) { return true, nil }) },
+				func() { ro.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind).Close() },
 				func() {
 					ro.NewIterator(IterOptions{
 						MinTimestampHint: hlc.MinTimestamp,
 						MaxTimestampHint: hlc.MaxTimestamp,
 						UpperBound:       roachpb.KeyMax,
-					}).Close()
+					}, MVCCKeyAndIntentsIterKind).Close()
 				},
 			}
 			defer func() {
@@ -1015,7 +1015,7 @@ func TestBatchDistinct(t *testing.T) {
 
 			// Similarly, for distinct batch iterators we will see previous writes to the
 			// batch.
-			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid; err=%v", err)
@@ -1083,7 +1083,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 
 			// Verify that reads on the distinct batch go to the underlying engine, not
 			// to the write-only batch.
-			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := distinct.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -1133,8 +1133,8 @@ func TestBatchDistinctPanics(t *testing.T) {
 				func() { _ = batch.ApplyBatchRepr(nil, false) },
 				func() { _, _ = batch.Get(a) },
 				func() { _, _, _, _ = batch.GetProto(a, nil) },
-				func() { _ = batch.Iterate(a.Key, a.Key, nil) },
-				func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}) },
+				func() { _ = batch.Iterate(a.Key, a.Key, true, nil) },
+				func() { _ = batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind) },
 			}
 			for i, f := range testCases {
 				func() {
@@ -1181,7 +1181,7 @@ func TestBatchIteration(t *testing.T) {
 			}
 
 			iterOpts := IterOptions{UpperBound: k3.Key}
-			iter := b.NewIterator(iterOpts)
+			iter := b.NewIterator(iterOpts, MVCCKeyAndIntentsIterKind)
 			defer iter.Close()
 
 			// Forward iteration,

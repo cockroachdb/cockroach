@@ -107,10 +107,10 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 
 	k := MakeMVCCMetadataKey(testKey1)
 
-	before := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	before := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 	defer before.Close()
 
-	nonBatchBefore := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	nonBatchBefore := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 	defer nonBatchBefore.Close()
 
 	if err := b.Put(k, []byte("abc")); err != nil {
@@ -120,7 +120,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	// We use a prefix iterator for after in order to workaround the restriction
 	// on concurrent use of more than 1 prefix or normal (non-prefix) iterator on
 	// a batch.
-	after := b.NewIterator(IterOptions{Prefix: true})
+	after := b.NewIterator(IterOptions{Prefix: true}, MVCCKeyAndIntentsIterKind)
 	defer after.Close()
 
 	after.SeekGE(k)
@@ -142,7 +142,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nonBatchAfter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	nonBatchAfter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 	defer nonBatchAfter.Close()
 
 	nonBatchBefore.SeekGE(k)
@@ -193,7 +193,7 @@ func TestBatchPrefixIter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := b.NewIterator(IterOptions{Prefix: true})
+	iter := b.NewIterator(IterOptions{Prefix: true}, MVCCKeyAndIntentsIterKind)
 	defer iter.Close()
 
 	iter.SeekGE(mvccKey("b"))
@@ -242,7 +242,7 @@ func TestIterBounds(t *testing.T) {
 			if _, ok := e.(*rocksDBBatch); !ok { // batches do not support reverse iteration
 				// Test that a new iterator's lower bound is applied.
 				func() {
-					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("b")})
+					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("b")}, MVCCKeyAndIntentsIterKind)
 					defer iter.Close()
 					iter.SeekLT(mvccKey("c"))
 					if ok, err := iter.Valid(); err != nil {
@@ -267,7 +267,7 @@ func TestIterBounds(t *testing.T) {
 				// Test that the cached iterator, if the underlying engine implementation
 				// caches iterators, can take on a new lower bound.
 				func() {
-					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("a")})
+					iter := e.NewIterator(IterOptions{LowerBound: roachpb.Key("a")}, MVCCKeyAndIntentsIterKind)
 					defer iter.Close()
 
 					iter.SeekLT(mvccKey("b"))
@@ -288,7 +288,7 @@ func TestIterBounds(t *testing.T) {
 
 			// Test that a new iterator's upper bound is applied.
 			func() {
-				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("a")})
+				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("a")}, MVCCKeyAndIntentsIterKind)
 				defer iter.Close()
 				iter.SeekGE(mvccKey("a"))
 				if ok, err := iter.Valid(); err != nil {
@@ -301,7 +301,7 @@ func TestIterBounds(t *testing.T) {
 			// Test that the cached iterator, if the underlying engine implementation
 			// caches iterators, can take on a new upper bound.
 			func() {
-				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("b")})
+				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("b")}, MVCCKeyAndIntentsIterKind)
 				defer iter.Close()
 
 				iter.SeekGE(mvccKey("a"))
@@ -328,7 +328,7 @@ func TestIterBounds(t *testing.T) {
 				t.Fatal(err)
 			}
 			func() {
-				iter := w.NewIterator(IterOptions{UpperBound: roachpb.Key("c")})
+				iter := w.NewIterator(IterOptions{UpperBound: roachpb.Key("c")}, MVCCKeyAndIntentsIterKind)
 				defer iter.Close()
 				iter.SeekGE(mvccKey("c"))
 				if ok, err := iter.Valid(); err != nil {
@@ -369,7 +369,7 @@ func benchmarkIterOnBatch(ctx context.Context, b *testing.B, writes int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
-		iter := batch.NewIterator(IterOptions{Prefix: true})
+		iter := batch.NewIterator(IterOptions{Prefix: true}, MVCCKeyAndIntentsIterKind)
 		iter.SeekGE(key)
 		iter.Close()
 	}
@@ -397,7 +397,7 @@ func benchmarkIterOnReadWriter(
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
-		iter := readWriter.NewIterator(IterOptions{Prefix: true})
+		iter := readWriter.NewIterator(IterOptions{Prefix: true}, MVCCKeyAndIntentsIterKind)
 		iter.SeekGE(key)
 		iter.Close()
 	}
@@ -902,7 +902,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 	iter.SeekGE(key("a"))
 	if ok, _ := iter.Valid(); ok {
 		t.Fatalf("unexpected key: %s", iter.Key())
@@ -1152,7 +1152,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+						iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 						iter.SeekGE(MakeMVCCMetadataKey(from))
 						ok, err := iter.Valid()
 						if err != nil {
@@ -1262,7 +1262,7 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 		MinTimestampHint: hlc.Timestamp{WallTime: 2},
 		MaxTimestampHint: hlc.Timestamp{WallTime: 3},
 		WithStats:        true,
-	})
+	}, MVCCKeyAndIntentsIterKind)
 	defer it.Close()
 	for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; it.Next() {
 		ok, err := it.Valid()

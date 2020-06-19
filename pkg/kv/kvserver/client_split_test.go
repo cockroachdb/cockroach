@@ -409,7 +409,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	// Verify the transaction record is gone.
 	start := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
 	end := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
-	iter := store.Engine().NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := store.Engine().NewIterator(storage.IterOptions{UpperBound: roachpb.KeyMax}, storage.MVCCKeyAndIntentsIterKind)
 
 	defer iter.Close()
 	for iter.SeekGE(start); ; iter.Next() {

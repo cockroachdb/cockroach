@@ -231,7 +231,7 @@ func TestGoMergeAppend(t *testing.T) {
 
 func mergeValuesPebble(reverse bool, srcBytes [][]byte) ([]byte, error) {
 	if reverse {
-		valueMerger, err := MVCCMerger.Merge(nil /* key */, srcBytes[len(srcBytes)-1])
+		valueMerger, err := StorageMerger.Merge(nil /* key */, srcBytes[len(srcBytes)-1])
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +244,7 @@ func mergeValuesPebble(reverse bool, srcBytes [][]byte) ([]byte, error) {
 		val, _, err := valueMerger.Finish(false)
 		return val, err
 	}
-	valueMerger, err := MVCCMerger.Merge(nil /* key */, srcBytes[0])
+	valueMerger, err := StorageMerger.Merge(nil /* key */, srcBytes[0])
 	if err != nil {
 		return nil, err
 	}

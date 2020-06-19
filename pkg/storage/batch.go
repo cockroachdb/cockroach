@@ -122,7 +122,7 @@ func (b *RocksDBBatchBuilder) getRepr() []byte {
 func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	keyLen := key.Len()
 	deferredOp := b.batch.SetDeferred(keyLen, len(value))
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
+	encodeMVCCKeyToBuf(deferredOp.Key, key, keyLen)
 	copy(deferredOp.Value, value)
 	// NB: the batch is not indexed, obviating the need to call
 	// deferredOp.Finish.
@@ -137,7 +137,7 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
 	keyLen := key.Len()
 	deferredOp := b.batch.MergeDeferred(keyLen, len(value))
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
+	encodeMVCCKeyToBuf(deferredOp.Key, key, keyLen)
 	copy(deferredOp.Value, value)
 	// NB: the batch is not indexed, obviating the need to call
 	// deferredOp.Finish.
@@ -149,7 +149,7 @@ func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
 func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	keyLen := key.Len()
 	deferredOp := b.batch.DeleteDeferred(keyLen)
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
+	encodeMVCCKeyToBuf(deferredOp.Key, key, keyLen)
 	// NB: the batch is not indexed, obviating the need to call
 	// deferredOp.Finish.
 }
@@ -160,7 +160,7 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
 	keyLen := key.Len()
 	deferredOp := b.batch.SingleDeleteDeferred(keyLen)
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
+	encodeMVCCKeyToBuf(deferredOp.Key, key, keyLen)
 	// NB: the batch is not indexed, obviating the need to call
 	// deferredOp.Finish.
 }
@@ -192,29 +192,29 @@ func (b *RocksDBBatchBuilder) Count() uint32 {
 	return b.batch.Count()
 }
 
-// EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
+// EncodeMVCCKey encodes an engine.MVCC key into the RocksDB representation. This
 // encoding must match with the encoding in engine/db.cc:EncodeKey().
-func EncodeKey(key MVCCKey) []byte {
+func EncodeMVCCKey(key MVCCKey) []byte {
 	keyLen := key.Len()
 	buf := make([]byte, keyLen)
-	encodeKeyToBuf(buf, key, keyLen)
+	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
 }
 
-// EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
+// EncodeMVCCKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
 // This encoding must match with the encoding in engine/db.cc:EncodeKey().
-func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
+func EncodeMVCCKeyToBuf(buf []byte, key MVCCKey) []byte {
 	keyLen := key.Len()
 	if cap(buf) < keyLen {
 		buf = make([]byte, keyLen)
 	} else {
 		buf = buf[:keyLen]
 	}
-	encodeKeyToBuf(buf, key, keyLen)
+	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
 }
 
-func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
+func encodeMVCCKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 	const (
 		timestampSentinelLen = 1
 		walltimeEncodedLen   = 8
@@ -239,7 +239,7 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 }
 
 func encodeTimestamp(ts hlc.Timestamp) []byte {
-	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(MVCCKey{Timestamp: ts}))
+	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeMVCCKey(MVCCKey{Timestamp: ts}))
 	return encodedTS
 }
 

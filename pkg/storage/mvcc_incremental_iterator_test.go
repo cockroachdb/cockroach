@@ -699,7 +699,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		// in the second DB.
 		it := db1.NewIterator(IterOptions{
 			UpperBound: keys.MaxKey,
-		})
+		}, MVCCKeyAndIntentsIterKind)
 		defer it.Close()
 		it.SeekGE(MVCCKey{Key: keys.MinKey})
 		ingest(it, 2)
@@ -780,7 +780,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
 			var expectedKVs []MVCCKeyValue
-			iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 			defer iter.Close()
 			iter.SeekGE(MVCCKey{})
 			for {

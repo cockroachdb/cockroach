@@ -349,9 +349,9 @@ func BenchmarkClearRange_RocksDB(b *testing.B) {
 func BenchmarkClearIterRange_RocksDB(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCRocksDB, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 		defer iter.Close()
-		return batch.ClearIterRange(iter, start.Key, end.Key)
+		return batch.ClearIterMVCCRangeAndIntents(iter, start.Key, end.Key)
 	})
 }
 

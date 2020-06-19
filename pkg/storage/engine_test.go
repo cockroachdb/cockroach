@@ -144,7 +144,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 			{
 				batch := eng.NewBatch()
 				defer batch.Close()
-				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 				key := MVCCKey{Key: roachpb.Key("b")}
 
 				if err := batch.Put(key, []byte("foo")); err != nil {
@@ -316,7 +316,7 @@ func TestEngineBatch(t *testing.T) {
 					t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 				}
 				// Try using an iterator to get the value from the batch.
-				iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+				iter := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 				iter.SeekGE(key)
 				if ok, err := iter.Valid(); !ok {
 					if currentBatch[len(currentBatch)-1].value != nil {
@@ -625,7 +625,7 @@ func TestEngineTimeBound(t *testing.T) {
 						MaxTimestampHint: maxTimestamp.Next().Next(),
 						UpperBound:       roachpb.KeyMax,
 						WithStats:        true,
-					}),
+					}, MVCCKeyAndIntentsIterKind),
 					keys: 0,
 					ssts: 0,
 				},
@@ -636,7 +636,7 @@ func TestEngineTimeBound(t *testing.T) {
 						MaxTimestampHint: minTimestamp.Prev(),
 						UpperBound:       roachpb.KeyMax,
 						WithStats:        true,
-					}),
+					}, MVCCKeyAndIntentsIterKind),
 					keys: 0,
 					ssts: 0,
 				},
@@ -647,7 +647,7 @@ func TestEngineTimeBound(t *testing.T) {
 						MaxTimestampHint: maxTimestamp,
 						UpperBound:       roachpb.KeyMax,
 						WithStats:        true,
-					}),
+					}, MVCCKeyAndIntentsIterKind),
 					keys: len(times),
 					ssts: 1,
 				},
@@ -658,7 +658,7 @@ func TestEngineTimeBound(t *testing.T) {
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       roachpb.KeyMax,
 						WithStats:        true,
-					}),
+					}, MVCCKeyAndIntentsIterKind),
 					keys: len(times),
 					ssts: 1,
 				},
@@ -670,7 +670,7 @@ func TestEngineTimeBound(t *testing.T) {
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       roachpb.KeyMax,
 						WithStats:        false,
-					}),
+					}, MVCCKeyAndIntentsIterKind),
 					keys: len(times),
 					ssts: 0,
 				},
@@ -681,7 +681,7 @@ func TestEngineTimeBound(t *testing.T) {
 						MaxTimestampHint: minTimestamp,
 						UpperBound:       []byte("02"),
 						WithStats:        false,
-					}),
+					}, MVCCKeyAndIntentsIterKind),
 					keys: 2,
 					ssts: 0,
 				},
@@ -695,7 +695,7 @@ func TestEngineTimeBound(t *testing.T) {
 
 			// Make a regular iterator. Before #21721, this would accidentally pick up the
 			// time bounded iterator instead.
-			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 			defer iter.Close()
 			iter.SeekGE(NilKey)
 
@@ -944,9 +944,9 @@ func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+		iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 		defer iter.Close()
-		return engine.ClearIterRange(iter, start.Key, end.Key)
+		return engine.ClearIterMVCCRangeAndIntents(iter, start.Key, end.Key)
 	})
 }
 
@@ -1059,7 +1059,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify Iterate.
 			index := 0
-			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, func(kv MVCCKeyValue) (bool, error) {
+			if err := snap.Iterate(roachpb.KeyMin, roachpb.KeyMax, true, func(kv MVCCKeyValue) (bool, error) {
 				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 						index, keys[index], vals[index], kv.Key, kv.Value)
@@ -1078,7 +1078,7 @@ func TestSnapshotMethods(t *testing.T) {
 			}
 
 			// Verify NewIterator still iterates over original snapshot.
-			iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+			iter := snap.NewIterator(IterOptions{UpperBound: roachpb.KeyMax}, MVCCKeyAndIntentsIterKind)
 			iter.SeekGE(newKey)
 			if ok, err := iter.Valid(); err != nil {
 				t.Fatal(err)
@@ -1457,21 +1457,21 @@ func TestSupportsPrev(t *testing.T) {
 	}
 	runTest := func(t *testing.T, eng Engine, et engineTest) {
 		t.Run("engine", func(t *testing.T) {
-			it := eng.NewIterator(opts)
+			it := eng.NewIterator(opts, MVCCKeyAndIntentsIterKind)
 			defer it.Close()
 			require.Equal(t, et.engineIterSupportsPrev, it.SupportsPrev())
 		})
 		t.Run("batch", func(t *testing.T) {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			batchIt := batch.NewIterator(opts)
+			batchIt := batch.NewIterator(opts, MVCCKeyAndIntentsIterKind)
 			defer batchIt.Close()
 			require.Equal(t, et.batchIterSupportsPrev, batchIt.SupportsPrev())
 		})
 		t.Run("snapshot", func(t *testing.T) {
 			snap := eng.NewSnapshot()
 			defer snap.Close()
-			snapIt := snap.NewIterator(opts)
+			snapIt := snap.NewIterator(opts, MVCCKeyAndIntentsIterKind)
 			defer snapIt.Close()
 			require.Equal(t, et.snapshotIterSupportsPrev, snapIt.SupportsPrev())
 		})
