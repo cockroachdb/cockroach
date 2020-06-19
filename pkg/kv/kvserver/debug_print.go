@@ -228,7 +228,15 @@ func tryTxn(kv storage.MVCCKeyValue) (string, error) {
 	return txn.String() + "\n", nil
 }
 
-func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
+func tryRangeIDKey(kv storage.MVCCKeyValue) (_ string, rErr error) {
+	defer func() {
+		// HardState.String() can panic.
+		//
+		// TODO(tbg): fix this upstream.
+		if r := recover(); r != nil {
+			rErr = errors.Newf("%v", r)
+		}
+	}()
 	if kv.Key.Timestamp != (hlc.Timestamp{}) {
 		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}

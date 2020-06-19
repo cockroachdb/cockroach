@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -205,7 +207,7 @@ func runZipRequestWithTimeout(
 	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
 }
 
-func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
+func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	const (
 		base          = "debug"
 		eventsName    = base + "/events"
@@ -229,6 +231,67 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
+	var allTSMetrics []string
+	{
+		// TODO(alexlunev): use a timeouted ctx here.
+		resp, err := admin.ChartCatalog(baseCtx, &serverpb.ChartCatalogRequest{})
+		if err != nil {
+			// TODO(alexlunev): log warning but continue
+			panic(err)
+		}
+		allTSMetrics = catalog.AllMetricsNames(resp.Catalog...)
+	}
+
+	{
+		tsc := tspb.NewTimeSeriesClient(conn)
+		now := timeutil.Now()
+		_ = now
+		// TODO(alexlunev): hook up flags to specify the from and to timestamps here.
+		// Choose sane defaults - we want to balance between inflating the debug zip
+		// with unnecessary historical data and not reaching far enough into the
+		// past. The default should aim maybe for no more than 100mb compressed (if
+		// that gets us far enough back at least, I'd say a week is fine). Madeline
+		// might be poking at the timeseries stats soon so she might have an idea
+		// about this soon.
+		from := now.Add(-time.Hour).UnixNano()
+		// TODO(lunevalex): figure out whether the truncation to the nearest
+		// slab boundary makes this workaround necessary. I don't think so but
+		// needs checking. (Want to avoid having the query effectively end at the
+		// smaller boundary).
+		to := now.Add(time.Hour).UnixNano()
+		req := &tspb.DumpRequest{
+			StartNanos: from,
+			EndNanos:   to,
+			Names:      allTSMetrics,
+		}
+
+		stream, err := tsc.Dump(baseCtx, req) // TODO(lunevalex): ditto ctx
+		if err != nil {
+			panic(err) // TODO(lunevalex)
+		}
+		for {
+			data, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				panic(err) // TODO(lunevalex)
+			}
+			// TODO(lunevalex): print this in a more concise format, like `tsdump`
+			// does. (Code should be shared, maybe in `ts` package?). Stream it to a
+			// file instead of printing here. Since it may take a while to dump data
+			// from ~500 timeseries (the internal latencies alone may pile up in a
+			// geo-distributed cluster), provide some periodic log output about
+			// progress (i.e. every 10s, print the current timeseries being exported
+			// and the total number seen, or something like that).
+			for _, d := range data.Datapoints {
+				fmt.Printf("%s %s %d %v\n", data.Name, data.Source, d.TimestampNanos, d.Value)
+			}
+		}
+	}
+	// TODO(lunevalex): move all of this code above to an appropriate place below.
+	// TODO(lunevalex): needs a test.
+	return nil // don't care about the rest for this prototype
 
 	fmt.Println("retrieving the node status to get the SQL address...")
 	nodeD, err := status.Details(baseCtx, &serverpb.DetailsRequest{NodeId: "local"})

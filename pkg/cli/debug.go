@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
@@ -873,8 +874,15 @@ func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
 	}
 	defer finish()
 
+	resp, err := serverpb.NewAdminClient(conn).ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
+	if err != nil {
+		return err
+	}
+
 	tsClient := tspb.NewTimeSeriesClient(conn)
-	stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
+	stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{
+		Names: catalog.AllMetricsNames(resp.Catalog...),
+	})
 	if err != nil {
 		log.Fatalf(context.Background(), "%v", err)
 	}
