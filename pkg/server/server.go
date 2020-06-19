@@ -251,27 +251,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stopper.AddCloser(tr)
 	}
 
-	// Attempt to load TLS configs right away, failures are permanent.
-	if !cfg.Insecure {
-		// TODO(peter): Call methods on CertificateManager directly. Need to call
-		// base.wrapError or similar on the resulting error.
-		if _, err := cfg.GetServerTLSConfig(); err != nil {
-			return nil, err
-		}
-		if _, err := cfg.GetUIServerTLSConfig(); err != nil {
-			return nil, err
-		}
-		if _, err := cfg.GetClientTLSConfig(); err != nil {
-			return nil, err
-		}
-		cm, err := cfg.GetCertificateManager()
-		if err != nil {
-			return nil, err
-		}
-		cm.RegisterSignalHandler(stopper)
-		registry.AddMetricStruct(cm.Metrics())
-	}
-
 	// Add a dynamic log tag value for the node ID.
 	//
 	// We need to pass an ambient context to the various server components, but we
@@ -324,6 +303,27 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 	registry.AddMetricStruct(rpcContext.Metrics())
+
+	// Attempt to load TLS configs right away, failures are permanent.
+	if !cfg.Insecure {
+		// TODO(peter): Call methods on CertificateManager directly. Need to call
+		// base.wrapError or similar on the resulting error.
+		if _, err := cfg.GetServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := cfg.GetClientTLSConfig(); err != nil {
+			return nil, err
+		}
+		cm, err := cfg.GetCertificateManager()
+		if err != nil {
+			return nil, err
+		}
+		cm.RegisterSignalHandler(stopper)
+		registry.AddMetricStruct(cm.Metrics())
+	}
 
 	grpcServer := newGRPCServer(rpcContext)
 
