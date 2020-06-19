@@ -7,28 +7,32 @@ ON CATALOG_NAME=TABLE_CATALOG AND SCHEMA_NAME=TABLE_SCHEMA
 project
  ├── columns: catalog_name:2(string!null) sql_path:5(string)
  ├── prune: (2,5)
+ ├── reject-nulls: (5)
  └── left-join (cross)
       ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) information_schema.tables.crdb_internal_vtable_pk:6(int) table_catalog:7(string) table_schema:8(string) table_name:9(string) table_type:10(string) is_insertable_into:11(string) version:12(int)
       ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       ├── fd: ()-->(3), (6)-->(7-12)
       ├── prune: (4-6,9-12)
-      ├── reject-nulls: (6-12)
+      ├── reject-nulls: (4-12)
       ├── interesting orderings: (+6)
       ├── project
       │    ├── columns: catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string)
       │    ├── fd: ()-->(3)
       │    ├── prune: (2-5)
+      │    ├── reject-nulls: (4,5)
       │    └── select
       │         ├── columns: information_schema.schemata.crdb_internal_vtable_pk:1(int!null) catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string)
       │         ├── key: (1)
       │         ├── fd: ()-->(3), (1)-->(2,4,5)
       │         ├── prune: (1,2,4,5)
+      │         ├── reject-nulls: (4,5)
       │         ├── interesting orderings: (+1)
       │         ├── scan information_schema.schemata
       │         │    ├── columns: information_schema.schemata.crdb_internal_vtable_pk:1(int!null) catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string)
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-5)
       │         │    ├── prune: (1-5)
+      │         │    ├── reject-nulls: (4,5)
       │         │    └── interesting orderings: (+1)
       │         └── filters
       │              └── eq [type=bool, outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
@@ -39,6 +43,7 @@ project
       │    ├── key: (6)
       │    ├── fd: (6)-->(7-12)
       │    ├── prune: (6-12)
+      │    ├── reject-nulls: (12)
       │    ├── interesting orderings: (+6)
       │    └── unfiltered-cols: (6-12)
       └── filters

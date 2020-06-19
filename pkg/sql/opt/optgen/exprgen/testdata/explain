@@ -20,6 +20,7 @@ explain
       ├── stats: [rows=1000]
       ├── cost: 1050.02
       ├── prune: (1)
+      ├── reject-nulls: (1)
       └── interesting orderings: (+1)
 
 expr
@@ -40,6 +41,7 @@ explain
       ├── stats: [rows=1000]
       ├── cost: 1050.02
       ├── prune: (1)
+      ├── reject-nulls: (1)
       └── interesting orderings: (+1)
 
 expr
@@ -60,6 +62,7 @@ explain
       ├── stats: [rows=1000]
       ├── cost: 1050.02
       ├── prune: (1)
+      ├── reject-nulls: (1)
       └── interesting orderings: (+1)
 
 expr
@@ -110,4 +113,5 @@ explain
       ├── stats: [rows=1000]
       ├── cost: 1050.02
       ├── prune: (1)
+      ├── reject-nulls: (1)
       └── interesting orderings: (+1)

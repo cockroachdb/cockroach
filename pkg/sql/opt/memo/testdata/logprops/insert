@@ -63,6 +63,7 @@ insert abcde
       │    │    │              ├── key: (7)
       │    │    │              ├── fd: (7)-->(8,9)
       │    │    │              ├── prune: (7-9)
+      │    │    │              ├── reject-nulls: (9)
       │    │    │              └── interesting orderings: (+7)
       │    │    └── const: 10 [type=int]
       │    └── projections
@@ -131,6 +132,7 @@ project
            │    │    │              ├── key: (7)
            │    │    │              ├── fd: (7)-->(8,9)
            │    │    │              ├── prune: (7-9)
+           │    │    │              ├── reject-nulls: (9)
            │    │    │              └── interesting orderings: (+7)
            │    │    └── const: 10 [type=int]
            │    └── projections
@@ -178,11 +180,13 @@ project
            │    ├── project
            │    │    ├── columns: y:8(int!null) z:9(float)
            │    │    ├── prune: (8,9)
+           │    │    ├── reject-nulls: (9)
            │    │    └── scan xyz
            │    │         ├── columns: x:7(string!null) y:8(int!null) z:9(float)
            │    │         ├── key: (7)
            │    │         ├── fd: (7)-->(8,9)
            │    │         ├── prune: (7-9)
+           │    │         ├── reject-nulls: (9)
            │    │         └── interesting orderings: (+7)
            │    └── projections
            │         ├── const: 10 [as=column10:10, type=int]
@@ -288,12 +292,14 @@ project
            │    │    │    ├── key: (7)
            │    │    │    ├── fd: ()-->(8), (7)-->(9)
            │    │    │    ├── prune: (7,9)
+           │    │    │    ├── reject-nulls: (9)
            │    │    │    ├── interesting orderings: (+7)
            │    │    │    ├── scan xyz
            │    │    │    │    ├── columns: x:7(string!null) y:8(int!null) z:9(float)
            │    │    │    │    ├── key: (7)
            │    │    │    │    ├── fd: (7)-->(8,9)
            │    │    │    │    ├── prune: (7-9)
+           │    │    │    │    ├── reject-nulls: (9)
            │    │    │    │    └── interesting orderings: (+7)
            │    │    │    └── filters
            │    │    │         └── eq [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]

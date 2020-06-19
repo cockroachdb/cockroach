@@ -38,13 +38,14 @@ project
  │    │    ├── columns: u:1(int) v:2(int!null) rowid:3(int!null) x:4(int) y:5(int) unnest:6(int)
  │    │    ├── fd: (3)-->(1,2)
  │    │    ├── prune: (3,6)
- │    │    ├── reject-nulls: (4-6)
+ │    │    ├── reject-nulls: (1,4-6)
  │    │    ├── interesting orderings: (+3) (+4)
  │    │    ├── scan uv
  │    │    │    ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │    │    ├── key: (3)
  │    │    │    ├── fd: (3)-->(1,2)
  │    │    │    ├── prune: (1-3)
+ │    │    │    ├── reject-nulls: (1)
  │    │    │    ├── interesting orderings: (+3)
  │    │    │    └── unfiltered-cols: (1-3)
  │    │    ├── inner-join-apply
@@ -61,12 +62,14 @@ project
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(4,5)
  │    │    │    │    ├── prune: (5)
+ │    │    │    │    ├── reject-nulls: (5)
  │    │    │    │    ├── interesting orderings: (+4)
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:4(int!null) y:5(int)
  │    │    │    │    │    ├── key: (4)
  │    │    │    │    │    ├── fd: (4)-->(5)
  │    │    │    │    │    ├── prune: (4,5)
+ │    │    │    │    │    ├── reject-nulls: (5)
  │    │    │    │    │    └── interesting orderings: (+4)
  │    │    │    │    └── filters
  │    │    │    │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]

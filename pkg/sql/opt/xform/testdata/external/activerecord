@@ -128,7 +128,7 @@ sort
       │    ├── key: (6)
       │    ├── fd: ()-->(1,15), (6)-->(2,3,9,13,18,23-25,27,28,34,61), (2)-->(3,6,9,13,18), (24)-->(25), (27)-->(28), (34)-->(61)
       │    ├── inner-join (cross)
-      │    │    ├── columns: c.oid:27!null c.collname:28!null t.oid:34!null typcollation:61!null
+      │    │    ├── columns: adrelid:23 adnum:24 adbin:25 c.oid:27!null c.collname:28!null t.oid:34!null typcollation:61!null
       │    │    ├── key: (27,34)
       │    │    ├── fd: (27)-->(28), (34)-->(61)
       │    │    ├── scan c@pg_collation_name_enc_nsp_index

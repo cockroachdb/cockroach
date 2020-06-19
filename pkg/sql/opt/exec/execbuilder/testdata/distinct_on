@@ -312,21 +312,22 @@ render          ·             ·            (min)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
-·                         distribution  local        ·         ·
-·                         vectorized    true         ·         ·
-render                    ·             ·            (min)     ·
- │                        render 0      min          ·         ·
- └── limit                ·             ·            (y, min)  ·
-      │                   count         1            ·         ·
-      └── filter          ·             ·            (y, min)  ·
-           │              filter        min = 1      ·         ·
-           └── group      ·             ·            (y, min)  ·
-                │         aggregate 0   y            ·         ·
-                │         aggregate 1   min(x)       ·         ·
-                │         group by      y            ·         ·
-                └── scan  ·             ·            (x, y)    ·
-·                         table         xyz@primary  ·         ·
-·                         spans         FULL SCAN    ·         ·
+·                         distribution  local          ·         ·
+·                         vectorized    true           ·         ·
+render                    ·             ·              (min)     ·
+ │                        render 0      min            ·         ·
+ └── limit                ·             ·              (y, min)  ·
+      │                   count         1              ·         ·
+      └── filter          ·             ·              (y, min)  ·
+           │              filter        min = 1        ·         ·
+           └── group      ·             ·              (y, min)  ·
+                │         aggregate 0   y              ·         ·
+                │         aggregate 1   min(x)         ·         ·
+                │         group by      y              ·         ·
+                └── scan  ·             ·              (x, y)    ·
+·                         table         xyz@primary    ·         ·
+·                         spans         FULL SCAN      ·         ·
+·                         filter        x IS NOT NULL  ·         ·
 
 #########################
 # With window functions #

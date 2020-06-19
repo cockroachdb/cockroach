@@ -14,12 +14,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
+ ├── reject-nulls: (2,4)
  ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
+ │    ├── reject-nulls: (2,4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── filters
       └── eq [type=bool, subquery]
@@ -33,10 +35,12 @@ select
            │         └── project
            │              ├── columns: v:7(string)
            │              ├── prune: (7)
+           │              ├── reject-nulls: (7)
            │              └── scan kuv
            │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
            │                   ├── key: (5)
            │                   ├── fd: (5)-->(6,7)
            │                   ├── prune: (5-7)
+           │                   ├── reject-nulls: (6,7)
            │                   └── interesting orderings: (+5)
            └── const: 'foo' [type=string]

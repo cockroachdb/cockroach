@@ -121,12 +121,14 @@ project
            │    │    │    │    │    │    │         ├── key: (5)
            │    │    │    │    │    │    │         ├── fd: ()-->(6), (5)-->(7), (6,7)~~>(5)
            │    │    │    │    │    │    │         ├── prune: (5,7)
+           │    │    │    │    │    │    │         ├── reject-nulls: (7)
            │    │    │    │    │    │    │         ├── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
            │    │    │    │    │    │    │         ├── scan xyz
            │    │    │    │    │    │    │         │    ├── columns: x:5(int!null) y:6(int) z:7(int)
            │    │    │    │    │    │    │         │    ├── key: (5)
            │    │    │    │    │    │    │         │    ├── fd: (5)-->(6,7), (6,7)~~>(5)
            │    │    │    │    │    │    │         │    ├── prune: (5-7)
+           │    │    │    │    │    │    │         │    ├── reject-nulls: (6,7)
            │    │    │    │    │    │    │         │    └── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
            │    │    │    │    │    │    │         └── filters
            │    │    │    │    │    │    │              └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
@@ -153,6 +155,7 @@ project
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
            │    │    │    │    ├── prune: (10-13)
+           │    │    │    │    ├── reject-nulls: (11,12)
            │    │    │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            │    │    │    │    └── unfiltered-cols: (10-13)
            │    │    │    └── filters
@@ -246,6 +249,7 @@ project
            │         ├── key: (5)
            │         ├── fd: ()-->(18-21), (5)-->(6,8,9), (6)-->(9), (8)~~>(5,6,9)
            │         ├── prune: (18)
+           │         ├── reject-nulls: (18-21)
            │         ├── interesting orderings: (+21) (+18) (+19,+20,+21)
            │         ├── left-join (hash)
            │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:18(int) b:19(int) c:20(int) rowid:21(int)
@@ -274,6 +278,7 @@ project
            │         │    │    │         ├── key: (5)
            │         │    │    │         ├── fd: ()-->(14-17), (5)-->(6,8), (6)-->(9), (8)~~>(5,6,9)
            │         │    │    │         ├── prune: (15-17)
+           │         │    │    │         ├── reject-nulls: (14-17)
            │         │    │    │         ├── interesting orderings: (+17) (+14) (+15,+16,+17)
            │         │    │    │         ├── left-join (hash)
            │         │    │    │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:14(int) b:15(int) c:16(int) rowid:17(int)
@@ -296,6 +301,7 @@ project
            │         │    │    │         │    │    │    ├── key: (5)
            │         │    │    │         │    │    │    ├── fd: (5)-->(6,8), (6)-->(9)
            │         │    │    │         │    │    │    ├── prune: (5,6,8,9)
+           │         │    │    │         │    │    │    ├── reject-nulls: (6)
            │         │    │    │         │    │    │    ├── interesting orderings: (+5) (+6)
            │         │    │    │         │    │    │    └── select
            │         │    │    │         │    │    │         ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
@@ -303,6 +309,7 @@ project
            │         │    │    │         │    │    │         ├── key: (5)
            │         │    │    │         │    │    │         ├── fd: ()-->(10-13), (5)-->(6,8), (6)-->(9)
            │         │    │    │         │    │    │         ├── prune: (5,6,9-12)
+           │         │    │    │         │    │    │         ├── reject-nulls: (6,10-13)
            │         │    │    │         │    │    │         ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │         │    │    │         │    │    │         ├── left-join (hash)
            │         │    │    │         │    │    │         │    ├── columns: x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
@@ -311,7 +318,7 @@ project
            │         │    │    │         │    │    │         │    ├── key: (5)
            │         │    │    │         │    │    │         │    ├── fd: (5)-->(6,8,10-13), (6)-->(9), (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
            │         │    │    │         │    │    │         │    ├── prune: (5,6,9-12)
-           │         │    │    │         │    │    │         │    ├── reject-nulls: (10-13)
+           │         │    │    │         │    │    │         │    ├── reject-nulls: (6,10-13)
            │         │    │    │         │    │    │         │    ├── interesting orderings: (+5) (+6) (+13) (+10) (+11,+12,+13)
            │         │    │    │         │    │    │         │    ├── project
            │         │    │    │         │    │    │         │    │    ├── columns: column9:9(int) x:5(int!null) y:6(int) column8:8(int)
@@ -319,6 +326,7 @@ project
            │         │    │    │         │    │    │         │    │    ├── key: (5)
            │         │    │    │         │    │    │         │    │    ├── fd: (5)-->(6,8), (6)-->(9)
            │         │    │    │         │    │    │         │    │    ├── prune: (5,6,8,9)
+           │         │    │    │         │    │    │         │    │    ├── reject-nulls: (6)
            │         │    │    │         │    │    │         │    │    ├── interesting orderings: (+5) (+6)
            │         │    │    │         │    │    │         │    │    ├── unfiltered-cols: (5-7)
            │         │    │    │         │    │    │         │    │    ├── project
@@ -327,6 +335,7 @@ project
            │         │    │    │         │    │    │         │    │    │    ├── key: (5)
            │         │    │    │         │    │    │         │    │    │    ├── fd: (5)-->(6,8)
            │         │    │    │         │    │    │         │    │    │    ├── prune: (5,6,8)
+           │         │    │    │         │    │    │         │    │    │    ├── reject-nulls: (6)
            │         │    │    │         │    │    │         │    │    │    ├── interesting orderings: (+5) (+6)
            │         │    │    │         │    │    │         │    │    │    ├── unfiltered-cols: (5-7)
            │         │    │    │         │    │    │         │    │    │    ├── project
@@ -334,6 +343,7 @@ project
            │         │    │    │         │    │    │         │    │    │    │    ├── key: (5)
            │         │    │    │         │    │    │         │    │    │    │    ├── fd: (5)-->(6)
            │         │    │    │         │    │    │         │    │    │    │    ├── prune: (5,6)
+           │         │    │    │         │    │    │         │    │    │    │    ├── reject-nulls: (6)
            │         │    │    │         │    │    │         │    │    │    │    ├── interesting orderings: (+5) (+6)
            │         │    │    │         │    │    │         │    │    │    │    ├── unfiltered-cols: (5-7)
            │         │    │    │         │    │    │         │    │    │    │    └── scan xyz
@@ -341,6 +351,7 @@ project
            │         │    │    │         │    │    │         │    │    │    │         ├── key: (5)
            │         │    │    │         │    │    │         │    │    │    │         ├── fd: (5)-->(6,7), (6,7)~~>(5)
            │         │    │    │         │    │    │         │    │    │    │         ├── prune: (5-7)
+           │         │    │    │         │    │    │         │    │    │    │         ├── reject-nulls: (6,7)
            │         │    │    │         │    │    │         │    │    │    │         ├── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
            │         │    │    │         │    │    │         │    │    │    │         └── unfiltered-cols: (5-7)
            │         │    │    │         │    │    │         │    │    │    └── projections
@@ -359,6 +370,7 @@ project
            │         │    │    │         │    │    │         │    │    ├── key: (13)
            │         │    │    │         │    │    │         │    │    ├── fd: (13)-->(10-12), (10)-->(11-13), (11,12)~~>(10,13)
            │         │    │    │         │    │    │         │    │    ├── prune: (10-13)
+           │         │    │    │         │    │    │         │    │    ├── reject-nulls: (11,12)
            │         │    │    │         │    │    │         │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
            │         │    │    │         │    │    │         │    │    └── unfiltered-cols: (10-13)
            │         │    │    │         │    │    │         │    └── filters
@@ -386,6 +398,7 @@ project
            │         │    │    │         │    │    ├── key: (17)
            │         │    │    │         │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17)
            │         │    │    │         │    │    ├── prune: (14-17)
+           │         │    │    │         │    │    ├── reject-nulls: (15,16)
            │         │    │    │         │    │    ├── interesting orderings: (+17) (+14) (+15,+16,+17)
            │         │    │    │         │    │    └── unfiltered-cols: (14-17)
            │         │    │    │         │    └── filters
@@ -413,6 +426,7 @@ project
            │         │    │    ├── key: (21)
            │         │    │    ├── fd: (21)-->(18-20), (18)-->(19-21), (19,20)~~>(18,21)
            │         │    │    ├── prune: (18-21)
+           │         │    │    ├── reject-nulls: (19,20)
            │         │    │    ├── interesting orderings: (+21) (+18) (+19,+20,+21)
            │         │    │    └── unfiltered-cols: (18-21)
            │         │    └── filters
@@ -540,6 +554,7 @@ project
  │         │    │    │    ├── key: (12)
  │         │    │    │    ├── fd: (12)-->(9-11), (9)-->(10-12), (10,11)~~>(9,12)
  │         │    │    │    ├── prune: (9-12)
+ │         │    │    │    ├── reject-nulls: (10,11)
  │         │    │    │    ├── interesting orderings: (+12) (+9) (+10,+11,+12)
  │         │    │    │    └── unfiltered-cols: (9-12)
  │         │    │    └── filters
@@ -663,12 +678,14 @@ upsert abc
       │    │    │    │    │    │    │         ├── key: (5)
       │    │    │    │    │    │    │         ├── fd: (5)-->(6,7), (6,7)~~>(5)
       │    │    │    │    │    │    │         ├── prune: (5,7)
+      │    │    │    │    │    │    │         ├── reject-nulls: (7)
       │    │    │    │    │    │    │         ├── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
       │    │    │    │    │    │    │         ├── scan xyz
       │    │    │    │    │    │    │         │    ├── columns: x:5(int!null) y:6(int) z:7(int)
       │    │    │    │    │    │    │         │    ├── key: (5)
       │    │    │    │    │    │    │         │    ├── fd: (5)-->(6,7), (6,7)~~>(5)
       │    │    │    │    │    │    │         │    ├── prune: (5-7)
+      │    │    │    │    │    │    │         │    ├── reject-nulls: (6,7)
       │    │    │    │    │    │    │         │    └── interesting orderings: (+5) (+6,+7,+5) (+7,+6,+5)
       │    │    │    │    │    │    │         └── filters
       │    │    │    │    │    │    │              └── is-not [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
@@ -698,6 +715,7 @@ upsert abc
       │    │    │    │    ├── key: (14)
       │    │    │    │    ├── fd: (14)-->(11-13), (11)-->(12-14), (12,13)~~>(11,14)
       │    │    │    │    ├── prune: (11-14)
+      │    │    │    │    ├── reject-nulls: (12,13)
       │    │    │    │    ├── interesting orderings: (+14) (+11) (+12,+13,+14)
       │    │    │    │    └── unfiltered-cols: (11-14)
       │    │    │    └── filters

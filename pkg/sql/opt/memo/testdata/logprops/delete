@@ -30,6 +30,7 @@ delete abcde
       ├── key: (11)
       ├── fd: ()-->(7), (11)-->(8-10,12)
       ├── prune: (8-12)
+      ├── reject-nulls: (8,10,12)
       ├── interesting orderings: (+11)
       ├── scan abcde
       │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
@@ -43,6 +44,7 @@ delete abcde
       │    ├── key: (11)
       │    ├── fd: (11)-->(7-10,12)
       │    ├── prune: (7-12)
+      │    ├── reject-nulls: (8,10,12)
       │    └── interesting orderings: (+11)
       └── filters
            └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
@@ -70,6 +72,7 @@ project
            ├── key: (11)
            ├── fd: ()-->(7), (11)-->(8-10,12)
            ├── prune: (8-12)
+           ├── reject-nulls: (8,10,12)
            ├── interesting orderings: (+11)
            ├── scan abcde
            │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
@@ -83,6 +86,7 @@ project
            │    ├── key: (11)
            │    ├── fd: (11)-->(7-10,12)
            │    ├── prune: (7-12)
+           │    ├── reject-nulls: (8,10,12)
            │    └── interesting orderings: (+11)
            └── filters
                 └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
@@ -114,6 +118,7 @@ project
            ├── key: ()
            ├── fd: ()-->(7-12)
            ├── prune: (7-10,12)
+           ├── reject-nulls: (8,10,12)
            ├── interesting orderings: (+11)
            ├── scan abcde
            │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
@@ -127,6 +132,7 @@ project
            │    ├── key: (11)
            │    ├── fd: (11)-->(7-10,12)
            │    ├── prune: (7-12)
+           │    ├── reject-nulls: (8,10,12)
            │    └── interesting orderings: (+11)
            └── filters
                 └── eq [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
@@ -154,6 +160,7 @@ project
            ├── key: (11)
            ├── fd: (11)-->(7-10,12), (8)==(9), (9)==(8)
            ├── prune: (7,10-12)
+           ├── reject-nulls: (10,12)
            ├── interesting orderings: (+11)
            ├── scan abcde
            │    ├── columns: a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int)
@@ -167,6 +174,7 @@ project
            │    ├── key: (11)
            │    ├── fd: (11)-->(7-10,12)
            │    ├── prune: (7-12)
+           │    ├── reject-nulls: (8,10,12)
            │    └── interesting orderings: (+11)
            └── filters
                 └── eq [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]

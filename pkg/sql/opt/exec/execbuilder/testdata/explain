@@ -956,6 +956,7 @@ inner-join (hash)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1100.02
  │    ├── prune: (1,2)
+ │    ├── reject-nulls: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-3)
  ├── scan t
@@ -965,6 +966,7 @@ inner-join (hash)
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── prune: (4,5)
+ │    ├── reject-nulls: (5)
  │    ├── interesting orderings: (+4)
  │    └── unfiltered-cols: (4,5)
  └── filters
