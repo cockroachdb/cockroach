@@ -110,7 +110,7 @@ EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y,
 ----
 ·                               distribution        local                                                  ·                                                ·
 ·                               vectorized          true                                                   ·                                                ·
-render                          ·                   ·                                                      (x, y, z, "information_schema._pg_expandarray")  ·
+render                          ·                   ·                                                      (x, y, z, "information_schema._pg_expandarray")  +x
  │                              render 0            x                                                      ·                                                ·
  │                              render 1            y                                                      ·                                                ·
  │                              render 2            z                                                      ·                                                ·

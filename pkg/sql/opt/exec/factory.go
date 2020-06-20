@@ -90,9 +90,7 @@ type Factory interface {
 	// more efficient version of ConstructRender.
 	// The colNames argument is optional; if it is nil, the names of the
 	// corresponding input columns are kept.
-	ConstructSimpleProject(
-		n Node, cols []NodeColumnOrdinal, colNames []string, reqOrdering OutputOrdering,
-	) (Node, error)
+	ConstructSimpleProject(n Node, cols []NodeColumnOrdinal, colNames []string) (Node, error)
 
 	// ConstructRender returns a node that applies a projection on the results of
 	// the given input node. The projection can contain new expressions. The input

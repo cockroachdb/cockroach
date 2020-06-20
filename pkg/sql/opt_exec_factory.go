@@ -190,7 +190,7 @@ func (ef *execFactory) constructVirtualScan(
 			cols = append(cols, exec.NodeColumnOrdinal(ord-1))
 			colNames = append(colNames, columns[ord-1].Name)
 		}
-		n, err = ef.ConstructSimpleProject(n, cols, colNames, nil /* reqOrdering */)
+		n, err = ef.ConstructSimpleProject(n, cols, colNames)
 		if err != nil {
 			return nil, err
 		}
@@ -258,8 +258,28 @@ func (ef *execFactory) ConstructFilter(
 
 // ConstructSimpleProject is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
+	var reqOrdering exec.OutputOrdering
+	if p, ok := n.(planNode); ok {
+		oldReqOrdering := exec.OutputOrdering(planReqOrdering(p))
+		reqOrdering = make(exec.OutputOrdering, 0, len(oldReqOrdering))
+		// Update the ordering.
+		for _, oldCol := range oldReqOrdering {
+			// Look for the column in the new projection, it's ok if the column
+			// is not present.
+			for j, projCol := range cols {
+				if int(projCol) == oldCol.ColIdx {
+					reqOrdering = append(reqOrdering, sqlbase.ColumnOrderInfo{
+						ColIdx:    j,
+						Direction: oldCol.Direction,
+					})
+					break
+				}
+			}
+		}
+	}
+
 	// If the top node is already a renderNode, just rearrange the columns. But
 	// we don't want to duplicate a rendering expression (in case it is expensive
 	// to compute or has side-effects); so if we have duplicates we avoid this

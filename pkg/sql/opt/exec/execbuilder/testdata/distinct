@@ -149,7 +149,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
 ----
 ·          distribution  local              ·          ·
 ·          vectorized    true               ·          ·
-render     ·             ·                  (z, d, b)  ·
+render     ·             ·                  (z, d, b)  +d,+b
  │         render 0      1                  ·          ·
  │         render 1      d                  ·          ·
  │         render 2      b                  ·          ·

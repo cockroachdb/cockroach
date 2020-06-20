@@ -41,7 +41,7 @@ func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
 			colList[i] = ct.InputCols[i].ID
 			colNames[i] = ct.InputCols[i].Alias
 		}
-		input, err = b.ensureColumns(input, colList, colNames, nil /* provided */)
+		input, err = b.ensureColumns(input, colList, colNames)
 		if err != nil {
 			return execPlan{}, err
 		}

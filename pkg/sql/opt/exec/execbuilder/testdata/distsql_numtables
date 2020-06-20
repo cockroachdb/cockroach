@@ -168,7 +168,7 @@ EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY
 ----
 ·                    distribution  full               ·              ·
 ·                    vectorized    true               ·              ·
-render               ·             ·                  (y, str, res)  ·
+render               ·             ·                  (y, str, res)  +res
  │                   render 0      y                  ·              ·
  │                   render 1      str                ·              ·
  │                   render 2      res                ·              ·
@@ -187,7 +187,7 @@ EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY
 ----
 ·                         distribution  full               ·              ·
 ·                         vectorized    true               ·              ·
-render                    ·             ·                  (y, str, res)  ·
+render                    ·             ·                  (y, str, res)  +res
  │                        render 0      y                  ·              ·
  │                        render 1      str                ·              ·
  │                        render 2      res                ·              ·

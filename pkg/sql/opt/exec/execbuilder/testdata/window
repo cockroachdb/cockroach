@@ -110,7 +110,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) 
 ----
 ·                         distribution  local                                                                                                               ·                                                            ·
 ·                         vectorized    true                                                                                                                ·                                                            ·
-render                    ·             ·                                                                                                                   (k int, stddev decimal)                                      ·
+render                    ·             ·                                                                                                                   (k int, stddev decimal)                                      +k
  │                        render 0      (k)[int]                                                                                                            ·                                                            ·
  │                        render 1      (stddev)[decimal]                                                                                                   ·                                                            ·
  └── sort                 ·             ·                                                                                                                   (k int, stddev decimal, variance decimal)                    +variance,+k
@@ -133,7 +133,7 @@ EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY 
 ----
 ·                              distribution  local                                                                                                               ·                                                            ·
 ·                              vectorized    true                                                                                                                ·                                                            ·
-render                         ·             ·                                                                                                                   (k int, stddev decimal)                                      ·
+render                         ·             ·                                                                                                                   (k int, stddev decimal)                                      +k
  │                             render 0      (k)[int]                                                                                                            ·                                                            ·
  │                             render 1      (stddev)[decimal]                                                                                                   ·                                                            ·
  └── sort                      ·             ·                                                                                                                   (k int, stddev decimal, variance decimal)                    +variance,+k
@@ -174,7 +174,7 @@ EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER
 ----
 ·                              distribution  local                                                                                                               ·                                                            ·
 ·                              vectorized    true                                                                                                                ·                                                            ·
-render                         ·             ·                                                                                                                   (k int, "?column?" decimal)                                  ·
+render                         ·             ·                                                                                                                   (k int, "?column?" decimal)                                  +k
  │                             render 0      (k)[int]                                                                                                            ·                                                            ·
  │                             render 1      ("?column?")[decimal]                                                                                               ·                                                            ·
  └── sort                      ·             ·                                                                                                                   ("?column?" decimal, k int, variance decimal)                +variance,+k

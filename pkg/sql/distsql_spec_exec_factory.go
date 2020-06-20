@@ -258,7 +258,7 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }

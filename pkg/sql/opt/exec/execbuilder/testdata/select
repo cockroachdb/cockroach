@@ -634,7 +634,7 @@ EXPLAIN (TYPES) SELECT b, a FROM coll ORDER BY b, a
 ----
 ·          distribution  local                    ·                              ·
 ·          vectorized    true                     ·                              ·
-render     ·             ·                        (b int, a collatedstring{da})  ·
+render     ·             ·                        (b int, a collatedstring{da})  +b,+a
  │         render 0      (b)[int]                 ·                              ·
  │         render 1      (a)[collatedstring{da}]  ·                              ·
  └── scan  ·             ·                        (a collatedstring{da}, b int)  +b,+a
@@ -1207,7 +1207,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, a+b+c AS x FROM (SELECT * FROM abcd L
 ----
 ·               distribution  local                ·          ·
 ·               vectorized    true                 ·          ·
-render          ·             ·                    (a, x)     ·
+render          ·             ·                    (a, x)     +a
  │              render 0      a                    ·          ·
  │              render 1      c + (a + b)          ·          ·
  └── filter     ·             ·                    (a, b, c)  +a

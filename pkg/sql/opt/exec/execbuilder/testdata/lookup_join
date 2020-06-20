@@ -665,7 +665,7 @@ EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
 ·                 distribution  full         ·                   ·
 ·                 vectorized    true         ·                   ·
-render            ·             ·            (d, e, f, a, b, c)  ·
+render            ·             ·            (d, e, f, a, b, c)  +a
  │                render 0      d            ·                   ·
  │                render 1      e            ·                   ·
  │                render 2      f            ·                   ·

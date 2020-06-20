@@ -54,7 +54,7 @@ func (f *stubFactory) ConstructFilter(
 }
 
 func (f *stubFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

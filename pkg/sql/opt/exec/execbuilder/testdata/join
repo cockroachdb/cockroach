@@ -218,7 +218,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, 
 ----
 ·                           distribution   local                  ·                                     ·
 ·                           vectorized     false                  ·                                     ·
-render                      ·              ·                      (k, u, w)                             ·
+render                      ·              ·                      (k, u, w)                             +u
  │                          render 0       column2                ·                                     ·
  │                          render 1       column1                ·                                     ·
  │                          render 2       column2                ·                                     ·

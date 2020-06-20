@@ -49,7 +49,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 ----
 ·                         distribution  local      ·       ·
 ·                         vectorized    true       ·       ·
-render                    ·             ·          (c, b)  ·
+render                    ·             ·          (c, b)  +b
  │                        render 0      c          ·       ·
  │                        render 1      b          ·       ·
  └── limit                ·             ·          (b, c)  +b
@@ -330,7 +330,7 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 ·          distribution  local      ·          ·
 ·          vectorized    true       ·          ·
-render     ·             ·          (a, b)     ·
+render     ·             ·          (a, b)     +b
  │         render 0      a          ·          ·
  │         render 1      b          ·          ·
  └── scan  ·             ·          (a, b, c)  +b,+c
@@ -639,7 +639,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY
 ----
 ·          distribution  local        ·          ·
 ·          vectorized    true         ·          ·
-render     ·             ·            (y, w, x)  ·
+render     ·             ·            (y, w, x)  +w,+x
  │         render 0      y            ·          ·
  │         render 1      w            ·          ·
  │         render 2      x            ·          ·
@@ -687,7 +687,7 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
 ·                    distribution  local        ·                ·
 ·                    vectorized    true         ·                ·
-render               ·             ·            (b, a)           ·
+render               ·             ·            (b, a)           +a
  │                   render 0      b            ·                ·
  │                   render 1      a            ·                ·
  └── sort            ·             ·            (column4, a, b)  +a
@@ -705,7 +705,7 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
 ·                    distribution  local        ·                ·
 ·                    vectorized    true         ·                ·
-render               ·             ·            (b, a)           ·
+render               ·             ·            (b, a)           +b
  │                   render 0      b            ·                ·
  │                   render 1      a            ·                ·
  └── sort            ·             ·            (column4, a, b)  +b
@@ -796,7 +796,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
 ·               distribution  local       ·       ·
 ·               vectorized    true        ·       ·
-render          ·             ·           (k)     ·
+render          ·             ·           (k)     +k
  │              render 0      k           ·       ·
  └── sort       ·             ·           (k, v)  +v,+k
       │         order         +v,+k       ·       ·
@@ -809,7 +809,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (k)     ·
+render     ·             ·          (k)     +k
  │         render 0      k          ·       ·
  └── scan  ·             ·          (k, v)  -v,+k
 ·          table         kv@foo     ·       ·
@@ -820,7 +820,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (k)     ·
+render     ·             ·          (k)     +k
  │         render 0      k          ·       ·
  └── scan  ·             ·          (k, v)  -v,+k
 ·          table         kv@foo     ·       ·
@@ -831,7 +831,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
 ·             distribution  local      ·       ·
 ·             vectorized    true       ·       ·
-render        ·             ·          (k)     ·
+render        ·             ·          (k)     -k
  │            render 0      k          ·       ·
  └── revscan  ·             ·          (k, v)  +v,-k
 ·             table         kv@foo     ·       ·
@@ -842,7 +842,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (k)     ·
+render     ·             ·          (k)     +k
  │         render 0      k          ·       ·
  └── scan  ·             ·          (k, v)  -v,+k
 ·          table         kv@foo     ·       ·
@@ -860,7 +860,7 @@ SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY IND
 ----
 ·                           distribution           local             ·                ·
 ·                           vectorized             false             ·                ·
-render                      ·                      ·                 (k)              ·
+render                      ·                      ·                 (k)              +k
  │                          render 0               k                 ·                ·
  └── sort                   ·                      ·                 (k, v)           -v,+k
       │                     order                  -v,+k             ·                ·
@@ -883,7 +883,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
 ·                distribution        local              ·             ·
 ·                vectorized          true               ·             ·
-render           ·                   ·                  (k)           ·
+render           ·                   ·                  (k)           +k
  │               render 0            k                  ·             ·
  └── merge-join  ·                   ·                  (k, v, k, v)  -v,+k
       │          type                inner              ·             ·

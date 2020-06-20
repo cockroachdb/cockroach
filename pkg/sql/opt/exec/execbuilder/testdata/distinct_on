@@ -129,7 +129,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
 ----
 ·               distribution  local        ·         ·
 ·               vectorized    true         ·         ·
-render          ·             ·            (pk1, x)  ·
+render          ·             ·            (pk1, x)  +pk1
  │              render 0      pk1          ·         ·
  │              render 1      x            ·         ·
  └── distinct   ·             ·            (x, pk1)  +pk1
@@ -229,7 +229,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
 ·                    distribution  local        ·          ·
 ·                    vectorized    true         ·          ·
-render               ·             ·            (y, z, x)  ·
+render               ·             ·            (y, z, x)  +z
  │                   render 0      y            ·          ·
  │                   render 1      z            ·          ·
  │                   render 2      x            ·          ·
@@ -247,7 +247,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC
 ----
 ·                    distribution  local        ·          ·
 ·                    vectorized    true         ·          ·
-render               ·             ·            (y, z, x)  ·
+render               ·             ·            (y, z, x)  +x
  │                   render 0      y            ·          ·
  │                   render 1      z            ·          ·
  │                   render 2      x            ·          ·

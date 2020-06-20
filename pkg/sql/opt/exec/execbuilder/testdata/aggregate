@@ -764,7 +764,7 @@ EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 group                ·             ·                             (min int)       ·
  │                   aggregate 0   any_not_null(v)               ·               ·
  │                   scalar        ·                             ·               ·
- └── render          ·             ·                             (v int)         ·
+ └── render          ·             ·                             (v int)         +v
       │              render 0      (v)[int]                      ·               ·
       └── limit      ·             ·                             (k int, v int)  +v
            │         count         (1)[int]                      ·               ·

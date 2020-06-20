@@ -536,9 +536,7 @@ func (b *Builder) buildSelect(sel *memo.SelectExpr) (execPlan, error) {
 }
 
 // applySimpleProject adds a simple projection on top of an existing plan.
-func (b *Builder) applySimpleProject(
-	input execPlan, cols opt.ColSet, providedOrd opt.Ordering,
-) (execPlan, error) {
+func (b *Builder) applySimpleProject(input execPlan, cols opt.ColSet) (execPlan, error) {
 	// We have only pass-through columns.
 	colList := make([]exec.NodeColumnOrdinal, 0, cols.Len())
 	var res execPlan
@@ -547,9 +545,7 @@ func (b *Builder) applySimpleProject(
 		colList = append(colList, input.getNodeColumnOrdinal(i))
 	})
 	var err error
-	res.root, err = b.factory.ConstructSimpleProject(
-		input.root, colList, nil /* colNames */, exec.OutputOrdering(res.sqlOrdering(providedOrd)),
-	)
+	res.root, err = b.factory.ConstructSimpleProject(input.root, colList, nil /* colNames */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -566,7 +562,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 	projections := prj.Projections
 	if len(projections) == 0 {
 		// We have only pass-through columns.
-		return b.applySimpleProject(input, prj.Passthrough, prj.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(input, prj.Passthrough)
 	}
 
 	var res execPlan
@@ -1057,9 +1053,7 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 	if input.outputCols.Len() == outCols.Len() {
 		return ep, nil
 	}
-	return b.ensureColumns(
-		ep, opt.ColSetToList(outCols), nil /* colNames */, distinct.ProvidedPhysical().Ordering,
-	)
+	return b.ensureColumns(ep, opt.ColSetToList(outCols), nil /* colNames */)
 }
 
 func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
@@ -1110,10 +1104,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	}
 
 	input.outputCols = newOutputCols
-	reqOrdering := input.reqOrdering(groupByInput)
-	input.root, err = b.factory.ConstructSimpleProject(
-		input.root, cols, nil /* colNames */, reqOrdering,
-	)
+	input.root, err = b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1153,15 +1144,11 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	// Note that (unless this is part of a larger query) the presentation property
 	// will ensure that the columns are presented correctly in the output (i.e. in
 	// the order `b, c, a`).
-	left, err = b.ensureColumns(
-		left, private.LeftCols, nil /* colNames */, leftExpr.ProvidedPhysical().Ordering,
-	)
+	left, err = b.ensureColumns(left, private.LeftCols, nil /* colNames */)
 	if err != nil {
 		return execPlan{}, err
 	}
-	right, err = b.ensureColumns(
-		right, private.RightCols, nil /* colNames */, rightExpr.ProvidedPhysical().Ordering,
-	)
+	right, err = b.ensureColumns(right, private.RightCols, nil /* colNames */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1356,7 +1343,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
 	if !inputCols.SubsetOf(join.Cols) {
-		return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(res, join.Cols)
 	}
 	return res, nil
 }
@@ -1410,7 +1397,7 @@ func (b *Builder) buildGeoLookupJoin(join *memo.GeoLookupJoinExpr) (execPlan, er
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
 	if !inputCols.SubsetOf(join.Cols) {
-		return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
+		return b.applySimpleProject(res, join.Cols)
 	}
 	return res, nil
 }
@@ -1550,7 +1537,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	}
 
 	// Make sure we have the columns in the correct order.
-	initial, err = b.ensureColumns(initial, rec.InitialCols, nil /* colNames */, nil /* ordering */)
+	initial, err = b.ensureColumns(initial, rec.InitialCols, nil /* colNames */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1585,9 +1572,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 			return nil, err
 		}
 		// Ensure columns are output in the same order.
-		plan, err = innerBld.ensureColumns(
-			plan, rec.RecursiveCols, nil /* colNames */, nil, /* ordering */
-		)
+		plan, err = innerBld.ensureColumns(plan, rec.RecursiveCols, nil /* colNames */)
 		if err != nil {
 			return nil, err
 		}
@@ -1648,10 +1633,7 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 			cols[i] = exec.NodeColumnOrdinal(col)
 			res.outputCols.Set(int(withScan.OutCols[i]), i)
 		}
-		res.root, err = b.factory.ConstructSimpleProject(
-			res.root, cols, nil, /* colNames */
-			exec.OutputOrdering(res.sqlOrdering(withScan.ProvidedPhysical().Ordering)),
-		)
+		res.root, err = b.factory.ConstructSimpleProject(res.root, cols, nil /* colNames */)
 		if err != nil {
 			return execPlan{}, err
 		}
@@ -1824,7 +1806,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
 	// can result in an extra render beneath each window function. Figure out a
 	// way to alleviate this.
-	input, err = b.ensureColumns(input, desiredCols, nil, opt.Ordering{})
+	input, err = b.ensureColumns(input, desiredCols, nil /* colNames */)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -2050,7 +2032,7 @@ func (b *Builder) needProjection(
 // ensureColumns applies a projection as necessary to make the output match the
 // given list of columns; colNames is optional.
 func (b *Builder) ensureColumns(
-	input execPlan, colList opt.ColList, colNames []string, provided opt.Ordering,
+	input execPlan, colList opt.ColList, colNames []string,
 ) (execPlan, error) {
 	cols, needProj := b.needProjection(input, colList)
 	if !needProj {
@@ -2068,9 +2050,8 @@ func (b *Builder) ensureColumns(
 	for i, col := range colList {
 		res.outputCols.Set(int(col), i)
 	}
-	reqOrdering := exec.OutputOrdering(res.sqlOrdering(provided))
 	var err error
-	res.root, err = b.factory.ConstructSimpleProject(input.root, cols, colNames, reqOrdering)
+	res.root, err = b.factory.ConstructSimpleProject(input.root, cols, colNames)
 	return res, err
 }
 
@@ -2087,7 +2068,7 @@ func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execP
 	// The ordering is not useful for a top-level projection (it is used by the
 	// distsql planner for internal nodes); we might not even be able to represent
 	// it because it can refer to columns not in the presentation.
-	return b.ensureColumns(input, colList, colNames, nil /* provided */)
+	return b.ensureColumns(input, colList, colNames)
 }
 
 // getEnvData consolidates the information that must be presented in
