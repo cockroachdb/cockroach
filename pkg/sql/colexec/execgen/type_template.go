@@ -51,8 +51,11 @@ func extractInstantiationsFromComment(n dst.Node) (instantiations [][]dst.Expr) 
 //
 // It returns a map from struct type name to list of lists of instantiation
 // arguments.
-func createTemplateStructVariants(f *dst.File) {
+func createTemplateStructVariants(f *dst.File, verbose bool) {
 	templateStructInfoMap := replaceTemplateStructs(f)
+	if verbose {
+		printFile(f, "replacing template structs")
+	}
 
 	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
 		n := cursor.Node()

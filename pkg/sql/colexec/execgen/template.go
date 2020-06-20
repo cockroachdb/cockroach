@@ -30,11 +30,13 @@ type funcInfo struct {
 	templateParams []templateParamInfo
 }
 
+var templateArgsStr = `\/\/ execgen:%s<((?:(?:[a-zA-Z\*\.\[\]]+),?[^a-zA-Z\*\.\[\]]*)+)>`
+
 // Match // execgen:template<foo, bar>
-var templateRe = regexp.MustCompile(`\/\/ execgen:template<((?:(?:\w+),?\W*)+)>`)
+var templateRe = regexp.MustCompile(fmt.Sprintf(templateArgsStr, "template"))
 
 // Match // execgen:instantiate<foo, bar>
-var instantiateRe = regexp.MustCompile(`\/\/ execgen:instantiate<((?:(?:\w+),?\W*)+)>`)
+var instantiateRe = regexp.MustCompile(fmt.Sprintf(templateArgsStr, "instantiate"))
 
 // replaceTemplateVars removes the template arguments from a callsite of a
 // templated function. It returns the template arguments that were used, and a
@@ -231,7 +233,8 @@ func createTemplateFuncVariants(f *dst.File) map[string]*funcInfo {
 					}
 				}
 				if !found {
-					panic(fmt.Errorf("template var %s not found", v))
+					panic(fmt.Errorf("template var %s not found in function %s (Searching for %v, found %v)", v, n.Name,
+						templateVars, prettyPrintExprs(n.Type)))
 				}
 			}
 			if len(argsList) == 0 {
@@ -347,7 +350,11 @@ func getTemplateVariantIdent(objectName string, args []dst.Expr) *dst.Ident {
 	newName.WriteString(objectName)
 	for j := range args {
 		newName.WriteByte('_')
-		newName.WriteString(prettyPrintExprs(args[j]))
+		variantName := prettyPrintExprs(args[j])
+		variantName = strings.ReplaceAll(variantName, "[]", "SLICE")
+		variantName = strings.ReplaceAll(variantName, "*", "STAR")
+		variantName = strings.ReplaceAll(variantName, ".", "DOT")
+		newName.WriteString(variantName)
 	}
 	return dst.NewIdent(newName.String())
 }
@@ -405,8 +412,17 @@ func replaceTemplateCallSites(f *dst.File, templateFuncInfos map[string]*funcInf
 // expandTemplates is the main entry point to the templater. Given a dst.File,
 // it modifies the dst.File to include all expanded template functions, and
 // edits call sites to call the newly expanded functions.
-func expandTemplates(f *dst.File) {
-	createTemplateStructVariants(f)
+func expandTemplates(f *dst.File, verbose bool) {
+	createTemplateStructVariants(f, verbose)
+	if verbose {
+		printFile(f, "creating template struct variants")
+	}
 	funcInfos := createTemplateFuncVariants(f)
+	if verbose {
+		printFile(f, "creating template func variants")
+	}
 	replaceTemplateCallSites(f, funcInfos)
+	if verbose {
+		printFile(f, "replacing template call sites")
+	}
 }

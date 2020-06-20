@@ -128,7 +128,7 @@ func (g *execgenTool) generate(path string, entry entry) error {
 		if err != nil {
 			return err
 		}
-		inputFileContents, err = execgen.Generate(string(inputFileBytes))
+		inputFileContents, err = execgen.Generate(string(inputFileBytes), g.verbose)
 		if err != nil {
 			return err
 		}

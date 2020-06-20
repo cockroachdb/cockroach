@@ -29,6 +29,13 @@ func b (T interface{}) {
 func b (T interface{}) {
   fmt.Println("staticly invoked with boolean")
 }
+
+// execgen:template<T, U>
+// execgen:instantiate<int, bool>
+func c(T interface{}, U interface{}) {
+    var foo T
+    var bar U
+}
 ----
 ----
 package main
@@ -70,6 +77,13 @@ const _ = "template_b"
 
 func b_bool() {
 	fmt.Println("staticly invoked with boolean")
+}
+
+const _ = "template_c"
+
+func c_int_bool() {
+	var foo int
+	var bar bool
 }
 ----
 ----
