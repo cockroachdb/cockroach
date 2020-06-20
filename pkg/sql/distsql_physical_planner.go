@@ -2159,6 +2159,19 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		return nil, err
 	}
 
+	leftMap, rightMap := leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap
+	helper := &joinPlanningHelper{
+		numLeftCols:             n.pred.numLeftCols,
+		numRightCols:            n.pred.numRightCols,
+		leftPlanToStreamColMap:  leftMap,
+		rightPlanToStreamColMap: rightMap,
+	}
+	post, joinToStreamColMap := helper.joinOutColumns(n.joinType, n.columns)
+	onExpr, err := helper.remapOnExpr(planCtx, n.pred.onCond)
+	if err != nil {
+		return nil, err
+	}
+
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
 
@@ -2174,8 +2187,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 
 	// Set up the equality columns.
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
-		leftEqCols = eqCols(n.pred.leftEqualityIndices, leftPlan.PlanToStreamColMap)
-		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.PlanToStreamColMap)
+		leftEqCols = eqCols(n.pred.leftEqualityIndices, leftMap)
+		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightMap)
 	}
 
 	p := MakePhysicalPlan(dsp.gatewayNodeID)
@@ -2186,20 +2199,6 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// Set up the output columns.
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
 		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
-
-		if len(n.mergeJoinOrdering) > 0 {
-			// TODO(radu): we currently only use merge joins when we have an ordering on
-			// all equality columns. We should relax this by either:
-			//  - implementing a hybrid hash/merge processor which implements merge
-			//    logic on the columns we have an ordering on, and within each merge
-			//    group uses a hashmap on the remaining columns
-			//  - or: adding a sort processor to complete the order
-			if len(n.mergeJoinOrdering) == len(n.pred.leftEqualityIndices) {
-				// Excellent! We can use the merge joiner.
-				leftMergeOrd = distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
-				rightMergeOrd = distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
-			}
-		}
 	} else {
 		// Without column equality, we cannot distribute the join. Run a
 		// single processor.
@@ -2214,16 +2213,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	rightMap := rightPlan.PlanToStreamColMap
-	post, joinToStreamColMap := joinOutColumns(n, leftPlan.PlanToStreamColMap, rightMap)
-	onExpr, err := remapOnExpr(planCtx, n, leftPlan.PlanToStreamColMap, rightMap)
-	if err != nil {
-		return nil, err
-	}
-
 	// Create the Core spec.
 	var core execinfrapb.ProcessorCoreUnion
-	if leftMergeOrd.Columns == nil {
+	if len(n.mergeJoinOrdering) == 0 {
 		core.HashJoiner = &execinfrapb.HashJoinerSpec{
 			LeftEqColumns:        leftEqCols,
 			RightEqColumns:       rightEqCols,
@@ -2233,6 +2225,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			RightEqColumnsAreKey: n.pred.rightEqKey,
 		}
 	} else {
+		leftMergeOrd = distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
+		rightMergeOrd = distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
 		core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
 			LeftOrdering:         leftMergeOrd,
 			RightOrdering:        rightMergeOrd,
