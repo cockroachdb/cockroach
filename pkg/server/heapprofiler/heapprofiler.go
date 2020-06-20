@@ -12,16 +12,11 @@ package heapprofiler
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
 	"os"
-	"path/filepath"
 	"runtime"
 	"runtime/pprof"
-	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,15 +26,6 @@ import (
 // resetHighWaterMarkInterval specifies how often the high-water mark value will
 // be reset. Immediately after it is reset, a new profile will be taken.
 const resetHighWaterMarkInterval = time.Hour
-
-var (
-	maxProfiles = settings.RegisterIntSetting(
-		"server.heap_profile.max_profiles",
-		"maximum number of profiles to be kept. "+
-			"Profiles with lower score are GC'ed, but latest profile is always kept.",
-		5,
-	)
-)
 
 type testingKnobs struct {
 	dontWriteProfiles    bool
@@ -56,8 +42,7 @@ type testingKnobs struct {
 // Profiles are also GCed periodically. The latest is always kept, and a couple
 // of the ones with the largest heap are also kept.
 type HeapProfiler struct {
-	dir string
-	st  *cluster.Settings
+	dir profileStore
 	// lastProfileTime marks the time when we took the last profile.
 	lastProfileTime time.Time
 	// highwaterMarkBytes represents the maximum heap size that we've seen since
@@ -74,16 +59,16 @@ func NewHeapProfiler(dir string, st *cluster.Settings) (*HeapProfiler, error) {
 		return nil, errors.Errorf("need to specify dir for NewHeapProfiler")
 	}
 	hp := &HeapProfiler{
-		dir: dir,
-		st:  st,
+		dir: profileStore{dir: dir, st: st},
 	}
 	return hp, nil
 }
 
 // MaybeTakeProfile takes a heap profile if the heap is big enough.
 func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, ms runtime.MemStats) {
+	now := o.now()
 	// If it's been too long since we took a profile, make sure we'll take one now.
-	if o.now().Sub(o.lastProfileTime) > resetHighWaterMarkInterval {
+	if now.Sub(o.lastProfileTime) > resetHighWaterMarkInterval {
 		o.highwaterMarkBytes = 0
 	}
 
@@ -97,17 +82,19 @@ func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, ms runtime.MemStats
 	}
 
 	o.highwaterMarkBytes = curHeap
-	o.lastProfileTime = o.now()
+	o.lastProfileTime = now
 
 	if o.knobs.dontWriteProfiles {
 		return
 	}
-	const format = "2006-01-02T15_04_05.999"
-	filePrefix := "memprof."
-	fileName := fmt.Sprintf("%s%018d_%s", filePrefix, curHeap, o.now().Format(format))
-	path := filepath.Join(o.dir, fileName)
-	takeHeapProfile(ctx, path)
-	o.gcProfiles(ctx, o.dir, filePrefix)
+	path := o.dir.makeNewFileName(now, curHeap)
+	success := takeHeapProfile(ctx, path)
+	if success {
+		// We only remove old files if the current heap dump was
+		// successful. Otherwise, the GC may remove "interesting" files
+		// from a previous crash.
+		o.dir.gcProfiles(ctx, now)
+	}
 }
 
 func (o *HeapProfiler) now() time.Time {
@@ -117,61 +104,19 @@ func (o *HeapProfiler) now() time.Time {
 	return timeutil.Now()
 }
 
-// gcProfiles removes least score profile matching the specified prefix when the
-// number of profiles is more than maxCount. Requires that the suffix used for
-// the profiles indicates score such that sorting the filenames corresponds to
-// ordering the profiles from least to max score.
-// Latest profile in the directory is not considered for GC.
-//
-// Files that don't match the output file prefix are ignored
-// (i.e. preserved).
-func (o *HeapProfiler) gcProfiles(ctx context.Context, dir, prefix string) {
-	maxCount := maxProfiles.Get(&o.st.SV)
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Warningf(ctx, "%v", err)
-		return
-	}
-
-	latestProfileIdx := 0
-	for i, fi := range files {
-		if fi.ModTime().UnixNano() > files[latestProfileIdx].ModTime().UnixNano() {
-			latestProfileIdx = i
-		}
-	}
-	maxCount-- // Since latest profile always needs to be kept
-	var count int64
-	for i := len(files) - 1; i >= 0; i-- {
-		if i == latestProfileIdx {
-			continue
-		}
-		f := files[i]
-		if !f.Mode().IsRegular() {
-			continue
-		}
-		if !strings.HasPrefix(f.Name(), prefix) {
-			continue
-		}
-		count++
-		if count <= maxCount {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
-			log.Infof(ctx, "%v", err)
-		}
-	}
-}
-
-func takeHeapProfile(ctx context.Context, path string) {
+// takeHeapProfile returns true if and only if the profile dump was
+// taken successfully.
+func takeHeapProfile(ctx context.Context, path string) (success bool) {
 	// Try writing a go heap profile.
 	f, err := os.Create(path)
 	if err != nil {
-		log.Warningf(ctx, "error creating go heap profile %s", err)
-		return
+		log.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
+		return false
 	}
 	defer f.Close()
 	if err = pprof.WriteHeapProfile(f); err != nil {
-		log.Warningf(ctx, "error writing go heap profile %s: %s", path, err)
-		return
+		log.Warningf(ctx, "error writing go heap profile %s: %v", path, err)
+		return false
 	}
+	return true
 }
