@@ -130,3 +130,22 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 		}
 	}
 }
+
+// TestCastsFromUnknown verifies that there is a cast from Unknown defined for
+// all type families.
+func TestCastsFromUnknown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for v := range types.Family_name {
+		switch fam := types.Family(v); fam {
+		case types.UnknownFamily, types.AnyFamily:
+			// These type families are exceptions.
+
+		default:
+			cast := lookupCast(types.UnknownFamily, fam)
+			if cast == nil {
+				t.Errorf("cast from Unknown to %s does not exist", fam)
+			}
+		}
+	}
+}

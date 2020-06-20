@@ -348,3 +348,23 @@ project
                           ├── fd: (3)-->(1,2)
                           ├── prune: (1-3)
                           └── interesting orderings: (+3)
+
+# Regression test for #50258: cast from unknown to tuple.
+expr
+(Values
+  [
+    (Tuple [ (Cast (Null "unknown") "tuple{string}") ] "tuple{string}" )
+  ]
+  [ (Cols [ (NewColumn "a" "tuple{string}") ]) ]
+)
+----
+values
+ ├── columns: a:1(tuple{string})
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ └── tuple [type=tuple{string}]
+      └── cast:  [type=tuple{string}]
+           └── null [type=unknown]
