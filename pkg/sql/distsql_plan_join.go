@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -56,7 +57,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	var totalLimitHint int64
 	for i, t := range []struct {
 		scan      *scanNode
-		eqIndices []int
+		eqIndices []exec.NodeColumnOrdinal
 	}{
 		{
 			scan:      leftScan,
@@ -105,8 +106,15 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 	joinType := n.joinType
 
-	post, joinToStreamColMap := joinOutColumns(n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
-	onExpr, err := remapOnExpr(planCtx, n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
+	leftMap, rightMap := plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap
+	helper := &joinPlanningHelper{
+		numLeftCols:             n.pred.numLeftCols,
+		numRightCols:            n.pred.numRightCols,
+		leftPlanToStreamColMap:  leftMap,
+		rightPlanToStreamColMap: rightMap,
+	}
+	post, joinToStreamColMap := helper.joinOutColumns(n.joinType, n.columns)
+	onExpr, err := helper.remapOnExpr(planCtx, n.pred.onCond)
 	if err != nil {
 		return nil, false, err
 	}
@@ -228,10 +236,17 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	return plan, true, nil
 }
 
-func joinOutColumns(
-	n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
+// joinPlanningHelper is a utility struct that helps with the physical planning
+// of joins.
+type joinPlanningHelper struct {
+	numLeftCols, numRightCols                       int
+	leftPlanToStreamColMap, rightPlanToStreamColMap []int
+}
+
+func (h *joinPlanningHelper) joinOutColumns(
+	joinType sqlbase.JoinType, columns sqlbase.ResultColumns,
 ) (post execinfrapb.PostProcessSpec, joinToStreamColMap []int) {
-	joinToStreamColMap = makePlanToStreamColMap(len(n.columns))
+	joinToStreamColMap = makePlanToStreamColMap(len(columns))
 	post.Projection = true
 
 	// addOutCol appends to post.OutputColumns and returns the index
@@ -245,14 +260,14 @@ func joinOutColumns(
 	// The join columns are in two groups:
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
-	for i := 0; i < n.pred.numLeftCols; i++ {
-		joinToStreamColMap[i] = addOutCol(uint32(leftPlanToStreamColMap[i]))
+	for i := 0; i < h.numLeftCols; i++ {
+		joinToStreamColMap[i] = addOutCol(uint32(h.leftPlanToStreamColMap[i]))
 	}
 
-	if n.pred.joinType != sqlbase.LeftSemiJoin && n.pred.joinType != sqlbase.LeftAntiJoin {
-		for i := 0; i < n.pred.numRightCols; i++ {
-			joinToStreamColMap[n.pred.numLeftCols+i] = addOutCol(
-				uint32(n.pred.numLeftCols + rightPlanToStreamColMap[i]),
+	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
+		for i := 0; i < h.numRightCols; i++ {
+			joinToStreamColMap[h.numLeftCols+i] = addOutCol(
+				uint32(h.numLeftCols + h.rightPlanToStreamColMap[i]),
 			)
 		}
 	}
@@ -263,29 +278,29 @@ func joinOutColumns(
 // remapOnExpr remaps ordinal references in the on condition (which refer to the
 // join columns as described above) to values that make sense in the joiner (0
 // to N-1 for the left input columns, N to N+M-1 for the right input columns).
-func remapOnExpr(
-	planCtx *PlanningCtx, n *joinNode, leftPlanToStreamColMap, rightPlanToStreamColMap []int,
+func (h *joinPlanningHelper) remapOnExpr(
+	planCtx *PlanningCtx, onCond tree.TypedExpr,
 ) (execinfrapb.Expression, error) {
-	if n.pred.onCond == nil {
+	if onCond == nil {
 		return execinfrapb.Expression{}, nil
 	}
 
-	joinColMap := make([]int, n.pred.numLeftCols+n.pred.numRightCols)
+	joinColMap := make([]int, h.numLeftCols+h.numRightCols)
 	idx := 0
 	leftCols := 0
-	for i := 0; i < n.pred.numLeftCols; i++ {
-		joinColMap[idx] = leftPlanToStreamColMap[i]
-		if leftPlanToStreamColMap[i] != -1 {
+	for i := 0; i < h.numLeftCols; i++ {
+		joinColMap[idx] = h.leftPlanToStreamColMap[i]
+		if h.leftPlanToStreamColMap[i] != -1 {
 			leftCols++
 		}
 		idx++
 	}
-	for i := 0; i < n.pred.numRightCols; i++ {
-		joinColMap[idx] = leftCols + rightPlanToStreamColMap[i]
+	for i := 0; i < h.numRightCols; i++ {
+		joinColMap[idx] = leftCols + h.rightPlanToStreamColMap[i]
 		idx++
 	}
 
-	return physicalplan.MakeExpression(n.pred.onCond, planCtx, joinColMap)
+	return physicalplan.MakeExpression(onCond, planCtx, joinColMap)
 }
 
 // eqCols produces a slice of ordinal references for the plan columns specified
@@ -293,7 +308,7 @@ func remapOnExpr(
 // That is: eqIndices contains a slice of plan column indexes and planToColMap
 // maps the plan column indexes to the ordinal references (index of the
 // intermediate row produced).
-func eqCols(eqIndices, planToColMap []int) []uint32 {
+func eqCols(eqIndices []exec.NodeColumnOrdinal, planToColMap []int) []uint32 {
 	eqCols := make([]uint32, len(eqIndices))
 	for i, planCol := range eqIndices {
 		eqCols[i] = uint32(planToColMap[planCol])
@@ -343,8 +358,8 @@ func useInterleavedJoin(n *joinNode) bool {
 		return false
 	}
 
-	var ancestorEqIndices []int
-	var descendantEqIndices []int
+	var ancestorEqIndices []exec.NodeColumnOrdinal
+	var descendantEqIndices []exec.NodeColumnOrdinal
 	// We are guaranteed that both of the sources are scan nodes from
 	// n.interleavedNodes().
 	if ancestor == n.left.plan.(*scanNode) {
@@ -377,8 +392,8 @@ func useInterleavedJoin(n *joinNode) bool {
 		// the index in scanNode.resultColumns. To convert the colID
 		// from the index descriptor, we can use the map provided by
 		// colIdxMap.
-		if ancestorEqIndices[info.ColIdx] != ancestor.colIdxMap[colID] ||
-			descendantEqIndices[info.ColIdx] != descendant.colIdxMap[colID] {
+		if int(ancestorEqIndices[info.ColIdx]) != ancestor.colIdxMap[colID] ||
+			int(descendantEqIndices[info.ColIdx]) != descendant.colIdxMap[colID] {
 			// The column in the ordering does not correspond to
 			// the column in the interleave prefix.
 			// We should not try to do an interleaved join.

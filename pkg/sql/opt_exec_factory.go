@@ -355,17 +355,13 @@ func (ef *execFactory) ConstructHashJoin(
 	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 
 	numEqCols := len(leftEqCols)
-	// Save some allocations by putting both sides in the same slice.
-	intBuf := make([]int, 2*numEqCols)
-	pred.leftEqualityIndices = intBuf[:numEqCols:numEqCols]
-	pred.rightEqualityIndices = intBuf[numEqCols:]
+	pred.leftEqualityIndices = leftEqCols
+	pred.rightEqualityIndices = rightEqCols
 	nameBuf := make(tree.NameList, 2*numEqCols)
 	pred.leftColNames = nameBuf[:numEqCols:numEqCols]
 	pred.rightColNames = nameBuf[numEqCols:]
 
 	for i := range leftEqCols {
-		pred.leftEqualityIndices[i] = int(leftEqCols[i])
-		pred.rightEqualityIndices[i] = int(rightEqCols[i])
 		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftEqCols[i]].Name)
 		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightEqCols[i]].Name)
 	}
@@ -412,14 +408,14 @@ func (ef *execFactory) ConstructMergeJoin(
 	if n == 0 || len(rightOrdering) != n {
 		return nil, errors.Errorf("orderings from the left and right side must be the same non-zero length")
 	}
-	pred.leftEqualityIndices = make([]int, n)
-	pred.rightEqualityIndices = make([]int, n)
+	pred.leftEqualityIndices = make([]exec.NodeColumnOrdinal, n)
+	pred.rightEqualityIndices = make([]exec.NodeColumnOrdinal, n)
 	pred.leftColNames = make(tree.NameList, n)
 	pred.rightColNames = make(tree.NameList, n)
 	for i := 0; i < n; i++ {
 		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
-		pred.leftEqualityIndices[i] = leftColIdx
-		pred.rightEqualityIndices[i] = rightColIdx
+		pred.leftEqualityIndices[i] = exec.NodeColumnOrdinal(leftColIdx)
+		pred.rightEqualityIndices[i] = exec.NodeColumnOrdinal(rightColIdx)
 		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftColIdx].Name)
 		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightColIdx].Name)
 	}
