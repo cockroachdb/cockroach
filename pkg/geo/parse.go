@@ -34,6 +34,9 @@ func parseEWKBRaw(soType geopb.SpatialObjectType, in geopb.EWKB) (geopb.SpatialO
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if soType == geopb.SpatialObjectType_GeographyType {
+		makeValidGeographyGeom(t)
+	}
 	return spatialObjectFromGeomT(t, soType)
 }
 
@@ -69,6 +72,9 @@ func parseEWKBHex(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if soType == geopb.SpatialObjectType_GeographyType {
+		makeValidGeographyGeom(t)
+	}
 	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
@@ -87,6 +93,9 @@ func parseEWKB(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if soType == geopb.SpatialObjectType_GeographyType {
+		makeValidGeographyGeom(t)
+	}
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
@@ -101,6 +110,9 @@ func parseWKB(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	if soType == geopb.SpatialObjectType_GeographyType {
+		makeValidGeographyGeom(t)
+	}
 	adjustGeomSRID(t, defaultSRID)
 	return spatialObjectFromGeomT(t, soType)
 }
@@ -112,6 +124,9 @@ func parseGeoJSON(
 	var t geom.T
 	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
+	}
+	if soType == geopb.SpatialObjectType_GeographyType {
+		makeValidGeographyGeom(t)
 	}
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)

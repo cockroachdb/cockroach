@@ -14,6 +14,7 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -616,6 +617,37 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 //
 // Common
 //
+
+// Normalize geographical coordinates
+// to spherical coordinates
+func makeValidGeographicalPoint(lat float64, lng float64) (float64, float64) {
+	if math.IsNaN(lat) || math.IsNaN(lng) {
+		return lat, lng
+	}
+	latlng := s2.LatLngFromDegrees(lat, lng)
+	return NormalizeLatitudeDegrees(latlng.Lat.Degrees()),
+		NormalizeLongitudeDegrees(latlng.Lng.Degrees())
+}
+
+// Limit geography coordinates to spherical coordinates
+// by converting geom.T cordinates inplace
+func makeValidGeographyGeom(t geom.T) {
+	if t.Layout() != geom.XY {
+		return
+	}
+
+	switch repr := t.(type) {
+	case *geom.GeometryCollection:
+		for _, geom := range repr.Geoms() {
+			makeValidGeographyGeom(geom)
+		}
+	default:
+		coords := repr.FlatCoords()
+		for i := 0; i < len(coords); i += repr.Stride() {
+			coords[i+1], coords[i] = makeValidGeographicalPoint(coords[i+1], coords[i])
+		}
+	}
+}
 
 // spatialObjectFromGeomT creates a geopb.SpatialObject from a geom.T.
 func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.SpatialObject, error) {
