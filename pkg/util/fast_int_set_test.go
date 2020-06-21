@@ -68,6 +68,7 @@ func TestFastIntSet(t *testing.T) {
 					t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
 				}
 				assertSame := func(orig, copy FastIntSet) {
+					t.Helper()
 					if !orig.Equals(copy) || !copy.Equals(orig) {
 						t.Fatalf("expected equality: %v, %v", orig, copy)
 					}
