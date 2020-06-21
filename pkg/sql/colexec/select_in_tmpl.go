@@ -228,7 +228,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				col = execgen.SLICE(col, 0, n)
+				_ = execgen.UNSAFEGET(col, n-1)
 				for i := 0; i < n; i++ {
 					v := execgen.UNSAFEGET(col, i)
 					if !nulls.NullAt(i) && cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
@@ -250,7 +250,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				col = execgen.SLICE(col, 0, n)
+				_ = execgen.UNSAFEGET(col, n-1)
 				for i := 0; i < n; i++ {
 					v := execgen.UNSAFEGET(col, i)
 					if cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
