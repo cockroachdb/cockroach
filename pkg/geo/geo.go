@@ -617,8 +617,38 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 // Common
 //
 
+// normalizeLngLat normalizes geographical coordinates into a valid range.
+func normalizeLngLat(lng float64, lat float64) (float64, float64) {
+	if lat > 90 || lat < -90 {
+		lat = NormalizeLatitudeDegrees(lat)
+	}
+	if lng > 180 || lng < -180 {
+		lng = NormalizeLongitudeDegrees(lng)
+	}
+	return lng, lat
+}
+
+// normalizeGeographyGeomT limits geography coordinates to spherical coordinates
+// by converting geom.T cordinates inplace
+func normalizeGeographyGeomT(t geom.T) {
+	switch repr := t.(type) {
+	case *geom.GeometryCollection:
+		for _, geom := range repr.Geoms() {
+			normalizeGeographyGeomT(geom)
+		}
+	default:
+		coords := repr.FlatCoords()
+		for i := 0; i < len(coords); i += repr.Stride() {
+			coords[i], coords[i+1] = normalizeLngLat(coords[i], coords[i+1])
+		}
+	}
+}
+
 // spatialObjectFromGeomT creates a geopb.SpatialObject from a geom.T.
 func spatialObjectFromGeomT(t geom.T, soType geopb.SpatialObjectType) (geopb.SpatialObject, error) {
+	if soType == geopb.SpatialObjectType_GeographyType {
+		normalizeGeographyGeomT(t)
+	}
 	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
 	if err != nil {
 		return geopb.SpatialObject{}, err
