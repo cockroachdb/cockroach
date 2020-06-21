@@ -244,8 +244,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 func (e *distSQLSpecExecFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	plan := n.(planMaybePhysical)
-	physPlan := plan.physPlan
+	physPlan, plan := getPhysPlan(n)
 	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, []tree.TypedExpr{filter})
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
@@ -259,8 +258,7 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	plan := n.(planMaybePhysical)
-	physPlan := plan.physPlan
+	physPlan, plan := getPhysPlan(n)
 	projection := make([]uint32, len(cols))
 	for i := range cols {
 		projection[i] = uint32(cols[i])
@@ -285,8 +283,7 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 	exprs tree.TypedExprs,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	plan := n.(planMaybePhysical)
-	physPlan := plan.physPlan
+	physPlan, plan := getPhysPlan(n)
 	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, exprs)
 	if err := physPlan.AddRendering(
 		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
@@ -309,6 +306,9 @@ func (e *distSQLSpecExecFactory) ConstructApplyJoin(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 }
 
+// TODO(yuzefovich): move the decision whether to use an interleaved join from
+// the physical planner into the execbuilder.
+
 func (e *distSQLSpecExecFactory) ConstructHashJoin(
 	joinType sqlbase.JoinType,
 	left, right exec.Node,
@@ -316,7 +316,52 @@ func (e *distSQLSpecExecFactory) ConstructHashJoin(
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	leftPlan, _ := getPhysPlan(left)
+	rightPlan, _ := getPhysPlan(right)
+	resultColumns := getJoinResultColumns(joinType, leftPlan.ResultColumns, rightPlan.ResultColumns)
+	leftMap, rightMap := leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap
+	helper := &joinPlanningHelper{
+		numLeftCols:             len(leftPlan.ResultColumns),
+		numRightCols:            len(rightPlan.ResultColumns),
+		leftPlanToStreamColMap:  leftMap,
+		rightPlanToStreamColMap: rightMap,
+	}
+	post, joinToStreamColMap := helper.joinOutColumns(joinType, resultColumns)
+	// We always try to distribute the join, but planJoiners() itself might
+	// decide not to.
+	onExpr, err := helper.remapOnExpr(e.getPlanCtx(shouldDistribute), extraOnCond)
+	if err != nil {
+		return nil, err
+	}
+
+	p := e.dsp.planJoiners(&joinPlanningInfo{
+		leftPlan:  leftPlan,
+		rightPlan: rightPlan,
+		getCoreSpec: func(info *joinPlanningInfo) execinfrapb.ProcessorCoreUnion {
+			var core execinfrapb.ProcessorCoreUnion
+			core.HashJoiner = &execinfrapb.HashJoinerSpec{
+				LeftEqColumns:        info.leftEqCols,
+				RightEqColumns:       info.rightEqCols,
+				OnExpr:               onExpr,
+				Type:                 info.joinType,
+				LeftEqColumnsAreKey:  leftEqColsAreKey,
+				RightEqColumnsAreKey: rightEqColsAreKey,
+			}
+			return core
+		},
+		joinType:              joinType,
+		joinResultTypes:       getTypesFromResultColumns(resultColumns),
+		post:                  post,
+		joinToStreamColMap:    joinToStreamColMap,
+		leftEqCols:            eqCols(leftEqCols, leftMap),
+		rightEqCols:           eqCols(rightEqCols, rightMap),
+		leftMergeOrd:          execinfrapb.Ordering{},
+		rightMergeOrd:         execinfrapb.Ordering{},
+		leftPlanDistribution:  leftPlan.Distribution,
+		rightPlanDistribution: rightPlan.Distribution,
+	}, ReqOrdering{})
+	p.ResultColumns = resultColumns
+	return planMaybePhysical{physPlan: p}, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructMergeJoin(
@@ -672,4 +717,9 @@ func (e *distSQLSpecExecFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+}
+
+func getPhysPlan(n exec.Node) (*PhysicalPlan, planMaybePhysical) {
+	plan := n.(planMaybePhysical)
+	return plan.physPlan, plan
 }
