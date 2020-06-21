@@ -103,21 +103,17 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		// output vector.
 		vec.Nulls().UnsetNulls()
 	}
-	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
-		func() {
-			if sel := batch.Selection(); sel != nil {
-				for _, i := range sel[:n] {
-					execgen.SET(col, i, c.constVal)
-				}
-			} else {
-				col = execgen.SLICE(col, 0, n)
-				for i := 0; i < n; i++ {
-					execgen.SET(col, i, c.constVal)
-				}
-			}
-		},
-	)
+	if sel := batch.Selection(); sel != nil {
+		for _, i := range sel[:n] {
+			execgen.SET(col, i, c.constVal)
+		}
+	} else {
+		col = execgen.SLICE(col, 0, n)
+		_ = execgen.UNSAFEGET(col, n-1)
+		for i := 0; i < n; i++ {
+			execgen.SET(col, i, c.constVal)
+		}
+	}
 	return batch
 }
 
