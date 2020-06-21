@@ -106,12 +106,17 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
+			// Shallow copy col to work around Go issue
+			// https://github.com/golang/go/issues/39756 which prevents bound check
+			// elimination from working in this case.
+			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
 					execgen.SET(col, i, c.constVal)
 				}
 			} else {
 				col = execgen.SLICE(col, 0, n)
+				_ = execgen.UNSAFEGET(col, n-1)
 				for i := 0; i < n; i++ {
 					execgen.SET(col, i, c.constVal)
 				}
