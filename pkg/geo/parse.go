@@ -12,6 +12,7 @@ package geo
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -25,6 +26,122 @@ import (
 	"github.com/twpayne/go-geom/encoding/wkb"
 )
 
+// Threshold to assume that both float64 values are
+// equivilent
+const float64EquivalentThreshold = 1e-9
+
+// longitudeNormalize will normalize angles to
+// spherical polar angles (-180 to 180)
+func longitudeNormalize(log float64) float64 {
+	if log > 360 {
+		log = math.Remainder(log, 360)
+	}
+	if log < -360 {
+		log = math.Remainder(log, -360)
+	}
+	if log > 180 {
+		log += -360
+	}
+	if log < -180 {
+		log += 360
+	}
+	if log == -180 {
+		return 180
+	}
+	if log == -360 {
+		return 0
+	}
+	return log
+}
+
+// latitudeNormalize will normalize angles to
+// spherical azimuth angle (-90 to 90)
+func latitudeNormalize(lat float64) float64 {
+	if lat > 360 {
+		lat = math.Remainder(lat, 360)
+	}
+	if lat < -360 {
+		lat = math.Remainder(lat, -360)
+	}
+	if lat > 180 {
+		lat = 180 - lat
+	}
+	if lat < 180 {
+		lat = -180 - lat
+	}
+	if lat > 90 {
+		lat = 180 - lat
+	}
+	if lat < -90 {
+		lat = -180 - lat
+	}
+
+	return lat
+}
+
+func makeValidPoint(lat float64, log float64) (float64, float64) {
+	if math.IsNaN(lat) || math.IsNaN(log) {
+		return lat, log
+	}
+	_lat := latitudeNormalize(lat)
+	_log := longitudeNormalize(log)
+
+	// Normalize occurs in integer part of lat/log
+	// if the difference are within 1 we could set the original lat/log
+	// to prevent unwanted float point arithmetic errors
+	if math.Abs(lat-_lat) <= 1 && math.Abs(log-_log) <= 1 {
+		return lat, log
+	}
+	return _lat, _log
+}
+
+func makeGeomValid(t geom.T) {
+	if t.Layout() != geom.XY {
+		return
+	}
+
+	switch repr := t.(type) {
+	case *geom.Point:
+		y, x := makeValidPoint(repr.Y(), repr.X())
+		coords := repr.FlatCoords()
+		coords[0] = x
+		coords[1] = y
+	case *geom.LineString:
+		for i := 0; i < repr.NumCoords(); i++ {
+			p := repr.Coord(i)
+			y, x := makeValidPoint(p.Y(), p.X())
+			p[0] = x
+			p[1] = y
+		}
+	case *geom.Polygon:
+		for ringIdx := 0; ringIdx < repr.NumLinearRings(); ringIdx++ {
+			linearRing := repr.LinearRing(ringIdx)
+			for pointIdx := 0; pointIdx < linearRing.NumCoords(); pointIdx++ {
+				p := repr.Coord(pointIdx)
+				y, x := makeValidPoint(p.Y(), p.X())
+				p[0] = x
+				p[1] = y
+			}
+		}
+	case *geom.GeometryCollection:
+		for _, geom := range repr.Geoms() {
+			makeGeomValid(geom)
+		}
+	case *geom.MultiPoint:
+		for i := 0; i < repr.NumPoints(); i++ {
+			makeGeomValid(repr.Point(i))
+		}
+	case *geom.MultiLineString:
+		for i := 0; i < repr.NumLineStrings(); i++ {
+			makeGeomValid(repr.LineString(i))
+		}
+	case *geom.MultiPolygon:
+		for i := 0; i < repr.NumPolygons(); i++ {
+			makeGeomValid(repr.Polygon(i))
+		}
+	}
+}
+
 // parseEWKBRaw creates a geopb.SpatialObject from an EWKB
 // without doing any SRID based checks.
 // You most likely want parseEWKB instead.
@@ -33,6 +150,7 @@ func parseEWKBRaw(in geopb.EWKB) (geopb.SpatialObject, error) {
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	makeGeomValid(t)
 	return spatialObjectFromGeom(t)
 }
 
@@ -64,6 +182,7 @@ func parseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.SpatialObject, erro
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	makeGeomValid(t)
 	// TODO(otan): check SRID is valid against spatial_ref_sys.
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
@@ -80,16 +199,19 @@ func parseEWKB(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	makeGeomValid(t)
 	// TODO(otan): check SRID is valid against spatial_ref_sys.
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) {
 		adjustGeomSRID(t, defaultSRID)
 	}
+
 	return spatialObjectFromGeom(t)
 }
 
 // parseWKB takes given bytes assumed to be WKB and transforms it into a SpatialObject.
 func parseWKB(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
 	t, err := wkb.Unmarshal(b)
+	makeGeomValid(t)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
@@ -103,6 +225,7 @@ func parseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error)
 	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
 	}
+	makeGeomValid(t)
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
