@@ -142,3 +142,13 @@ EXPLAIN SELECT k::REGCLASS FROM kv
 ----
 ·  distribution  partial
 ·  vectorized    true
+
+# Check that hash join is supported by the new factory.
+query II rowsort
+SELECT kv.k, v FROM kv, kw WHERE v = w
+----
+1  1
+2  2
+3  3
+4  4
+5  5
