@@ -234,6 +234,10 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	}
 
 	n := batch.Length()
+	// Eliminate bounds checks for outputCol[idx]
+	_ = outputCol[n-1]
+	// Eliminate bounds checks for col[idx]
+	_ = execgen.UNSAFEGET(col, n-1)
 	if sel != nil {
 		// Bounds check elimination.
 		sel = sel[:n]
@@ -247,9 +251,6 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		col = execgen.SLICE(col, 0, n)
-		outputCol = outputCol[:n]
-		_ = outputCol[n-1]
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
@@ -286,6 +287,10 @@ func (p partitioner_TYPE) partitionWithOrder(
 	col := colVec.TemplateType()
 	col = execgen.SLICE(col, 0, n)
 	outputCol = outputCol[:n]
+	// Eliminate bounds checks for outputcol[outputIdx].
+	_ = outputCol[len(order)-1]
+	// Eliminate bounds checks for col[outputIdx].
+	_ = execgen.UNSAFEGET(col, len(order)-1)
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -309,8 +314,8 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.TemplateType()
-	col = execgen.SLICE(col, 0, n)
-	outputCol = outputCol[:n]
+	_ = execgen.UNSAFEGET(col, n-1)
+	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
