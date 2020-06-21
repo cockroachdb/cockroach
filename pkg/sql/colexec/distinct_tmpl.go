@@ -251,11 +251,11 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		outputCol = outputCol[:n]
 		_ = outputCol[n-1]
 		if nulls != nil {
-			for execgen.RANGE(idx, col, 0, n) {
+			for idx := 0; idx < n; idx++ {
 				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
-			for execgen.RANGE(idx, col, 0, n) {
+			for idx := 0; idx < n; idx++ {
 				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
 			}
 		}
@@ -313,11 +313,11 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	outputCol = outputCol[:n]
 	outputCol[0] = true
 	if nulls != nil {
-		for execgen.RANGE(idx, col, 0, n) {
+		for idx := 0; idx < n; idx++ {
 			lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 		}
 	} else {
-		for execgen.RANGE(idx, col, 0, n) {
+		for idx := 0; idx < n; idx++ {
 			lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
 		}
 	}

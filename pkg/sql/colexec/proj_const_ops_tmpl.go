@@ -136,7 +136,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	} else {
 		col = execgen.SLICE(col, 0, n)
 		_ = _RETURN_UNSAFEGET(projCol, n-1)
-		for execgen.RANGE(i, col, 0, n) {
+		for i := 0; i < n; i++ {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	}
