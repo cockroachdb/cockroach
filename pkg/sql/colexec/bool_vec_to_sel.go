@@ -82,10 +82,11 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 		} else {
 			batch.SetSelection(true)
 			sel := batch.Selection()
-			for i := range outputCol[:n] {
+			col := outputCol[:n]
+			for i := range col {
 				var inc int
 				// Ditto above: replace a conditional with a data dependency.
-				if outputCol[i] {
+				if col[i] {
 					inc = 1
 				}
 				sel[idx] = i
