@@ -134,7 +134,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32
 					}
 				} else {
 					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
+					for i := 0; i < inputLen; i++ {
 						_FIND_ANY_NOT_NULL(a, nulls, i, true)
 					}
 				}
@@ -146,7 +146,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32
 					}
 				} else {
 					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
+					for i := 0; i < inputLen; i++ {
 						_FIND_ANY_NOT_NULL(a, nulls, i, false)
 					}
 				}
