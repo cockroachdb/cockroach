@@ -79,7 +79,6 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		col = execgen.SLICE(col, 0, n)
 		for i := 0; i < n; i++ {
 			var cmp bool
 			arg := execgen.UNSAFEGET(col, i)
@@ -194,6 +193,7 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 		col := vec._L_TYP()
 		var idx int
 		n := batch.Length()
+		_ = execgen.UNSAFEGET(col, n-1)
 		if vec.MaybeHasNulls() {
 			nulls := vec.Nulls()
 			_SEL_CONST_LOOP(true)
@@ -239,6 +239,7 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 		n := batch.Length()
 
 		var idx int
+
 		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
 			nulls := vec1.Nulls().Or(vec2.Nulls())
 			_SEL_LOOP(true)
