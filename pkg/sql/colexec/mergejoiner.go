@@ -208,7 +208,7 @@ type mergeJoinInput struct {
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
-	distincterInput *feedOperator
+	distincterInput *FeedOperator
 	distincter      colexecbase.Operator
 	distinctOutput  []bool
 
@@ -231,11 +231,11 @@ type mergeJoinInput struct {
 // expanding the groups (leftGroups and rightGroups) when a group spans
 // multiple batches.
 
-// newMergeJoinOp returns a new merge join operator with the given spec that
+// NewMergeJoinOp returns a new merge join operator with the given spec that
 // implements sort-merge join. It performs a merge on the left and right input
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
-func newMergeJoinOp(
+func NewMergeJoinOp(
 	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
@@ -248,7 +248,7 @@ func newMergeJoinOp(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
-) (resettableOperator, error) {
+) (ResettableOperator, error) {
 	base, err := newMergeJoinBase(
 		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType,
 		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering, diskAcc,
@@ -357,13 +357,13 @@ func newMergeJoinBase(
 		diskAcc: diskAcc,
 	}
 	var err error
-	base.left.distincterInput = &feedOperator{}
+	base.left.distincterInput = &FeedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return base, err
 	}
-	base.right.distincterInput = &feedOperator{}
+	base.right.distincterInput = &FeedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {

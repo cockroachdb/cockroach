@@ -22,23 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// bufferingInMemoryOperator is an Operator that buffers up intermediate tuples
-// in memory and knows how to export them once the memory limit has been
-// reached.
-type bufferingInMemoryOperator interface {
-	colexecbase.Operator
-
-	// ExportBuffered returns all the batches that have been buffered up from the
-	// input and have not yet been processed by the operator. It needs to be
-	// called once the memory limit has been reached in order to "dump" the
-	// buffered tuples into a disk-backed operator. It will return a zero-length
-	// batch once the buffer has been emptied.
-	//
-	// Calling ExportBuffered may invalidate the contents of the last batch
-	// returned by ExportBuffered.
-	ExportBuffered(input colexecbase.Operator) coldata.Batch
-}
-
 // oneInputDiskSpiller is an Operator that manages the fallback from a one
 // input in-memory buffering operator to a disk-backed one when the former hits
 // the memory limit.
@@ -74,7 +57,7 @@ type bufferingInMemoryOperator interface {
 //   former will first export all the buffered tuples from inMemoryOp and then
 //   will proceed on emitting from input.
 
-// newOneInputDiskSpiller returns a new oneInputDiskSpiller. It takes the
+// NewOneInputDiskSpiller returns a new oneInputDiskSpiller. It takes the
 // following arguments:
 // - inMemoryOp - the in-memory operator that will be consuming input and doing
 //   computations until it either successfully processes the whole input or
@@ -88,9 +71,9 @@ type bufferingInMemoryOperator interface {
 //   exporting operator that serves as the input to the disk-backed operator.
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
-func newOneInputDiskSpiller(
+func NewOneInputDiskSpiller(
 	input colexecbase.Operator,
-	inMemoryOp bufferingInMemoryOperator,
+	inMemoryOp colexecbase.BufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
 	diskBackedOpConstructor func(input colexecbase.Operator) colexecbase.Operator,
 	spillingCallbackFn func(),
@@ -141,7 +124,7 @@ func newOneInputDiskSpiller(
 //   former will first export all the buffered tuples from inMemoryOp and then
 //   will proceed on emitting from input.
 
-// newTwoInputDiskSpiller returns a new twoInputDiskSpiller. It takes the
+// NewTwoInputDiskSpiller returns a new twoInputDiskSpiller. It takes the
 // following arguments:
 // - inMemoryOp - the in-memory operator that will be consuming inputs and
 //   doing computations until it either successfully processes the whole inputs
@@ -155,9 +138,9 @@ func newOneInputDiskSpiller(
 //   exporting operators that serves as inputs to the disk-backed operator.
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
-func newTwoInputDiskSpiller(
+func NewTwoInputDiskSpiller(
 	inputOne, inputTwo colexecbase.Operator,
-	inMemoryOp bufferingInMemoryOperator,
+	inMemoryOp colexecbase.BufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
 	diskBackedOpConstructor func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator,
 	spillingCallbackFn func(),
@@ -185,7 +168,7 @@ type diskSpillerBase struct {
 	inputs  []colexecbase.Operator
 	spilled bool
 
-	inMemoryOp             bufferingInMemoryOperator
+	inMemoryOp             colexecbase.BufferingInMemoryOperator
 	inMemoryOpInitStatus   OperatorInitStatus
 	inMemoryMemMonitorName string
 	diskBackedOp           colexecbase.Operator
@@ -193,7 +176,7 @@ type diskSpillerBase struct {
 	spillingCallbackFn     func()
 }
 
-var _ resettableOperator = &diskSpillerBase{}
+var _ ResettableOperator = &diskSpillerBase{}
 
 func (d *diskSpillerBase) Init() {
 	if d.inMemoryOpInitStatus == OperatorInitialized {
@@ -312,15 +295,15 @@ type bufferExportingOperator struct {
 	colexecbase.ZeroInputNode
 	NonExplainable
 
-	firstSource     bufferingInMemoryOperator
+	firstSource     colexecbase.BufferingInMemoryOperator
 	secondSource    colexecbase.Operator
 	firstSourceDone bool
 }
 
-var _ resettableOperator = &bufferExportingOperator{}
+var _ ResettableOperator = &bufferExportingOperator{}
 
 func newBufferExportingOperator(
-	firstSource bufferingInMemoryOperator, secondSource colexecbase.Operator,
+	firstSource colexecbase.BufferingInMemoryOperator, secondSource colexecbase.Operator,
 ) colexecbase.Operator {
 	return &bufferExportingOperator{
 		firstSource:  firstSource,

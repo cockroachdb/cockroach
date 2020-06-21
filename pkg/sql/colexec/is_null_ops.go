@@ -30,7 +30,8 @@ type isNullProjOp struct {
 	negate    bool
 }
 
-func newIsNullProjOp(
+// NewIsNullProjOp returns a new isNullProjOp.
+func NewIsNullProjOp(
 	allocator *colmem.Allocator, input colexecbase.Operator, colIdx, outputIdx int, negate bool,
 ) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
@@ -103,7 +104,8 @@ type isNullSelOp struct {
 	negate bool
 }
 
-func newIsNullSelOp(input colexecbase.Operator, colIdx int, negate bool) colexecbase.Operator {
+// NewIsNullSelOp returns a new isNullSelOp.
+func NewIsNullSelOp(input colexecbase.Operator, colIdx int, negate bool) colexecbase.Operator {
 	return &isNullSelOp{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,

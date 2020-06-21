@@ -166,7 +166,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
 		testAllocator, types.Float, types.Float, types.Float,
-		binOp, input, colIdx, constArg, outputIdx, overloadHelper{},
+		binOp, input, colIdx, constArg, outputIdx, nil,
 	)
 	if err != nil {
 		t.Error(err)
@@ -195,7 +195,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
 		testAllocator, types.Int, types.Int2, types.Int,
-		binOp, input, colIdx, constArg, outputIdx, overloadHelper{},
+		binOp, input, colIdx, constArg, outputIdx, nil,
 	)
 	if err != nil {
 		t.Error(err)
@@ -320,7 +320,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	outputIdx := 9
 	op, err := GetProjectionOperator(
 		testAllocator, typ, typ, types.Int2,
-		binOp, input, col1Idx, col2Idx, outputIdx, overloadHelper{},
+		binOp, input, col1Idx, col2Idx, outputIdx, nil,
 	)
 	if err != nil {
 		t.Error(err)

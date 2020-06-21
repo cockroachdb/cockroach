@@ -305,7 +305,7 @@ func TestWindowFunctions(t *testing.T) {
 					semsToCheck = append(semsToCheck, sem)
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 					args.TestingKnobs.NumForcedRepartitions = maxNumberFDs
-					result, err := NewColOperator(ctx, flowCtx, args)
+					result, err := TestNewColOperator(ctx, flowCtx, args)
 					accounts = append(accounts, result.OpAccounts...)
 					monitors = append(monitors, result.OpMonitors...)
 					return result.Op, err

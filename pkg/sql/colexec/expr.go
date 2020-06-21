@@ -43,6 +43,12 @@ type defaultExprHelper struct {
 
 var _ ExprHelper = &defaultExprHelper{}
 
+// NewDefaultExprHelper returns an ExprHelper that takes advantage of an already
+// well-typed expression in LocalExpr when set.
+func NewDefaultExprHelper() ExprHelper {
+	return &defaultExprHelper{}
+}
+
 func (h *defaultExprHelper) ProcessExpr(
 	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
 ) (tree.TypedExpr, error) {

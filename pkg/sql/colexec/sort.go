@@ -41,7 +41,7 @@ func newSorter(
 	input spooler,
 	inputTypes []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (resettableOperator, error) {
+) (ResettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
@@ -218,7 +218,7 @@ type sortOp struct {
 	exported int
 }
 
-var _ bufferingInMemoryOperator = &sortOp{}
+var _ colexecbase.BufferingInMemoryOperator = &sortOp{}
 var _ resetter = &sortOp{}
 
 // colSorter is a single-column sorter, specialized on a particular type.
