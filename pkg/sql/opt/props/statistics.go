@@ -87,13 +87,23 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 }
 
 // ApplySelectivity applies a given selectivity to the statistics. RowCount and
-// Selectivity are updated. Note that DistinctCounts and NullCounts are not
-// updated.
-// See ColumnStatistic.ApplySelectivity for updating distinct counts and null
-// counts.
+// Selectivity are updated. Note that DistinctCounts, NullCounts, and
+// Histograms are not updated.
+// See ColumnStatistic.ApplySelectivity for updating distinct counts, null
+// counts, and histograms.
 func (s *Statistics) ApplySelectivity(selectivity float64) {
 	s.RowCount *= selectivity
 	s.Selectivity *= selectivity
+}
+
+// UnionWith unions this Statistics object with another Statistics object. It
+// updates the RowCount and Selectivity, and represents the result of unioning
+// two relational expressions with the given statistics. Note that
+// DistinctCounts, NullCounts, and Histograms are not updated.
+func (s *Statistics) UnionWith(other *Statistics) {
+	s.Available = s.Available && other.Available
+	s.RowCount += other.RowCount
+	s.Selectivity += other.Selectivity
 }
 
 func (s *Statistics) String() string {

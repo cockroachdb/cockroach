@@ -1225,7 +1225,7 @@ select
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=45.825]
+ │    ├── stats: [rows=16.596296]
  │    ├── fd: ()-->(2)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
@@ -1236,7 +1236,7 @@ select
  │         │    ├── [/true/7/5e-324 - /true/7]
  │         │    └── [/true/9/5e-324 - /true/9]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=45.825, distinct(2)=1, null(2)=0, distinct(5)=5, null(5)=0, distinct(6)=33.3333333, null(6)=0, distinct(2,5,6)=45.825, null(2,5,6)=0]
+ │         ├── stats: [rows=16.596296, distinct(2)=1, null(2)=0, distinct(5)=5, null(5)=0, distinct(6)=16.596296, null(6)=0, distinct(2,5,6)=16.596296, null(2,5,6)=0]
  │         ├── key: (7)
  │         └── fd: ()-->(2), (7)-->(5,6)
  └── filters
@@ -1514,7 +1514,7 @@ select
  ├── fd: ()-->(2,3)
  ├── index-join multi_col
  │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
- │    ├── stats: [rows=412.841659]
+ │    ├── stats: [rows=197.143852]
  │    ├── fd: ()-->(2)
  │    └── scan multi_col@bef_idx
  │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
@@ -1525,7 +1525,7 @@ select
  │         │    ├── [/true/7/5e-324 - /true/7]
  │         │    └── [/true/9/5e-324 - /true/9]
  │         ├── flags: force-index=bef_idx
- │         ├── stats: [rows=412.841659, distinct(2)=1, null(2)=0, distinct(5)=5, null(5)=0, distinct(6)=412.841659, null(6)=0, distinct(2,5,6)=412.841659, null(2,5,6)=0]
+ │         ├── stats: [rows=197.143852, distinct(2)=1, null(2)=0, distinct(5)=5, null(5)=0, distinct(6)=197.143852, null(6)=0, distinct(2,5,6)=197.143852, null(2,5,6)=0]
  │         ├── key: (7)
  │         └── fd: ()-->(2), (7)-->(5,6)
  └── filters
@@ -2010,3 +2010,68 @@ select
  └── filters
       ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
       └── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Regression test for #50409.
+exec-ddl
+CREATE TABLE t (
+  x int primary key,
+  y int,
+  z int,
+  s string,
+  index (y),
+  index (s)
+)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS'[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "null_count": 500,
+    "distinct_count": 500
+  }
+]'
+----
+
+opt disable=SplitDisjunction
+SELECT * FROM t WHERE (y IS NULL AND x = 5) OR y = 5
+----
+index-join t
+ ├── columns: x:1(int!null) y:2(int) z:3(int) s:4(string)
+ ├── stats: [rows=167.000668, distinct(2)=2, null(2)=167.000668]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@secondary
+      ├── columns: x:1(int!null) y:2(int)
+      ├── constraint: /2/1
+      │    ├── [/NULL/5 - /NULL/5]
+      │    └── [/5 - /5]
+      ├── stats: [rows=1.95200401, distinct(1)=1.95200401, null(1)=0, distinct(2)=1.95200401, null(2)=1.95200401]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt
+SELECT * FROM t WHERE (s >= 'a' AND s <= 'b') OR  (s >= 'c' AND s <= 'd') OR (s >= 'e' AND s <= 'f')
+----
+index-join t
+ ├── columns: x:1(int!null) y:2(int) z:3(int) s:4(string!null)
+ ├── stats: [rows=111.111111, distinct(4)=11.1111111, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@secondary
+      ├── columns: x:1(int!null) s:4(string!null)
+      ├── constraint: /4/1
+      │    ├── [/'a' - /'b']
+      │    ├── [/'c' - /'d']
+      │    └── [/'e' - /'f']
+      ├── stats: [rows=111.111111, distinct(4)=11.1111111, null(4)=0]
+      ├── key: (1)
+      └── fd: (1)-->(4)
