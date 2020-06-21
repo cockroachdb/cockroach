@@ -149,3 +149,62 @@
     )
     $filters
 )
+
+# AddNullRejectionForJoin derives not-null columns based on current filters in
+# the join operator and populates the ON condition with null rejection filters.
+# For example, it transforms this statement:
+#
+#   SELECT * FROM t1 JOIN t2 ON t1.x = t2.x
+#
+# into:
+#
+#   SELECT * FROM t1 JOIN t2 ON t1.x = t2.x AND t1.x IS NOT NULL AND t2.x IS NOT NULL
+#
+# The condition t1.x = t.x implies that t1.x IS NOT NULL AND t.x IS NOT NULL, we construct
+# these filters and add them to the ON filters. These filters will then be pushed down by
+# other rules.
+#
+# This rule applies to two join operator: InnerJoin, LeftJoin. For InnerJoin we push down
+# is-not-null filters to both left input and right input or only singe side. For left join,
+# we push is-not-null filters to right side, Consider following statement:
+#
+#    [1] SELECT * FROM t1 LEFT JOIN t2 ON t1.x = t2.x
+#
+# even thought the on-condition implies that t1.x is not null, but if we push down it to left:
+#
+#    [2] SELECT * FROM (select * from t1 where t1.x is not null) as t1_ LEFT JOIN t2 on t1.x=t2.x
+#
+# we lost some output rows whose t1.x is null, while statement [1] remains them. So we don't push down
+# is-not-null filters to left input in left join
+#
+# This rule is applied only if there is a certain fraction of NULLs in the relevant inputs. We
+# make it 20% for now.
+#
+[AddNullRejectionForJoin, Normalize]
+(InnerJoin | LeftJoin
+    $left:* & ^(HasOuterCols $left)
+    $right:* & ^(HasOuterCols $right)
+    $on:* &
+        (CanAddNullRejectionFilterToJoin
+            (OpName)
+            $on
+            $left
+            $right
+        )
+    $private:*
+)
+=>
+((OpName)
+    $left
+    $right
+    (ConcatFilters
+        $on
+        (DerivePushableNullRejectionFiltersForJoin
+            (OpName)
+            $on
+            $left
+            $right
+        )
+    )
+    $private
+)
