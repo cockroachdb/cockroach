@@ -10,6 +10,7 @@ scan t.public.abc
  ├── stats: [rows=1000]
  ├── cost: 1050.02
  ├── prune: (1)
+ ├── reject-nulls: (1)
  └── interesting orderings: (+1)
 
 expr
@@ -20,6 +21,7 @@ scan t.public.abc@ab
  ├── stats: [rows=1000]
  ├── cost: 1050.02
  ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
  └── interesting orderings: (+1,+2)
 
 expr
@@ -35,6 +37,7 @@ scan t.public.abc@ab
  ├── cost: 1050.02
  ├── ordering: +1,+2
  ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
  └── interesting orderings: (+1,+2)
 
 expr
@@ -49,12 +52,14 @@ select
  ├── cost: 1080.03
  ├── fd: ()-->(1)
  ├── prune: (2,3)
+ ├── reject-nulls: (2,3)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1070.02
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (1-3)
  │    └── interesting orderings: (+1,+2)
  └── filters
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]

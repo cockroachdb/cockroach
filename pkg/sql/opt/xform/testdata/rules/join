@@ -2738,6 +2738,7 @@ semi-join (lookup def)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 107.02
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
  │    └── unfiltered-cols: (1-4)
  └── filters (true)
@@ -2761,6 +2762,7 @@ semi-join (lookup def)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 107.02
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
  │    └── unfiltered-cols: (1-4)
  └── filters (true)

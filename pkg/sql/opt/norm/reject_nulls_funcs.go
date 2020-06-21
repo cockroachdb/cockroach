@@ -190,7 +190,7 @@ func deriveGroupByRejectNullCols(evalCtx *tree.EvalContext, in memo.RelExpr) opt
 // possible to derive not-null columns by on-condition and populate on condition with
 // null rejection filters that will not change the output result and will be later pushed
 // down by other rules
-func (c *CustomFuncs) CanAddNullRejectionFilterToJoin (
+func (c *CustomFuncs) CanAddNullRejectionFilterToJoin(
 	joinOperator opt.Operator, on memo.FiltersExpr, left memo.RelExpr, right memo.RelExpr,
 ) bool {
 	// NullRejectCols coming from outer join operator may not reflect null rejection

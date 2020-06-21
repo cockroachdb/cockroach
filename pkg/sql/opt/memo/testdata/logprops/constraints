@@ -12,9 +12,11 @@ SELECT * FROM a WHERE x > 1
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
            ├── variable: x:1 [type=int]
@@ -29,9 +31,11 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── fd: ()-->(1)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── range [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
            └── and [type=bool]
@@ -48,9 +52,11 @@ SELECT * FROM a WHERE x >= 1
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
            ├── variable: x:1 [type=int]
@@ -62,9 +68,11 @@ SELECT * FROM a WHERE x < 1
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
            ├── variable: x:1 [type=int]
@@ -76,9 +84,11 @@ SELECT * FROM a WHERE x <= 1
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
            ├── variable: x:1 [type=int]
@@ -91,9 +101,11 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── fd: ()-->(1)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
            ├── variable: x:1 [type=int]
@@ -105,9 +117,11 @@ SELECT * FROM a WHERE x > 1 AND x < 5
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── range [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
            └── and [type=bool]
@@ -126,7 +140,8 @@ select
  ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       │    ├── variable: x:1 [type=int]
@@ -142,7 +157,8 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       ├── range [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       │    └── and [type=bool]
@@ -168,9 +184,11 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       ├── range [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       │    └── and [type=bool]
@@ -192,9 +210,11 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: x:1 [type=int]
@@ -217,9 +237,11 @@ SELECT * FROM a WHERE x > 1.5
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
            ├── variable: x:1 [type=int]
@@ -234,12 +256,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,3)
+ ├── reject-nulls: (3)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── gt [type=bool, outer=(2), constraints=(/2: [/1.0000000000000002 - ]; tight)]
@@ -254,12 +278,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── range [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo']; tight)]
@@ -278,9 +304,11 @@ SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
            ├── variable: x:1 [type=int]
@@ -299,6 +327,7 @@ project
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
  └── scan a
       ├── columns: x:1(int) y:2(int) rowid:3(int!null)
       ├── constraint: contradiction
@@ -306,6 +335,7 @@ project
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── prune: (1-3)
+      ├── reject-nulls: (1,2)
       └── interesting orderings: (+3)
 
 # Test IN in combination with another condition on the same column (which rules
@@ -316,9 +346,11 @@ SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── range [type=bool, outer=(1), constraints=(/1: [/7 - /7] [/9 - /9]; tight)]
            └── and [type=bool]
@@ -342,7 +374,8 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3]; tight)]
       │    ├── variable: x:1 [type=int]
@@ -360,9 +393,11 @@ SELECT * FROM a WHERE (x, y) > (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── gt [type=bool, outer=(1,2), immutable, constraints=(/1/2: [/1/3 - ]; tight)]
            ├── tuple [type=tuple{int, int}]
@@ -378,9 +413,11 @@ SELECT * FROM a WHERE (x, y) >= (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── ge [type=bool, outer=(1,2), immutable, constraints=(/1/2: [/1/2 - ]; tight)]
            ├── tuple [type=tuple{int, int}]
@@ -396,9 +433,11 @@ SELECT * FROM a WHERE (x, y) < (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── lt [type=bool, outer=(1,2), immutable, constraints=(/1/2: (/NULL - /1/1]; tight)]
            ├── tuple [type=tuple{int, int}]
@@ -414,9 +453,11 @@ SELECT * FROM a WHERE (x, y) <= (1, 2)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── le [type=bool, outer=(1,2), immutable, constraints=(/1/2: (/NULL - /1/2]; tight)]
            ├── tuple [type=tuple{int, int}]
@@ -433,9 +474,11 @@ SELECT * FROM a WHERE (x, y) >= (1, 2.5)
 select
  ├── columns: x:1(int) y:2(int)
  ├── immutable
+ ├── reject-nulls: (1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── ge [type=bool, outer=(1,2), immutable]
            ├── tuple [type=tuple{int, int}]
@@ -452,9 +495,11 @@ SELECT * FROM a WHERE (x, y) >= (1, NULL)
 select
  ├── columns: x:1(int) y:2(int)
  ├── immutable
+ ├── reject-nulls: (1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── ge [type=bool, outer=(1,2), immutable]
            ├── tuple [type=tuple{int, int}]
@@ -473,9 +518,11 @@ select
  ├── columns: x:1(int) y:2(int)
  ├── immutable
  ├── prune: (2)
+ ├── reject-nulls: (1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── ge [type=bool, outer=(1), immutable]
            ├── tuple [type=tuple{int, int}]
@@ -495,9 +542,11 @@ SELECT * FROM abc WHERE a != 5
 select
  ├── columns: a:1(int!null) b:2(bool) c:3(string)
  ├── prune: (2,3)
+ ├── reject-nulls: (2,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── ne [type=bool, outer=(1), constraints=(/1: (/NULL - /4] [/6 - ]; tight)]
            ├── variable: a:1 [type=int]
@@ -509,9 +558,11 @@ SELECT * FROM abc WHERE a IS DISTINCT FROM 5
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── prune: (2,3)
+ ├── reject-nulls: (1-3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── is-not [type=bool, outer=(1), constraints=(/1: [ - /4] [/6 - ]; tight)]
            ├── variable: a:1 [type=int]
@@ -523,9 +574,11 @@ SELECT * FROM abc WHERE b != true
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── prune: (1,3)
+ ├── reject-nulls: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
            ├── variable: b:2 [type=bool]
@@ -537,9 +590,11 @@ SELECT * FROM abc WHERE b != false
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── prune: (1,3)
+ ├── reject-nulls: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── ne [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
            ├── variable: b:2 [type=bool]
@@ -551,9 +606,11 @@ SELECT * FROM abc WHERE b IS NOT true
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── prune: (1,3)
+ ├── reject-nulls: (1-3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
            ├── variable: b:2 [type=bool]
@@ -565,9 +622,11 @@ SELECT * FROM abc WHERE b IS NOT false
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── prune: (1,3)
+ ├── reject-nulls: (1-3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
            ├── variable: b:2 [type=bool]
@@ -580,9 +639,11 @@ select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── fd: ()-->(2)
  ├── prune: (1,3)
+ ├── reject-nulls: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── variable: b:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
@@ -593,9 +654,11 @@ select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── fd: ()-->(2)
  ├── prune: (1,3)
+ ├── reject-nulls: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
            └── variable: b:2 [type=bool]
@@ -607,9 +670,11 @@ select
  ├── columns: a:1(int!null) b:2(bool!null) c:3(string)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
       │    ├── variable: a:1 [type=int]
@@ -622,9 +687,11 @@ SELECT * FROM abc WHERE c != 'foo'
 select
  ├── columns: a:1(int) b:2(bool) c:3(string!null)
  ├── prune: (1,2)
+ ├── reject-nulls: (1,2)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── ne [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo') [/e'foo\x00' - ]; tight)]
            ├── variable: c:3 [type=string]
@@ -636,9 +703,11 @@ SELECT * FROM abc WHERE c IS DISTINCT FROM 'foo'
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── prune: (1,2)
+ ├── reject-nulls: (1-3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── prune: (1-3)
+ │    ├── prune: (1-3)
+ │    └── reject-nulls: (1-3)
  └── filters
       └── is-not [type=bool, outer=(3), constraints=(/3: [ - /'foo') [/e'foo\x00' - ]; tight)]
            ├── variable: c:3 [type=string]
@@ -655,7 +724,8 @@ select
  │    ├── prune: (4)
  │    ├── scan a
  │    │    ├── columns: x:1(int) y:2(int)
- │    │    └── prune: (1,2)
+ │    │    ├── prune: (1,2)
+ │    │    └── reject-nulls: (1,2)
  │    └── projections
  │         └── tuple [as=col:4, type=tuple{int, int}, outer=(1,2)]
  │              ├── variable: x:1 [type=int]
@@ -787,6 +857,7 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1) (+3,+2,+1)
  ├── scan c@v
  │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
@@ -797,6 +868,7 @@ select
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2)
  │    └── interesting orderings: (+1) (+3,+2,+1)
  └── filters
       └── in [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
@@ -826,6 +898,7 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1) (+3,+2,+1)
  ├── scan c@v
  │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
@@ -836,6 +909,7 @@ select
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2)
  │    └── interesting orderings: (+1) (+3,+2,+1)
  └── filters
       └── in [type=bool, outer=(2,3), immutable, constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
@@ -862,12 +936,14 @@ select
  ├── columns: k:1(int!null) u:2(int!null) v:3(int)
  ├── key: (1)
  ├── fd: (1)-->(2,3)
+ ├── reject-nulls: (3)
  ├── interesting orderings: (+1) (+3,+2,+1)
  ├── scan c
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1) (+3,+2,+1)
  └── filters
       └── in [type=bool, outer=(1-3), constraints=(/2: [/2 - /2] [/50 - /50] [/100 - /100])]
@@ -908,6 +984,7 @@ select
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── in [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight), fd=()-->(2)]
@@ -939,6 +1016,7 @@ select
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── in [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight), fd=()-->(3)]
@@ -994,7 +1072,8 @@ select
  │    ├── prune: (4)
  │    ├── scan a
  │    │    ├── columns: x:1(int) y:2(int)
- │    │    └── prune: (1,2)
+ │    │    ├── prune: (1,2)
+ │    │    └── reject-nulls: (1,2)
  │    └── projections
  │         └── tuple [as=foo:4, type=tuple{int, int}, outer=(1,2)]
  │              ├── variable: x:1 [type=int]
@@ -1019,12 +1098,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'); tight)]
@@ -1039,12 +1120,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
@@ -1059,12 +1142,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
@@ -1079,12 +1164,14 @@ select
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABC']; tight), fd=()-->(3)]
@@ -1099,12 +1186,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
@@ -1119,12 +1208,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── like [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
@@ -1139,12 +1230,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
@@ -1159,12 +1252,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
@@ -1179,12 +1274,14 @@ select
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABC']; tight), fd=()-->(3)]
@@ -1199,12 +1296,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'ABC' - /'ABD'))]
@@ -1219,12 +1318,14 @@ select
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,2)
+ ├── reject-nulls: (2)
  ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
+ │    ├── reject-nulls: (2,3)
  │    └── interesting orderings: (+1)
  └── filters
       └── similar-to [type=bool, outer=(3), constraints=(/3: [/'' - ])]
@@ -1239,9 +1340,11 @@ SELECT * FROM a WHERE x <= 5 OR x = 10 OR x = 15
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── prune: (2)
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── or [type=bool, outer=(1), constraints=(/1: (/NULL - /5] [/10 - /10] [/15 - /15]; tight)]
            ├── or [type=bool]
@@ -1263,9 +1366,11 @@ SELECT * FROM a WHERE (x, y) < (1, 2) OR (x, y) > (3, 4)
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── immutable
+ ├── reject-nulls: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── or [type=bool, outer=(1,2), immutable, constraints=(/1/2: (/NULL - /1/1] [/3/5 - ]; tight)]
            ├── lt [type=bool]
@@ -1293,7 +1398,8 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── or [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            ├── and [type=bool]
@@ -1321,7 +1427,8 @@ select
  ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── or [type=bool, outer=(1,2), constraints=(/1: [/10 - /10]; /2: [/20 - /20]; tight), fd=()-->(1,2)]
            ├── and [type=bool]
@@ -1349,7 +1456,8 @@ select
  ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── reject-nulls: (1,2)
  └── filters
       └── or [type=bool, outer=(1,2), constraints=(/1: [/10 - /10]; /2: [/20 - /20]; tight), fd=()-->(1,2)]
            ├── and [type=bool]

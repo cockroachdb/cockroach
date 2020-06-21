@@ -594,19 +594,23 @@ norm
 SELECT f, f+1.1 AS r FROM (SELECT f, i FROM a GROUP BY f, i HAVING sum(f)=10.0) a
 ----
 project
- ├── columns: f:3 r:7
+ ├── columns: f:3!null r:7!null
  ├── immutable
  ├── select
- │    ├── columns: i:2 f:3 sum:6!null
+ │    ├── columns: i:2 f:3!null sum:6!null
  │    ├── key: (2,3)
  │    ├── fd: ()-->(6)
  │    ├── group-by
- │    │    ├── columns: i:2 f:3 sum:6
- │    │    ├── grouping columns: i:2 f:3
+ │    │    ├── columns: i:2 f:3!null sum:6!null
+ │    │    ├── grouping columns: i:2 f:3!null
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(6)
- │    │    ├── scan a
- │    │    │    └── columns: i:2 f:3
+ │    │    ├── select
+ │    │    │    ├── columns: i:2 f:3!null
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: i:2 f:3
+ │    │    │    └── filters
+ │    │    │         └── f:3 IS NOT NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
  │    │    └── aggregations
  │    │         └── sum [as=sum:6, outer=(3)]
  │    │              └── f:3
@@ -1213,12 +1217,12 @@ select
  ├── key: (1)
  ├── fd: ()-->(6), (1)==(2), (2)==(1), (1)-->(2)
  ├── group-by
- │    ├── columns: k:1!null i:2!null max:6
+ │    ├── columns: k:1!null i:2!null max:6!null
  │    ├── grouping columns: k:1!null
  │    ├── key: (1)
  │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,6)
  │    ├── select
- │    │    ├── columns: k:1!null i:2!null s:4
+ │    │    ├── columns: k:1!null i:2!null s:4!null
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(4), (1)==(2), (2)==(1)
  │    │    ├── scan a
@@ -1226,7 +1230,8 @@ select
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2,4)
  │    │    └── filters
- │    │         └── i:2 = k:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │    │         ├── i:2 = k:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │    │         └── s:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
  │    └── aggregations
  │         ├── max [as=max:6, outer=(4)]
  │         │    └── s:4
