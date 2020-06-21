@@ -567,40 +567,100 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
 
-	if scan.Constraint != nil {
-		// Calculate distinct counts and histograms for constrained columns
-		// ----------------------------------------------------------------
-		var numUnappliedConjuncts float64
-		var constrainedCols, histCols opt.ColSet
-		// Inverted indexes are a special case; a constraint like:
-		// /1: [/'{"a": "b"}' - /'{"a": "b"}']
-		// does not necessarily mean there is only going to be one distinct
-		// value for column 1, if it is being applied to an inverted index.
-		// This is because inverted index keys could correspond to partial
-		// column values, such as one path-to-a-leaf through a JSON object.
+	if scan.Constraint != nil && scan.Constraint.Spans.Count() < 2 {
+		// This constraint has at most one span.
+		sb.constrainScan(scan, scan.Constraint, relProps, s)
+	} else if scan.Constraint != nil {
+		// There are multiple spans in this constraint. To calculate the row
+		// count and selectivity, split the spans up and apply each one
+		// separately, then union the result. This is important for correctly
+		// handling a constraint such as:
 		//
-		// For now, don't apply constraints on inverted index columns.
-		if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
-			for i, n := 0, scan.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
-				numUnappliedConjuncts += sb.numConjunctsInConstraint(scan.Constraint, i)
-			}
-		} else {
-			constrainedCols, histCols = sb.applyIndexConstraint(scan.Constraint, scan, relProps)
+		//   /a/b: [/5 - /5] [/NULL/5 - /NULL/5]
+		//
+		// If we didn't split the spans, the selectivity of column b would be
+		// completely ignored, and the calculated row count would be too high.
+
+		var spanStats, spanStatsUnion props.Statistics
+		var c constraint.Constraint
+		keyCtx := constraint.KeyContext{EvalCtx: sb.evalCtx, Columns: scan.Constraint.Columns}
+
+		// Make a copy of the stats so we don't modify the original.
+		spanStatsUnion.CopyFrom(s)
+
+		// Get the stats for each span and union them together.
+		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
+		sb.constrainScan(scan, &c, relProps, &spanStatsUnion)
+		for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
+			spanStats.CopyFrom(s)
+			c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
+			sb.constrainScan(scan, &c, relProps, &spanStats)
+			spanStatsUnion.UnionWith(&spanStats)
 		}
 
-		// Set null counts to 0 for non-nullable columns
-		// ---------------------------------------------
-		sb.updateNullCountsFromProps(scan, relProps)
+		// Now that we have the correct row count, use the combined spans to get
+		// the correct column stats.
+		sb.constrainScan(scan, scan.Constraint, relProps, s)
 
-		// Calculate row count and selectivity
-		// -----------------------------------
-		s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
-		s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), scan, s))
-		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-		s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps, constrainedCols))
+		// Copy in the row count and selectivity that were calculated above, if
+		// less than the values calculated from the combined spans.
+		//
+		// We must take the minimum in case we used unknownFilterSelectivity for
+		// some of the spans. For example, if no histogram is available for the
+		// constraint /1: [/'a' - /'b'] [/'c' - /'d'] [/'e' - /'f'], we would
+		// calculate selectivity = 1/9 + 1/9 + 1/9 = 1/3 in spanStatsUnion, which
+		// is too high. Instead, we should use the value calculated from the
+		// combined spans, which in this case is simply 1/9.
+		s.Selectivity = min(s.Selectivity, spanStatsUnion.Selectivity)
+		s.RowCount = min(s.RowCount, spanStatsUnion.RowCount)
 	}
 
 	sb.finalizeFromCardinality(relProps)
+}
+
+// constrainScan is called from buildScan to calculate the stats for the scan
+// based on the given constraint.
+func (sb *statisticsBuilder) constrainScan(
+	scan *ScanExpr,
+	constraint *constraint.Constraint,
+	relProps *props.Relational,
+	s *props.Statistics,
+) {
+	// Calculate distinct counts and histograms for constrained columns
+	// ----------------------------------------------------------------
+	var numUnappliedConjuncts float64
+	var constrainedCols, histCols opt.ColSet
+	// Inverted indexes are a special case; a constraint like:
+	// /1: [/'{"a": "b"}' - /'{"a": "b"}']
+	// does not necessarily mean there is only going to be one distinct
+	// value for column 1, if it is being applied to an inverted index.
+	// This is because inverted index keys could correspond to partial
+	// column values, such as one path-to-a-leaf through a JSON object.
+	//
+	// For now, don't apply constraints on inverted index columns.
+	if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
+		for i, n := 0, constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+			numUnappliedConjuncts += sb.numConjunctsInConstraint(constraint, i)
+		}
+	} else {
+		constrainedCols, histCols = sb.applyIndexConstraint(constraint, scan, relProps, s)
+	}
+
+	// Set null counts to 0 for non-nullable columns
+	// ---------------------------------------------
+	notNullCols := relProps.NotNullCols
+	if constraint != nil {
+		// Add any not-null columns from this constraint.
+		notNullCols = notNullCols.Union(constraint.ExtractNotNullCols(sb.evalCtx))
+	}
+	sb.updateNullCountsFromNotNullCols(scan, notNullCols, s)
+
+	// Calculate row count and selectivity
+	// -----------------------------------
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), scan, s))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps, constrainedCols))
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
@@ -686,7 +746,7 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 
 	// Set null counts to 0 for non-nullable columns
 	// -------------------------------------------
-	sb.updateNullCountsFromProps(sel, relProps)
+	sb.updateNullCountsFromNotNullCols(sel, relProps.NotNullCols, s)
 
 	// Calculate selectivity and row count
 	// -----------------------------------
@@ -915,7 +975,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Set null counts to 0 for non-nullable columns
 	// ---------------------------------------------
-	sb.updateNullCountsFromProps(join, relProps)
+	sb.updateNullCountsFromNotNullCols(join, relProps.NotNullCols, s)
 
 	// Calculate selectivity and row count
 	// -----------------------------------
@@ -1021,7 +1081,7 @@ func (sb *statisticsBuilder) buildJoin(
 			rightSideCols,
 		)
 
-		// Update all null counts not zeroed out in updateNullCountsFromProps
+		// Update all null counts not zeroed out in updateNullCountsFromNotNullCols
 		// to equal the inner join count, instead of what it currently is (either
 		// leftNullCount or rightNullCount).
 		if colStat.NullCount != 0 {
@@ -1452,7 +1512,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 
 	// Set null counts to 0 for non-nullable columns
 	// ---------------------------------------------
-	sb.updateNullCountsFromProps(zigzag, relProps)
+	sb.updateNullCountsFromNotNullCols(zigzag, relProps.NotNullCols, s)
 
 	// Calculate selectivity and row count
 	// -----------------------------------
@@ -2232,10 +2292,8 @@ func (sb *statisticsBuilder) copyColStatFromChild(
 // Then, ensureColStat sets the distinct count to the minimum of the existing
 // value and the new value.
 func (sb *statisticsBuilder) ensureColStat(
-	colSet opt.ColSet, maxDistinctCount float64, e RelExpr, relProps *props.Relational,
+	colSet opt.ColSet, maxDistinctCount float64, e RelExpr, s *props.Statistics,
 ) *props.ColumnStatistic {
-	s := &relProps.Stats
-
 	colStat, ok := s.ColStats.Lookup(colSet)
 	if !ok {
 		colStat, _ = sb.colStatFromInput(colSet, e)
@@ -2646,7 +2704,7 @@ func (sb *statisticsBuilder) applyFilter(
 // for the constrained columns in an index constraint. Returns the set of
 // constrained columns and the set of columns with a filtered histogram.
 func (sb *statisticsBuilder) applyIndexConstraint(
-	c *constraint.Constraint, e RelExpr, relProps *props.Relational,
+	c *constraint.Constraint, e RelExpr, relProps *props.Relational, s *props.Statistics,
 ) (constrainedCols, histCols opt.ColSet) {
 	// If unconstrained, then no constraint could be derived from the expression,
 	// so fall back to estimate.
@@ -2657,7 +2715,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 	}
 
 	// Calculate distinct counts.
-	applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, relProps)
+	applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, s)
 	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 		col := c.Columns.Get(i).ID()
 		constrainedCols.Add(col)
@@ -2676,7 +2734,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		if i == applied {
 			lowerBound = lastColMinDistinct
 		}
-		sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts, lowerBound)
+		sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lowerBound)
 	}
 
 	if !sb.shouldUseHistogram(relProps) {
@@ -2687,7 +2745,6 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 	inputStat, _ := sb.colStatFromInput(constrainedCols, e)
 	inputHist := inputStat.Histogram
 	if inputHist != nil && inputHist.CanFilter(c) {
-		s := &relProps.Stats
 		if colStat, ok := s.ColStats.Lookup(constrainedCols); ok {
 			colStat.Histogram = inputHist.Filter(c)
 			histCols = constrainedCols
@@ -2718,7 +2775,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 		col := c.Columns.Get(0).ID()
 
 		// Calculate distinct counts.
-		applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, relProps)
+		applied, lastColMinDistinct := sb.updateDistinctCountsFromConstraint(c, e, s)
 		if applied == 0 {
 			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
@@ -2729,7 +2786,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 
 			// Set the distinct count for the first column of the constraint
 			// according to unknownDistinctCountRatio.
-			sb.updateDistinctCountFromUnappliedConjuncts(col, e, relProps, numConjuncts, lastColMinDistinct)
+			sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lastColMinDistinct)
 		}
 
 		if !tight {
@@ -2758,7 +2815,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 	return histCols
 }
 
-// updateNullCountsFromProps zeroes null counts for columns that cannot
+// updateNullCountsFromNotNullCols zeroes null counts for columns that cannot
 // have nulls in them, usually due to a column property or an application.
 // of a null-excluding filter. The actual determination of non-nullable
 // columns is done in the logical props builder.
@@ -2770,9 +2827,10 @@ func (sb *statisticsBuilder) applyConstraintSet(
 // The first constraint set filters nulls out of column a, and the
 // second constraint set filters nulls out of column c.
 //
-func (sb *statisticsBuilder) updateNullCountsFromProps(e RelExpr, relProps *props.Relational) {
-	s := &relProps.Stats
-	relProps.NotNullCols.ForEach(func(col opt.ColumnID) {
+func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
+	e RelExpr, notNullCols opt.ColSet, s *props.Statistics,
+) {
+	notNullCols.ForEach(func(col opt.ColumnID) {
 		colSet := opt.MakeColSet(col)
 		colStat, ok := s.ColStats.Lookup(colSet)
 		if ok {
@@ -2822,7 +2880,7 @@ func (sb *statisticsBuilder) updateNullCountsFromProps(e RelExpr, relProps *prop
 // are at least two distinct values (10 and 15). This lower bound will be
 // returned in the second return value, lastColMinDistinct.
 func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
-	c *constraint.Constraint, e RelExpr, relProps *props.Relational,
+	c *constraint.Constraint, e RelExpr, s *props.Statistics,
 ) (applied int, lastColMinDistinct float64) {
 	// All of the columns that are part of the prefix have a finite number of
 	// distinct values.
@@ -2917,7 +2975,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 		}
 
 		colID := c.Columns.Get(col).ID()
-		sb.ensureColStat(opt.MakeColSet(colID), distinctCount, e, relProps)
+		sb.ensureColStat(opt.MakeColSet(colID), distinctCount, e, s)
 		applied = col + 1
 	}
 
@@ -2929,13 +2987,13 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 // The provided lowerBound serves as a lower bound on the calculated distinct
 // count.
 func (sb *statisticsBuilder) updateDistinctCountFromUnappliedConjuncts(
-	colID opt.ColumnID, e RelExpr, relProps *props.Relational, numConjuncts, lowerBound float64,
+	colID opt.ColumnID, e RelExpr, s *props.Statistics, numConjuncts, lowerBound float64,
 ) {
 	colSet := opt.MakeColSet(colID)
 	inputStat, _ := sb.colStatFromInput(colSet, e)
 	distinctCount := inputStat.DistinctCount * math.Pow(unknownFilterSelectivity, numConjuncts)
 	distinctCount = max(distinctCount, lowerBound)
-	sb.ensureColStat(colSet, distinctCount, e, relProps)
+	sb.ensureColStat(colSet, distinctCount, e, s)
 }
 
 // updateDistinctCountFromHistogram updates the distinct count for the given
