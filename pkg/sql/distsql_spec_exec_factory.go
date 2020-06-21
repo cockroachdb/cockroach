@@ -316,52 +316,21 @@ func (e *distSQLSpecExecFactory) ConstructHashJoin(
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
-	leftPlan, _ := getPhysPlan(left)
-	rightPlan, _ := getPhysPlan(right)
-	resultColumns := getJoinResultColumns(joinType, leftPlan.ResultColumns, rightPlan.ResultColumns)
-	leftMap, rightMap := leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap
-	helper := &joinPlanningHelper{
-		numLeftCols:             len(leftPlan.ResultColumns),
-		numRightCols:            len(rightPlan.ResultColumns),
-		leftPlanToStreamColMap:  leftMap,
-		rightPlanToStreamColMap: rightMap,
-	}
-	post, joinToStreamColMap := helper.joinOutColumns(joinType, resultColumns)
-	// We always try to distribute the join, but planJoiners() itself might
-	// decide not to.
-	onExpr, err := helper.remapOnExpr(e.getPlanCtx(shouldDistribute), extraOnCond)
-	if err != nil {
-		return nil, err
-	}
-
-	p := e.dsp.planJoiners(&joinPlanningInfo{
-		leftPlan:  leftPlan,
-		rightPlan: rightPlan,
-		getCoreSpec: func(info *joinPlanningInfo) execinfrapb.ProcessorCoreUnion {
+	return e.constructHashOrMergeJoin(
+		joinType, left, right, extraOnCond, leftEqCols, rightEqCols,
+		ReqOrdering{} /* mergeJoinOrdering */, exec.OutputOrdering{}, /* reqOrdering */
+		func(info *joinPlanningInfo) execinfrapb.ProcessorCoreUnion {
 			var core execinfrapb.ProcessorCoreUnion
 			core.HashJoiner = &execinfrapb.HashJoinerSpec{
 				LeftEqColumns:        info.leftEqCols,
 				RightEqColumns:       info.rightEqCols,
-				OnExpr:               onExpr,
+				OnExpr:               info.onExpr,
 				Type:                 info.joinType,
 				LeftEqColumnsAreKey:  leftEqColsAreKey,
 				RightEqColumnsAreKey: rightEqColsAreKey,
 			}
 			return core
-		},
-		joinType:              joinType,
-		joinResultTypes:       getTypesFromResultColumns(resultColumns),
-		post:                  post,
-		joinToStreamColMap:    joinToStreamColMap,
-		leftEqCols:            eqCols(leftEqCols, leftMap),
-		rightEqCols:           eqCols(rightEqCols, rightMap),
-		leftMergeOrd:          execinfrapb.Ordering{},
-		rightMergeOrd:         execinfrapb.Ordering{},
-		leftPlanDistribution:  leftPlan.Distribution,
-		rightPlanDistribution: rightPlan.Distribution,
-	}, ReqOrdering{})
-	p.ResultColumns = resultColumns
-	return planMaybePhysical{physPlan: p}, nil
+		})
 }
 
 func (e *distSQLSpecExecFactory) ConstructMergeJoin(
@@ -372,7 +341,24 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	reqOrdering exec.OutputOrdering,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	leftEqCols, rightEqCols, mergeJoinOrdering, err := getEqualityIndicesAndMergeJoinOrdering(leftOrdering, rightOrdering)
+	if err != nil {
+		return nil, err
+	}
+	return e.constructHashOrMergeJoin(
+		joinType, left, right, onCond, leftEqCols, rightEqCols, mergeJoinOrdering, reqOrdering,
+		func(info *joinPlanningInfo) execinfrapb.ProcessorCoreUnion {
+			var core execinfrapb.ProcessorCoreUnion
+			core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
+				LeftOrdering:         info.leftMergeOrd,
+				RightOrdering:        info.rightMergeOrd,
+				OnExpr:               info.onExpr,
+				Type:                 info.joinType,
+				LeftEqColumnsAreKey:  leftEqColsAreKey,
+				RightEqColumnsAreKey: rightEqColsAreKey,
+			}
+			return core
+		})
 }
 
 func (e *distSQLSpecExecFactory) ConstructGroupBy(
@@ -722,4 +708,53 @@ func (e *distSQLSpecExecFactory) ConstructExport(
 func getPhysPlan(n exec.Node) (*PhysicalPlan, planMaybePhysical) {
 	plan := n.(planMaybePhysical)
 	return plan.physPlan, plan
+}
+
+func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
+	joinType sqlbase.JoinType,
+	left, right exec.Node,
+	onCond tree.TypedExpr,
+	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
+	mergeJoinOrdering sqlbase.ColumnOrdering,
+	reqOrdering exec.OutputOrdering,
+	getCoreSpec func(info *joinPlanningInfo) execinfrapb.ProcessorCoreUnion,
+) (exec.Node, error) {
+	leftPlan, _ := getPhysPlan(left)
+	rightPlan, _ := getPhysPlan(right)
+	resultColumns := getJoinResultColumns(joinType, leftPlan.ResultColumns, rightPlan.ResultColumns)
+	leftMap, rightMap := leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap
+	helper := &joinPlanningHelper{
+		numLeftCols:             len(leftPlan.ResultColumns),
+		numRightCols:            len(rightPlan.ResultColumns),
+		leftPlanToStreamColMap:  leftMap,
+		rightPlanToStreamColMap: rightMap,
+	}
+	post, joinToStreamColMap := helper.joinOutColumns(joinType, resultColumns)
+	// We always try to distribute the join, but planJoiners() itself might
+	// decide not to.
+	onExpr, err := helper.remapOnExpr(e.getPlanCtx(shouldDistribute), onCond)
+	if err != nil {
+		return nil, err
+	}
+
+	leftEqColsRemapped := eqCols(leftEqCols, leftMap)
+	rightEqColsRemapped := eqCols(rightEqCols, rightMap)
+	p := e.dsp.planJoiners(&joinPlanningInfo{
+		leftPlan:              leftPlan,
+		rightPlan:             rightPlan,
+		getCoreSpec:           getCoreSpec,
+		joinType:              joinType,
+		joinResultTypes:       getTypesFromResultColumns(resultColumns),
+		onExpr:                onExpr,
+		post:                  post,
+		joinToStreamColMap:    joinToStreamColMap,
+		leftEqCols:            leftEqColsRemapped,
+		rightEqCols:           rightEqColsRemapped,
+		leftMergeOrd:          distsqlOrdering(mergeJoinOrdering, leftEqColsRemapped),
+		rightMergeOrd:         distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
+		leftPlanDistribution:  leftPlan.Distribution,
+		rightPlanDistribution: rightPlan.Distribution,
+	}, ReqOrdering(reqOrdering))
+	p.ResultColumns = resultColumns
+	return planMaybePhysical{physPlan: p}, nil
 }

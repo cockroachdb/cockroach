@@ -2123,6 +2123,7 @@ type joinPlanningInfo struct {
 	getCoreSpec                                 func(info *joinPlanningInfo) execinfrapb.ProcessorCoreUnion
 	joinType                                    sqlbase.JoinType
 	joinResultTypes                             []*types.T
+	onExpr                                      execinfrapb.Expression
 	post                                        execinfrapb.PostProcessSpec
 	joinToStreamColMap                          []int
 	leftEqCols, rightEqCols                     []uint32
@@ -2182,16 +2183,16 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			core.HashJoiner = &execinfrapb.HashJoinerSpec{
 				LeftEqColumns:        info.leftEqCols,
 				RightEqColumns:       info.rightEqCols,
-				OnExpr:               onExpr,
+				OnExpr:               info.onExpr,
 				Type:                 info.joinType,
 				LeftEqColumnsAreKey:  n.pred.leftEqKey,
 				RightEqColumnsAreKey: n.pred.rightEqKey,
 			}
 		} else {
 			core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
-				LeftOrdering:         leftMergeOrd,
-				RightOrdering:        rightMergeOrd,
-				OnExpr:               onExpr,
+				LeftOrdering:         info.leftMergeOrd,
+				RightOrdering:        info.rightMergeOrd,
+				OnExpr:               info.onExpr,
 				Type:                 info.joinType,
 				LeftEqColumnsAreKey:  n.pred.leftEqKey,
 				RightEqColumnsAreKey: n.pred.rightEqKey,
@@ -2210,6 +2211,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		getCoreSpec:        getCoreSpec,
 		joinType:           n.joinType,
 		joinResultTypes:    joinResultTypes,
+		onExpr:             onExpr,
 		post:               post,
 		joinToStreamColMap: joinToStreamColMap,
 		leftEqCols:         leftEqCols,
