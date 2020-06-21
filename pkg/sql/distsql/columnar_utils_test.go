@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/builder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -146,7 +147,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
 	constructorArgs.TestingKnobs.NumForcedRepartitions = args.numForcedRepartitions
-	result, err := colexec.NewColOperator(ctx, flowCtx, constructorArgs)
+	result, err := builder.NewColOperator(ctx, flowCtx, constructorArgs)
 	if err != nil {
 		return err
 	}

@@ -43,6 +43,10 @@ type defaultExprHelper struct {
 
 var _ ExprHelper = &defaultExprHelper{}
 
+func NewDefaultExprHelper() ExprHelper {
+	return &defaultExprHelper{}
+}
+
 func (h *defaultExprHelper) ProcessExpr(
 	expr execinfrapb.Expression, evalCtx *tree.EvalContext, typs []*types.T,
 ) (tree.TypedExpr, error) {

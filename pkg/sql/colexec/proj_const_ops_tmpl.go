@@ -216,7 +216,7 @@ func GetProjection_CONST_SIDEConstOperator(
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	overloadHelper overloadHelper,
+	binFn *tree.BinOp,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -224,16 +224,16 @@ func GetProjection_CONST_SIDEConstOperator(
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,
-		overloadHelper: overloadHelper,
+		overloadHelper: overloadHelper{binFn: binFn},
 	}
 	var (
 		c   interface{}
 		err error
 	)
 	// {{if _IS_CONST_LEFT}}
-	c, err = getDatumToPhysicalFn(leftType)(constArg)
+	c, err = GetDatumToPhysicalFn(leftType)(constArg)
 	// {{else}}
-	c, err = getDatumToPhysicalFn(rightType)(constArg)
+	c, err = GetDatumToPhysicalFn(rightType)(constArg)
 	// {{end}}
 	if err != nil {
 		return nil, err

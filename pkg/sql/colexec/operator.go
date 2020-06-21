@@ -185,8 +185,8 @@ type zeroOperator struct {
 
 var _ colexecbase.Operator = &zeroOperator{}
 
-// newZeroOp creates a new operator which just returns an empty batch.
-func newZeroOp(input colexecbase.Operator) colexecbase.Operator {
+// NewZeroOp creates a new operator which just returns an empty batch.
+func NewZeroOp(input colexecbase.Operator) colexecbase.Operator {
 	return &zeroOperator{OneInputNode: NewOneInputNode(input)}
 }
 
@@ -254,6 +254,11 @@ type feedOperator struct {
 	colexecbase.ZeroInputNode
 	NonExplainable
 	batch coldata.Batch
+}
+
+// NewFeedOperator returns a new feed operator.
+func NewFeedOperator() *feedOperator {
+	return &feedOperator{}
 }
 
 func (feedOperator) Init() {}
@@ -347,11 +352,11 @@ type batchSchemaSubsetEnforcer struct {
 
 var _ colexecbase.Operator = &batchSchemaSubsetEnforcer{}
 
-// newBatchSchemaSubsetEnforcer creates a new batchSchemaSubsetEnforcer.
+// NewBatchSchemaSubsetEnforcer creates a new batchSchemaSubsetEnforcer.
 // - subsetStartIdx and subsetEndIdx define the boundaries of the range of
 // columns that the projecting operator and its internal projecting operators
 // own.
-func newBatchSchemaSubsetEnforcer(
+func NewBatchSchemaSubsetEnforcer(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
 	typs []*types.T,
@@ -382,4 +387,11 @@ func (e *batchSchemaSubsetEnforcer) Next(ctx context.Context) coldata.Batch {
 		e.allocator.MaybeAppendColumn(b, e.typs[i], i)
 	}
 	return b
+}
+
+// SetTypes sets the types of this schema subset enforcer, and sets the end
+// of the range of enforced columns to the length of the input types.
+func (e *batchSchemaSubsetEnforcer) SetTypes(typs []*types.T) {
+	e.typs = typs
+	e.subsetEndIdx = len(typs)
 }

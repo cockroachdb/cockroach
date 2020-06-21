@@ -257,7 +257,7 @@ const (
 	rightSide
 )
 
-// newExternalHashJoiner returns a disk-backed hash joiner.
+// NewExternalHashJoiner returns a disk-backed hash joiner.
 // - unlimitedAllocator must have been created with a memory account derived
 // from an unlimited memory monitor. It will be used by several internal
 // components of the external hash joiner which is responsible for making sure
@@ -268,7 +268,7 @@ const (
 // - delegateFDAcquisitions specifies whether the external hash joiner should
 // let the partitioned disk queues acquire file descriptors instead of acquiring
 // them up front in Next. Should be true only in tests.
-func newExternalHashJoiner(
+func NewExternalHashJoiner(
 	unlimitedAllocator *colmem.Allocator,
 	spec hashJoinerSpec,
 	leftInput, rightInput colexecbase.Operator,
@@ -351,7 +351,7 @@ func newExternalHashJoiner(
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	diskBackedSortMerge, err := newMergeJoinOp(
+	diskBackedSortMerge, err := NewMergeJoinOp(
 		unlimitedAllocator, memoryLimit, diskQueueCfg,
 		partitionedDiskQueueSemaphore, spec.joinType, leftPartitionSorter, rightPartitionSorter,
 		spec.left.sourceTypes, spec.right.sourceTypes, leftOrdering, rightOrdering,
@@ -378,7 +378,7 @@ func newExternalHashJoiner(
 		partitionsToJoinUsingSortMerge: make([]int, 0),
 		leftJoinerInput:                leftJoinerInput,
 		rightJoinerInput:               rightJoinerInput,
-		inMemHashJoiner: newHashJoiner(
+		inMemHashJoiner: NewHashJoiner(
 			unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,

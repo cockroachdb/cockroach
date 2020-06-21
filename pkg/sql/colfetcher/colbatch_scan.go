@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colfetcher
 
 import (
 	"context"
@@ -102,8 +102,8 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	return trailingMeta
 }
 
-// newColBatchScan creates a new colBatchScan operator.
-func newColBatchScan(
+// NewColBatchScan creates a new colBatchScan operator.
+func NewColBatchScan(
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,

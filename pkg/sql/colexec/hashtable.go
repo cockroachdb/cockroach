@@ -23,7 +23,7 @@ import (
 )
 
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
-const hashTableNumBuckets = 1 << 16
+const HashTableNumBuckets = 1 << 16
 
 // hashTableBuildMode represents different modes in which the hashTable can be
 // built.

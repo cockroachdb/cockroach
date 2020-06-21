@@ -218,7 +218,7 @@ type sortOp struct {
 	exported int
 }
 
-var _ bufferingInMemoryOperator = &sortOp{}
+var _ colexecbase.BufferingInMemoryOperator = &sortOp{}
 var _ resetter = &sortOp{}
 
 // colSorter is a single-column sorter, specialized on a particular type.

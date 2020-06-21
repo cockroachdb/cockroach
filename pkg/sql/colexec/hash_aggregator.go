@@ -179,7 +179,7 @@ func NewHashAggregator(
 	aggCols [][]uint32,
 ) (colexecbase.Operator, error) {
 	aggTyps := extractAggTypes(aggCols, typs)
-	outputTypes, err := makeAggregateFuncsOutputTypes(aggTyps, aggFns)
+	outputTypes, err := MakeAggregateFuncsOutputTypes(aggTyps, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,

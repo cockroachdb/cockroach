@@ -231,11 +231,11 @@ type mergeJoinInput struct {
 // expanding the groups (leftGroups and rightGroups) when a group spans
 // multiple batches.
 
-// newMergeJoinOp returns a new merge join operator with the given spec that
+// NewMergeJoinOp returns a new merge join operator with the given spec that
 // implements sort-merge join. It performs a merge on the left and right input
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
-func newMergeJoinOp(
+func NewMergeJoinOp(
 	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,

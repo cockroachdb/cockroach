@@ -66,7 +66,7 @@ type sortChunksOp struct {
 }
 
 var _ colexecbase.Operator = &sortChunksOp{}
-var _ bufferingInMemoryOperator = &sortChunksOp{}
+var _ colexecbase.BufferingInMemoryOperator = &sortChunksOp{}
 
 func (c *sortChunksOp) ChildCount(verbose bool) int {
 	return 1

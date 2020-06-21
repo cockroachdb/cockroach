@@ -1680,7 +1680,7 @@ func TestMergeJoiner(t *testing.T) {
 							}
 							args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-							result, err := NewColOperator(ctx, flowCtx, args)
+							result, err := TestNewColOperator(ctx, flowCtx, args)
 							if err != nil {
 								return nil, err
 							}
@@ -1729,7 +1729,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 				}
 				leftSource := newChunkingBatchSource(typs, colsLeft, nTuples)
 				rightSource := newChunkingBatchSource(typs, colsRight, nTuples)
-				a, err := newMergeJoinOp(
+				a, err := NewMergeJoinOp(
 					testAllocator, defaultMemoryLimit, queueCfg,
 					colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.FullOuterJoin,
 					leftSource, rightSource, typs, typs,
@@ -1837,7 +1837,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 				rightMJSource := newChunkingBatchSource(typs, colsRight, nTuples)
 				leftHJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
 				rightHJSource := newChunkingBatchSource(typs, colsRight, nTuples)
-				mj, err := newMergeJoinOp(
+				mj, err := NewMergeJoinOp(
 					testAllocator, defaultMemoryLimit, queueCfg,
 					colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
 					leftMJSource, rightMJSource, typs, typs,
@@ -1849,7 +1849,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 					t.Fatal("error in merge join op constructor", err)
 				}
 				mj.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
-				hj := newHashJoiner(
+				hj := NewHashJoiner(
 					testAllocator, hashJoinerSpec{
 						joinType: sqlbase.InnerJoin,
 						left: hashJoinerSourceSpec{
@@ -1906,7 +1906,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					leftSource := newChunkingBatchSource(typs, cols, nTuples)
 					rightSource := newChunkingBatchSource(typs, cols, nTuples)
 
-					a, err := newMergeJoinOp(
+					a, err := NewMergeJoinOp(
 						testAllocator, defaultMemoryLimit,
 						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
 						leftSource, rightSource, typs, typs,
@@ -1986,7 +1986,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					leftSource := newChunkingBatchSource(typs, cols, nTuples)
 					rightSource := newChunkingBatchSource(typs, cols, nTuples)
 
-					a, err := newMergeJoinOp(
+					a, err := NewMergeJoinOp(
 						testAllocator, defaultMemoryLimit,
 						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
 						leftSource, rightSource, typs, typs,
@@ -2116,7 +2116,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							leftSource := newChunkingBatchSource(typs, lCols, nTuples)
 							rightSource := newChunkingBatchSource(typs, rCols, nTuples)
 
-							a, err := newMergeJoinOp(
+							a, err := NewMergeJoinOp(
 								testAllocator, defaultMemoryLimit,
 								queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
 								leftSource, rightSource, typs, typs,

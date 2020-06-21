@@ -216,7 +216,7 @@ type hashJoiner struct {
 	}
 }
 
-var _ bufferingInMemoryOperator = &hashJoiner{}
+var _ colexecbase.BufferingInMemoryOperator = &hashJoiner{}
 var _ resetter = &hashJoiner{}
 
 func (hj *hashJoiner) Init() {
@@ -230,7 +230,7 @@ func (hj *hashJoiner) Init() {
 	}
 	hj.ht = newHashTable(
 		hj.allocator,
-		hashTableNumBuckets,
+		HashTableNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		allowNullEquality,
@@ -623,12 +623,12 @@ func (hj *hashJoiner) reset(ctx context.Context) {
 	hj.exportBufferedState.rightExported = 0
 }
 
-// makeHashJoinerSpec creates a specification for columnar hash join operator.
+// MakeHashJoinerSpec creates a specification for columnar hash join operator.
 // leftEqCols and rightEqCols specify the equality columns while leftOutCols
 // and rightOutCols specifies the output columns. leftTypes and rightTypes
 // specify the input column types of the two sources. rightDistinct indicates
 // whether the equality columns of the right source form a key.
-func makeHashJoinerSpec(
+func MakeHashJoinerSpec(
 	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
@@ -684,9 +684,9 @@ func makeHashJoinerSpec(
 	return spec, nil
 }
 
-// newHashJoiner creates a new equality hash join operator on the left and
+// NewHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
-func newHashJoiner(
+func NewHashJoiner(
 	allocator *colmem.Allocator, spec hashJoinerSpec, leftSource, rightSource colexecbase.Operator,
 ) colexecbase.Operator {
 	hj := &hashJoiner{
