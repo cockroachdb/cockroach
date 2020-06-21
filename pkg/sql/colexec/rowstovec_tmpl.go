@@ -47,7 +47,7 @@ func _ROWS_TO_COL_VEC(
 ) error { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
-	datumToPhysicalFn := getDatumToPhysicalFn(t)
+	datumToPhysicalFn := GetDatumToPhysicalFn(t)
 	var v interface{}
 	for i := range rows {
 		row := rows[i]

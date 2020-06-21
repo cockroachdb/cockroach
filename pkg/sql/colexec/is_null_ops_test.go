@@ -241,7 +241,7 @@ func TestIsNullSelOp(t *testing.T) {
 					StreamingMemAccount: testMemAcc,
 				}
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := NewColOperator(ctx, flowCtx, args)
+				result, err := TestNewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					return nil, err
 				}

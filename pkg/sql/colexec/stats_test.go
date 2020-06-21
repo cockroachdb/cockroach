@@ -98,7 +98,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		)
 		rightInput.SetOutputWatch(mjInputWatch)
 
-		mergeJoiner, err := newMergeJoinOp(
+		mergeJoiner, err := NewMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
 			colexecbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},

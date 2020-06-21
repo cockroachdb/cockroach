@@ -22,8 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+// HashTableNumBuckets is the default number of buckets in the colexec hashtable.
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
-const hashTableNumBuckets = 1 << 16
+const HashTableNumBuckets = 1 << 16
 
 // hashTableBuildMode represents different modes in which the hashTable can be
 // built.

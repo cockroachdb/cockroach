@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -101,7 +102,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					StreamingMemAccount: &acc,
 				}
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := colexec.NewColOperator(ctx, flowCtx, args)
+				result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -241,7 +242,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				// if there was no error during planning. That is why we have
 				// two separate panic-catchers.
 				if err = colexecerror.CatchVectorizedRuntimeError(func() {
-					result, err = colexec.NewColOperator(ctx, flowCtx, args)
+					result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 					require.NoError(t, err)
 				}); err == nil {
 					err = colexecerror.CatchVectorizedRuntimeError(func() {

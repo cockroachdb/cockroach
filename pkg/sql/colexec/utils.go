@@ -195,9 +195,9 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 	b.length += endIdx - startIdx
 }
 
-// getDatumToPhysicalFn returns a function for converting a datum of the given
+// GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
-func getDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
+func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 	switch ct.Family() {
 	case types.BoolFamily:
 		return func(datum tree.Datum) (interface{}, error) {

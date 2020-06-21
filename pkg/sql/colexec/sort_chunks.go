@@ -58,7 +58,7 @@ func NewSortChunks(
 type sortChunksOp struct {
 	allocator *colmem.Allocator
 	input     *chunker
-	sorter    resettableOperator
+	sorter    ResettableOperator
 
 	exportedFromBuffer int
 	exportedFromBatch  int
@@ -66,7 +66,7 @@ type sortChunksOp struct {
 }
 
 var _ colexecbase.Operator = &sortChunksOp{}
-var _ bufferingInMemoryOperator = &sortChunksOp{}
+var _ colexecbase.BufferingInMemoryOperator = &sortChunksOp{}
 
 func (c *sortChunksOp) ChildCount(verbose bool) int {
 	return 1

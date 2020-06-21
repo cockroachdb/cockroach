@@ -915,9 +915,9 @@ func TestHashAggregator(t *testing.T) {
 			input: tuples{
 				{0, 3},
 				{0, 4},
-				{hashTableNumBuckets, 6},
+				{HashTableNumBuckets, 6},
 				{0, 5},
-				{hashTableNumBuckets, 7},
+				{HashTableNumBuckets, 7},
 			},
 			typs:      []*types.T{types.Int, types.Int},
 			groupCols: []uint32{0},

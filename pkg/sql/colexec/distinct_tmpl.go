@@ -45,7 +45,7 @@ func OrderedDistinctColsToOperators(
 	}
 	var (
 		err error
-		r   resettableOperator
+		r   ResettableOperator
 		ok  bool
 	)
 	for i := range distinctCols {
@@ -54,20 +54,20 @@ func OrderedDistinctColsToOperators(
 			return nil, nil, err
 		}
 	}
-	if r, ok = input.(resettableOperator); !ok {
+	if r, ok = input.(ResettableOperator); !ok {
 		colexecerror.InternalError("unexpectedly an ordered distinct is not a resetter")
 	}
 	distinctChain := &distinctChainOps{
-		resettableOperator: r,
+		ResettableOperator: r,
 	}
 	return distinctChain, distinctCol, nil
 }
 
 type distinctChainOps struct {
-	resettableOperator
+	ResettableOperator
 }
 
-var _ resettableOperator = &distinctChainOps{}
+var _ ResettableOperator = &distinctChainOps{}
 
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given types.
@@ -188,7 +188,7 @@ type distinct_TYPEOp struct {
 	lastValNull bool
 }
 
-var _ resettableOperator = &distinct_TYPEOp{}
+var _ ResettableOperator = &distinct_TYPEOp{}
 
 func (p *distinct_TYPEOp) Init() {
 	p.input.Init()

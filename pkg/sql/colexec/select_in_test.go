@@ -252,7 +252,7 @@ func TestProjectInInt64(t *testing.T) {
 						ProcessorConstructor: rowexec.NewProcessor,
 					}
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-					result, err := NewColOperator(ctx, flowCtx, args)
+					result, err := TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
 						return nil, err
 					}
