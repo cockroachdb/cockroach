@@ -169,7 +169,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		_ = _RETURN_UNSAFEGET(projCol, colLen-1)
 		_ = _R_UNSAFEGET(col2, colLen-1)
 		// {{end}}
-		for execgen.RANGE(i, col1, 0, n) {
+		for i := 0; i < n; i++ {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	}

@@ -80,7 +80,7 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		batch.SetSelection(true)
 		sel := batch.Selection()
 		col = execgen.SLICE(col, 0, n)
-		for execgen.RANGE(i, col, 0, n) {
+		for i := 0; i < n; i++ {
 			var cmp bool
 			arg := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
@@ -133,7 +133,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 		col1Len := execgen.LEN(col1)
 		col2 = _R_SLICE(col2, 0, col1Len)
 		// {{end}}
-		for execgen.RANGE(i, col1, 0, n) {
+		for i := 0; i < n; i++ {
 			var cmp bool
 			arg1 := execgen.UNSAFEGET(col1, i)
 			arg2 := _R_UNSAFEGET(col2, i)
