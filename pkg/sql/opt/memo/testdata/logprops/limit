@@ -22,6 +22,7 @@ limit
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── limit hint: 1.00
  │    ├── prune: (1-4)
+ │    ├── reject-nulls: (2,4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 1 [type=int]
 
@@ -47,6 +48,7 @@ limit
  │    │         ├── key: (1)
  │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │         ├── prune: (1-4)
+ │    │         ├── reject-nulls: (2,4)
  │    │         └── interesting orderings: (+1) (-4,+3,+1)
  │    └── aggregations
  │         └── count-rows [as=count_rows:5, type=int]
@@ -67,6 +69,7 @@ limit
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
+ │    ├── reject-nulls: (2,4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── subquery [type=int]
       └── max1-row
@@ -104,6 +107,7 @@ limit
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── limit hint: 1.00
  │    ├── prune: (1-4)
+ │    ├── reject-nulls: (2,4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 0 [type=int]
 
@@ -120,6 +124,7 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
+ │    ├── reject-nulls: (2,4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── projections
       └── subquery [as=x:9, type=int, outer=(1,2), immutable, side-effects, correlated-subquery]
@@ -147,6 +152,7 @@ project
                      │    │    ├── key: (5)
                      │    │    ├── fd: (5)-->(6,7)
                      │    │    ├── prune: (5-7)
+                     │    │    ├── reject-nulls: (6,7)
                      │    │    └── interesting orderings: (+5)
                      │    └── projections
                      │         └── variable: xyzs.x:1 [as=x:8, type=int, outer=(1)]

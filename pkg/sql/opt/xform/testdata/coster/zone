@@ -44,6 +44,7 @@ scan t.public.abc
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
  └── interesting orderings: (+1) (+2,+3,+1)
 
 # With locality in central, still use bc1 index when the filter is selective.
@@ -58,6 +59,7 @@ scan t.public.abc@bc1
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  ├── prune: (1,3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+1) (+2,+3,+1)
 
 # With locality in east, use bc1 index.
@@ -72,6 +74,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in west, use bc2 index.
@@ -86,6 +89,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # No locality, so use bc1, since it's first.
@@ -100,6 +104,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # Locality doesn't match any constraints, so use bc1, since it's first.
@@ -114,6 +119,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # --------------------------------------------------
@@ -144,6 +150,7 @@ scan t.public.abc
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
  └── interesting orderings: (+1) (+2,+3,+1)
 
 # With locality in us + central, still use bc1 index if filter is selective.
@@ -158,6 +165,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + east, use bc1 index.
@@ -172,6 +180,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + west, use bc2 index, even though region does not match
@@ -187,6 +196,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # --------------------------------------------------
@@ -214,6 +224,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + east, use bc2 index (use lowest match count when
@@ -229,6 +240,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # --------------------------------------------------
@@ -255,6 +267,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in eu, use bc2, since it's prohibited with bc1.
@@ -269,6 +282,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + east, use bc2, since it matches both tiers, even though
@@ -284,6 +298,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in ap + east, use bc1, since ap is not in list of regions for
@@ -299,6 +314,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 exec-ddl
@@ -321,6 +337,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in eu + east, use bc2, since eu is prohibited for bc1.
@@ -335,6 +352,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # --------------------------------------------------
@@ -380,6 +398,7 @@ inner-join (lookup xy@y2)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  │    ├── prune: (1,3)
+ │    ├── reject-nulls: (3)
  │    └── interesting orderings: (+1) (+2,+3,+1)
  └── filters
       └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
@@ -418,6 +437,7 @@ inner-join (lookup xy@y1)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  │    ├── prune: (1,3)
+ │    ├── reject-nulls: (3)
  │    └── interesting orderings: (+1) (+2,+3,+1)
  └── filters
       └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
@@ -451,6 +471,7 @@ scan t.public.abc
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
  └── interesting orderings: (+1) (+2,+3,+1)
 
 # With locality in us + central, still use bc1 index if filter is selective.
@@ -465,6 +486,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in east, use bc1 index.
@@ -479,6 +501,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in west, use bc2 index.
@@ -493,6 +516,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # --------------------------------------------------
@@ -522,6 +546,7 @@ scan t.public.abc
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
  └── interesting orderings: (+1) (+2,+3,+1)
 
 # With locality in us + central, still use bc1 index if filter is selective.
@@ -536,6 +561,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + east, use bc1 index.
@@ -550,6 +576,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + west, use bc2 index.
@@ -564,6 +591,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # --------------------------------------------------
@@ -596,6 +624,7 @@ scan t.public.abc
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
+ ├── reject-nulls: (2,3)
  └── interesting orderings: (+1) (+2,+3,+1)
 
 # With locality in us + central, still use bc1 index if filter is selective.
@@ -610,6 +639,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + east, use bc1 index.
@@ -624,6 +654,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 # With locality in us + west, use bc2 index.
@@ -638,6 +669,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
 
 exec-ddl
@@ -667,4 +699,5 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
+ ├── reject-nulls: (3)
  └── interesting orderings: (+2,+3)
