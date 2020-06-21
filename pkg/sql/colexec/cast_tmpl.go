@@ -64,6 +64,11 @@ func _L_UNSAFEGET(to, from interface{}) interface{} {
 	colexecerror.InternalError("")
 }
 
+// This will be replaced with execgen.UNSAFEGET.
+func _R_UNSAFEGET(to, from interface{}) interface{} {
+	colexecerror.InternalError("")
+}
+
 // This will be replaced with execgen.SET.
 func _R_SET(to, from interface{}) {
 	colexecerror.InternalError("")
@@ -71,6 +76,16 @@ func _R_SET(to, from interface{}) {
 
 // This will be replaced with execgen.SLICE.
 func _L_SLICE(col, i, j interface{}) interface{} {
+	colexecerror.InternalError("")
+}
+
+// This will be replaced with execgen.SLICE.
+func _R_SLICE(col, i, j interface{}) interface{} {
+	colexecerror.InternalError("")
+}
+
+// This will be replaced with execgen.LEN.
+func _L_LEN(col interface{}) interface{} {
 	colexecerror.InternalError("")
 }
 
@@ -92,6 +107,11 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 				case _RIGHT_TYPE_WIDTH:
 					inputCol := inputVec._L_TYP()
 					outputCol := outputVec._R_TYP()
+					// Remove bounds checks for inputCol[i] and outputCol[i]
+					_ = _L_UNSAFEGET(inputCol, n-1)
+					_ = _R_UNSAFEGET(outputCol, n-1)
+					l := _L_LEN(inputCol)
+					_ = _R_UNSAFEGET(outputCol, l-1)
 					if inputVec.MaybeHasNulls() {
 						inputNulls := inputVec.Nulls()
 						outputNulls := outputVec.Nulls()
@@ -108,7 +128,6 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 							}
 						} else {
-							inputCol = _L_SLICE(inputCol, 0, n)
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
@@ -130,7 +149,6 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								_R_SET(outputCol, i, r)
 							}
 						} else {
-							inputCol = _L_SLICE(inputCol, 0, n)
 							for i := 0; i < n; i++ {
 								v := _L_UNSAFEGET(inputCol, i)
 								var r _R_GO_TYPE
