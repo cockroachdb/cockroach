@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// boolOrUnknownToSelOp plans an infrastructure necessary to convert a column
+// BoolOrUnknownToSelOp plans an infrastructure necessary to convert a column
 // of either Bool or Unknown type into a selection vector on the input batches.
-func boolOrUnknownToSelOp(
+func BoolOrUnknownToSelOp(
 	input colexecbase.Operator, typs []*types.T, vecIdx int,
 ) (colexecbase.Operator, error) {
 	switch typs[vecIdx].Family() {
@@ -31,7 +31,7 @@ func boolOrUnknownToSelOp(
 		// If the column is of an Unknown type, then all values in that column
 		// must be NULLs, so the selection vector will always be empty, and we
 		// can simply plan a zero operator.
-		return newZeroOp(input), nil
+		return NewZeroOp(input), nil
 	default:
 		return nil, errors.Errorf("unexpectedly %s is neither bool nor unknown", typs[vecIdx])
 	}
@@ -124,7 +124,7 @@ func boolVecToSel64(vec []bool, sel []int) []int {
 // boolVecToSelOp directly with the desired boolean slice.
 //
 // NOTE: if the column can be of a type other than boolean,
-// boolOrUnknownToSelOp *must* be used instead.
+// BoolOrUnknownToSelOp *must* be used instead.
 func newBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
 	d := selBoolOp{OneInputNode: NewOneInputNode(input), colIdx: colIdx}
 	ret := &boolVecToSelOp{OneInputNode: NewOneInputNode(&d)}

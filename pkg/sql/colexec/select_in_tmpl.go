@@ -154,7 +154,7 @@ type projectInOp_TYPE struct {
 var _ colexecbase.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := getDatumToPhysicalFn(t)
+	conv := GetDatumToPhysicalFn(t)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {

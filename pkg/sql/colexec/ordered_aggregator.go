@@ -160,7 +160,7 @@ func NewOrderedAggregator(
 		)
 	}
 	a.aggregateFuncs = funcsAlloc.makeAggregateFuncs()
-	a.outputTypes, err = makeAggregateFuncsOutputTypes(aggTypes, aggFns)
+	a.outputTypes, err = MakeAggregateFuncsOutputTypes(aggTypes, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,

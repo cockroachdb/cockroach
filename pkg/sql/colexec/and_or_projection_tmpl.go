@@ -38,8 +38,8 @@ type _OP_LOWERProjOp struct {
 
 	leftProjOpChain  colexecbase.Operator
 	rightProjOpChain colexecbase.Operator
-	leftFeedOp       *feedOperator
-	rightFeedOp      *feedOperator
+	leftFeedOp       *FeedOperator
+	rightFeedOp      *FeedOperator
 
 	leftIdx   int
 	rightIdx  int
@@ -57,7 +57,7 @@ type _OP_LOWERProjOp struct {
 func New_OP_TITLEProjOp(
 	allocator *colmem.Allocator,
 	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
-	leftFeedOp, rightFeedOp *feedOperator,
+	leftFeedOp, rightFeedOp *FeedOperator,
 	leftIdx, rightIdx, outputIdx int,
 ) colexecbase.Operator {
 	return &_OP_LOWERProjOp{

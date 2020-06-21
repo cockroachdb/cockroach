@@ -134,7 +134,7 @@ func NewBuiltinFunctionOperator(
 			outputIdx:    outputIdx,
 			columnTypes:  columnTypes,
 			outputType:   outputType,
-			converter:    getDatumToPhysicalFn(outputType),
+			converter:    GetDatumToPhysicalFn(outputType),
 			row:          make(tree.Datums, len(argumentCols)),
 			argumentCols: argumentCols,
 		}, nil

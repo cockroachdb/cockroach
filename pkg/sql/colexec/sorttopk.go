@@ -47,7 +47,7 @@ func NewTopKSorter(
 	}
 }
 
-var _ bufferingInMemoryOperator = &topKSorter{}
+var _ colexecbase.BufferingInMemoryOperator = &topKSorter{}
 
 // topKSortState represents the state of the sort operator.
 type topKSortState int

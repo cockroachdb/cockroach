@@ -183,7 +183,7 @@ func TestDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
+		for _, numOfBuckets := range []uint64{1, 3, 5, HashTableNumBuckets} {
 			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
 				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
@@ -225,7 +225,7 @@ func BenchmarkDistinct(b *testing.B) {
 
 	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []*types.T) (colexecbase.Operator, error){
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return NewUnorderedDistinct(allocator, input, distinctCols, typs, hashTableNumBuckets), nil
+			return NewUnorderedDistinct(allocator, input, distinctCols, typs, HashTableNumBuckets), nil
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
