@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/stretchr/testify/assert"
@@ -49,6 +50,7 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 
 func TestGetDescriptorFromDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -97,6 +99,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 
 func TestImportChunking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Generate at least 2 chunks.
 	const chunkSize = 1024 * 500
@@ -126,6 +129,7 @@ func TestImportChunking(t *testing.T) {
 
 func TestImportOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/gogo/protobuf/proto"
@@ -71,6 +72,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 
 func TestExportImportBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	db, dir, cleanup := setupExportableBank(t, 3, 100)
 	defer cleanup()
@@ -122,6 +124,7 @@ func TestExportImportBank(t *testing.T) {
 
 func TestMultiNodeExportStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	nodes := 5
 	exportRows := 100
@@ -171,6 +174,7 @@ func TestMultiNodeExportStmt(t *testing.T) {
 
 func TestExportJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
@@ -184,6 +188,7 @@ func TestExportJoin(t *testing.T) {
 
 func TestExportOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
@@ -206,6 +211,7 @@ func TestExportOrder(t *testing.T) {
 
 func TestExportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -249,6 +255,7 @@ INSERT INTO greeting_table VALUES ('hello', 'hello'), ('hi', 'hi');
 
 func TestExportOrderCompressed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
@@ -292,6 +299,7 @@ func TestExportOrderCompressed(t *testing.T) {
 
 func TestExportShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
@@ -313,6 +321,7 @@ func TestExportShow(t *testing.T) {
 // on CSVWriter processor.
 func TestExportVectorized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, cleanupDir := testutils.TempDir(t)
 	defer cleanupDir()
 
