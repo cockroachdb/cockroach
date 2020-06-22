@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
@@ -36,6 +37,7 @@ import (
 // Test that mitigations to backpressure when reducing the range size work.
 func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rRand, _ := randutil.NewPseudoRand()
 	ctx := context.Background()

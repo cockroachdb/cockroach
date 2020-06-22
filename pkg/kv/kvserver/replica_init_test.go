@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	desc := func(replicaIDs ...roachpb.ReplicaID) roachpb.RangeDescriptor {
 		d := roachpb.RangeDescriptor{

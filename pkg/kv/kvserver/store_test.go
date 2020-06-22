@@ -296,6 +296,7 @@ func createTestStoreWithConfig(
 // correctly returns only the relevant keys and values.
 func TestIterateIDPrefixKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -424,6 +425,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
 	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
@@ -502,6 +504,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 // is not empty.
 func TestInitializeEngineErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -559,6 +562,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 
 func TestStoreAddRemoveRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
@@ -635,6 +639,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 // snapshot is applied that advances a replica past a split.
 func TestReplicasByKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
@@ -683,6 +688,8 @@ func TestReplicasByKey(t *testing.T) {
 
 func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -721,6 +728,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 func TestStoreReplicaVisitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
@@ -803,6 +811,8 @@ func TestStoreReplicaVisitor(t *testing.T) {
 
 func TestStoreVisitReplicasByKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -867,6 +877,7 @@ func TestStoreVisitReplicasByKey(t *testing.T) {
 
 func TestHasOverlappingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
@@ -933,6 +944,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 
 func TestLookupPrecedingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -1001,6 +1013,7 @@ func TestLookupPrecedingReplica(t *testing.T) {
 
 func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
@@ -1073,6 +1086,7 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 // of both a read-only and a read-write command.
 func TestStoreSend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1093,6 +1107,7 @@ func TestStoreSend(t *testing.T) {
 // error's or the response's transaction, as well as an originating NodeID.
 func TestStoreObservedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	badKey := []byte("a")
 	goodKey := []byte("b")
 	desc := roachpb.ReplicaDescriptor{
@@ -1172,6 +1187,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 // TestStoreAnnotateNow verifies that the Store sets Now on the batch responses.
 func TestStoreAnnotateNow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	badKey := []byte("a")
 	goodKey := []byte("b")
@@ -1245,6 +1261,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 // that end keys must sort >= start.
 func TestStoreVerifyKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1303,6 +1320,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 // TestStoreSendUpdateTime verifies that the node clock is updated.
 func TestStoreSendUpdateTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1322,6 +1340,7 @@ func TestStoreSendUpdateTime(t *testing.T) {
 // the command to assume the node's wall time.
 func TestStoreSendWithZeroTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1346,6 +1365,7 @@ func TestStoreSendWithZeroTime(t *testing.T) {
 // maximum allowed clock offset, the cmd fails.
 func TestStoreSendWithClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1361,6 +1381,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 // TestStoreSendBadRange passes a bad range.
 func TestStoreSendBadRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1409,6 +1430,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 // within the range's key range.
 func TestStoreSendOutOfRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1438,6 +1460,7 @@ func TestStoreSendOutOfRange(t *testing.T) {
 // allocated in successive blocks.
 func TestStoreRangeIDAllocation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -1463,6 +1486,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 // the sorted replicasByKey slice.
 func TestStoreReplicasByKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
@@ -1513,6 +1537,7 @@ func TestStoreReplicasByKey(t *testing.T) {
 // verify the ranges' max bytes are updated appropriately.
 func TestStoreSetRangesMaxBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	cfg := TestStoreConfig(nil)
@@ -1577,6 +1602,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 // until the original txn is ended.
 func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	manual := hlc.NewManualClock(123)
 	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, 1000*time.Nanosecond))
@@ -1660,6 +1686,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 // intent by aborting it yields the previous value.
 func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1696,6 +1723,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // - PENDING pushee txn records vs. STAGING pushee txn records
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DontRetryPushTxnFailures = true
 	storeCfg.TestingKnobs.DontRecoverIndeterminateCommits = true
@@ -1886,6 +1914,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 // which are not part of a transaction can push intents.
 func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -1979,6 +2008,7 @@ func setTxnAutoGC(to bool) func() { return batcheval.TestingSetTxnAutoGC(to) }
 // the intents that they run into.
 func TestStoreReadInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, rc := range []roachpb.ReadConsistencyType{
 		roachpb.READ_UNCOMMITTED,
@@ -2182,6 +2212,7 @@ func TestStoreReadInconsistent(t *testing.T) {
 // results and a resume span.
 func TestStoreScanResumeTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -2262,6 +2293,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 // them in one fell swoop using both consistent and inconsistent reads.
 func TestStoreScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cfg := TestStoreConfig(nil)
 	var count int32
@@ -2383,6 +2415,7 @@ func TestStoreScanIntents(t *testing.T) {
 // inconsistent reads are triggering intent resolution.
 func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on having a committed Txn record and open intents on
 	// the same Range. This only works with auto-gc turned off; alternatively
 	// the test could move to splitting its underlying Range.
@@ -2447,6 +2480,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 // resolution of the intents, allowing the scan to complete.
 func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, manualClock := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -2489,6 +2523,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 // ten intents are resolved from a single INCONSISTENT scan.
 func TestStoreScanMultipleIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var resolveCount int32
 	manual := hlc.NewManualClock(123)
@@ -2544,6 +2579,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 // bad requests that do not pass key verification.
 func TestStoreBadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
@@ -2638,6 +2674,7 @@ func (fq *fakeRangeQueue) NeedsLease() bool {
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
 func TestMaybeRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cfg := TestStoreConfig(nil)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -2673,6 +2710,7 @@ func TestMaybeRemove(t *testing.T) {
 
 func TestStoreGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -2726,6 +2764,7 @@ func TestStoreGCThreshold(t *testing.T) {
 // a nil pointer panic.
 func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	ctx := context.Background()
@@ -2752,6 +2791,7 @@ func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 
 func TestStoreRangePlaceholders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	ctx := context.Background()
@@ -2856,6 +2896,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 // processing for an uninitialized Replica.
 func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -2984,6 +3025,7 @@ func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID r
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	e := storage.NewDefaultInMem()
 	defer e.Close()
 
@@ -3066,6 +3108,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 
 func TestReserveSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -3154,6 +3197,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 // the recipient store's disk is near full.
 func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -3237,6 +3281,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 
 func TestSnapshotRateLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		priority      SnapshotRequest_Priority

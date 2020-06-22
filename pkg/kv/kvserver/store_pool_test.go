@@ -128,6 +128,7 @@ func createTestStorePool(
 // correctly updates a store's details.
 func TestStorePoolGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
@@ -194,6 +195,7 @@ func verifyStoreList(
 // that are live and match the attribute criteria.
 func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
@@ -351,6 +353,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 // properly.
 func TestStoreListFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	constraints := []zonepb.ConstraintsConjunction{
 		{
@@ -443,6 +446,7 @@ func TestStoreListFilter(t *testing.T) {
 
 func TestStorePoolUpdateLocalStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	// We're going to manually mark stores dead in this test.
@@ -564,6 +568,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 // the local copy of store before that store has been gossiped will be a no-op.
 func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
@@ -617,6 +622,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 func TestStorePoolGetStoreDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -637,6 +643,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 
 func TestStorePoolFindDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -740,6 +747,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 // order.
 func TestStorePoolDefaultState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -765,6 +773,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 
 func TestStorePoolThrottle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -803,6 +812,7 @@ func TestStorePoolThrottle(t *testing.T) {
 
 func TestGetLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -874,6 +884,7 @@ func TestGetLocalities(t *testing.T) {
 
 func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, sp, mnl := createTestStorePool(
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -966,6 +977,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 
 func TestNodeLivenessLivenessStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	now := timeutil.Now()
 	threshold := 5 * time.Minute
 

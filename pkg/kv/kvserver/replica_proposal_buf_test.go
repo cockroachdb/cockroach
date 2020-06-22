@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -85,6 +86,7 @@ func newPropData(leaseReq bool) (*ProposalData, []byte) {
 // TestProposalBuffer tests the basic behavior of the Raft proposal buffer.
 func TestProposalBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var p testProposer
 	var b propBuf
@@ -163,6 +165,7 @@ func TestProposalBuffer(t *testing.T) {
 // the Raft proposal buffer.
 func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var p testProposer
 	var b propBuf
@@ -232,6 +235,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 // even if an error is seen when proposing a batch of entries.
 func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var p testProposer
 	var b propBuf
@@ -265,6 +269,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 // them due to errors, we simply ignore said indexes when flushing proposals.
 func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var p testProposer
 	var b propBuf
@@ -299,6 +304,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 // proposal buffer.
 func TestPropBufCnt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var count propBufCnt
 	const numReqs = 10

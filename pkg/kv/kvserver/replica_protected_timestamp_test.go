@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -35,6 +36,7 @@ import (
 // shut down store to a variety of test cases.
 func TestProtectedTimestampRecordApplies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	makeArgs := func(r *Replica, ts, aliveAt hlc.Timestamp) roachpb.AdminVerifyProtectedTimestampRequest {
@@ -297,6 +299,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 // shut down store to a variety of test cases.
 func TestCheckProtectedTimestampsForGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	makePolicy := func(ttlSec int32) zonepb.GCPolicy {

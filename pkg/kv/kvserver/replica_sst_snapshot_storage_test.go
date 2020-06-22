@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -26,6 +27,7 @@ import (
 
 func TestSSTSnapshotStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	testRangeID := roachpb.RangeID(1)
@@ -108,6 +110,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 // deletion tombstone that spans the entire range of each respectively.
 func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	testRangeID := roachpb.RangeID(1)

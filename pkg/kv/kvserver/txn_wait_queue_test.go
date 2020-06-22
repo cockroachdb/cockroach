@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -72,6 +73,7 @@ func checkAllGaugesZero(tc testContext) error {
 
 func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -170,6 +172,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 
 func TestTxnWaitQueueCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -233,6 +236,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 // both are returned when the txn is updated.
 func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -342,6 +346,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 // be advanced, the PushTxnRequest could get stuck forever.
 func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
 	// value mismatches, whether transient or permanent, skip this test if the
@@ -429,6 +434,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 // updated.
 func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -483,6 +489,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 // returned when the pushee's txn may have expired.
 func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var queryTxnCount int32
 
 	manual := hlc.NewManualClock(123)
@@ -581,6 +588,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 // periodically updated and will notice if the pusher has been aborted.
 func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "txnRecordExists", func(t *testing.T, txnRecordExists bool) {
 		// Test with the pusher txn record below the pusher's expected epoch, at
@@ -694,6 +702,7 @@ type ReqWithRespAndErr struct {
 // detected and broken by a higher priority pusher.
 func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -787,6 +796,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 // and the dependency is appropriately broken.
 func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())

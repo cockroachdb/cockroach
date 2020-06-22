@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -98,6 +99,7 @@ func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 // pass the correct data to the store's TimeSeriesData
 func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	model := &modelTimeSeriesDataStore{t: t}
@@ -215,6 +217,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 // maintenance queue runs correctly on a test server.
 func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
