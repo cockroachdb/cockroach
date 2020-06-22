@@ -19,7 +19,6 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -58,13 +57,7 @@ func handleSignalDuringShutdown(sig os.Signal) {
 	select {}
 }
 
-var startBackground bool
-
-func init() {
-	for _, cmd := range StartCmds {
-		BoolFlag(cmd.Flags(), &startBackground, cliflags.Background, false)
-	}
-}
+const backgroundFlagDefined = true
 
 func maybeRerunBackground() (bool, error) {
 	if startBackground {
