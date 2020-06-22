@@ -55,9 +55,13 @@ func (tq *testQueueImpl) shouldQueue(
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ *config.SystemConfig) error {
+func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ *config.SystemConfig) (bool, error) {
 	atomic.AddInt32(&tq.processed, 1)
-	return tq.err
+	done := false
+	if tq.err == nil {
+		done = true
+	}
+	return done, tq.err
 }
 
 func (tq *testQueueImpl) getProcessed() int {
@@ -841,10 +845,15 @@ type processTimeoutQueueImpl struct {
 
 func (pq *processTimeoutQueueImpl) process(
 	ctx context.Context, r *Replica, _ *config.SystemConfig,
-) error {
+) (bool, error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
-	return ctx.Err()
+	err := ctx.Err()
+	done := false
+	if err == nil {
+		done = true
+	}
+	return done, err
 }
 
 func TestBaseQueueProcessTimeout(t *testing.T) {
@@ -958,9 +967,9 @@ type processTimeQueueImpl struct {
 
 func (pq *processTimeQueueImpl) process(
 	_ context.Context, _ *Replica, _ *config.SystemConfig,
-) error {
+) (bool, error) {
 	time.Sleep(5 * time.Millisecond)
-	return nil
+	return true, nil
 }
 
 func TestBaseQueueTimeMetric(t *testing.T) {
@@ -1090,14 +1099,14 @@ type parallelQueueImpl struct {
 
 func (pq *parallelQueueImpl) process(
 	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
-) error {
+) (bool, error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	err := pq.testQueueImpl.process(ctx, repl, cfg)
+	done, err := pq.testQueueImpl.process(ctx, repl, cfg)
 	atomic.AddInt32(&pq.processing, -1)
-	return err
+	return done, err
 }
 
 func (pq *parallelQueueImpl) getProcessing() int {

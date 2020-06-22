@@ -569,7 +569,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	if _, err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -804,7 +804,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	if _, err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -934,7 +934,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		t.Fatal("config not set")
 	}
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	if _, err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -993,7 +993,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	if _, err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1098,7 +1098,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1e9 + 1)
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	if _, err := gcQ.process(ctx, tc.repl, cfg); err != nil {
 		t.Fatal(err)
 	}
 

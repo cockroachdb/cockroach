@@ -138,8 +138,13 @@ func (fakeQueueImpl) shouldQueue(
 
 func (fq fakeQueueImpl) process(
 	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
-) error {
-	return fq.pr(ctx, repl, cfg)
+) (bool, error) {
+	err := fq.pr(ctx, repl, cfg)
+	done := false
+	if err == nil {
+		done = true
+	}
+	return done, err
 }
 
 func (fakeQueueImpl) timer(time.Duration) time.Duration {

@@ -9582,7 +9582,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
 		sysCfg := tc.store.Gossip().GetSystemConfig()
-		if err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg); !testutils.IsError(err, "boom") {
+		if _, err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg); !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}
 	}
