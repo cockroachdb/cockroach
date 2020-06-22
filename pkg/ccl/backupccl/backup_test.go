@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -69,6 +70,7 @@ import (
 
 func TestBackupRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -103,6 +105,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 
 func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -113,6 +116,7 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 
 func TestBackupRestoreMultiNodeLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -123,6 +127,7 @@ func TestBackupRestoreMultiNodeLocal(t *testing.T) {
 
 func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -135,6 +140,7 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 
 func TestBackupRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	ctx, tc, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -216,6 +222,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	ctx, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -270,6 +277,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -293,6 +301,7 @@ func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
 
 func TestBackupRestoreEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 0
 	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -305,6 +314,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 // for tables with negative primary key data caused AdminSplit to fail.
 func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 
@@ -521,6 +531,7 @@ func backupAndRestore(
 
 func TestBackupRestoreSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 0
 	ctx, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -579,6 +590,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 0
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
@@ -736,6 +748,7 @@ func checkInProgressBackupRestore(
 
 func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
 
 	checkFraction := func(ctx context.Context, ip inProgressState) error {
@@ -764,6 +777,7 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 
 func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/33357")
 
@@ -862,6 +876,7 @@ func createAndWaitForJob(
 // to have completed.
 func TestBackupRestoreResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -1001,6 +1016,7 @@ func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 // work as intended on backup and restore jobs.
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("#24136")
 
 	// force every call to update
@@ -1184,6 +1200,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 // TestRestoreFailCleanup tests that a failed RESTORE is cleaned up.
 func TestRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params := base.TestServerArgs{}
 	// Disable GC job so that the final check of crdb_internal.tables is
@@ -1233,6 +1250,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 // when restoring an entire database.
 func TestRestoreFailDatabaseCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params := base.TestServerArgs{}
 	// Disable external processing of mutations so that the final check of
@@ -1275,6 +1293,7 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 
 func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// TODO (rohany): Add tests for backup/restore with revision history and
 	//  incremental backups once types can change.
@@ -1537,6 +1556,7 @@ INSERT INTO d.t2 VALUES (ARRAY['hello']);
 
 func TestBackupRestoreInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numAccounts = 20
 
 	_, _, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -1617,6 +1637,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 
 func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 30
 	const createStore = "CREATE DATABASE store"
@@ -1970,6 +1991,7 @@ func checksumBankPayload(t *testing.T, sqlDB *sqlutils.SQLRunner) uint32 {
 
 func TestBackupRestoreIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	const numBackups = 4
@@ -2061,6 +2083,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 func TestBackupRestorePartitionedIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	const numBackups = 4
@@ -2190,6 +2213,7 @@ func startBackgroundWrites(
 
 func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rows = 10
 	const numBackgroundTasks = MultiNode
@@ -2243,6 +2267,7 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 
 func TestConcurrentBackupRestores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	const concurrency, numIterations = 2, 3
@@ -2290,6 +2315,7 @@ func TestConcurrentBackupRestores(t *testing.T) {
 
 func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 
@@ -2339,6 +2365,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 func TestRestoreAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	ctx, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -2626,6 +2653,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -2664,6 +2692,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -2694,6 +2723,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 
 func TestBackupRestoreChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	_, _, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -2742,6 +2772,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 func TestTimestampMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numAccounts = 1
 
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -2822,6 +2853,7 @@ func TestTimestampMismatch(t *testing.T) {
 
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	_, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 1, InitNone)
 	defer cleanupFn()
@@ -2853,6 +2885,7 @@ func TestBackupLevelDB(t *testing.T) {
 
 func TestBackupEncrypted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
 	defer cleanupFn()
@@ -2967,6 +3000,7 @@ func TestBackupEncrypted(t *testing.T) {
 
 func TestRestoredPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3021,6 +3055,7 @@ func TestRestoredPrivileges(t *testing.T) {
 
 func TestRestoreInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3041,6 +3076,7 @@ func TestRestoreInto(t *testing.T) {
 
 func TestBackupRestorePermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3114,6 +3150,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 
 func TestRestoreDatabaseVersusTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, tc, origDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3223,6 +3260,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 
 func TestBackupAzureAccountName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3249,6 +3287,7 @@ func TestBackupAzureAccountName(t *testing.T) {
 // see the subtests for two ways this can work.
 func TestPointInTimeRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3325,6 +3364,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 
 func TestBackupRestoreDropDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3345,6 +3385,7 @@ func TestBackupRestoreDropDB(t *testing.T) {
 
 func TestBackupRestoreDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3366,6 +3407,7 @@ func TestBackupRestoreDropTable(t *testing.T) {
 
 func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3384,6 +3426,7 @@ func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 
 func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3405,6 +3448,7 @@ func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
 
 func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3422,6 +3466,7 @@ func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
 
 func TestBackupRestoreIncrementalDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3449,6 +3494,7 @@ func TestBackupRestoreIncrementalDropTable(t *testing.T) {
 
 func TestFileIOLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 11
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3484,6 +3530,8 @@ func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id int64) {
 
 func TestDetachedBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	const numAccounts = 1
 	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	defer cleanupFn()
@@ -3525,6 +3573,7 @@ func TestDetachedBackupRestore(t *testing.T) {
 
 func TestBackupRestoreSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numAccounts = 1
 	_, _, origDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	defer cleanupFn()
@@ -3623,6 +3672,8 @@ func TestBackupRestoreSequence(t *testing.T) {
 
 func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	const numAccounts = 1
 	_, _, origDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	defer cleanupFn()
@@ -3877,6 +3928,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 
 func TestBackupRestoreShowJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3901,6 +3953,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 
 func TestBackupCreatedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3935,6 +3988,7 @@ func TestBackupCreatedStats(t *testing.T) {
 // Ensure that backing up and restoring an empty database succeeds.
 func TestBackupRestoreEmptyDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3949,6 +4003,7 @@ func TestBackupRestoreEmptyDB(t *testing.T) {
 
 func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -3979,6 +4034,7 @@ func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
 // Ensure that statistics are restored from correct backup.
 func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const incremental1Foo = "nodelocal://0/incremental1foo"
 	const incremental2Foo = "nodelocal://0/incremental2foo"
@@ -4027,6 +4083,7 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 // data can be read for a period longer than the default GC interval.
 func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// A sketch of the test is as follows:
 	//
