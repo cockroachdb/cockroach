@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -72,6 +73,7 @@ func singleKVSSTable(key storage.MVCCKey, value []byte) ([]byte, error) {
 
 func TestDBAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Run("store=in-memory", func(t *testing.T) {
 		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 		ctx := context.Background()
@@ -330,6 +332,7 @@ func mvccKVsFromStrs(in []strKv) []storage.MVCCKeyValue {
 
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range engineImpls {
@@ -486,6 +489,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 
 func TestAddSSTableDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range engineImpls {
