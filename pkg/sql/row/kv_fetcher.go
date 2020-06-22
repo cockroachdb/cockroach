@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -73,14 +74,18 @@ func (f *KVFetcher) NextKV(
 			var key []byte
 			var rawBytes []byte
 			var err error
-			key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
+			var ts hlc.Timestamp
+			// TODO (rohany): We should pass in whether we want the timestamp or not
+			//  to avoid decoding it unnecessarily.
+			key, ts, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
 			if err != nil {
 				return false, kv, false, err
 			}
 			return true, roachpb.KeyValue{
 				Key: key,
 				Value: roachpb.Value{
-					RawBytes: rawBytes,
+					RawBytes:  rawBytes,
+					Timestamp: ts,
 				},
 			}, newSpan, nil
 		}

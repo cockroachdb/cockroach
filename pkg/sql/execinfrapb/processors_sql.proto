@@ -131,6 +131,8 @@ message TableReaderSpec {
   // makes it out of the SQL optimizer without throwing an error. If/when other
   // wait policies are supported, this field will be plumbed further.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
+
+  optional bool includes_timestamp_col = 12 [(gogoproto.nullable) = false];
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that
@@ -251,6 +253,8 @@ message JoinReaderSpec {
   // stream. This is only applicable to lookup joins, where doing so is
   // expensive. Index joins do this by default regardless of the parameter.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
+
+  optional bool includes_timestamp_col = 12 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

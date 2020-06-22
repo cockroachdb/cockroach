@@ -1,0 +1,28 @@
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
+INSERT INTO t VALUES (1, 2, 3)
+
+# Get the timestamp for row (1, 2, 3).
+query B
+SELECT mvcc_timestamp IS NOT NULL FROM t
+----
+true
+
+let $base_ts
+SELECT mvcc_timestamp FROM t
+
+# Insert a new value into t.
+statement ok
+INSERT INTO t VALUES (2, 3, 4)
+
+# Its timestamp should be bigger than the timestamp of the first row.
+query B
+SELECT mvcc_timestamp > $base_ts FROM t WHERE x = 2
+----
+true
+
+# Check that trying to get the timestamp from t@i succeeds too.
+query B
+SELECT mvcc_timestamp = $base_ts FROM t@i WHERE x = 1
+----
+true

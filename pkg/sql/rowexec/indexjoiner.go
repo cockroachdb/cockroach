@@ -79,10 +79,18 @@ func newIndexJoiner(
 		batchSize: indexJoinerBatchSize,
 	}
 	needMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
+
+	colIdxMap := ij.desc.ColumnIdxMapWithMutations(needMutations)
+	resultTypes := ij.desc.ColumnTypesWithMutations(needMutations)
+	if spec.IncludesTimestampCol {
+		resultTypes = append(resultTypes, sqlbase.MVCCTimestampColumnType)
+		colIdxMap[ij.desc.NextColumnID] = len(colIdxMap)
+	}
+
 	if err := ij.Init(
 		ij,
 		post,
-		ij.desc.ColumnTypesWithMutations(needMutations),
+		resultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -102,11 +110,11 @@ func newIndexJoiner(
 		flowCtx,
 		&fetcher,
 		&ij.desc,
-		0, /* primary index */
-		ij.desc.ColumnIdxMapWithMutations(needMutations),
-		false, /* reverse */
+		0,
+		colIdxMap,
+		false,
 		ij.Out.NeededColumns(),
-		false, /* isCheck */
+		false,
 		&ij.alloc,
 		spec.Visibility,
 		spec.LockingStrength,

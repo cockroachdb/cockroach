@@ -97,6 +97,17 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, needed)
 
+	// Figure out if the timestamp column is requested.
+	for i, id := range colCfg.wantedColumns {
+		// TODO (rohany): This should be replaced with a more general check
+		//  that the requested col is the timestamp col.
+		if sqlbase.ColumnID(id) == tabDesc.NextColumnID {
+			scan.needTimestamp = true
+			scan.timestampColOrdinal = i
+			break
+		}
+	}
+
 	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// initTable checks that the current user has the correct privilege to access
@@ -610,6 +621,17 @@ func (ef *execFactory) ConstructIndexJoin(
 	colDescs := makeColDescList(table, tableCols)
 
 	tableScan := ef.planner.Scan()
+
+	// Figure out if the timestamp column is requested.
+	for i, id := range colCfg.wantedColumns {
+		// TODO (rohany): This should be replaced with a more general check
+		//  that the requested col is the timestamp col.
+		if sqlbase.ColumnID(id) == tabDesc.NextColumnID {
+			tableScan.needTimestamp = true
+			tableScan.timestampColOrdinal = i
+			break
+		}
+	}
 
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
@@ -1876,5 +1898,15 @@ func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []sqlbase
 		}
 		colDescs = append(colDescs, *table.Column(i).(*sqlbase.ColumnDescriptor))
 	}
+
+	// Add any requested system columns.
+	for i := range table.SystemColumns() {
+		ord := table.DeletableColumnCount() + i
+		col := table.SystemColumns()[i]
+		if cols.Contains(ord) {
+			colDescs = append(colDescs, *col.(*sqlbase.ColumnDescriptor))
+		}
+	}
+
 	return colDescs
 }

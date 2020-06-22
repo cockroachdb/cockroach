@@ -90,12 +90,17 @@ func newTableReader(
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	resultTypes := spec.Table.ColumnTypesWithMutations(returnMutations)
+	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
+	if spec.IncludesTimestampCol {
+		resultTypes = append(resultTypes, sqlbase.MVCCTimestampColumnType)
+		columnIdxMap[spec.Table.NextColumnID] = len(columnIdxMap)
+	}
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
 		tr,
 		post,
-		types,
+		resultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -115,10 +120,18 @@ func newTableReader(
 	neededColumns := tr.Out.NeededColumns()
 
 	var fetcher row.Fetcher
-	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility, spec.LockingStrength,
+		flowCtx,
+		&fetcher,
+		&spec.Table,
+		int(spec.IndexIdx),
+		columnIdxMap,
+		spec.Reverse,
+		neededColumns,
+		spec.IsCheck,
+		&tr.alloc,
+		spec.Visibility,
+		spec.LockingStrength,
 	); err != nil {
 		return nil, err
 	}

@@ -105,7 +105,8 @@ type tableInfo struct {
 	//
 	// rowLastModified is the timestamp of the last time any family in the row
 	// was modified in any way.
-	rowLastModified hlc.Timestamp
+	rowLastModified    hlc.Timestamp
+	timestampOutputIdx int
 	// rowIsDeleted is true when the row has been deleted. This is only
 	// meaningful when kv deletion tombstones are returned by the kvBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
@@ -291,14 +292,15 @@ func (rf *Fetcher) Init(
 			index:            tableArgs.Index,
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,
 			cols:             tableArgs.Cols,
-			row:              make(sqlbase.EncDatumRow, len(tableArgs.Cols)),
+			row:              make(sqlbase.EncDatumRow, len(tableArgs.ColIdxMap)),
 			decodedRow:       make(tree.Datums, len(tableArgs.Cols)),
 
 			// These slice fields might get re-allocated below, so reslice them from
 			// the old table here in case they've got enough capacity already.
-			indexColIdx: oldTable.indexColIdx[:0],
-			keyVals:     oldTable.keyVals[:0],
-			extraVals:   oldTable.extraVals[:0],
+			indexColIdx:        oldTable.indexColIdx[:0],
+			keyVals:            oldTable.keyVals[:0],
+			extraVals:          oldTable.extraVals[:0],
+			timestampOutputIdx: -1,
 		}
 
 		var err error
@@ -338,6 +340,11 @@ func (rf *Fetcher) Init(
 			if tableArgs.ValNeededForCol.Contains(idx) {
 				// The idx-th column is required.
 				table.neededCols.Add(int(col))
+				// TODO (rohany): This should be replaced with a more general check
+				//  that the requested col is the timestamp col.
+				if col == table.desc.NextColumnID {
+					table.timestampOutputIdx = idx
+				}
 			}
 		}
 
@@ -1426,6 +1433,15 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 
 func (rf *Fetcher) finalizeRow() error {
 	table := rf.rowReadyTable
+
+	if table.timestampOutputIdx != -1 {
+		ed := sqlbase.EncDatum{
+			// TODO (rohany): This datum should be stored on the fetcher to avoid an alloc every time.
+			Datum: tree.TimestampToDecimal(rf.RowLastModified()),
+		}
+		table.row[table.timestampOutputIdx] = ed
+	}
+
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
 		if rf.valueColsFound == table.neededValueCols {

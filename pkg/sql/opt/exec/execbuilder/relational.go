@@ -408,12 +408,23 @@ func (b *Builder) getColumns(
 	var needed exec.TableColumnOrdinalSet
 	var output opt.ColMap
 
-	columnCount := b.mem.Metadata().Table(tableID).DeletableColumnCount()
+	table := b.mem.Metadata().Table(tableID)
+	columnCount := table.DeletableColumnCount()
 	n := 0
 	for i := 0; i < columnCount; i++ {
 		colID := tableID.ColumnID(i)
 		if cols.Contains(colID) {
 			needed.Add(i)
+			output.Set(int(colID), n)
+			n++
+		}
+	}
+
+	for i := range table.SystemColumns() {
+		ord := columnCount + i
+		colID := tableID.ColumnID(ord)
+		if cols.Contains(colID) {
+			needed.Add(ord)
 			output.Set(int(colID), n)
 			n++
 		}

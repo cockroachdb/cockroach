@@ -155,6 +155,13 @@ message ColumnDescriptor {
    (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
   // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
   optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
+
+  enum SystemColumnKind {
+    // Default value, unused.
+    NONE = 0;
+    MVCCTIMESTAMP = 1;
+  }
+  optional SystemColumnKind system_column_kind = 15 [(gogoproto.nullable) = false];
 }
   
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

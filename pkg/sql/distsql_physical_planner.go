@@ -864,7 +864,8 @@ func initTableReaderSpec(
 		LockingWaitPolicy: n.lockingWaitPolicy,
 
 		// Retain the capacity of the spans slice.
-		Spans: s.Spans[:0],
+		Spans:                s.Spans[:0],
+		IncludesTimestampCol: n.needTimestamp,
 	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
@@ -914,6 +915,13 @@ func tableOrdinal(
 			}
 		}
 	}
+
+	// The column is an implicit system column, so give it an ordinal based
+	// on its ID that is larger than physical columns.
+	if colID >= desc.NextColumnID {
+		return len(desc.Columns) + len(desc.MutationColumns()) + int(colID-desc.NextColumnID)
+	}
+
 	panic(fmt.Sprintf("column %d not in desc.Columns", colID))
 }
 
@@ -1056,17 +1064,19 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		planCtx,
 		&p,
 		&tableReaderPlanningInfo{
-			spec:                   spec,
-			post:                   post,
-			desc:                   n.desc,
-			spans:                  n.spans,
-			reverse:                n.reverse,
-			scanVisibility:         n.colCfg.visibility,
-			maxResults:             n.maxResults,
-			estimatedRowCount:      n.estimatedRowCount,
-			reqOrdering:            n.reqOrdering,
-			cols:                   n.cols,
-			colsToTableOrdrinalMap: scanNodeToTableOrdinalMap,
+			spec:                  spec,
+			post:                  post,
+			desc:                  n.desc,
+			spans:                 n.spans,
+			reverse:               n.reverse,
+			scanVisibility:        n.colCfg.visibility,
+			maxResults:            n.maxResults,
+			estimatedRowCount:     n.estimatedRowCount,
+			reqOrdering:           n.reqOrdering,
+			cols:                  n.cols,
+			colsToTableOrdinalMap: scanNodeToTableOrdinalMap,
+			needTimestampCol:      n.needTimestamp,
+			timestampColOrdinal:   n.timestampColOrdinal,
 		},
 	)
 	return &p, err
@@ -1076,17 +1086,19 @@ func (dsp *DistSQLPlanner) createTableReaders(
 // needed to perform the physical planning of table readers once the specs have
 // been created. See scanNode to get more context on some of the fields.
 type tableReaderPlanningInfo struct {
-	spec                   *execinfrapb.TableReaderSpec
-	post                   execinfrapb.PostProcessSpec
-	desc                   *sqlbase.ImmutableTableDescriptor
-	spans                  []roachpb.Span
-	reverse                bool
-	scanVisibility         execinfrapb.ScanVisibility
-	maxResults             uint64
-	estimatedRowCount      uint64
-	reqOrdering            ReqOrdering
-	cols                   []sqlbase.ColumnDescriptor
-	colsToTableOrdrinalMap []int
+	spec                  *execinfrapb.TableReaderSpec
+	post                  execinfrapb.PostProcessSpec
+	desc                  *sqlbase.ImmutableTableDescriptor
+	spans                 []roachpb.Span
+	reverse               bool
+	scanVisibility        execinfrapb.ScanVisibility
+	maxResults            uint64
+	estimatedRowCount     uint64
+	reqOrdering           ReqOrdering
+	cols                  []sqlbase.ColumnDescriptor
+	colsToTableOrdinalMap []int
+	needTimestampCol      bool
+	timestampColOrdinal   int
 }
 
 func (dsp *DistSQLPlanner) planTableReaders(
@@ -1163,12 +1175,15 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			typs = append(typs, col.Type)
 		}
 	}
+	if info.spec.IncludesTimestampCol {
+		typs = append(typs, types.Decimal)
+	}
 
 	p.AddNoInputStage(
-		corePlacement, info.post, typs, dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdrinalMap),
+		corePlacement, info.post, typs, dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdinalMap),
 	)
 
-	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdrinalMap)
+	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
 	descColumnIDs := make([]sqlbase.ColumnID, 0, len(info.desc.Columns))
 	for i := range info.desc.Columns {
@@ -1179,6 +1194,11 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			descColumnIDs = append(descColumnIDs, c.ID)
 		}
 	}
+
+	if info.needTimestampCol {
+		descColumnIDs = append(descColumnIDs, info.cols[info.timestampColOrdinal].ID)
+	}
+
 	for i := range planToStreamColMap {
 		planToStreamColMap[i] = -1
 		for j, c := range outCols {
@@ -1820,11 +1840,12 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.AddProjection(pkCols)
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:             *n.table.desc.TableDesc(),
-		IndexIdx:          0,
-		Visibility:        n.table.colCfg.visibility,
-		LockingStrength:   n.table.lockingStrength,
-		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		Table:                *n.table.desc.TableDesc(),
+		IndexIdx:             0,
+		Visibility:           n.table.colCfg.visibility,
+		LockingStrength:      n.table.lockingStrength,
+		LockingWaitPolicy:    n.table.lockingWaitPolicy,
+		IncludesTimestampCol: n.table.needTimestamp,
 	}
 
 	filter, err := physicalplan.MakeExpression(

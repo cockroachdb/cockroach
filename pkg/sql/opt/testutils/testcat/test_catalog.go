@@ -556,6 +556,10 @@ type Table struct {
 
 var _ cat.Table = &Table{}
 
+func (tt *Table) SystemColumns() []cat.Column {
+	return nil
+}
+
 func (tt *Table) String() string {
 	tp := treeprinter.New()
 	cat.FormatTable(tt.Catalog, tt, tp)

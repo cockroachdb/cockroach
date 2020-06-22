@@ -70,6 +70,8 @@ type Table interface {
 	// by deletable columns.
 	Column(i int) Column
 
+	SystemColumns() []Column
+
 	// IndexCount returns the number of public indexes defined on this table.
 	// Public indexes are not currently being added or dropped from the table.
 	// This method should be used when mutation columns can be ignored (the common

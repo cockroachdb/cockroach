@@ -508,6 +508,8 @@ func (os *optSequence) SequenceMarker() {}
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
+	systemColumnDescs []cat.Column
+
 	// indexes are the inlined wrappers for the table's primary and secondary
 	// indexes.
 	indexes []optIndex
@@ -550,6 +552,10 @@ type optTable struct {
 
 var _ cat.Table = &optTable{}
 
+func (ot *optTable) SystemColumns() []cat.Column {
+	return ot.systemColumnDescs
+}
+
 func newOptTable(
 	desc *sqlbase.ImmutableTableDescriptor,
 	codec keys.SQLCodec,
@@ -562,6 +568,11 @@ func newOptTable(
 		rawStats: stats,
 		zone:     tblZone,
 	}
+
+	// Set up the MVCC timestamp system column.
+	tsCol := sqlbase.MVCCTimestampColumn
+	tsCol.ID = desc.NextColumnID
+	ot.systemColumnDescs = append(ot.systemColumnDescs, &tsCol)
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
 	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
@@ -797,6 +808,11 @@ func (ot *optTable) DeletableColumnCount() int {
 
 // Column is part of the cat.Table interface.
 func (ot *optTable) Column(i int) cat.Column {
+	// TODO (rohany): This is weird... We are adding in an ordinal that is bigger
+	//  than ColumnCount(), and then handling it!
+	if i >= len(ot.desc.DeletableColumns()) {
+		return ot.SystemColumns()[i-len(ot.desc.DeletableColumns())]
+	}
 	return &ot.desc.DeletableColumns()[i]
 }
 
@@ -940,7 +956,7 @@ func (oi *optIndex) init(
 		notNull := true
 		for _, id := range desc.ColumnIDs {
 			ord, _ := tab.lookupColumnOrdinal(id)
-			if tab.desc.DeletableColumns()[ord].Nullable {
+			if tab.Column(ord).IsNullable() {
 				notNull = false
 				break
 			}
@@ -1352,6 +1368,10 @@ type optVirtualTable struct {
 }
 
 var _ cat.Table = &optVirtualTable{}
+
+func (ot *optVirtualTable) SystemColumns() []cat.Column {
+	return nil
+}
 
 func newOptVirtualTable(
 	ctx context.Context,

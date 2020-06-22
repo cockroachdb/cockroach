@@ -347,6 +347,13 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 		md.ColumnMeta(colID).Table = tabID
 	}
 
+	// Add all of the system columns.
+	for i := range tab.SystemColumns() {
+		col := tab.SystemColumns()[i]
+		colID := md.AddColumn(string(col.ColName()), col.DatumType())
+		md.ColumnMeta(colID).Table = tabID
+	}
+
 	return tabID
 }
 

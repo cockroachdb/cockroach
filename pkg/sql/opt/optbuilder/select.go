@@ -480,6 +480,24 @@ func (b *Builder) buildScan(
 		})
 	}
 
+	// Do i need to check ordinals here?
+	// Add the system columns to the scope.
+	if ordinals == nil {
+		for i := range tab.SystemColumns() {
+			col := tab.SystemColumns()[i]
+			ord := i + colCount
+			colID := tabID.ColumnID(ord)
+			tabColIDs.Add(colID)
+			outScope.cols = append(outScope.cols, scopeColumn{
+				name:   col.ColName(),
+				table:  tabMeta.Alias,
+				typ:    col.DatumType(),
+				id:     colID,
+				hidden: true,
+			})
+		}
+	}
+
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
 			panic(pgerror.Newf(pgcode.Syntax,

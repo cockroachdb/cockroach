@@ -108,6 +108,9 @@ type scanNode struct {
 	// mode of the Scan.
 	lockingStrength   sqlbase.ScanLockingStrength
 	lockingWaitPolicy sqlbase.ScanLockingWaitPolicy
+
+	needTimestamp       bool
+	timestampColOrdinal int
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.
@@ -289,15 +292,27 @@ func initColsForScan(
 	for _, wc := range colCfg.wantedColumns {
 		var c *sqlbase.ColumnDescriptor
 		var err error
-		if id := sqlbase.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-			c, err = desc.FindActiveColumnByID(id)
+		// TODO (rohany): It's not good to fabricate a column descriptor here.
+		//  We should be able to construct the col data that we want from data
+		//  in the colCfg.
+		if sqlbase.ColumnID(wc) == desc.NextColumnID {
+			c = &sqlbase.ColumnDescriptor{
+				Name:     "mvcc_timestamp",
+				ID:       desc.NextColumnID,
+				Type:     types.Decimal,
+				Hidden:   true,
+				Nullable: true,
+			}
 		} else {
-			c, _, err = desc.FindReadableColumnByID(id)
+			if id := sqlbase.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
+				c, err = desc.FindActiveColumnByID(id)
+			} else {
+				c, _, err = desc.FindReadableColumnByID(id)
+			}
+			if err != nil {
+				return cols, err
+			}
 		}
-		if err != nil {
-			return cols, err
-		}
-
 		cols = append(cols, *c)
 	}
 
