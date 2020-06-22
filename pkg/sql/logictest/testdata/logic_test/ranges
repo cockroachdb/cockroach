@@ -390,7 +390,7 @@ start_key                          start_pretty                   end_key       
 # of the show ranges from database command. The test below just ensures that
 # the command gets parsed and evaluated correctly.
 
-# regression tests for #40450
+# Regression tests for #40450.
 statement ok
 CREATE DATABASE "show ranges"
 
@@ -457,17 +457,17 @@ statement ok
 ALTER INDEX range_for_row@i SPLIT AT VALUES (3, 4), (3, 5)
 
 query TT
-SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 2, 1, 2)]
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 2)]
 ----
 /1/2 /1/3
 
 query TT
-SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 3, 1, 2)]
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 3)]
 ----
 /1/3 NULL
 
 query TT
-SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 1, 1, 2)]
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 1)]
 ----
 NULL /1/2
 
@@ -477,12 +477,12 @@ SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (1
 NULL /3/4
 
 query TT
-SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (1, 2, 3, 4)]
+SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (3, 4, 1, 2)]
 ----
 /3/4 /3/5
 
 query TT
-SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (1, 2, 3, 5)]
+SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (3, 5, 1, 2)]
 ----
 /3/5 NULL
 
@@ -515,7 +515,7 @@ statement ok
 ALTER INDEX range_for_row_nulls@i SPLIT AT VALUES (NULL)
 
 query TT
-SELECT start_key, end_key from [SHOW RANGE FROM INDEX range_for_row_nulls@i FOR ROW (1, NULL)]
+SELECT start_key, end_key from [SHOW RANGE FROM INDEX range_for_row_nulls@i FOR ROW (NULL, 1)]
 ----
 /NULL NULL
 
@@ -533,7 +533,7 @@ CREATE INDEX i3 on t42456 (x)
 query T
 SELECT crdb_internal.pretty_key(crdb_internal.encode_key(70, 4, (1, )), 0)
 ----
-/70/4/1/0
+/70/4/1
 
 # Regression test for #44326. SHOW RANGES on a virtual table should cause
 # an error, not a panic.
@@ -542,3 +542,11 @@ SHOW RANGES FROM TABLE crdb_internal.tables
 
 query error SHOW RANGE FOR ROW may not be called on a virtual table
 SHOW RANGE FROM TABLE crdb_internal.tables FOR ROW (0, 0)
+
+# Test that SHOW RANGE FOR ROW returns a nice error message for hidden columns
+# in a secondary index.
+statement ok
+CREATE TABLE err_msg (x INT, y INT, z INT, PRIMARY KEY (x, y), INDEX i (z))
+
+statement error HINT: columns \[x y\] are implicitly part of index "i"'s key, include columns \[z x y\] in this order
+SHOW RANGE FROM INDEX err_msg@i FOR ROW (1)
