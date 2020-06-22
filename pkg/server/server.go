@@ -83,6 +83,7 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -1127,13 +1128,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	// Enable the debug endpoints first to provide an earlier window into what's
-	// going on with the node in advance of exporting node functionality.
-	//
-	// TODO(marc): when cookie-based authentication exists, apply it to all web
-	// endpoints.
-	s.mux.Handle(debug.Endpoint, s.debug)
-
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	jsonpb := &protoutil.JSONPb{
@@ -1531,8 +1525,35 @@ func (s *Server) Start(ctx context.Context) error {
 	// The /login endpoint is, by definition, available pre-authentication.
 	s.mux.Handle(loginPath, gwMux)
 	s.mux.Handle(logoutPath, authHandler)
+
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+
+	// Register debugging endpoints.
+	var debugHandler http.Handler = s.debug
+	if s.cfg.RequireWebSession() {
+		// TODO(bdarnell): Refactor our authentication stack.
+		// authenticationMux guarantees that we have a non-empty user
+		// session, but our machinery for verifying the roles of a user
+		// lives on adminServer and is tied to GRPC metadata.
+		debugHandler = newAuthenticationMux(s.authentication, http.HandlerFunc(
+			func(w http.ResponseWriter, req *http.Request) {
+				md := forwardAuthenticationMetadata(req.Context(), req)
+				authCtx := metadata.NewIncomingContext(req.Context(), md)
+				_, err := s.admin.requireAdminUser(authCtx)
+				if errors.Is(err, errInsufficientPrivilege) {
+					http.Error(w, "admin privilege required", http.StatusUnauthorized)
+					return
+				} else if err != nil {
+					log.Infof(authCtx, "web session error: %s", err)
+					http.Error(w, "error checking authentication", http.StatusInternalServerError)
+					return
+				}
+				s.debug.ServeHTTP(w, req)
+			}))
+	}
+	s.mux.Handle(debug.Endpoint, debugHandler)
+
 	log.Event(ctx, "added http endpoints")
 
 	// Attempt to upgrade cluster version.
