@@ -93,17 +93,17 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 	case opt.RightJoinOp:
 		// Pass through null-rejection columns from right input, and request null-
 		// rejection on left columns.
-		relProps.Rule.RejectNullCols = in.Child(0).(memo.RelExpr).Relational().OutputCols
+		relProps.Rule.RejectNullCols.UnionWith(in.Child(0).(memo.RelExpr).Relational().OutputCols)
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
 			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
 		}
 
 	case opt.FullJoinOp:
 		// Request null-rejection on all output columns.
-		relProps.Rule.RejectNullCols = relProps.OutputCols
+		relProps.Rule.RejectNullCols.UnionWith(relProps.OutputCols)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		relProps.Rule.RejectNullCols = deriveGroupByRejectNullCols(in)
+		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(in))
 
 	case opt.ProjectOp:
 		// Pass through all null-rejection columns that the Project passes through.
