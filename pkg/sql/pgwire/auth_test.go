@@ -161,7 +161,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 		pgServer := s.(*server.TestServer).PGServer()
 
-		httpClient, err := s.GetHTTPClient()
+		httpClient, err := s.GetAdminAuthenticatedHTTPClient()
 		if err != nil {
 			t.Fatal(err)
 		}
