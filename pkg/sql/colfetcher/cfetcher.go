@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -93,6 +95,15 @@ type cTableInfo struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
+	// The following fields contain MVCC metadata for each row and may be
+	// returned to users of cFetcher immediately after NextBatch returns.
+	//
+	// rowLastModified is the timestamp of the last time any family in the row
+	// was modified in any way.
+	rowLastModified hlc.Timestamp
+	// timestampOutputIdx controls at what row ordinal to write the timestamp.
+	timestampOutputIdx int
+
 	keyValTypes []*types.T
 	extraTypes  []*types.T
 
@@ -142,6 +153,10 @@ func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
 	}
 	return 0, false
 }
+
+// noTimestampColumn is a sentinel value to denote that the MVCC timestamp
+// column is not part of the output.
+const noTimestampColumn = -1
 
 // cFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
@@ -194,6 +209,11 @@ type cFetcher struct {
 	// when beginning a new scan.
 	traceKV bool
 
+	// mvccDecodeStrategy controls whether or not MVCC timestamps should
+	// be decoded from KV's fetched. It is set if any of the requested tables
+	// are required to produce an MVCC timestamp system column.
+	mvccDecodeStrategy row.MVCCDecodingStrategy
+
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
 
@@ -229,6 +249,11 @@ type cFetcher struct {
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
 		// having to call batch.Vec too often in the tight loop.
 		colvecs []coldata.Vec
+
+		// timestampCol is the underlying ColVec for the timestamp output column,
+		// or nil if the timestamp column was not requested. It is pulled out from
+		// colvecs to avoid having to cast the vec to decimal on every write.
+		timestampCol []apd.Decimal
 	}
 
 	// adapter is a utility struct that helps with memory accounting.
@@ -278,21 +303,19 @@ func (rf *cFetcher) Init(
 	sort.Sort(m)
 	colDescriptors := tableArgs.Cols
 	table := &cTableInfo{
-		spans:            tableArgs.Spans,
-		desc:             tableArgs.Desc,
-		colIdxMap:        m,
-		index:            tableArgs.Index,
-		isSecondaryIndex: tableArgs.IsSecondaryIndex,
-		cols:             colDescriptors,
+		spans:              tableArgs.Spans,
+		desc:               tableArgs.Desc,
+		colIdxMap:          m,
+		index:              tableArgs.Index,
+		isSecondaryIndex:   tableArgs.IsSecondaryIndex,
+		cols:               colDescriptors,
+		timestampOutputIdx: noTimestampColumn,
 	}
 
 	typs := make([]*types.T, len(colDescriptors))
 	for i := range typs {
 		typs[i] = colDescriptors[i].Type
 	}
-
-	rf.machine.batch = allocator.NewMemBatch(typs)
-	rf.machine.colvecs = rf.machine.batch.ColVecs()
 
 	var err error
 
@@ -305,9 +328,23 @@ func (rf *cFetcher) Init(
 			// The idx-th column is required.
 			neededCols.Add(int(col))
 			table.neededColsList = append(table.neededColsList, int(col))
+			// If this column is the timestamp column, set up the output index.
+			sysColKind := sqlbase.GetSystemColumnKindFromColumnID(table.desc.TableDesc(), col)
+			if sysColKind == sqlbase.SystemColumnKind_MVCCTIMESTAMP {
+				table.timestampOutputIdx = idx
+				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
+			}
 		}
 	}
 	sort.Ints(table.neededColsList)
+
+	rf.machine.batch = allocator.NewMemBatch(typs)
+	rf.machine.colvecs = rf.machine.batch.ColVecs()
+	// If the fetcher is requested to produce a timestamp column, pull out the
+	// column as a decimal and save it.
+	if table.timestampOutputIdx != noTimestampColumn {
+		rf.machine.timestampCol = rf.machine.colvecs[table.timestampOutputIdx].Decimal()
+	}
 
 	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, table.desc.TableDesc(), table.index.ID))
 
@@ -320,6 +357,15 @@ func (rf *cFetcher) Init(
 	}
 
 	table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
+
+	// If system columns are requested, they are present in ValNeededForCol.
+	// However, we don't want to include them in neededValueColsByIdx, because
+	// the handling of system columns is separate from the standard value
+	// decoding process.
+	if table.timestampOutputIdx != noTimestampColumn {
+		table.neededValueColsByIdx.Remove(table.timestampOutputIdx)
+	}
+
 	neededIndexCols := 0
 	nIndexCols := len(indexColumnIDs)
 	if cap(table.indexColOrdinals) >= nIndexCols {
@@ -603,7 +649,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx)
+			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, colexecerror.NewStorageError(err)
 			}
@@ -641,6 +687,9 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.batch.ResetInternalBatch()
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
+			// Reset MVCC metadata for the table, since this is the first KV of a row.
+			rf.table.rowLastModified = hlc.Timestamp{}
+
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
 			// to tell whether they have extra columns appended to the key.
@@ -745,6 +794,10 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			if rf.traceKV {
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
+			// Update the MVCC values for this row.
+			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
+				rf.table.rowLastModified = rf.machine.nextKV.Value.Timestamp
+			}
 			if len(rf.table.desc.Families) == 1 {
 				rf.machine.state[0] = stateFinalizeRow
 				rf.machine.state[1] = stateInitFetch
@@ -753,7 +806,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 		case stateSeekPrefix:
 			for {
-				moreRows, kv, _, err := rf.fetcher.NextKV(ctx)
+				moreRows, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 				if err != nil {
 					return nil, colexecerror.NewStorageError(err)
 				}
@@ -785,7 +838,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.shiftState()
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx)
+			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, colexecerror.NewStorageError(err)
 			}
@@ -836,6 +889,11 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 			}
 
+			// Update the MVCC values for this row.
+			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
+				rf.table.rowLastModified = rf.machine.nextKV.Value.Timestamp
+			}
+
 			if familyID == rf.table.maxColumnFamilyID {
 				// We know the row can't have any more keys, so finalize the row.
 				rf.machine.state[0] = stateFinalizeRow
@@ -846,6 +904,10 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 
 		case stateFinalizeRow:
+			// Populate the row with the buffered MVCC information.
+			if rf.table.timestampOutputIdx != noTimestampColumn {
+				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
+			}
 			// We're finished with a row. Bump the row index, fill the row in with
 			// nulls if necessary, emit the batch if necessary, and move to the next
 			// state.

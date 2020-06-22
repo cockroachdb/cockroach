@@ -262,7 +262,6 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	)
 
 	fromClausePresent := len(from) > 0
-	numCols := len(mb.outScope.cols)
 
 	// If there is a FROM clause present, we must join all the tables
 	// together with the table being updated.
@@ -327,7 +326,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	}
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := 0; i < numCols; i++ {
+	for i := 0; i < len(mb.fetchOrds); i++ {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 }
@@ -388,7 +387,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
+	for i := range mb.fetchOrds {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 }

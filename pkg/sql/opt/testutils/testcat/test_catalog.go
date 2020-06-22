@@ -611,6 +611,11 @@ func (tt *Table) DeletableColumnCount() int {
 	return len(tt.Columns)
 }
 
+// DeletableAndSystemColumnCount is part of the cat.Table interface.
+func (tt *Table) DeletableAndSystemColumnCount() int {
+	return tt.DeletableColumnCount()
+}
+
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
 	return tt.Columns[i]
@@ -775,6 +780,11 @@ func (ti *Index) IsInverted() bool {
 
 // ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
+	return len(ti.Columns)
+}
+
+// ColumnCountNoSystemColumns is part of the cat.Index interface.
+func (ti *Index) ColumnCountNoSystemColumns() int {
 	return len(ti.Columns)
 }
 
