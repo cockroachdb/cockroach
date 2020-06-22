@@ -842,6 +842,13 @@ given Geometry.</p>
 <p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_centroid"></a><code>st_centroid(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the centroid of given geography. Uses a spheroid to perform the operation.</p>
+<p>This function utilizes the GeographicLib library for spheroid calculations.</p>
+</span></td></tr>
+<tr><td><a name="st_centroid"></a><code>st_centroid(geography: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the centroid of given geography.</p>
+<p>This function utilizes the S2 library for spherical calculations.</p>
+<p>This function utilizes the GeographicLib library for spheroid calculations.</p>
+</span></td></tr>
 <tr><td><a name="st_centroid"></a><code>st_centroid(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
