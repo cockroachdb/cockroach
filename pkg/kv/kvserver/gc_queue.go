@@ -430,7 +430,9 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 // 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
+func (gcq *gcQueue) process(
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
+) (processed bool, err error) {
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, zone := repl.DescAndZone()
 	// Consult the protected timestamp state to determine whether we can GC and
@@ -438,7 +440,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// threshold.
 	canGC, cacheTimestamp, gcTimestamp, newThreshold := repl.checkProtectedTimestampsForGC(ctx, *zone.GC)
 	if !canGC {
-		return nil
+		return false, nil
 	}
 	r := makeGCQueueScore(ctx, repl, gcTimestamp, *zone.GC)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
@@ -446,7 +448,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// AdminVerifyProtectedTimestamp requests.
 	if err := repl.markPendingGC(cacheTimestamp, newThreshold); err != nil {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
-		return nil
+		return false, nil
 	}
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
@@ -479,13 +481,13 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 			return err
 		})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
 	log.Eventf(ctx, "GC score after GC: %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), *zone.GC))
 	updateStoreMetricsWithGCInfo(gcq.store.metrics, info)
-	return nil
+	return true, nil
 }
 
 func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {

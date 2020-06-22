@@ -206,7 +206,7 @@ func replicaGCShouldQueueImpl(
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
 	ctx context.Context, repl *Replica, _ *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
 	// StartKey (and avoid rng.GetReplica() for the same reason).
@@ -223,7 +223,7 @@ func (rgcq *replicaGCQueue) process(
 	rs, _, err := kv.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), desc.StartKey.AsRawKey(),
 		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(rs) != 1 {
 		// Regardless of whether ranges were merged, we're guaranteed one answer.
@@ -231,7 +231,7 @@ func (rgcq *replicaGCQueue) process(
 		// TODO(knz): we should really have a separate type for assertion
 		// errors that trigger telemetry, like
 		// errors.AssertionFailedf() does.
-		return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
+		return false, errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 	}
 	replyDesc := rs[0]
 
@@ -248,10 +248,8 @@ func (rgcq *replicaGCQueue) process(
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
 		log.VEventf(ctx, 1, "not gc'able, replica is still in range descriptor: %v", currentDesc)
-		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
-			return err
-		}
-
+		err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now())
+		return false, err
 		// Note that we do not check the replicaID at this point. If our
 		// local replica ID is behind the one in the meta descriptor, we
 		// could safely delete our local copy, but this would just force
@@ -306,7 +304,7 @@ func (rgcq *replicaGCQueue) process(
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		// This case is tricky. This range has been merged away, so it is likely
@@ -326,10 +324,10 @@ func (rgcq *replicaGCQueue) process(
 			rs, _, err := kv.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), leftDesc.StartKey.AsRawKey(),
 				roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 			if err != nil {
-				return err
+				return false, err
 			}
 			if len(rs) != 1 {
-				return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
+				return false, errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 			}
 			if leftReplyDesc := &rs[0]; !leftDesc.Equal(*leftReplyDesc) {
 				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
@@ -337,7 +335,7 @@ func (rgcq *replicaGCQueue) process(
 				// Chances are that the left replica needs to be GC'd. Since we don't
 				// have definitive proof, queue it with a low priority.
 				rgcq.AddAsync(ctx, leftRepl, replicaGCPriorityDefault)
-				return nil
+				return false, nil
 			}
 		}
 
@@ -347,10 +345,10 @@ func (rgcq *replicaGCQueue) process(
 		if err := repl.store.RemoveReplica(ctx, repl, mergedTombstoneReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
