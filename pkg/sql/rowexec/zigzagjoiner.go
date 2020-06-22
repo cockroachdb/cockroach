@@ -581,7 +581,6 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	}
 
 	keys, err := sqlbase.EncodeInvertedIndexKeys(
-		info.table,
 		info.index,
 		colMap,
 		decodedDatums,
