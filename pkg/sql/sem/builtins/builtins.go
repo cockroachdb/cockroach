@@ -819,7 +819,7 @@ var builtins = map[string]builtinDefinition{
 
 	"repeat": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
+			Types:      tree.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				s := string(tree.MustBeDString(args[0]))
