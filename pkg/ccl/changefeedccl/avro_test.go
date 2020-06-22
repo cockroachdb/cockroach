@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -141,6 +142,7 @@ func randTime(rng *rand.Rand) time.Time {
 
 func TestAvroSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
 
 	type test struct {
@@ -521,6 +523,7 @@ func adjustNative(native map[string]interface{}, writerSchema, readerSchema *avr
 
 func TestAvroMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type test struct {
 		name           string
@@ -570,6 +573,7 @@ func TestAvroMigration(t *testing.T) {
 
 func TestDecimalRatRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run(`table`, func(t *testing.T) {
 		tests := []struct {

@@ -13,11 +13,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSQLNameToKafkaName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		sql, kafka string
@@ -55,6 +57,7 @@ func TestSQLNameToKafkaName(t *testing.T) {
 
 func TestSQLNameToAvroName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		sql, avro string
