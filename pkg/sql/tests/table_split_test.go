@@ -26,6 +26,7 @@ import (
 
 func TestSplitAtTableBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testClusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,

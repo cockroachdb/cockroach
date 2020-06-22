@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -191,6 +192,7 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 
 func TestRandomSyntaxGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "stmt"
 
@@ -227,6 +229,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 func TestRandomSyntaxSelect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "target_list"
 
@@ -254,6 +257,7 @@ type namedBuiltin struct {
 
 func TestRandomSyntaxFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	done := make(chan struct{})
 	defer close(done)
@@ -334,6 +338,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 
 func TestRandomSyntaxFuncCommon(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "func_expr_common_subexpr"
 
@@ -346,6 +351,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	roots := []string{
 		"create_database_stmt",
@@ -369,6 +375,7 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 
 func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	roots := []string{
 		"alter_table_cmd",
@@ -512,6 +519,7 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
 	var smither *sqlsmith.Smither
@@ -566,6 +574,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 func TestRandomDatumRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	eval := tree.MakeTestingEvalContext(nil)
 
