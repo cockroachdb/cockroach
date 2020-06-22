@@ -821,7 +821,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	mb.canaryColID = canaryScopeCol.id
 
 	// Set fetchOrds to point to the scope columns created for the fetch values.
-	for i := range fetchScope.cols {
+	for i := range mb.fetchOrds {
 		// Fetch columns come after insert columns.
 		mb.fetchOrds[i] = scopeOrdinal(len(mb.outScope.cols) + i)
 	}
