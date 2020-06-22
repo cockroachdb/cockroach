@@ -17,12 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestVersions verifies that both getVersions() and writeVersionFile work
 // correctly.
 func TestVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, err := ioutil.TempDir("", "testing")
 	if err != nil {

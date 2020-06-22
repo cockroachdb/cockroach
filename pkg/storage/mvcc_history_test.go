@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -78,6 +79,7 @@ import (
 //
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -225,7 +227,7 @@ func TestMVCCHistories(t *testing.T) {
 
 							// Trace the execution in testing.T, to clarify where we
 							// are in case an error occurs.
-							e.t.Logf("%s: %s", d.Pos, line)
+							log.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
 
 							// Decompose the current script line.
 							var err error

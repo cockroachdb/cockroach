@@ -170,6 +170,7 @@ var mvccGetImpls = []struct {
 
 func TestMVCCStatsAddSubForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	goldMS := enginepb.MVCCStats{
 		ContainsEstimates: 1,
 		KeyBytes:          1,
@@ -315,6 +316,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 // a\x00<t=0>
 func TestMVCCKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	aKey := roachpb.Key("a")
 	a0Key := roachpb.Key("a\x00")
 	keys := mvccKeys{
@@ -338,6 +340,7 @@ func TestMVCCKeys(t *testing.T) {
 
 func TestMVCCGetNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -364,6 +367,7 @@ func TestMVCCGetNotExist(t *testing.T) {
 
 func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -413,6 +417,7 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 // timestamp, but older than the transaction's MaxTimestamp.
 func TestMVCCGetUncertainty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -694,6 +699,7 @@ func TestMVCCGetUncertainty(t *testing.T) {
 
 func TestMVCCGetAndDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -762,6 +768,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 // tombstone with its timestamp in order to push the write's timestamp.
 func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -813,6 +820,7 @@ func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) 
 
 func TestMVCCInlineWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -853,6 +861,7 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 
 func TestMVCCDeleteMissingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -873,6 +882,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 
 func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -938,6 +948,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 
 func TestMVCCGetWriteIntentError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -977,6 +988,7 @@ func mkVal(s string, ts hlc.Timestamp) roachpb.Value {
 
 func TestMVCCScanWriteIntentError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1099,6 +1111,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 // consistent set to false.
 func TestMVCCGetInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -1167,6 +1180,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 // consistent set to false.
 func TestMVCCGetProtoInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1279,6 +1293,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 // ComputeStats need to invalidate the cached iterator data.
 func TestMVCCInvalidateIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, which := range []string{"get", "scan", "findSplitKey", "computeStats"} {
 		t.Run(which, func(t *testing.T) {
@@ -1346,6 +1361,7 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 
 func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1508,6 +1524,7 @@ func mvccScanTest(ctx context.Context, t *testing.T, engine Engine) {
 
 func TestMVCCScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1522,6 +1539,7 @@ func TestMVCCScan(t *testing.T) {
 
 func TestMVCCScanMaxNum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1602,6 +1620,7 @@ func TestMVCCScanMaxNum(t *testing.T) {
 
 func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1654,6 +1673,7 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 
 func TestMVCCScanInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1701,6 +1721,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 // verifies that the scan sees only the committed versions.
 func TestMVCCScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1792,6 +1813,7 @@ func TestMVCCScanInconsistent(t *testing.T) {
 
 func TestMVCCDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -1957,6 +1979,7 @@ func TestMVCCDeleteRange(t *testing.T) {
 
 func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2106,6 +2129,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 
 func TestMVCCDeleteRangeFailed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2147,6 +2171,7 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 
 func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2183,6 +2208,7 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 // DeleteRange are visible to the same transaction at a higher epoch.
 func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2231,6 +2257,7 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 
 func TestMVCCDeleteRangeInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2341,6 +2368,7 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 
 func TestMVCCClearTimeRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2573,6 +2601,7 @@ func computeStats(
 // later time post-revert.
 func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewPseudoRand()
 
@@ -2679,6 +2708,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 
 func TestMVCCInitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2770,6 +2800,7 @@ func TestMVCCInitPut(t *testing.T) {
 
 func TestMVCCInitPutWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2829,6 +2860,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 // end) in descending order of keys.
 func TestMVCCReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2955,6 +2987,7 @@ func TestMVCCReverseScan(t *testing.T) {
 // continues to scan in reverse. #17825 was caused by this not working correctly.
 func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -2999,6 +3032,7 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 // `SeekForPrev()` target (logical key + '\0').
 func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3053,6 +3087,7 @@ func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 // this whole process repeats ad infinitum.
 func TestMVCCReverseScanStopAtSmallestKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			run := func(numPuts int, ts int64) {
@@ -3094,6 +3129,7 @@ func TestMVCCReverseScanStopAtSmallestKey(t *testing.T) {
 
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3142,6 +3178,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 // than the committing transaction aborts the intent.
 func TestMVCCResolveNewerIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3179,6 +3216,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 
 func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3235,6 +3273,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 // WriteTooOldError if that timestamp isn't recent.
 func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3286,6 +3325,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 // avoid the WriteTooOldError but also write at the higher timestamp.
 func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3339,6 +3379,7 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 
 func TestMVCCPutNegativeTimestampError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3364,6 +3405,7 @@ func TestMVCCPutNegativeTimestampError(t *testing.T) {
 // its intent at this timestamp instead of directly above the existing key.
 func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3407,6 +3449,7 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 
 func TestMVCCAbortTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3445,6 +3488,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 
 func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3494,6 +3538,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 
 func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3594,6 +3639,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 // transaction epochs are not visible.
 func TestMVCCGetWithDiffEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -3661,6 +3707,7 @@ func TestMVCCGetWithDiffEpochs(t *testing.T) {
 // happen commonly, but caused issues in #36089.
 func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -3736,6 +3783,7 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 // reads using epoch 1 to verify that the read will fail.
 func TestMVCCGetWithOldEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -3769,6 +3817,7 @@ func TestMVCCGetWithOldEpoch(t *testing.T) {
 // idempotent. If not, they throw errors.
 func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3845,6 +3894,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 // to pushed txn.
 func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -3883,6 +3933,7 @@ func TestMVCCGetWithPushedTimestamp(t *testing.T) {
 
 func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3927,6 +3978,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 
 func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -3979,6 +4031,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4033,6 +4086,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 func TestMVCCResolveTxnNoOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4072,6 +4126,7 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 
 func TestMVCCResolveTxnRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4151,6 +4206,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 func TestMVCCResolveTxnRangeResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4195,6 +4251,7 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 
 func TestValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		key   roachpb.Key
@@ -4227,6 +4284,7 @@ func TestValidSplitKeys(t *testing.T) {
 
 func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4284,6 +4342,7 @@ func TestFindSplitKey(t *testing.T) {
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const userID = keys.MinUserDescID
 	const interleave1 = userID + 1
@@ -4677,6 +4736,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		keySizes []int
 		valSizes []int
@@ -4759,6 +4819,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 // stats.
 func TestMVCCGarbageCollect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4874,6 +4935,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 // a key cannot be GC'd if it's not deleted.
 func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4921,6 +4983,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 // TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
 func TestMVCCGarbageCollectIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4960,6 +5023,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 // leaves the intent untouched.
 func TestResolveIntentWithLowerEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -4995,6 +5059,7 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 // series data does not result in a different final result than a "full merge".
 func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -5057,6 +5122,7 @@ func TestMVCCTimeSeriesPartialMerge(t *testing.T) {
 
 func TestWillOverflow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		a, b     int64

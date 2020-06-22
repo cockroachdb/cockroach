@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -140,6 +141,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 // visible until commit, and then are all visible after commit.
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
 		return b.Commit(false /* sync */)
 	})
@@ -170,6 +172,7 @@ func shouldNotPanic(t *testing.T, f func(), funcName string) {
 // as "not implemented". Also basic iterating functionality is verified.
 func TestReadOnlyBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -268,6 +271,7 @@ func TestReadOnlyBasics(t *testing.T) {
 
 func TestBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
 		repr := b.Repr()
 
@@ -328,6 +332,7 @@ func TestBatchRepr(t *testing.T) {
 
 func TestWriteBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testBatchBasics(t, true /* writeOnly */, func(e Engine, b Batch) error {
 		return b.Commit(false /* sync */)
 	})
@@ -337,6 +342,7 @@ func TestWriteBatchBasics(t *testing.T) {
 // b2.ApplyBatchRepr(b1.Repr()).Repr() to not equal a noop.
 func TestApplyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -402,6 +408,7 @@ func TestApplyBatchRepr(t *testing.T) {
 
 func TestBatchGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -470,6 +477,7 @@ func compareMergedValues(t *testing.T, result, expected []byte) bool {
 
 func TestBatchMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -531,6 +539,7 @@ func TestBatchMerge(t *testing.T) {
 
 func TestBatchProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -584,6 +593,7 @@ func TestBatchProto(t *testing.T) {
 
 func TestBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -681,6 +691,7 @@ func TestBatchScan(t *testing.T) {
 // a single deleted value returns nothing.
 func TestBatchScanWithDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -713,6 +724,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 // max on a scan is still reached.
 func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -751,6 +763,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 // batches, but worth verifying.
 func TestBatchConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -789,6 +802,7 @@ func TestBatchConcurrency(t *testing.T) {
 
 func TestBatchBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -845,6 +859,7 @@ func TestBatchBuilder(t *testing.T) {
 
 func TestBatchBuilderStress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -919,6 +934,7 @@ func TestBatchBuilderStress(t *testing.T) {
 
 func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -956,6 +972,7 @@ func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 
 func TestBatchDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1044,6 +1061,7 @@ func TestBatchDistinct(t *testing.T) {
 
 func TestWriteOnlyBatchDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1091,6 +1109,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 
 func TestBatchDistinctPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1135,6 +1154,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 
 func TestBatchIteration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1241,6 +1261,7 @@ func TestBatchIteration(t *testing.T) {
 // all of the keys written by the individual batches are subsequently readable.
 func TestBatchCombine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1294,6 +1315,7 @@ func TestBatchCombine(t *testing.T) {
 
 func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()

@@ -17,10 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestSSTableInfosString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	info := func(level int, size int64) SSTableInfo {
 		return SSTableInfo{
@@ -72,6 +74,7 @@ func TestSSTableInfosString(t *testing.T) {
 
 func TestReadAmplification(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	info := func(level int, size int64) SSTableInfo {
 		return SSTableInfo{
@@ -163,6 +166,7 @@ func createTestSSTableInfos() SSTableInfos {
 
 func TestSSTableInfosByLevel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ssti := NewSSTableInfosByLevel(createTestSSTableInfos())
 
 	// First, verify that each level is sorted by start key, not size.

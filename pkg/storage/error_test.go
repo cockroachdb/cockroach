@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,6 +25,7 @@ import (
 // being reported safely.
 func TestRocksDBErrorSafeMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
