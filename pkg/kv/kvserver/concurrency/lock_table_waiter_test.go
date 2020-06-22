@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -108,6 +109,7 @@ func makeTxnProto(name string) roachpb.Transaction {
 // different waiting states while a transactional request is waiting.
 func TestLockTableWaiterWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	maxTS := hlc.Timestamp{WallTime: 15}
@@ -179,6 +181,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 // different waiting states while a non-transactional request is waiting.
 func TestLockTableWaiterWithNonTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	reqHeaderTS := hlc.Timestamp{WallTime: 10}
@@ -361,6 +364,7 @@ func notifyUntilDone(t *testing.T, g *mockLockTableGuard) func() {
 // or resolves their intents.
 func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	w, ir, g := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
@@ -419,6 +423,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 // propagates errors from its intent resolver when it resolves intent batches.
 func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	w, ir, g := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)

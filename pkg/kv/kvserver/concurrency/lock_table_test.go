@@ -128,6 +128,7 @@ print
 
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
@@ -867,6 +868,7 @@ L:
 // test executor can run in strict concurrency mode (see comment in execute()).
 func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	txnCounter := uint128.FromInts(0, 0)
 	var timestamps []hlc.Timestamp
@@ -937,6 +939,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 // General randomized test.
 func TestLockTableConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// TODO(sbhola): different test cases with different settings of the
 	// randomization parameters.
