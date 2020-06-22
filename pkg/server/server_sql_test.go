@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -37,6 +38,7 @@ import (
 // `*kv.DB` and a small number of allowlisted RPCs.
 func TestSQLServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
@@ -57,6 +59,7 @@ func TestSQLServer(t *testing.T) {
 
 func TestTenantCannotSetClusterSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})

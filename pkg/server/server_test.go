@@ -61,6 +61,7 @@ import (
 // been specified.
 func TestSelfBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +76,7 @@ func TestSelfBootstrap(t *testing.T) {
 // TestHealthCheck runs a basic sanity check on the health checker.
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
@@ -126,6 +128,7 @@ func TestHealthCheck(t *testing.T) {
 // start that denotes engine type.
 func TestEngineTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -153,6 +156,7 @@ func TestEngineTelemetry(t *testing.T) {
 // our system.
 func TestServerStartClock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Set a high max-offset so that, if the server's clock is pushed by
 	// MaxOffset, we don't hide that under the latency of the Start operation
@@ -191,6 +195,7 @@ func TestServerStartClock(t *testing.T) {
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// The default context uses embedded certs.
 		Insecure: true,
@@ -232,6 +237,7 @@ func TestPlainHTTPServer(t *testing.T) {
 
 func TestSecureHTTPRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -282,6 +288,7 @@ func TestSecureHTTPRedirect(t *testing.T) {
 // conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	client, err := s.GetAdminAuthenticatedHTTPClient()
@@ -336,6 +343,7 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -422,6 +430,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 // ranges.
 func TestMultiRangeScanWithPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		splitKeys []roachpb.Key
 		keys      []roachpb.Key
@@ -506,7 +515,9 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 								keys = append(keys, kv.Key)
 							}
 							resumeSpan = br.Responses[0].GetInner().Header().ResumeSpan
-							t.Logf("page #%d: scan %v -> keys (after) %v resume %v", scan.Header().Span(), numPages, keys, resumeSpan)
+							if log.V(1) {
+								t.Logf("page #%d: scan %v -> keys (after) %v resume %v", scan.Header().Span(), numPages, keys, resumeSpan)
+							}
 							if resumeSpan == nil {
 								// Done with this pagination.
 								break
@@ -542,6 +553,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 
 func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -622,6 +634,7 @@ func TestSystemConfigGossip(t *testing.T) {
 
 func TestListenerFileCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -676,6 +689,7 @@ func TestListenerFileCreation(t *testing.T) {
 
 func TestClusterIDMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	engines := make([]storage.Engine, 2)
 	for i := range engines {
@@ -705,6 +719,7 @@ func TestClusterIDMismatch(t *testing.T) {
 
 func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		name              string
@@ -790,6 +805,7 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 
 func TestPersistHLCUpperBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var fatal bool
 	defer log.ResetExitFunc()
@@ -930,6 +946,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 func TestServeIndexHTML(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const htmlTemplate = `<!DOCTYPE html>
 <html>
@@ -1096,6 +1113,7 @@ Binary built without web UI.
 
 func TestGWRuntimeMarshalProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	// Regression test against:
 	// https://github.com/cockroachdb/cockroach/issues/49842

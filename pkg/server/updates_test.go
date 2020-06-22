@@ -34,11 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func TestCheckVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -104,6 +106,7 @@ func TestCheckVersion(t *testing.T) {
 
 func TestUsageQuantization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	r := diagutils.NewServer()
 	defer r.Close()
@@ -207,6 +210,7 @@ func TestUsageQuantization(t *testing.T) {
 // (see sql.TestTelemetry).
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const elemName = "somestring"
 	ctx := context.Background()

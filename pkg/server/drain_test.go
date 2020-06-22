@@ -34,6 +34,7 @@ import (
 // TestDrain tests the Drain RPC.
 func TestDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	doTestDrain(t, true /* newInterface */)
 }
 
@@ -42,6 +43,7 @@ func TestDrain(t *testing.T) {
 // is dropped.
 func TestDrainLegacy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	doTestDrain(t, false /* newInterface */)
 }
 
