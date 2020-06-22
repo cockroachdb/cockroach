@@ -10,3 +10,11 @@ parentID name id
 
 statement ok
 SELECT * FROM crdb_internal.zones
+
+# The below code reproduces a bug which led to the data distribution admin ui
+# page not rendering. The code for `SHOW ZONE CONFIGURATION` for a specific
+# entity is distinct from showing all of them.
+# See issue https://github.com/cockroachdb/cockroach/issues/49882
+
+statement ok
+SHOW ZONE CONFIGURATION FOR TABLE system.namespace2

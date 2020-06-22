@@ -146,7 +146,9 @@ func (ms MetadataSchema) GetInitialValues(
 		value.SetInt(int64(desc.GetID()))
 
 		// TODO(solon): This if/else can be removed in 20.2, as there will be no
-		// need to support the deprecated namespace table.
+		// need to support the deprecated namespace table. Note that we only
+		// bootstrap the initial data in code in 20.1 without 20.1 as the active
+		// version for testing.
 		if bootstrapVersion.IsActive(clusterversion.VersionNamespaceTableWithSchemas) {
 			if parentID != keys.RootNamespaceID {
 				ret = append(ret, roachpb.KeyValue{
@@ -170,10 +172,19 @@ func (ms MetadataSchema) GetInitialValues(
 					})
 			}
 		} else {
-			ret = append(ret, roachpb.KeyValue{
-				Key:   NewDeprecatedTableKey(parentID, desc.GetName()).Key(),
-				Value: value,
-			})
+			// Don't add the new namespace table to a cluster which is being
+			// bootstrapped before the migration to add the new namespace table has
+			// been run.
+			//
+			// TODO(ajwerner): Providing a mapping from system tables to the version
+			// at which they were added to avoid adding table descriptors to namespace
+			// prior to the migration which should add them.
+			if desc.GetID() != keys.NamespaceTableID {
+				ret = append(ret, roachpb.KeyValue{
+					Key:   NewDeprecatedTableKey(parentID, desc.GetName()).Key(),
+					Value: value,
+				})
+			}
 		}
 
 		// Create descriptor metadata key.

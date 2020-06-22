@@ -290,7 +290,9 @@ func allocateTableRewrites(
 				}
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				if err := CheckTableExists(ctx, txn, parentID, table.Name); err != nil {
+				if err := CheckTableExists(
+					ctx, p.ExecCfg().Settings, txn, parentID, table.Name,
+				); err != nil {
 					return err
 				}
 

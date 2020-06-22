@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // This file abstracts all accesses to system.namespace. Entries in
@@ -202,9 +203,25 @@ func LookupObjectID(
 }
 
 // LookupPublicTableID is a wrapper around LookupObjectID for public tables.
+// This function is helpful to resolve namespace entries given a parent ID and
+// name from the KV (avoiding caching). It assumes that the name is in the
+// public schema.
 func LookupPublicTableID(
-	ctx context.Context, txn *kv.Txn, parentID ID, name string,
+	ctx context.Context, settings *cluster.Settings, txn *kv.Txn, parentID ID, name string,
 ) (bool, ID, error) {
+	// NB: It is critical that this step exist in 20.1 in order to properly
+	// resolve system.public.namespace2 to a zone config. The fact that this
+	// escape hatch exists for SHOW ZONE CONFIGURATION is rather unfortunate.
+	// This code will need to be modified in 20.2 to deal with user-defined
+	// schemas and likely will not exist in this form.
+	if parentID == keys.SystemDatabaseID && name == NamespaceTable.Name {
+		if id := LookupSystemTableDescriptorID(ctx, settings, parentID, name); id != InvalidID {
+			return true, id, nil
+		}
+		return false, 0, errors.AssertionFailedf("failed to find %q in the system table descriptor cache",
+			NamespaceTable.Name)
+	}
+
 	return LookupObjectID(ctx, txn, parentID, keys.PublicSchemaID, name)
 }
 
