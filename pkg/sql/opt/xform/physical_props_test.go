@@ -15,12 +15,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestDistinctOnLimitHint verifies that distinctOnLimitHint never returns a
 // negative result.
 func TestDistinctOnLimitHint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Generate a list of test values. We want to try the 0 value, very small
 	// values, very large values, and cases where the two values are ~1 off from
