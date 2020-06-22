@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -83,6 +84,7 @@ type unreplicatedTruncStateTest struct {
 
 func TestTruncateLogUnreplicatedTruncatedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Check out the old clusterversion.VersionUnreplicatedRaftTruncatedState
 	// for information on what's being tested. The cluster version is gone, but

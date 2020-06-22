@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,6 +47,7 @@ func (wb *wrappedBatch) ClearRange(start, end storage.MVCCKey) error {
 // clear range command to the batch otherwise.
 func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	startKey := roachpb.Key("0000")
 	endKey := roachpb.Key("9999")

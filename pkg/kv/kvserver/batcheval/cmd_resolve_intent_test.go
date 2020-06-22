@@ -24,12 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDeclareKeysResolveIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const id = "f90b99de-6bd2-48a3-873c-12fdb9867a3c"
 	txnMeta := enginepb.TxnMeta{}
@@ -136,6 +138,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 // seqnums.
 func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	k := roachpb.Key("a")
