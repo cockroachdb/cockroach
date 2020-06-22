@@ -485,7 +485,6 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
-	geoLibsDir                string
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
@@ -504,7 +503,6 @@ func setDemoContextDefaults() {
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
-	demoCtx.geoLibsDir = "/usr/local/lib/cockroach"
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside
