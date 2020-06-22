@@ -40,6 +40,7 @@ func FakePHS(opName, user string) (interface{}, func()) {
 
 func TestRegistryCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -194,6 +195,7 @@ func TestRegistryCancelation(t *testing.T) {
 
 func TestRegistryGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("")
 	// TODO (lucy): This test probably shouldn't continue to exist in its current
 	// form if GCMutations will cease to be used. Refactor or get rid of it.
