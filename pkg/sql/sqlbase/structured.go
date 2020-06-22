@@ -2002,6 +2002,10 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return pgerror.Newf(pgcode.DuplicateColumn,
 				"duplicate: column %q in the middle of being added, not yet public", column.Name)
 		}
+		if IsSystemColumnName(column.Name) {
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"column name %q conflicts with a system column name", column.Name)
+		}
 		columnNames[column.Name] = column.ID
 
 		if other, ok := columnIDs[column.ID]; ok {

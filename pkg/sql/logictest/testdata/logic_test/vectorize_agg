@@ -40,7 +40,7 @@ EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string G
 │
 └ Node 1
   └ *colexec.hashAggregator
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
@@ -49,7 +49,7 @@ EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexec.distinctChainOps
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 statement ok
 SET vectorize=experimental_always

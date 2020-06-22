@@ -757,6 +757,12 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	tab := md.Table(tabID)
 	idx := tab.Index(idxOrd)
 	numCols := idx.ColumnCount()
+	// Remove any system columns from numCols.
+	for i := 0; i < idx.ColumnCount(); i++ {
+		if cat.IsSystemColumn(tab, idx.Column(i).Ordinal) {
+			numCols--
+		}
+	}
 
 	// Adjust cost based on how well the current locality matches the index's
 	// zone constraints.

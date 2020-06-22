@@ -28,6 +28,11 @@ const (
 	// DeleteOnly columns are mutation columns that have to be updated only on
 	// deletes and cannot be otherwise accessed.
 	DeleteOnly
+	// System columns are implicit columns that every physical table
+	// contains. These columns can only be read from and must not be included
+	// as part of mutations. They also cannot be part of the lax or key columns
+	// for indexes.
+	System
 )
 
 // Column is an interface to a table column, exposing only the information
@@ -102,4 +107,10 @@ type Column interface {
 func IsMutationColumn(table Table, ord int) bool {
 	kind := table.ColumnKind(ord)
 	return kind == WriteOnly || kind == DeleteOnly
+}
+
+// IsSystemColumn is a convenience function that returns true if the column at
+// the given ordinal position is a system column.
+func IsSystemColumn(table Table, ord int) bool {
+	return table.ColumnKind(ord) == System
 }
