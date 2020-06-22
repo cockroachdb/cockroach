@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -981,6 +982,7 @@ func runHashJoinTestCase(
 
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -1110,6 +1112,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 // sure hashing with unsafe.Pointer doesn't allocate still works correctly.
 func TestHashingDoesNotAllocate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var sum uintptr
 	foundAllocations := 0
@@ -1144,6 +1147,7 @@ func TestHashingDoesNotAllocate(t *testing.T) {
 // would occur.
 func TestHashJoinerProjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()

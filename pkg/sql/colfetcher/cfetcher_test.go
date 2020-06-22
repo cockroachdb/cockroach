@@ -14,11 +14,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCFetcherUninitialized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Regression test for #36570: make sure it's okay to call GetRangesInfo even
 	// before the fetcher was fully initialized.
 	var fetcher cFetcher

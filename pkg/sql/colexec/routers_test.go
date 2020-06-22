@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -90,6 +91,7 @@ func getDataAndFullSelection() (tuples, []*types.T, []int) {
 
 func TestRouterOutputAddBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	data, typs, fullSelection := getDataAndFullSelection()
@@ -199,6 +201,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 
 func TestRouterOutputNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	data, typs, fullSelection := getDataAndFullSelection()
@@ -423,6 +426,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 func TestRouterOutputRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	rng, _ := randutil.NewPseudoRand()
@@ -599,6 +603,7 @@ func (o callbackRouterOutput) cancel(context.Context) {
 
 func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// We have precomputed expectedNumVals only for the default batch size, so we
@@ -672,6 +677,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 
 func TestHashRouterCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	outputs := make([]routerOutput, 4)
 	numCancels := int64(0)
@@ -789,6 +795,7 @@ func TestHashRouterCancellation(t *testing.T) {
 
 func TestHashRouterOneOutput(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	rng, _ := randutil.NewPseudoRand()
@@ -851,6 +858,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 func TestHashRouterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	rng, _ := randutil.NewPseudoRand()
@@ -1189,6 +1197,7 @@ func TestHashRouterRandom(t *testing.T) {
 
 func BenchmarkHashRouter(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	// Use only one type. Note: the more types you use, the more you inflate the
