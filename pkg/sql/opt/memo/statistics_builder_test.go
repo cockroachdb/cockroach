@@ -125,7 +125,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(cols, sel, s))
 
 		// Update null counts.
-		sb.updateNullCountsFromProps(sel, relProps)
+		sb.updateNullCountsFromNotNullCols(sel, relProps.NotNullCols, s)
 
 		// Check if the statistics match the expected value.
 		testStats(t, s, expectedStats)
