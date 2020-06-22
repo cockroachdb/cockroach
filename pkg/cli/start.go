@@ -690,7 +690,7 @@ If problems persist, please see %s.`
 
 	// Set up the Geospatial library.
 	// We need to make sure this happens before any queries involving geospatial data is executed.
-	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, demoCtx.geoLibsDir)
+	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
 	if err != nil {
 		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
 	} else {
