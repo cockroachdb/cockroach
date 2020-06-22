@@ -89,6 +89,7 @@ func createTestClient(t *testing.T, s serverutils.TestServerInterface) *kv.DB {
 // transaction's value to be written after all retries are complete.
 func TestClientRetryNonTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Set up a command filter which tracks which one of our test keys have
 	// been attempted to be pushed.
@@ -232,6 +233,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 // semantics.
 func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -289,6 +291,7 @@ func TestClientRunTransaction(t *testing.T) {
 // client's convenience methods.
 func TestClientGetAndPutProto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -318,6 +321,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 // methods.
 func TestClientGetAndPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -340,6 +344,7 @@ func TestClientGetAndPut(t *testing.T) {
 
 func TestClientPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -367,6 +372,7 @@ func TestClientPutInline(t *testing.T) {
 // as equivalent and elides zero-valued defaults on decode.
 func TestClientEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -396,6 +402,7 @@ func TestClientEmptyValues(t *testing.T) {
 // results.
 func TestClientBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -652,6 +659,7 @@ func concurrentIncrements(db *kv.DB, t *testing.T) {
 // https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
 func TestConcurrentIncrements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -671,6 +679,7 @@ func TestConcurrentIncrements(t *testing.T) {
 // corresponding read consistency type set.
 func TestReadConsistencyTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, rc := range []roachpb.ReadConsistencyType{
 		roachpb.CONSISTENT,
@@ -735,6 +744,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 // TestTxn_ReverseScan a simple test for Txn.ReverseScan
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := createTestClient(t, s)
@@ -818,6 +828,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 
 func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
@@ -893,6 +904,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 // Test that a reader unblocks quickly after an intent is cleaned up.
 func TestIntentCleanupUnblocksReaders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -948,6 +960,7 @@ func TestIntentCleanupUnblocksReaders(t *testing.T) {
 // This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
 func TestRollbackWithCanceledContextBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -992,6 +1005,7 @@ func TestRollbackWithCanceledContextBasic(t *testing.T) {
 // fail, and we're testing that a 2nd one is sent.
 func TestRollbackWithCanceledContextInsidious(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Add a request filter which cancels the ctx when it sees a rollback.
 	var storeKnobs kvserver.StoreTestingKnobs
