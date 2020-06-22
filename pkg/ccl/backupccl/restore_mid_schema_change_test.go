@@ -50,6 +50,7 @@ import (
 // backupName1, backupName2, ...
 func TestRestoreMidSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const (
 		testdataBase = "testdata/restore_mid_schema_change"
 		exportDirs   = testdataBase + "/exports"
