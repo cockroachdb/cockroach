@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -41,6 +42,7 @@ import (
 // work as intended on create statistics jobs.
 func TestCreateStatsControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -132,6 +134,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 // becomes non-live (from the perspective of the jobs registry).
 func TestCreateStatsLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldAdoptInterval, oldCancelInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldAdoptInterval
@@ -241,6 +244,7 @@ func TestCreateStatsLivenessWithRestart(t *testing.T) {
 // owning node to continue processing.
 func TestCreateStatsLivenessWithLeniency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldAdoptInterval, oldCancelInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldAdoptInterval
@@ -329,6 +333,7 @@ func TestCreateStatsLivenessWithLeniency(t *testing.T) {
 
 func TestAtMostOneRunningCreateStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldAdoptInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldAdoptInterval
@@ -442,6 +447,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 
 func TestDeleteFailedJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldAdoptInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldAdoptInterval
@@ -496,6 +502,7 @@ func TestDeleteFailedJob(t *testing.T) {
 // for the CREATE STATISTICS job.
 func TestCreateStatsProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldProgressInterval time.Duration) {
 		rowexec.SampleAggregatorProgressInterval = oldProgressInterval
@@ -637,6 +644,7 @@ func TestCreateStatsProgress(t *testing.T) {
 
 func TestCreateStatsAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
