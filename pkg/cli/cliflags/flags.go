@@ -617,10 +617,10 @@ a public network without combining it with --listen-addr.`,
 		Description: `Disable use of HTTP when accessing external data.`,
 	}
 
-	ExtenralIODisableImplicitCredentials = FlagInfo{
+	ExternalIODisableImplicitCredentials = FlagInfo{
 		Name: "external-io-disable-implicit-credentials",
 		Description: `
-Disable use of implicit credentials when accessing external data.  
+Disable use of implicit credentials when accessing external data.
 Instead, require the user to always specify access keys.`,
 	}
 
