@@ -47,11 +47,23 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 }
 
 func (s *Smither) randScalarType() *types.T {
-	return sqlbase.RandTypeFromSlice(s.rnd, s.types.scalarTypes)
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	scalarTypes := types.Scalar
+	if s.types != nil {
+		scalarTypes = s.types.scalarTypes
+	}
+	return sqlbase.RandTypeFromSlice(s.rnd, scalarTypes)
 }
 
 func (s *Smither) randType() *types.T {
-	return sqlbase.RandTypeFromSlice(s.rnd, s.types.seedTypes)
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	seedTypes := sqlbase.SeedTypes
+	if s.types != nil {
+		seedTypes = s.types.seedTypes
+	}
+	return sqlbase.RandTypeFromSlice(s.rnd, seedTypes)
 }
 
 func (s *Smither) makeDesiredTypes() []*types.T {
