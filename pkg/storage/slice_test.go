@@ -14,11 +14,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Regression test for #25289: calling gobytes() on an invalid pointer is fine
 // as long as we're asking for 0 bytes.
 func TestGoBytesNil(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	_ = gobytes(nil, 0)
 }
