@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -61,6 +62,7 @@ func createStore(t *testing.T, path string) {
 
 func TestOpenExistingStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -95,6 +97,7 @@ func TestOpenExistingStore(t *testing.T) {
 
 func TestOpenReadOnlyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -135,6 +138,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test is pretty slow under race (200+ cpu-seconds) because it
 	// uses multiple real disk-backed stores and goes through multiple
@@ -419,6 +423,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 
 func TestParseGossipValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})

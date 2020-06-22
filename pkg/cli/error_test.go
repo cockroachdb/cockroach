@@ -28,6 +28,7 @@ import (
 
 func TestOutputError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	errBase := errors.New("woo")
 	file, line, fn, _ := errors.GetOneLineSource(errBase)
@@ -83,6 +84,7 @@ func TestOutputError(t *testing.T) {
 
 func TestFormatLocation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testData := []struct {
 		file, line, fn string
@@ -119,6 +121,7 @@ func (l *logger) Log(_ context.Context, sev log.Severity, msg string, args ...in
 
 func TestErrorReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		desc         string
