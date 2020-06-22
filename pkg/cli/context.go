@@ -84,16 +84,22 @@ var serverCfg = func() server.Config {
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setServerContextDefaults() {
+	serverCfg.BaseConfig.DefaultZoneConfig = zonepb.DefaultZoneConfig()
+
+	serverCfg.ClockDevicePath = ""
+	serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
+
 	serverCfg.KVConfig.GoroutineDumpDirName = ""
 	serverCfg.KVConfig.HeapProfileDirName = ""
 	serverCfg.KVConfig.ReadyFn = nil
 	serverCfg.KVConfig.DelayedBootstrapFn = nil
-	serverCfg.SQLConfig.SocketFile = ""
 	serverCfg.KVConfig.JoinList = nil
-	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
 	serverCfg.KVConfig.JoinPreferSRVRecords = false
-	serverCfg.BaseConfig.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	serverCfg.KVConfig.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
+
+	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
+
+	serverCfg.SQLConfig.SocketFile = ""
 	// Attempt to default serverCfg.MemoryPoolSize to 25% if possible.
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLConfig.MemoryPoolSize = bytes
