@@ -442,42 +442,44 @@ func (b *Builder) buildScan(
 		tabMeta.IgnoreForeignKeys = true
 	}
 
-	colCount := len(ordinals)
-	if colCount == 0 {
-		// If scanning mutation columns, then include writable and deletable
-		// columns in the output, in addition to public columns.
-		if scanMutationCols {
-			colCount = tab.DeletableColumnCount()
-		} else {
-			colCount = tab.ColumnCount()
-		}
-	}
-
-	getOrdinal := func(i int) int {
-		if ordinals == nil {
-			return i
-		}
-		return ordinals[i]
-	}
-
-	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	outScope.cols = make([]scopeColumn, 0, colCount)
-	for i := 0; i < colCount; i++ {
-		ord := getOrdinal(i)
+	var tabColIDs opt.ColSet
+	addCol := func(ord int) {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(colID)
 		name := col.ColName()
 		isMutation := cat.IsMutationColumn(tab, ord)
 		outScope.cols = append(outScope.cols, scopeColumn{
-			id:       colID,
-			name:     name,
-			table:    tabMeta.Alias,
-			typ:      col.DatumType(),
-			hidden:   col.IsHidden() || isMutation,
-			mutation: isMutation,
+			id:             colID,
+			name:           name,
+			table:          tabMeta.Alias,
+			typ:            col.DatumType(),
+			hidden:         col.IsHidden() || isMutation,
+			isSystemColumn: col.IsSystemCol(),
+			mutation:       isMutation,
 		})
+	}
+
+	if ordinals == nil {
+		// If no ordinals are requested, then add in all of the needed columns.
+		outScope.cols = make([]scopeColumn, 0, tab.DeletableColumnCount())
+		// Add in all of the normal table columns.
+		for i := 0; i < tab.ColumnCount(); i++ {
+			addCol(i)
+		}
+		// Add in the mutation columns if requested.
+		if scanMutationCols {
+			for i := tab.ColumnCount(); i < tab.DeletableColumnCount(); i++ {
+				addCol(i)
+			}
+		}
+	} else {
+		// Otherwise, just add the ordinals.
+		outScope.cols = make([]scopeColumn, 0, len(ordinals))
+		for _, ord := range ordinals {
+			addCol(ord)
+		}
 	}
 
 	if tab.IsVirtualTable() {
@@ -536,7 +538,11 @@ func (b *Builder) buildScan(
 			// We will track the ColumnID to Ord mapping so Ords can be added
 			// when a column is referenced.
 			for i, col := range outScope.cols {
-				dep.ColumnIDToOrd[col.id] = getOrdinal(i)
+				if ordinals == nil {
+					dep.ColumnIDToOrd[col.id] = i
+				} else {
+					dep.ColumnIDToOrd[col.id] = ordinals[i]
+				}
 			}
 			if private.Flags.ForceIndex {
 				dep.SpecificIndex = true

@@ -60,6 +60,8 @@ type Column interface {
 	// hidden column called rowid if there is no primary key on the table).
 	IsHidden() bool
 
+	IsSystemCol() bool
+
 	// HasDefault returns true if the column has a default value. DefaultExprStr
 	// will be set to the SQL expression string in that case.
 	HasDefault() bool
@@ -85,5 +87,11 @@ type Column interface {
 // IsMutationColumn is a convenience function that returns true if the column at
 // the given ordinal position is a mutation column.
 func IsMutationColumn(table Table, ord int) bool {
-	return ord >= table.ColumnCount()
+	return ord >= table.ColumnCount() && !IsSystemColumn(table, ord)
+}
+
+// IsSystemColumn is a convenience function that returns true if the column at
+// the given ordinal position is a system column.
+func IsSystemColumn(table Table, ord int) bool {
+	return ord >= table.DeletableColumnCount()
 }

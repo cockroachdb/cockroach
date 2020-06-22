@@ -611,6 +611,11 @@ func (tt *Table) DeletableColumnCount() int {
 	return len(tt.Columns)
 }
 
+// DeletableAndSystemColumnCount is part of the cat.Table interface.
+func (tt *Table) DeletableAndSystemColumnCount() int {
+	return tt.DeletableColumnCount()
+}
+
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
 	return tt.Columns[i]
@@ -721,6 +726,9 @@ type Index struct {
 
 	Columns []cat.IndexColumn
 
+	// numSystemColumns is the number of system columns that this index contains.
+	numSystemColumns int
+
 	// IdxZone is the zone associated with the index. This may be inherited from
 	// the parent table, database, or even the default zone.
 	IdxZone *zonepb.ZoneConfig
@@ -776,6 +784,11 @@ func (ti *Index) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
+}
+
+// ColumnCountNoSystemColumns is part of the cat.Index interface.
+func (ti *Index) ColumnCountNoSystemColumns() int {
+	return len(ti.Columns) - ti.numSystemColumns
 }
 
 // KeyColumnCount is part of the cat.Index interface.
@@ -979,6 +992,11 @@ func (tc *Column) DefaultExprStr() string {
 // ComputedExprStr is part of the cat.Column interface.
 func (tc *Column) ComputedExprStr() string {
 	return *tc.ComputedExpr
+}
+
+// TODO (rohany): Implement this -- add a flag to the cat.Column.
+func (tc *Column) IsSystemCol() bool {
+	return false
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.

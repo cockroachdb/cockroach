@@ -112,7 +112,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 	)
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
+	for i := range mb.fetchOrds {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 	mb.buildDelete(nil /* returning */)
@@ -222,7 +222,7 @@ func (cb *onDeleteSetBuilder) Build(
 	)
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
+	for i := range mb.fetchOrds {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 	// Add target columns.
@@ -440,11 +440,10 @@ func (cb *onUpdateCascadeBuilder) Build(
 	// The scope created by b.buildUpdateCascadeMutationInput has the table
 	// columns, followed by the old FK values, followed by the new FK values.
 	numFKCols := fk.ColumnCount()
-	tableScopeCols := mb.outScope.cols[:len(mb.outScope.cols)-2*numFKCols]
 	newValScopeCols := mb.outScope.cols[len(mb.outScope.cols)-numFKCols:]
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range tableScopeCols {
+	for i := range mb.fetchOrds {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 	// Add target columns.

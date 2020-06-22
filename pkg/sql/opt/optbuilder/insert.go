@@ -513,8 +513,8 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	// the SQL user.
 	numCols := 0
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
-		// Skip hidden columns.
-		if mb.tab.Column(i).IsHidden() {
+		// Skip hidden and system columns.
+		if col := mb.tab.Column(i); col.IsHidden() || col.IsSystemCol() {
 			continue
 		}
 
@@ -821,7 +821,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	mb.canaryColID = canaryScopeCol.id
 
 	// Set fetchOrds to point to the scope columns created for the fetch values.
-	for i := range fetchScope.cols {
+	for i := range mb.fetchOrds {
 		// Fetch columns come after insert columns.
 		mb.fetchOrds[i] = scopeOrdinal(len(mb.outScope.cols) + i)
 	}

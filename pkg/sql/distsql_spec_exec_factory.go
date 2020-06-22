@@ -201,6 +201,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	colCfg := makeScanColumnsConfig(table, needed)
+
+	// Check if any system columns are requested, as they need special handling.
+	systemColumns, systemColumnOrdinals := collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
+
 	sb := span.MakeBuilder(e.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
@@ -250,7 +254,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		IsCheck:    false,
 		Visibility: colCfg.visibility,
 		// Retain the capacity of the spans slice.
-		Spans: trSpec.Spans[:0],
+		Spans:         trSpec.Spans[:0],
+		SystemColumns: systemColumns,
 	}
 	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
 	if err != nil {
@@ -282,17 +287,19 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		e.getPlanCtx(recommendation),
 		&p,
 		&tableReaderPlanningInfo{
-			spec:                   trSpec,
-			post:                   post,
-			desc:                   tabDesc,
-			spans:                  spans,
-			reverse:                reverse,
-			scanVisibility:         colCfg.visibility,
-			parallelize:            parallelize,
-			estimatedRowCount:      uint64(rowCount),
-			reqOrdering:            ReqOrdering(reqOrdering),
-			cols:                   cols,
-			colsToTableOrdrinalMap: colsToTableOrdinalMap,
+			spec:                  trSpec,
+			post:                  post,
+			desc:                  tabDesc,
+			spans:                 spans,
+			reverse:               reverse,
+			scanVisibility:        colCfg.visibility,
+			parallelize:           parallelize,
+			estimatedRowCount:     uint64(rowCount),
+			reqOrdering:           ReqOrdering(reqOrdering),
+			cols:                  cols,
+			colsToTableOrdinalMap: colsToTableOrdinalMap,
+			systemColumns:         systemColumns,
+			systemColumnOrdinals:  systemColumnOrdinals,
 		},
 	)
 
@@ -625,6 +632,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	// TODO (rohany): Implement production of system columns by the underlying scan here.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: lookup join")
 }
 

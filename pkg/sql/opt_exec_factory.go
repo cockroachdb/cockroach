@@ -97,6 +97,9 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, needed)
 
+	// Check if any system columns are requested, as they need special handling.
+	scan.systemColumns, scan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
+
 	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// initTable checks that the current user has the correct privilege to access
@@ -124,7 +127,14 @@ func (ef *execFactory) ConstructScan(
 	if invertedConstraint != nil {
 		scan.spans, err = GenerateInvertedSpans(invertedConstraint, sb)
 	} else {
-		scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+		// TODO (rohany): This is a hack, but I'm not sure how to get around it. We pass
+		//  this set of ordinals to the family splitting logic, but that layer doesn't know
+		//  about the system column ordinals. They construct column idx maps which aren't right.
+		var needed2 exec.TableColumnOrdinalSet
+		needed.ForEach(func(i int) {
+			needed2.Add(i - 1)
+		})
+		scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed2, false /* forDelete */ || len(scan.systemColumns) > 0)
 	}
 	if err != nil {
 		return nil, err
@@ -486,6 +496,9 @@ func (ef *execFactory) ConstructIndexJoin(
 	colDescs := makeColDescList(table, tableCols)
 
 	tableScan := ef.planner.Scan()
+
+	// Check if any system columns are requested, as they need special handling.
+	tableScan.systemColumns, tableScan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
 
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err

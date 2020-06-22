@@ -231,11 +231,12 @@ func (s *scope) appendColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		tabCol := tab.Column(i)
 		s.cols = append(s.cols, scopeColumn{
-			name:   tabCol.ColName(),
-			table:  *alias,
-			typ:    tabCol.DatumType(),
-			id:     tabMeta.MetaID.ColumnID(i),
-			hidden: tabCol.IsHidden(),
+			name:           tabCol.ColName(),
+			table:          *alias,
+			typ:            tabCol.DatumType(),
+			id:             tabMeta.MetaID.ColumnID(i),
+			hidden:         tabCol.IsHidden(),
+			isSystemColumn: tabCol.IsSystemCol(),
 		})
 	}
 }

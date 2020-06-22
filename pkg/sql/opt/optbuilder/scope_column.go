@@ -39,6 +39,9 @@ type scopeColumn struct {
 	// included.
 	hidden bool
 
+	// isSystemColumn is true if the column is a system column.
+	isSystemColumn bool
+
 	// mutation is true if the column is in the process of being dropped or added
 	// to the table. It should not be visible to variable references.
 	mutation bool

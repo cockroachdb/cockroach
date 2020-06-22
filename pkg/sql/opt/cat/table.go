@@ -57,6 +57,10 @@ type Table interface {
 	// WritableColumnCount.
 	DeletableColumnCount() int
 
+	// DeletableAndSystemColumnCount returns the number of DeletableColumns as
+	// well as the extra system columns, such as the MVCC timestamp column.
+	// DeletableAndSystemColumnCount() int
+
 	// Column returns a Column interface to the column at the ith ordinal
 	// position within the table, where i < ColumnCount. Note that the Columns
 	// collection includes mutation columns, if present. Mutation columns are in
