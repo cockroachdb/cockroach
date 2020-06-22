@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
@@ -81,6 +82,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			if bigInitialData(meta) && testing.Short() {
 				t.Skipf(`%s loads a lot of data`, meta.Name)
 			}
+			defer log.Scope(t).Close(t)
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -139,6 +141,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
+			defer log.Scope(t).Close(t)
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 				UseDatabase: "d",
@@ -166,6 +169,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 
 func TestConsistentSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Test that the table schemas are consistent when the workload is created
 	// multiple times with the same seed.
 
