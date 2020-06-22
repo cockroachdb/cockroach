@@ -15,11 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -38,48 +35,25 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 	}
 	span := idx.Span()
 	table := idx.Table()
-
-	if len(n.Row) != table.ColumnCount() {
-		return nil, errors.New("number of values in row must equal number of columns in the requested table")
-	}
-
-	// Process the Datums within the expressions.
-	var semaCtx tree.SemaContext
-	var rowExprs tree.Exprs
-	for i, expr := range n.Row {
-		colTyp := table.Column(i).DatumType()
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(d.ctx, expr, colTyp, "range-for-row", &semaCtx, false)
-		if err != nil {
-			return nil, err
-		}
-		if !tree.IsConst(d.evalCtx, typedExpr) {
-			return nil, pgerror.Newf(pgcode.Syntax, "%s: row values must be constant", typedExpr)
-		}
-		datum, err := typedExpr.Eval(d.evalCtx)
-		if err != nil {
-			return nil, errors.Wrapf(err, "%s", typedExpr)
-		}
-		rowExprs = append(rowExprs, datum)
-	}
-
-	idxSpanStart := hex.EncodeToString([]byte(span.Key))
-	idxSpanEnd := hex.EncodeToString([]byte(span.EndKey))
+	idxSpanStart := hex.EncodeToString(span.Key)
+	idxSpanEnd := hex.EncodeToString(span.EndKey)
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.RangeForRow)
 
-	// Format the expressions into a string to be passed into the crdb_internal.encode_key function.
-	// We have to be sneaky here and special case when exprs has length 1 and place a comma after the
-	// the single tuple element so that we can deduce the expression actually has a tuple type for
+	// Format the expressions into a string to be passed into the
+	// crdb_internal.encode_key function. We have to be sneaky here and special
+	// case when exprs has length 1 and place a comma after the the single tuple
+	// element so that we can deduce the expression actually has a tuple type for
 	// the crdb_internal.encode_key function.
 	// Example: exprs = (1)
 	// Output when used: crdb_internal.encode_key(x, y, (1,))
 	var fmtCtx tree.FmtCtx
 	fmtCtx.WriteString("(")
-	if len(rowExprs) == 1 {
-		fmtCtx.FormatNode(rowExprs[0])
+	if len(n.Row) == 1 {
+		fmtCtx.FormatNode(n.Row[0])
 		fmtCtx.WriteString(",")
 	} else {
-		fmtCtx.FormatNode(&rowExprs)
+		fmtCtx.FormatNode(&n.Row)
 	}
 	fmtCtx.WriteString(")")
 	rowString := fmtCtx.String()
