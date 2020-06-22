@@ -65,12 +65,12 @@ func (diagnostics *stmtDiagnostics) toProto() serverpb.StatementDiagnostics {
 func (s *statusServer) CreateStatementDiagnosticsReport(
 	ctx context.Context, req *serverpb.CreateStatementDiagnosticsReportRequest,
 ) (*serverpb.CreateStatementDiagnosticsReportResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
 	if _, err := s.admin.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.CreateStatementDiagnosticsReportResponse{
 		Report: &serverpb.StatementDiagnosticsReport{},
@@ -90,12 +90,12 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 func (s *statusServer) StatementDiagnosticsRequests(
 	ctx context.Context, req *serverpb.StatementDiagnosticsReportsRequest,
 ) (*serverpb.StatementDiagnosticsReportsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
 	if _, err := s.admin.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
 
 	var err error
 
@@ -159,12 +159,12 @@ func (s *statusServer) StatementDiagnosticsRequests(
 func (s *statusServer) StatementDiagnostics(
 	ctx context.Context, req *serverpb.StatementDiagnosticsRequest,
 ) (*serverpb.StatementDiagnosticsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
 	if _, err := s.admin.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
 
 	var err error
 	row, err := s.internalExecutor.QueryRowEx(ctx, "stmt-diag-get-one", nil, /* txn */

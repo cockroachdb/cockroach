@@ -25,12 +25,12 @@ import (
 func (s *statusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
 	if _, err := s.admin.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.StatementsResponse{
 		Statements:            []serverpb.StatementsResponse_CollectedStatementStatistics{},
