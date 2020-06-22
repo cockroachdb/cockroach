@@ -53,6 +53,7 @@ var serverSQLAddr, serverSQLPort string
 var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var localityAdvertiseHosts localityList
+var sqlAuditLogDir log.DirName
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -71,6 +72,8 @@ func initPreFlagsDefaults() {
 	serverHTTPPort = base.DefaultHTTPPort
 
 	localityAdvertiseHosts = localityList{}
+
+	sqlAuditLogDir.Set("")
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
