@@ -2660,7 +2660,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	ctx, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
 	defer cleanupFn()
 	const dir = "nodelocal://0/"
-	preGC := tree.TimestampToDecimal(tc.Server(0).Clock().Now()).String()
+	preGC := tree.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
 
 	gcr := roachpb.GCRequest{
 		// Bogus span to make it a valid request.
@@ -2676,7 +2676,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	postGC := tree.TimestampToDecimal(tc.Server(0).Clock().Now()).String()
+	postGC := tree.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
 
 	lateFullTableBackup := dir + "/tbl-after-gc"
 	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, lateFullTableBackup)

@@ -52,9 +52,16 @@ type Index interface {
 	// IsInverted returns true if this is an inverted index.
 	IsInverted() bool
 
+	// ColumnCountNoSystemColumns returns the number of columns in the index, but
+	// excludes any system columns. These columns shouldn't be considered by
+	// statistics when computing the cost of scanning an index.
+	ColumnCountNoSystemColumns() int
+
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
-	// clause), as well as implicitly added primary key columns.
+	// clause), as well as implicitly added primary key columns. This also the
+	// implicit system columns, which are placed after all physical columns in
+	// the table.
 	ColumnCount() int
 
 	// Predicate returns the partial index predicate expression and true if the

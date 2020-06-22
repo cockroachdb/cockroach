@@ -16,11 +16,11 @@ count                       ·              ·                                  
       │                     into           sharded_primary(crdb_internal_a_shard_11, a)   ·                           ·
       │                     strategy       inserter                                       ·                           ·
       │                     auto commit    ·                                              ·                           ·
-      └── render            ·              ·                                              (column4, column1, check1)  ·
-           │                render 0       column4                                        ·                           ·
+      └── render            ·              ·                                              (column5, column1, check1)  ·
+           │                render 0       column5                                        ·                           ·
            │                render 1       column1                                        ·                           ·
-           │                render 2       column4 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
-           └── render       ·              ·                                              (column4, column1)          ·
+           │                render 2       column5 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
+           └── render       ·              ·                                              (column5, column1)          ·
                 │           render 0       mod(fnv32(COALESCE(column1::STRING, '')), 11)  ·                           ·
                 │           render 1       column1                                        ·                           ·
                 └── values  ·              ·                                              (column1)                   ·
@@ -41,12 +41,12 @@ count                       ·              ·                                  
       │                     into           sharded_secondary(a, crdb_internal_a_shard_12, rowid)  ·                                    ·
       │                     strategy       inserter                                               ·                                    ·
       │                     auto commit    ·                                                      ·                                    ·
-      └── render            ·              ·                                                      (column1, column6, column5, check1)  ·
+      └── render            ·              ·                                                      (column1, column7, column6, check1)  ·
            │                render 0       column1                                                ·                                    ·
-           │                render 1       column6                                                ·                                    ·
-           │                render 2       column5                                                ·                                    ·
-           │                render 3       column6 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)      ·                                    ·
-           └── render       ·              ·                                                      (column6, column5, column1)          ·
+           │                render 1       column7                                                ·                                    ·
+           │                render 2       column6                                                ·                                    ·
+           │                render 3       column7 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)      ·                                    ·
+           └── render       ·              ·                                                      (column7, column6, column1)          ·
                 │           render 0       mod(fnv32(COALESCE(column1::STRING, '')), 12)          ·                                    ·
                 │           render 1       unique_rowid()                                         ·                                    ·
                 │           render 2       column1                                                ·                                    ·

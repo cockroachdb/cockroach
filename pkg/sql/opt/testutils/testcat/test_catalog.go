@@ -725,6 +725,9 @@ type Index struct {
 
 	Columns []cat.IndexColumn
 
+	// numSystemColumns is the number of system columns that this index contains.
+	numSystemColumns int
+
 	// IdxZone is the zone associated with the index. This may be inherited from
 	// the parent table, database, or even the default zone.
 	IdxZone *zonepb.ZoneConfig
@@ -780,6 +783,11 @@ func (ti *Index) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
+}
+
+// ColumnCountNoSystemColumns is part of the cat.Index interface.
+func (ti *Index) ColumnCountNoSystemColumns() int {
+	return len(ti.Columns) - ti.numSystemColumns
 }
 
 // KeyColumnCount is part of the cat.Index interface.

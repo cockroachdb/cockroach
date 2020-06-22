@@ -240,7 +240,7 @@ func MakeSpanFromEncDatums(
 // retrieve neededCols for the specified table and index. The returned FamilyIDs
 // are in sorted order.
 func NeededColumnFamilyIDs(
-	neededCols util.FastIntSet, table *TableDescriptor, index *IndexDescriptor,
+	neededColOrdinals util.FastIntSet, table *TableDescriptor, index *IndexDescriptor,
 ) []FamilyID {
 	if len(table.Families) == 1 {
 		return []FamilyID{table.Families[0].ID}
@@ -275,11 +275,14 @@ func NeededColumnFamilyIDs(
 	hasSecondaryEncoding := index.GetEncodingType(table.PrimaryIndex.ID) == SecondaryIndexEncoding
 
 	// First iterate over the needed columns and look for a few special cases:
-	// columns which can be decoded from the key and columns whose value is stored
-	// in family 0.
+	// * columns which can be decoded from the key and columns whose value is stored
+	//   in family 0.
+	// * certain system columns, like the MVCC timestamp column require all of the
+	//   column families to be scanned to produce a value.
 	family0Needed := false
-	nc := neededCols.Copy()
-	neededCols.ForEach(func(columnOrdinal int) {
+	mvccColumnRequested := false
+	nc := neededColOrdinals.Copy()
+	neededColOrdinals.ForEach(func(columnOrdinal int) {
 		if indexedCols.Contains(columnOrdinal) && !compositeCols.Contains(columnOrdinal) {
 			// We can decode this column from the index key, so no particular family
 			// is needed.
@@ -292,7 +295,20 @@ func NeededColumnFamilyIDs(
 			family0Needed = true
 			nc.Remove(columnOrdinal)
 		}
+		// System column ordinals are larger than the number of columns.
+		if columnOrdinal >= len(columns) {
+			mvccColumnRequested = true
+		}
 	})
+
+	// If the MVCC timestamp column was requested, then bail out.
+	if mvccColumnRequested {
+		var families []FamilyID
+		for i := range table.Families {
+			families = append(families, table.Families[i].ID)
+		}
+		return families
+	}
 
 	// Iterate over the column families to find which ones contain needed columns.
 	// We also keep track of whether all of the needed families' columns are
