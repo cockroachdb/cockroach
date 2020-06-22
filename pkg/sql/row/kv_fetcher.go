@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,7 +60,7 @@ func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
 // more kvs to fetch, the kv that was fetched, and any errors that may have
 // occurred.
 func (f *KVFetcher) NextKV(
-	ctx context.Context,
+	ctx context.Context, decodeMVCCTimestamps bool,
 ) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
 	for {
 		newSpan = f.newSpan
@@ -73,14 +74,20 @@ func (f *KVFetcher) NextKV(
 			var key []byte
 			var rawBytes []byte
 			var err error
-			key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
+			var ts hlc.Timestamp
+			if decodeMVCCTimestamps {
+				key, ts, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
+			} else {
+				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
+			}
 			if err != nil {
 				return false, kv, false, err
 			}
 			return true, roachpb.KeyValue{
 				Key: key,
 				Value: roachpb.Value{
-					RawBytes: rawBytes,
+					RawBytes:  rawBytes,
+					Timestamp: ts,
 				},
 			}, newSpan, nil
 		}

@@ -183,12 +183,12 @@ EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x
 ·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, y)     ·
  │              type               semi             ·          ·
- │              equality           (x) = (column5)  ·          ·
+ │              equality           (x) = (column7)  ·          ·
  │              left cols are key  ·                ·          ·
  ├── scan       ·                  ·                (x, y)     ·
  │              table              a@primary        ·          ·
  │              spans              FULL SCAN        ·          ·
- └── render     ·                  ·                (column5)  ·
+ └── render     ·                  ·                (column7)  ·
       │         render 0           x - 1            ·          ·
       └── scan  ·                  ·                (x)        ·
 ·               table              b@primary        ·          ·
@@ -219,12 +219,12 @@ EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b
 ·               vectorized         true             ·          ·
 hash-join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
- │              equality           (x) = (column5)  ·          ·
+ │              equality           (x) = (column7)  ·          ·
  │              left cols are key  ·                ·          ·
  ├── scan       ·                  ·                (x, z)     ·
  │              table              b@primary        ·          ·
  │              spans              FULL SCAN        ·          ·
- └── render     ·                  ·                (column5)  ·
+ └── render     ·                  ·                (column7)  ·
       │         render 0           x - 1            ·          ·
       └── scan  ·                  ·                (x)        ·
 ·               table              a@primary        ·          ·

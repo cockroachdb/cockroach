@@ -100,12 +100,13 @@ type tableInfo struct {
 
 	// The following fields contain MVCC metadata for each row and may be
 	// returned to users of Fetcher immediately after NextRow returns.
-	// They're not important to ordinary consumers of Fetcher that only
-	// concern themselves with actual SQL row data.
 	//
 	// rowLastModified is the timestamp of the last time any family in the row
 	// was modified in any way.
 	rowLastModified hlc.Timestamp
+	// timestampOutputIdx controls at what row ordinal to write the timestamp.
+	timestampOutputIdx int
+
 	// rowIsDeleted is true when the row has been deleted. This is only
 	// meaningful when kv deletion tombstones are returned by the kvBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
@@ -208,6 +209,11 @@ type Fetcher struct {
 	// when beginning a new scan.
 	traceKV bool
 
+	// decodeMVCCTimestamps controls whether or not MVCC timestamps should
+	// be decoded from KV's fetched. It is set if any of the requested tables
+	// are required to produce an MVCC timestamp system column.
+	decodeMVCCTimestamps bool
+
 	// -- Fields updated during a scan --
 
 	kvFetcher      *KVFetcher
@@ -296,9 +302,10 @@ func (rf *Fetcher) Init(
 
 			// These slice fields might get re-allocated below, so reslice them from
 			// the old table here in case they've got enough capacity already.
-			indexColIdx: oldTable.indexColIdx[:0],
-			keyVals:     oldTable.keyVals[:0],
-			extraVals:   oldTable.extraVals[:0],
+			indexColIdx:        oldTable.indexColIdx[:0],
+			keyVals:            oldTable.keyVals[:0],
+			extraVals:          oldTable.extraVals[:0],
+			timestampOutputIdx: -1,
 		}
 
 		var err error
@@ -338,6 +345,12 @@ func (rf *Fetcher) Init(
 			if tableArgs.ValNeededForCol.Contains(idx) {
 				// The idx-th column is required.
 				table.neededCols.Add(int(col))
+				// If this column is the timestamp column, set up the output index.
+				sysColKind := sqlbase.GetSystemColumnKindFromColumnID(table.desc.TableDesc(), col)
+				if sysColKind == sqlbase.SystemColumnKind_MVCCTIMESTAMP {
+					table.timestampOutputIdx = idx
+					rf.decodeMVCCTimestamps = true
+				}
 			}
 		}
 
@@ -602,7 +615,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, _, err = rf.kvFetcher.NextKV(ctx)
+		ok, rf.kv, _, err = rf.kvFetcher.NextKV(ctx, rf.decodeMVCCTimestamps)
 		if err != nil {
 			return false, err
 		}
@@ -1426,6 +1439,18 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 
 func (rf *Fetcher) finalizeRow() error {
 	table := rf.rowReadyTable
+
+	// If the MVCC timestamp system column was requested, write it to the row.
+	if table.timestampOutputIdx != -1 {
+		// TODO (rohany): Is there a way to avoid this allocation? I tried to store
+		//  a tree.DDecimal on the fetcher and return a pointer to it, but that
+		//  seemed to break some contracts -- I thought that in general, if a caller
+		//  wants to modify or use a returned row after a call to Next() they would
+		//  have to copy it.
+		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: tree.TimestampToDecimal(rf.RowLastModified())})
+		table.row[table.timestampOutputIdx] = sqlbase.EncDatum{Datum: dec}
+	}
+
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
 		if rf.valueColsFound == table.neededValueCols {

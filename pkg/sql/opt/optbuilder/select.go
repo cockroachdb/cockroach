@@ -480,6 +480,27 @@ func (b *Builder) buildScan(
 		})
 	}
 
+	// Add the system columns to the scope.
+	if ordinals == nil {
+		numSystemCols := tab.DeletableAndSystemColumnCount() - tab.DeletableColumnCount()
+		for i := 0; i < numSystemCols; i++ {
+			// Get the i'th system column by offsetting from the set of DeletableColumns.
+			tabColIdx := i + tab.DeletableColumnCount()
+			col := tab.Column(tabColIdx)
+			// This new column is given an ordinal based on its offset from colCount.
+			ord := i + colCount
+			colID := tabID.ColumnID(ord)
+			tabColIDs.Add(colID)
+			outScope.cols = append(outScope.cols, scopeColumn{
+				name:   col.ColName(),
+				table:  tabMeta.Alias,
+				typ:    col.DatumType(),
+				id:     colID,
+				hidden: true,
+			})
+		}
+	}
+
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
 			panic(pgerror.Newf(pgcode.Syntax,
