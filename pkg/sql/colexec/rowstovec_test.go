@@ -18,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var alloc = sqlbase.DatumAlloc{}
 
 func TestEncDatumRowsToColVecBool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Test input: [[false, true], [true, false]]
 	rows := sqlbase.EncDatumRows{
 		sqlbase.EncDatumRow{
@@ -62,6 +64,7 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 
 func TestEncDatumRowsToColVecInt16(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rows := sqlbase.EncDatumRows{
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(17)}},
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(42)}},
@@ -80,6 +83,7 @@ func TestEncDatumRowsToColVecInt16(t *testing.T) {
 
 func TestEncDatumRowsToColVecString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rows := sqlbase.EncDatumRows{
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("foo")}},
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDString("bar")}},
@@ -102,6 +106,7 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 
 func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	nRows := 3
 	rows := make(sqlbase.EncDatumRows, nRows)
 	expected := testAllocator.NewMemColumn(types.Decimal, 3)

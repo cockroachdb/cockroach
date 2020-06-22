@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -146,6 +147,7 @@ func (tc *aggregatorTestCase) init() error {
 
 func TestAggregatorOneFunc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []aggregatorTestCase{
 		{
 			input: tuples{
@@ -352,6 +354,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 func TestAggregatorMultiFunc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// TODO(yuzefovich): introduce nicer aliases for the protobuf generated
 	// ones and use those throughout the codebase.
 	avgFn := execinfrapb.AggregatorSpec_AVG
@@ -541,6 +544,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 
 func TestAggregatorAllFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []aggregatorTestCase{
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{
@@ -635,6 +639,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 
 func TestAggregatorRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test aggregates random inputs, keeping track of the expected results
 	// to make sure the aggregations are correct.
@@ -875,6 +880,7 @@ func BenchmarkAllAggregateFunctions(b *testing.B) {
 
 func TestHashAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tcs := []aggregatorTestCase{
 		{
 			// Test carry between output batches.
