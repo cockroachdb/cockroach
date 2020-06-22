@@ -70,7 +70,11 @@ func distBackup(
 		return nil
 	}
 
-	var p sql.PhysicalPlan
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return err
+	}
+	p := sql.MakePhysicalPlan(gatewayNodeID)
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
