@@ -155,7 +155,7 @@ func distChangefeedFlow(
 		JobID:        jobID,
 	}
 
-	var p sql.PhysicalPlan
+	p := sql.MakePhysicalPlan(gatewayNodeID)
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,

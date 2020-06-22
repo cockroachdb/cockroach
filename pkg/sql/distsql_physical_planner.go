@@ -249,55 +249,6 @@ func (a distRecommendation) compose(b distRecommendation) distRecommendation {
 	return canDistribute
 }
 
-type planDistribution int
-
-const (
-	// localPlan indicates that the whole plan is executed on a single node.
-	localPlan planDistribution = iota
-
-	// partiallyDistributedPlan indicates that some parts of the plan are
-	// distributed while other parts are not (due to limitations of DistSQL).
-	// Note that such plans can only be created by distSQLSpecExecFactory.
-	//
-	// An example of such plan is the plan with distributed scans that have a
-	// filter which operates with an OID type (DistSQL currently doesn't
-	// support distributed operations with such type). As a result, we end
-	// up planning a noop processor on a local node that receives all scanned
-	// rows from the remote nodes while performing the filtering locally.
-	partiallyDistributedPlan
-
-	// fullyDistributedPlan indicates the the whole plan is distributed.
-	fullyDistributedPlan
-)
-
-// willDistribute is a small helper that returns whether at least a part of the
-// plan is distributed.
-func (a planDistribution) willDistribute() bool {
-	return a != localPlan
-}
-
-func (a planDistribution) String() string {
-	switch a {
-	case localPlan:
-		return "local"
-	case partiallyDistributedPlan:
-		return "partial"
-	case fullyDistributedPlan:
-		return "full"
-	default:
-		panic(fmt.Sprintf("unsupported planDistribution %d", a))
-	}
-}
-
-// compose returns the distribution indicator of a plan given indicators for
-// two parts of it.
-func (a planDistribution) compose(b planDistribution) planDistribution {
-	if a != b {
-		return partiallyDistributedPlan
-	}
-	return a
-}
-
 type queryNotSupportedError struct {
 	msg string
 }
@@ -642,6 +593,11 @@ type PhysicalPlan struct {
 	// "invisible" columns (e.g., columns required for merge ordering) will not
 	// be output.
 	PlanToStreamColMap []int
+}
+
+// MakePhysicalPlan returns a new PhysicalPlan.
+func MakePhysicalPlan(gatewayNodeID roachpb.NodeID) PhysicalPlan {
+	return PhysicalPlan{PhysicalPlan: physicalplan.PhysicalPlan{GatewayNodeID: gatewayNodeID}}
 }
 
 // makePlanToStreamColMap initializes a new PhysicalPlan.PlanToStreamColMap. The
@@ -1091,7 +1047,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return nil, err
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(dsp.nodeDesc.NodeID)
 	err = dsp.planTableReaders(
 		planCtx,
 		&p,
@@ -1793,7 +1749,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 			}
 		}
 
-		stageID := p.NewStageID()
+		// We have multiple streams, so we definitely have a processor planned
+		// on a remote node.
+		stageID := p.NewStage(true /* containsRemoteProcessor */)
 
 		// We have one final stage processor for each result router. This is a
 		// somewhat arbitrary decision; we could have a different number of nodes
@@ -2012,7 +1970,8 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
-	plan = &PhysicalPlan{}
+	p := MakePhysicalPlan(dsp.nodeDesc.NodeID)
+	plan = &p
 
 	tables := make([]sqlbase.TableDescriptor, len(n.sides))
 	indexOrdinals := make([]uint32, len(n.sides))
@@ -2215,10 +2174,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.PlanToStreamColMap)
 	}
 
-	var p PhysicalPlan
-	var leftRouters, rightRouters []physicalplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = physicalplan.MergePlans(
-		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+	p := MakePhysicalPlan(dsp.nodeDesc.NodeID)
+	leftRouters, rightRouters := physicalplan.MergePlans(
+		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
 	)
 
 	// Set up the output columns.
@@ -2357,7 +2315,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
 			return nil, err
 		}
-		if err := plan.AddLimit(n.count, n.offset, planCtx, dsp.nodeDesc.NodeID); err != nil {
+		if err := plan.AddLimit(n.count, n.offset, planCtx); err != nil {
 			return nil, err
 		}
 
@@ -2473,7 +2431,8 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
 	nParents := uint32(0)
-	p := &PhysicalPlan{}
+	plan := MakePhysicalPlan(dsp.nodeDesc.NodeID)
+	p := &plan
 	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
 	// modify its parent later to connect its source to the DistSQL-planned
 	// subtree.
@@ -2557,7 +2516,8 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 			}},
-			StageID: p.NewStageID(),
+			// This stage consists of a single processor planned on the gateway.
+			StageID: p.NewStage(false /* containsRemoteProcessor */),
 		},
 	}
 	pIdx := p.AddProcessor(proc)
@@ -2611,6 +2571,8 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 		}},
 		ResultRouters: []physicalplan.ProcessorIdx{0},
 		ResultTypes:   resultTypes,
+		GatewayNodeID: dsp.nodeDesc.NodeID,
+		Distribution:  physicalplan.LocalPlan,
 	}
 
 	return &PhysicalPlan{
@@ -2948,14 +2910,13 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			if !dsp.isOnlyOnGateway(plan) {
 				// TODO(solon): We could skip this stage if there is a strong key on
 				// the result columns.
-				plan.AddNoGroupingStage(
-					*distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, distinctOrds[side])
+				plan.AddNoGroupingStage(*distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, distinctOrds[side])
 				plan.AddProjection(streamCols)
 			}
 		}
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(dsp.nodeDesc.NodeID)
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap
@@ -2977,9 +2938,9 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	var mergeOrdering execinfrapb.Ordering
 
 	// Merge processors, streams, result routers, and stage counter.
-	var leftRouters, rightRouters []physicalplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = physicalplan.MergePlans(
-		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
+	leftRouters, rightRouters := physicalplan.MergePlans(
+		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+	)
 
 	if n.unionType == tree.UnionOp {
 		// We just need to append the left and right streams together, so append
@@ -2996,8 +2957,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			distinctSpec := execinfrapb.ProcessorCoreUnion{
 				Distinct: &execinfrapb.DistinctSpec{DistinctColumns: streamCols},
 			}
-			p.AddSingleGroupStage(
-				dsp.nodeDesc.NodeID, distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes)
+			p.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes)
 		} else {
 			// With UNION ALL, we can end up with multiple streams on the same node.
 			// We don't want to have unnecessary routers and cross-node streams, so
@@ -3170,7 +3130,9 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 					HashColumns: partitionIdxs,
 				}
 			}
-			stageID := plan.NewStageID()
+			// We have multiple streams, so we definitely have a processor planned
+			// on a remote node.
+			stageID := plan.NewStage(true /* containsRemoteProcessor */)
 
 			// We put a windower on each node and we connect it
 			// with all hash routers from the previous stage in

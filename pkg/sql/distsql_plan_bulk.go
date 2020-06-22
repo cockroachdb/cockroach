@@ -37,7 +37,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	// planCtx.NodeStatuses map ourselves. CheckNodeHealthAndVersion() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStautus */ = dsp.CheckNodeHealthAndVersion(planCtx, node.Desc.NodeID)
+		_ /* NodeStatus */ = dsp.CheckNodeHealthAndVersion(planCtx, node.Desc.NodeID)
 	}
 	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeStatuses))
 	for nodeID := range planCtx.NodeStatuses {

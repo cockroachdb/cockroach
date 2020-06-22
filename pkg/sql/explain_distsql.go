@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -65,7 +66,7 @@ type distSQLExplainable interface {
 	newPlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (*PhysicalPlan, error)
 }
 
-// getPlanDistributionForExplainPurposes returns the planDistribution that plan
+// getPlanDistributionForExplainPurposes returns the PlanDistribution that plan
 // will have. It is similar to getPlanDistribution but also pays attention to
 // whether the logical plan will be handled as a distributed job. It should
 // *only* be used in EXPLAIN variants.
@@ -74,22 +75,22 @@ func getPlanDistributionForExplainPurposes(
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
-) planDistribution {
+) physicalplan.PlanDistribution {
 	if plan.isPhysicalPlan() {
-		return plan.distribution
+		return plan.physPlan.Distribution
 	}
 	switch p := plan.planNode.(type) {
 	case *explainDistSQLNode:
 		if p.plan.main.isPhysicalPlan() {
-			return p.plan.main.distribution
+			return p.plan.main.physPlan.Distribution
 		}
 	case *explainVecNode:
 		if p.plan.isPhysicalPlan() {
-			return p.plan.distribution
+			return p.plan.physPlan.Distribution
 		}
 	case *explainPlanNode:
 		if p.plan.main.isPhysicalPlan() {
-			return p.plan.main.distribution
+			return p.plan.main.physPlan.Distribution
 		}
 	}
 	if _, ok := plan.planNode.(distSQLExplainable); ok {
@@ -97,7 +98,7 @@ func getPlanDistributionForExplainPurposes(
 		// but are represented using local plan nodes (for example, "create
 		// statistics" is handled by the jobs framework which is responsible
 		// for setting up the correct DistSQL infrastructure).
-		return fullyDistributedPlan
+		return physicalplan.FullyDistributedPlan
 	}
 	return getPlanDistribution(ctx, nodeID, distSQLMode, plan)
 }
@@ -108,7 +109,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
-	willDistribute := distribution.willDistribute()
+	willDistribute := distribution.WillDistribute()
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, willDistribute)
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
