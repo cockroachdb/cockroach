@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type queryCounter struct {
@@ -53,6 +54,7 @@ type queryCounter struct {
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -167,6 +169,7 @@ func TestQueryCounts(t *testing.T) {
 
 func TestAbortCountConflictingWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
 		params, cmdFilters := tests.CreateTestServerParams()
@@ -273,6 +276,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 // results in an error during a txn.
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -306,6 +310,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 
 func TestSavepointMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)

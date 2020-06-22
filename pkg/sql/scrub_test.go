@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestScrubIndexMissingIndexEntry tests that
@@ -37,6 +38,7 @@ import (
 // the expected secondary index k/v.
 func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
@@ -110,6 +112,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 // dangling index error as the corresponding primary k/v is not equal.
 func TestScrubIndexDanglingIndexReference(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -202,6 +205,7 @@ CREATE INDEX secondary ON t.test (v);
 // index k/v is updated using the KV client to have a different value.
 func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -322,6 +326,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 // the constraint..
 func TestScrubCheckConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -412,6 +417,7 @@ INSERT INTO t.test VALUES (10, 2);
 // violation.
 func TestScrubFKConstraintFKMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
@@ -512,6 +518,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 // constraint in this test with corrupted KVs.
 func TestScrubFKConstraintFKNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -557,6 +564,7 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 // the column is the only one in the family.
 func TestScrubPhysicalNonnullableNullInSingleColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -638,6 +646,7 @@ INSERT INTO t.test VALUES (217, 314);
 // the columns that belongs in the family.
 func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -730,6 +739,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 // using the KV client which has the ID of the first family.
 func TestScrubPhysicalUnexpectedFamilyID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("currently KV pairs with unexpected family IDs are not noticed by the fetcher")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -847,6 +857,7 @@ CREATE TABLE t.test (
 // descriptor. To test this, a row is inserted using the KV client.
 func TestScrubPhysicalIncorrectPrimaryIndexValueColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("the test is not failing, as it would be expected")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

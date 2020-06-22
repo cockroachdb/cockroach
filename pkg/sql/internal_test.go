@@ -28,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestInternalExecutor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -105,6 +107,7 @@ func TestInternalExecutor(t *testing.T) {
 
 func TestQueryIsAdminWithNoTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -147,6 +150,7 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 
 func TestSessionBoundInternalExecutor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -193,6 +197,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 // the cancellability of the query, and the listing in the application statistics.
 func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true

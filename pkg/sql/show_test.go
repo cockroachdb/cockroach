@@ -30,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func TestShowCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -335,6 +337,7 @@ func TestShowCreateTable(t *testing.T) {
 
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -429,6 +432,7 @@ func TestShowCreateView(t *testing.T) {
 
 func TestShowCreateSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -506,6 +510,7 @@ func TestShowCreateSequence(t *testing.T) {
 
 func TestShowQueries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const multiByte = "💩"
 	const selectBase = "SELECT * FROM "
@@ -654,6 +659,7 @@ func TestShowQueries(t *testing.T) {
 
 func TestShowSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var conn *gosql.DB
 
@@ -765,6 +771,7 @@ func TestShowSessions(t *testing.T) {
 
 func TestShowSessionPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
@@ -841,6 +848,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 
 func TestLintClusterSettingNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -963,6 +971,7 @@ func TestLintClusterSettingNames(t *testing.T) {
 // more details, see #28033.
 func TestCancelQueriesRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

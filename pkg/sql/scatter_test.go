@@ -25,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestScatterRandomizeLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if testutils.NightlyStress() && util.RaceEnabled {
 		t.Skip("uses too many resources for stressrace")
@@ -110,6 +112,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 // is unskipped.
 func TestScatterResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

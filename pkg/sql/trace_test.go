@@ -31,9 +31,7 @@ import (
 
 func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	s := log.Scope(t)
-	defer s.Close(t)
+	defer log.Scope(t).Close(t)
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
@@ -384,6 +382,7 @@ func TestTrace(t *testing.T) {
 // the parts of a trace/log message into different columns properly.
 func TestTraceFieldDecomposition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	query := "SELECT 42"
 
@@ -511,6 +510,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 
 func TestKVTraceWithCountStar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Test that we don't crash if we try to do a KV trace
 	// on a COUNT(*) query (#19846).
@@ -526,6 +526,7 @@ func TestKVTraceWithCountStar(t *testing.T) {
 
 func TestKVTraceDistSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Test that kv tracing works in distsql.
 	const numNodes = 2

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +33,8 @@ import (
 // has been dropped expecting a parse error on insert.
 func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
@@ -92,6 +95,8 @@ ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 // is dropped.
 func TestInsertBeforeOldColumnIsDroppedUsingExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
@@ -153,6 +158,7 @@ ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
 // column has the correct type.
 func TestVisibilityDuringAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer setTestJobsAdoptInterval()()
 
@@ -216,6 +222,8 @@ INSERT INTO t.test VALUES (1), (2), (3);
 // if the alter column type fails.
 func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, kvDB := serverutils.StartServer(t, params)
@@ -247,6 +255,7 @@ ALTER TABLE t.test ALTER COLUMN x TYPE INT;
 // tries inserting 'hello' into the column and expects it to eventually succeed.
 func TestQueryIntToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 
 	params, _ := tests.CreateTestServerParams()
@@ -273,6 +282,8 @@ ALTER TABLE t.test ALTER COLUMN y TYPE STRING;
 
 func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	swapNotification := make(chan struct{})
@@ -320,6 +331,8 @@ ALTER TABLE t.test ALTER COLUMN y TYPE STRING;`)
 // cannot be queued while an ALTER COLUMN TYPE schema change is in progress.
 func TestSchemaChangeWhileExecutingAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	params, _ := tests.CreateTestServerParams()
 	childJobStartNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
