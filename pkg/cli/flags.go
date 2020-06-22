@@ -663,24 +663,32 @@ func init() {
 	}
 
 	// demo command.
-	demoFlags := demoCmd.PersistentFlags()
-	// We add this command as a persistent flag so you can do stuff like
-	// ./cockroach demo movr --nodes=3.
-	intFlag(demoFlags, &demoCtx.nodes, cliflags.DemoNodes)
-	boolFlag(demoFlags, &demoCtx.runWorkload, cliflags.RunDemoWorkload)
-	varFlag(demoFlags, &demoCtx.localities, cliflags.DemoNodeLocality)
-	boolFlag(demoFlags, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
-	varFlag(demoFlags, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
-	varFlag(demoFlags, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
-	boolFlag(demoFlags, &demoCtx.insecure, cliflags.ClientInsecure)
-	boolFlag(demoFlags, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
-	// Mark the --global flag as hidden until we investigate it more.
-	boolFlag(demoFlags, &demoCtx.simulateLatency, cliflags.Global)
-	_ = demoFlags.MarkHidden(cliflags.Global.Name)
-	// The --empty flag is only valid for the top level demo command,
-	// so we use the regular flag set.
-	boolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase)
-	stringFlag(demoFlags, &demoCtx.geoLibsDir, cliflags.GeoLibsDir)
+	{
+		// We use the persistent flag set so that the flags apply to every
+		// workload sub-command. This enables e.g.
+		// ./cockroach demo movr --nodes=3.
+		f := demoCmd.PersistentFlags()
+
+		intFlag(f, &demoCtx.nodes, cliflags.DemoNodes)
+		boolFlag(f, &demoCtx.runWorkload, cliflags.RunDemoWorkload)
+		varFlag(f, &demoCtx.localities, cliflags.DemoNodeLocality)
+		boolFlag(f, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
+		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
+		varFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
+		boolFlag(f, &demoCtx.insecure, cliflags.ClientInsecure)
+		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
+		// Mark the --global flag as hidden until we investigate it more.
+		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
+		_ = f.MarkHidden(cliflags.Global.Name)
+		// The --empty flag is only valid for the top level demo command,
+		// so we use the regular flag set.
+		boolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase)
+		// We also support overriding the GEOS library path for 'demo'.
+		// Even though the demoCtx uses mostly different configuration
+		// variables from startCtx, this is one case where we affort
+		// sharing a variable between both.
+		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+	}
 
 	// sqlfmt command.
 	{
