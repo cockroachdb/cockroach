@@ -624,7 +624,8 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -687,20 +688,22 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 		leaseSequences []roachpb.LeaseSequence
 		expected       int64
 	}{
-		{[]roachpb.LeaseSequence{1, 0, 1, 2}, 2},
+		{[]roachpb.LeaseSequence{2, 1, 2, 3}, 2},
 		{[]roachpb.LeaseSequence{0}, 0},
-		{[]roachpb.LeaseSequence{1, 0, 1, 2, 1}, 3},
+		{[]roachpb.LeaseSequence{2, 1, 2, 3, 2}, 3},
 	} {
-		sequences = c.leaseSequences
-		ds := NewDistSender(cfg)
-		v := roachpb.MakeValueFromString("value")
-		put := roachpb.NewPut(roachpb.Key("a"), v)
-		if _, pErr := kv.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
-			t.Fatalf("%d: unexpected error: %v", i, pErr)
-		}
-		if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
-			t.Fatalf("%d: expected %d backoffs, got %d", i, c.expected, got)
-		}
+		t.Run("", func(t *testing.T) {
+			sequences = c.leaseSequences
+			ds := NewDistSender(cfg)
+			v := roachpb.MakeValueFromString("value")
+			put := roachpb.NewPut(roachpb.Key("a"), v)
+			if _, pErr := kv.SendWrapped(ctx, ds, put); !testutils.IsPError(pErr, "boom") {
+				t.Fatalf("%d: unexpected error: %v", i, pErr)
+			}
+			if got := ds.Metrics().InLeaseTransferBackoffs.Count(); got != c.expected {
+				t.Fatalf("%d: expected %d backoffs, got %d", i, c.expected, got)
+			}
+		})
 	}
 }
 
