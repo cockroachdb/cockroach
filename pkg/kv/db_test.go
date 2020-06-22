@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
@@ -69,6 +70,7 @@ func checkLen(t *testing.T, expected, count int) {
 
 func TestDB_Get(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -81,6 +83,7 @@ func TestDB_Get(t *testing.T) {
 
 func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -97,6 +100,7 @@ func TestDB_Put(t *testing.T) {
 
 func TestDB_CPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -143,6 +147,7 @@ func TestDB_CPut(t *testing.T) {
 
 func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -174,6 +179,7 @@ func TestDB_InitPut(t *testing.T) {
 
 func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -190,6 +196,7 @@ func TestDB_Inc(t *testing.T) {
 
 func TestBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -209,6 +216,7 @@ func TestBatch(t *testing.T) {
 
 func TestDB_Scan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -234,6 +242,7 @@ func TestDB_Scan(t *testing.T) {
 
 func TestDB_ScanForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -259,6 +268,7 @@ func TestDB_ScanForUpdate(t *testing.T) {
 
 func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -284,6 +294,7 @@ func TestDB_ReverseScan(t *testing.T) {
 
 func TestDB_ReverseScanForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -309,6 +320,7 @@ func TestDB_ReverseScanForUpdate(t *testing.T) {
 
 func TestDB_TxnIterate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -354,6 +366,7 @@ func TestDB_TxnIterate(t *testing.T) {
 
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -381,6 +394,7 @@ func TestDB_Del(t *testing.T) {
 
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -409,6 +423,7 @@ func TestTxn_Commit(t *testing.T) {
 
 func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
