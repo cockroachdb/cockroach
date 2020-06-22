@@ -48,6 +48,8 @@ type TestServerArgs struct {
 	Addr string
 	// SQLAddr (if nonempty) is the SQL address to use for the test server.
 	SQLAddr string
+	// TenantAddr (if nonempty) is the tenant KV address to use for the test server.
+	TenantAddr string
 	// HTTPAddr (if nonempty) is the HTTP address to use for the test server.
 	HTTPAddr string
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
