@@ -139,8 +139,22 @@ message ColumnDescriptor {
    (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
   // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
   optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
+
+  // SystemColumnKind represents what kind of system column this column
+  // descriptor represents, if any.
+  optional SystemColumnKind system_column_kind = 15 [(gogoproto.nullable) = false];
 }
-  
+
+// SystemColumnKind is an enum representing the different kind of system
+// columns that can be synthesized by the execution engine.
+enum SystemColumnKind {
+  // Default value, unused.
+  NONE = 0;
+  // A system column containing the value of the MVCC timestamp associated
+  // with the kv's corresponding to the row.
+  MVCCTIMESTAMP = 1;
+}
+
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
 // For more information, look at `docs/tech-notes/encoding.md#value-encoding`.
 message ColumnFamilyDescriptor {

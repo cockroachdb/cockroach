@@ -137,6 +137,11 @@ message TableReaderSpec {
   // makes it out of the SQL optimizer without throwing an error. If/when other
   // wait policies are supported, this field will be plumbed further.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
+
+  // Indicates what implicit system columns this TableReader is expected to
+  // synthesize. These system columns will be placed at the end of the row
+  // output by the TableReader, in the order specified.
+  repeated sqlbase.SystemColumnKind system_columns = 13;
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that
@@ -257,6 +262,15 @@ message JoinReaderSpec {
   // stream. This is only applicable to lookup joins, where doing so is
   // expensive. Index joins do this by default regardless of the parameter.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
+
+  // Indicates what implicit system columns this JoinReader is expected to
+  // synthesize. These system columns will be placed at the end of the row
+  // output by the JoinReader, in the order specified.
+  //
+  // This is only used in the special case of index joins, where the final
+  // result of the secondary index joined against the primary index is
+  // expected to contain the materialized system columns.
+  repeated sqlbase.SystemColumnKind system_columns = 12;
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

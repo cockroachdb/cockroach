@@ -238,17 +238,17 @@ render                              ·                   ·                     
                 │                   render 0            id                        ·                                             ·
                 │                   render 1            data                      ·                                             ·
                 │                   render 2            "?column?"                ·                                             ·
-                └── hash-join       ·                   ·                         (column8, id, data, column9, "?column?")      ·
+                └── hash-join       ·                   ·                         (column10, id, data, column11, "?column?")    ·
                      │              type                left outer                ·                                             ·
-                     │              equality            (column8) = (column9)     ·                                             ·
-                     ├── render     ·                   ·                         (column8, id, data)                           ·
+                     │              equality            (column10) = (column11)   ·                                             ·
+                     ├── render     ·                   ·                         (column10, id, data)                          ·
                      │    │         render 0            data->>'name'             ·                                             ·
                      │    │         render 1            id                        ·                                             ·
                      │    │         render 2            data                      ·                                             ·
                      │    └── scan  ·                   ·                         (id, data)                                    ·
                      │              table               groups@primary            ·                                             ·
                      │              spans               FULL SCAN                 ·                                             ·
-                     └── render     ·                   ·                         (column9, "?column?")                         ·
+                     └── render     ·                   ·                         (column11, "?column?")                        ·
                           │         render 0            data->>'name'             ·                                             ·
                           │         render 1            data->'members'           ·                                             ·
                           └── scan  ·                   ·                         (data)                                        ·
