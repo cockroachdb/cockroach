@@ -385,7 +385,7 @@ func (r *Replica) handleNoRaftLogDeltaResult(ctx context.Context) {
 func (r *Replica) handleSuggestedCompactionsResult(
 	ctx context.Context, scs []kvserverpb.SuggestedCompaction,
 ) {
-	// TODO(itsbilal): Remove this check once Pebble supports GetSSTables
+	// Pebble Stores don't use a compactor.
 	if r.store.compactor == nil {
 		return
 	}
