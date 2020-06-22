@@ -15,12 +15,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
 func TestWaitingForInitError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := &grpcServer{}
 	if err := s.waitingForInitError("foo"); !IsWaitingForInit(err) {
 		t.Errorf("WaitingForInitError() not recognized by IsWaitingForInit(): %v", err)

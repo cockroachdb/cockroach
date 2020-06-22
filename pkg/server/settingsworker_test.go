@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,6 +64,7 @@ var enumA = settings.RegisterEnumSetting(enumKey, "desc", "foo", map[int64]strin
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.
@@ -188,6 +190,7 @@ func TestSettingsRefresh(t *testing.T) {
 
 func TestSettingsSetAndShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
@@ -294,6 +297,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 func TestSettingsShowAll(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.

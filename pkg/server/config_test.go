@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ import (
 
 func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: base.SizeSpec{InBytes: base.MinimumStoreSize * 100}}}}
@@ -52,6 +54,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.JoinList = []string{"localhost:12345", "localhost:23456", "localhost:34567", "localhost"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: base.SizeSpec{InBytes: base.MinimumStoreSize * 100}}}}
@@ -89,6 +92,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 // correctly parsed.
 func TestReadEnvironmentVariables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	resetEnvVar := func() {
 		// Reset all environment variables in case any were already set.
@@ -170,6 +174,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 func TestFilterGossipBootstrapResolvers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
@@ -199,6 +204,7 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 
 func TestParseBootstrapResolvers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	const expectedName = "hello"

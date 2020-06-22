@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,7 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	e := storage.NewDefaultInMem()
 	defer e.Close()
@@ -115,6 +117,7 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	path, cleanup := testutils.TempDir(t)
@@ -164,6 +167,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// For kicks, start both nodes in the cluster with two initially empty
@@ -228,6 +232,7 @@ func TestNodeJoin(t *testing.T) {
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	e := storage.NewDefaultInMem()
@@ -381,6 +386,7 @@ func compareNodeStatus(
 // both the Node and stores within the node.
 func TestNodeStatusWritten(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// ========================================
 	// Start test server and wait for full initialization.
@@ -560,6 +566,7 @@ func TestNodeStatusWritten(t *testing.T) {
 // collection of different localities.
 func TestStartNodeWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
@@ -614,6 +621,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 
 func TestNodeSendUnknownBatchRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ba := roachpb.BatchRequest{
 		Requests: make([]roachpb.RequestUnion, 1),
