@@ -1,0 +1,24 @@
+# LogicTest: local
+
+# Create a table with different families.
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY (z))
+
+# When doing a lookup where we could split families, but the MVCC column is
+# requested, we shouldn't split the family.
+query TTT
+SELECT * FROM [EXPLAIN SELECT z FROM t WHERE x = 1] OFFSET 2
+----
+render     ·         ·
+ └── scan  ·         ·
+·          table     t@primary
+·          spans     /1/0-/1/1 /1/2/1-/1/2/2
+·          parallel  ·
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT mvcc_timestamp, z FROM t WHERE x = 1] OFFSET 2
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@primary
+·          spans  /1-/1/#

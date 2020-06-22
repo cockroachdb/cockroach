@@ -57,6 +57,11 @@ type Index interface {
 	// clause), as well as implicitly added primary key columns.
 	ColumnCount() int
 
+	// ColumnCountNoSystemColumns returns the number of columns in the index, but
+	// excludes any system columns. These columns shouldn't be considered by
+	// statistics when computing the cost of scanning an index.
+	ColumnCountNoSystemColumns() int
+
 	// Predicate returns the partial index predicate expression and true if the
 	// index is a partial index. If it is not a partial index, the empty string
 	// and false are returned.
