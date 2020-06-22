@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type testVarContainer []Datum
@@ -37,6 +38,7 @@ func (d testVarContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
 
 func TestIndexedVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	c := make(testVarContainer, 4)
 	c[0] = NewDInt(3)
 	c[1] = NewDInt(5)

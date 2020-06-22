@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/stretchr/testify/assert"
@@ -59,6 +60,7 @@ func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 
 func TestDatumOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const valIsMin = `min`
 	const valIsMax = `max`
 	const noPrev = ``
@@ -312,6 +314,7 @@ func TestDatumOrdering(t *testing.T) {
 
 func TestDFloatCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	values := []tree.Datum{tree.DNull}
 	for _, x := range []float64{math.NaN(), math.Inf(-1), -1, 0, 1, math.Inf(1)} {
 		values = append(values, tree.NewDFloat(tree.DFloat(x)))
@@ -338,6 +341,7 @@ func TestDFloatCompare(t *testing.T) {
 // to tree.ParseDIntervalWithTypeMetadata beyond those in tree.ParseDInterval behave as expected.
 func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var (
 		second = types.IntervalTypeMetadata{
@@ -419,6 +423,7 @@ func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 
 func TestParseDDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := testParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
@@ -478,6 +483,7 @@ func TestParseDDate(t *testing.T) {
 
 func TestParseDBool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		str      string
 		expected *tree.DBool
@@ -540,6 +546,8 @@ func TestParseDBool(t *testing.T) {
 
 func TestParseDTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := testParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
@@ -590,6 +598,7 @@ func TestParseDTime(t *testing.T) {
 
 func TestParseDTimeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []string{
 		"",
 		"foo",
@@ -688,6 +697,7 @@ func TestParseDTimeTZError(t *testing.T) {
 
 func TestParseDTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := testParseTimeContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
@@ -797,6 +807,7 @@ func TestParseDTimestampTZ(t *testing.T) {
 
 func TestMakeDJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	j1, err := tree.MakeDJSON(1)
 	if err != nil {
 		t.Fatal(err)
@@ -812,6 +823,7 @@ func TestMakeDJSON(t *testing.T) {
 
 func TestDTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := &tree.EvalContext{
 		SessionData: &sessiondata.SessionData{
@@ -938,6 +950,7 @@ func TestDTimeTZ(t *testing.T) {
 
 func TestIsDistinctFrom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		a        string // comma separated list of strings, `NULL` is converted to a NULL
 		b        string // same as a
@@ -1035,6 +1048,7 @@ func TestIsDistinctFrom(t *testing.T) {
 
 func TestAllTypesAsJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		d := tree.SampleDatum(typ)
 		_, err := tree.AsJSON(d, time.UTC)
@@ -1047,6 +1061,7 @@ func TestAllTypesAsJSON(t *testing.T) {
 // Test default values of many different datum types.
 func TestNewDefaultDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
