@@ -568,10 +568,12 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 // process truncates the raft log of the range if the replica is the raft
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
-func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.SystemConfig) error {
+func (rlq *raftLogQueue) process(
+	ctx context.Context, r *Replica, _ *config.SystemConfig,
+) (processed bool, err error) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if _, recompute, _ := rlq.shouldQueueImpl(ctx, decision); recompute {
@@ -592,7 +594,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 		r.raftMu.Unlock()
 
 		if err != nil {
-			return errors.Wrap(err, "recomputing raft log size")
+			return false, errors.Wrap(err, "recomputing raft log size")
 		}
 
 		log.VEventf(ctx, 2, "recomputed raft log size to %s", humanizeutil.IBytes(n))
@@ -600,31 +602,32 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 		// Override the decision, now that an accurate log size is available.
 		decision, err = newTruncateDecision(ctx, r)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	// Can and should the raft logs be truncated?
-	if decision.ShouldTruncate() {
-		if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-			log.Infof(ctx, "%v", log.Safe(decision.String()))
-		} else {
-			log.VEventf(ctx, 1, "%v", log.Safe(decision.String()))
-		}
-		b := &kv.Batch{}
-		b.AddRawRequest(&roachpb.TruncateLogRequest{
-			RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
-			Index:         decision.NewFirstIndex,
-			RangeID:       r.RangeID,
-		})
-		if err := rlq.db.Run(ctx, b); err != nil {
-			return err
-		}
-		r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
-	} else {
+	if !decision.ShouldTruncate() {
 		log.VEventf(ctx, 3, "%s", log.Safe(decision.String()))
+		return false, nil
 	}
-	return nil
+
+	if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
+		log.Infof(ctx, "%v", log.Safe(decision.String()))
+	} else {
+		log.VEventf(ctx, 1, "%v", log.Safe(decision.String()))
+	}
+	b := &kv.Batch{}
+	b.AddRawRequest(&roachpb.TruncateLogRequest{
+		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
+		Index:         decision.NewFirstIndex,
+		RangeID:       r.RangeID,
+	})
+	if err := rlq.db.Run(ctx, b); err != nil {
+		return false, err
+	}
+	r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
+	return true, nil
 }
 
 // timer returns interval between processing successive queued truncations.

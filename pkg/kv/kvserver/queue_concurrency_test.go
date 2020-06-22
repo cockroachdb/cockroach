@@ -77,16 +77,16 @@ func TestBaseQueueConcurrent(t *testing.T) {
 
 	// Set up a queue impl that will return random results from processing.
 	impl := fakeQueueImpl{
-		pr: func(context.Context, *Replica, *config.SystemConfig) error {
+		pr: func(context.Context, *Replica, *config.SystemConfig) (bool, error) {
 			n := rand.Intn(4)
 			if n == 0 {
-				return nil
+				return true, nil
 			} else if n == 1 {
-				return errors.New("injected regular error")
+				return false, errors.New("injected regular error")
 			} else if n == 2 {
-				return &benignError{errors.New("injected benign error")}
+				return false, &benignError{errors.New("injected benign error")}
 			}
-			return &testPurgatoryError{}
+			return false, &testPurgatoryError{}
 		},
 	}
 	bq := newBaseQueue("test", impl, store, nil /* Gossip */, cfg)
@@ -127,7 +127,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 }
 
 type fakeQueueImpl struct {
-	pr func(context.Context, *Replica, *config.SystemConfig) error
+	pr func(context.Context, *Replica, *config.SystemConfig) (processed bool, err error)
 }
 
 func (fakeQueueImpl) shouldQueue(
@@ -138,8 +138,9 @@ func (fakeQueueImpl) shouldQueue(
 
 func (fq fakeQueueImpl) process(
 	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
-) error {
-	return fq.pr(ctx, repl, cfg)
+) (bool, error) {
+	processed, err := fq.pr(ctx, repl, cfg)
+	return processed, err
 }
 
 func (fakeQueueImpl) timer(time.Duration) time.Duration {
