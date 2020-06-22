@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestProjectionAndRendering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We don't care about actual types, so we use ColumnType.Locale to store an
 	// arbitrary string.
@@ -374,6 +376,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 func TestMergeResultTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	empty := []*types.T{}
 	null := []*types.T{types.Unknown}
