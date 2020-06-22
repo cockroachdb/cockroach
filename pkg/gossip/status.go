@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/redact"
+	"github.com/cockroachdb/redact"
 )
 
 // Metrics contains gossip metrics used per node and server.

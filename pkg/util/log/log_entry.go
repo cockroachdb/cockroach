@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
