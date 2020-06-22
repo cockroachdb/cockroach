@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type mutationTest struct {
@@ -157,6 +158,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 // Regression test for #29436.
 func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB: This test manually adds mutations to a table descriptor to test that
 	// other schema changes work in the presence of those mutations. Since there's
 	// no job associated with the added mutations, those mutations stay on the
@@ -215,6 +217,7 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 // change.
 func TestOperationsWithColumnMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB: This test manually adds mutations to a table descriptor to test that
 	// other schema changes work in the presence of those mutations. Since there's
 	// no job associated with the added mutations, those mutations stay on the
@@ -483,6 +486,7 @@ func (mt mutationTest) writeIndexMutation(index string, m sqlbase.DescriptorMuta
 // change.
 func TestOperationsWithIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB: This test manually adds mutations to a table descriptor to test that
 	// other schema changes work in the presence of those mutations. Since there's
 	// no job associated with the added mutations, those mutations stay on the
@@ -631,6 +635,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 // and DELETE operations while an index mutation refers to a column mutation.
 func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB: This test manually adds mutations to a table descriptor to test that
 	// other schema changes work in the presence of those mutations. Since there's
 	// no job associated with the added mutations, those mutations stay on the
@@ -836,6 +841,7 @@ CREATE INDEX allidx ON t.test (k, v);
 // mutations that are not yet live.
 func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
@@ -1047,6 +1053,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 // assigned the correct start state and mutation id.
 func TestTableMutationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Disable synchronous and asynchronous schema change processing so that
 	// the mutations get queued up.
 	params, _ := tests.CreateTestServerParams()
@@ -1150,6 +1157,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 // written to it yet.
 func TestAddingFKs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)

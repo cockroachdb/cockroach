@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
@@ -51,6 +52,7 @@ import (
 
 func TestAnonymizeStatementsForReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const stmt1s = `
 INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
@@ -111,6 +113,7 @@ var fileref = regexp.MustCompile(`((?:[a-zA-Z0-9\._@-]*/)*)([a-zA-Z0-9._@-]*\.(?
 // closes the connection more abruptly than that.
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
@@ -265,6 +268,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // errors.
 func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	query := "SELECT 42"
 
@@ -302,6 +306,7 @@ func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 // returned to the client and the session state is transitioned to NoTxn.
 func TestErrorOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const targetKeyString string = "/Table/53/1/1/0"
 	var injectedErr int64
@@ -375,6 +380,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Populate a sufficiently large number of rows. We want at least as
 	// many rows as an insert can batch in its output buffer (to force a
@@ -444,6 +450,7 @@ SELECT IF(x::INT::FLOAT = x,
 
 func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
@@ -486,6 +493,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 
 func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rows, kvBatchSize = 1000, 50
 
@@ -584,6 +592,7 @@ func TestQueryProgress(t *testing.T) {
 // detection.
 func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -654,6 +663,7 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 // the user's transaction.
 func TestRetriableErrorDuringPrepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const uniqueString = "'a very unique string'"
 	var failed int64
 	const numToFail = 2 // only fail on the first two attempts
@@ -685,6 +695,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 // are handled correctly.
 func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	filter := newDynamicRequestFilter()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -770,6 +781,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 // statements buffer once the corresponding results are returned to the user.
 func TestTrimFlushedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		countStmt = "SELECT count(*) FROM test"

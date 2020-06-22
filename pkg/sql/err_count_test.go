@@ -20,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
 
 func TestErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
@@ -65,6 +67,7 @@ func TestErrorCounts(t *testing.T) {
 
 func TestUnimplementedCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
@@ -90,6 +93,7 @@ BEGIN;
 
 func TestTransactionRetryErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
