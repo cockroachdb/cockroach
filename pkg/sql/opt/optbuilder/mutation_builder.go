@@ -172,7 +172,7 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
 
 	// Allocate segmented array of scope column ordinals.
-	n := tab.DeletableColumnCount()
+	n := tab.DeletableAndSystemColumnCount()
 	numPartialIndexes := partialIndexCount(tab)
 	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount()+2*numPartialIndexes)
 	for i := range scopeOrds {
