@@ -256,7 +256,7 @@ type queueImpl interface {
 
 	// process accepts a replica, and the system config and executes
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
-	process(context.Context, *Replica, *config.SystemConfig) error
+	process(context.Context, *Replica, *config.SystemConfig) (bool, error)
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -953,11 +953,12 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			if err := bq.impl.process(ctx, realRepl, cfg); err != nil {
+			if done, err := bq.impl.process(ctx, realRepl, cfg); err != nil {
 				return err
+			} else if done {
+				log.VEventf(ctx, 3, "processing... done")
+				bq.successes.Inc(1)
 			}
-			log.VEventf(ctx, 3, "processing... done")
-			bq.successes.Inc(1)
 			return nil
 		})
 }

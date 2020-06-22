@@ -81,7 +81,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 
 func (rq *raftSnapshotQueue) process(
 	ctx context.Context, repl *Replica, _ *config.SystemConfig,
-) error {
+) (bool, error) {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
@@ -91,12 +91,12 @@ func (rq *raftSnapshotQueue) process(
 					log.Infof(ctx, "sending raft snapshot")
 				}
 				if err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
-					return err
+					return false, err
 				}
 			}
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (rq *raftSnapshotQueue) processRaftSnapshot(

@@ -256,7 +256,7 @@ func (rq *replicateQueue) shouldQueue(
 
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
-) error {
+) (bool, error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
@@ -282,24 +282,24 @@ func (rq *replicateQueue) process(
 			}
 
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if testingAggressiveConsistencyChecks {
-				if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+				if _, err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
 					log.Warningf(ctx, "%v", err)
 				}
 			}
 
 			if !requeue {
-				return nil
+				return true, nil
 			}
 
 			log.VEventf(ctx, 1, "re-processing")
 		}
 	}
 
-	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
+	return false, errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
 }
 
 func (rq *replicateQueue) processOneChange(
@@ -567,10 +567,10 @@ func (rq *replicateQueue) addOrReplace(
 func (rq *replicateQueue) findRemoveTarget(
 	ctx context.Context,
 	repl interface {
-		DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig)
-		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
-		RaftStatus() *raft.Status
-	},
+	DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig)
+	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
+	RaftStatus() *raft.Status
+},
 	existingReplicas []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	_, zone := repl.DescAndZone()
