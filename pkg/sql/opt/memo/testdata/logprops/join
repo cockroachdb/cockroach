@@ -2488,3 +2488,280 @@ left-join (hash)
       └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
            ├── variable: r_b:2 [type=int]
            └── variable: b:5 [type=int]
+
+#Verify that computing property "RejectNullCols" will not affect property "OutputCols"
+
+exec-ddl
+CREATE TABLE col(_0 int)
+----
+
+exec-ddl
+CREATE TABLE cols(_0 int, _1 int, _2 int, _3 int, _4 int, _5 int, _6 int, _7 int, _8 int, _9 int, _10 int, _11 int, _12 int, _13 int, _14 int, _15 int, _16 int, _17 int, _18 int, _19 int, _20 int, _21 int, _22 int, _23 int, _24 int, _25 int, _26 int, _27 int, _28 int, _29 int, _30 int, _31 int, _32 int, _33 int, _34 int, _35 int, _36 int, _37 int, _38 int, _39 int, _40 int, _41 int, _42 int, _43 int, _44 int, _45 int, _46 int, _47 int, _48 int, _49 int, _50 int, _51 int, _52 int, _53 int, _54 int, _55 int, _56 int, _57 int, _58 int, _59 int, _60 int, _61 int, _62 int, _63 int, _64 int)
+----
+
+build format=show-ruleprops
+SELECT * FROM (cols cs1 FULL JOIN col c1 ON TRUE), (cols cs2 FULL JOIN col c2 ON TRUE)
+----
+project
+ ├── columns: "_0":1(int) "_1":2(int) "_2":3(int) "_3":4(int) "_4":5(int) "_5":6(int) "_6":7(int) "_7":8(int) "_8":9(int) "_9":10(int) "_10":11(int) "_11":12(int) "_12":13(int) "_13":14(int) "_14":15(int) "_15":16(int) "_16":17(int) "_17":18(int) "_18":19(int) "_19":20(int) "_20":21(int) "_21":22(int) "_22":23(int) "_23":24(int) "_24":25(int) "_25":26(int) "_26":27(int) "_27":28(int) "_28":29(int) "_29":30(int) "_30":31(int) "_31":32(int) "_32":33(int) "_33":34(int) "_34":35(int) "_35":36(int) "_36":37(int) "_37":38(int) "_38":39(int) "_39":40(int) "_40":41(int) "_41":42(int) "_42":43(int) "_43":44(int) "_44":45(int) "_45":46(int) "_46":47(int) "_47":48(int) "_48":49(int) "_49":50(int) "_50":51(int) "_51":52(int) "_52":53(int) "_53":54(int) "_54":55(int) "_55":56(int) "_56":57(int) "_57":58(int) "_58":59(int) "_59":60(int) "_60":61(int) "_61":62(int) "_62":63(int) "_63":64(int) "_64":65(int) "_0":67(int) "_0":69(int) "_1":70(int) "_2":71(int) "_3":72(int) "_4":73(int) "_5":74(int) "_6":75(int) "_7":76(int) "_8":77(int) "_9":78(int) "_10":79(int) "_11":80(int) "_12":81(int) "_13":82(int) "_14":83(int) "_15":84(int) "_16":85(int) "_17":86(int) "_18":87(int) "_19":88(int) "_20":89(int) "_21":90(int) "_22":91(int) "_23":92(int) "_24":93(int) "_25":94(int) "_26":95(int) "_27":96(int) "_28":97(int) "_29":98(int) "_30":99(int) "_31":100(int) "_32":101(int) "_33":102(int) "_34":103(int) "_35":104(int) "_36":105(int) "_37":106(int) "_38":107(int) "_39":108(int) "_40":109(int) "_41":110(int) "_42":111(int) "_43":112(int) "_44":113(int) "_45":114(int) "_46":115(int) "_47":116(int) "_48":117(int) "_49":118(int) "_50":119(int) "_51":120(int) "_52":121(int) "_53":122(int) "_54":123(int) "_55":124(int) "_56":125(int) "_57":126(int) "_58":127(int) "_59":128(int) "_60":129(int) "_61":130(int) "_62":131(int) "_63":132(int) "_64":133(int) "_0":135(int)
+ ├── prune: (1-65,67,69-133,135)
+ ├── reject-nulls: (1-65,67,69-133,135)
+ └── inner-join (cross)
+      ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int) cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      ├── key: (66,68,134,136)
+      ├── fd: (66)-->(1-65), (68)-->(67), (134)-->(69-133), (136)-->(135)
+      ├── prune: (1-136)
+      ├── reject-nulls: (1-136)
+      ├── interesting orderings: (+66) (+68) (+134) (+136)
+      ├── full-join (cross)
+      │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (66,68)
+      │    ├── fd: (66)-->(1-65), (68)-->(67)
+      │    ├── prune: (1-68)
+      │    ├── reject-nulls: (1-68)
+      │    ├── interesting orderings: (+66) (+68)
+      │    ├── unfiltered-cols: (1-68)
+      │    ├── scan cs1
+      │    │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int!null)
+      │    │    ├── key: (66)
+      │    │    ├── fd: (66)-->(1-65)
+      │    │    ├── prune: (1-66)
+      │    │    ├── interesting orderings: (+66)
+      │    │    └── unfiltered-cols: (1-66)
+      │    ├── scan c1
+      │    │    ├── columns: c1._0:67(int) c1.rowid:68(int!null)
+      │    │    ├── key: (68)
+      │    │    ├── fd: (68)-->(67)
+      │    │    ├── prune: (67,68)
+      │    │    ├── interesting orderings: (+68)
+      │    │    └── unfiltered-cols: (67,68)
+      │    └── filters
+      │         └── true [type=bool]
+      ├── full-join (cross)
+      │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (134,136)
+      │    ├── fd: (134)-->(69-133), (136)-->(135)
+      │    ├── prune: (69-136)
+      │    ├── reject-nulls: (69-136)
+      │    ├── interesting orderings: (+134) (+136)
+      │    ├── unfiltered-cols: (69-136)
+      │    ├── scan cs2
+      │    │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int!null)
+      │    │    ├── key: (134)
+      │    │    ├── fd: (134)-->(69-133)
+      │    │    ├── prune: (69-134)
+      │    │    ├── interesting orderings: (+134)
+      │    │    └── unfiltered-cols: (69-134)
+      │    ├── scan c2
+      │    │    ├── columns: c2._0:135(int) c2.rowid:136(int!null)
+      │    │    ├── key: (136)
+      │    │    ├── fd: (136)-->(135)
+      │    │    ├── prune: (135,136)
+      │    │    ├── interesting orderings: (+136)
+      │    │    └── unfiltered-cols: (135,136)
+      │    └── filters
+      │         └── true [type=bool]
+      └── filters (true)
+
+build format=show-ruleprops
+SELECT * FROM (cols cs1 FULL JOIN col c1 ON TRUE) LEFT JOIN (cols cs2 FULL JOIN col c2 ON TRUE) ON TRUE
+----
+project
+ ├── columns: "_0":1(int) "_1":2(int) "_2":3(int) "_3":4(int) "_4":5(int) "_5":6(int) "_6":7(int) "_7":8(int) "_8":9(int) "_9":10(int) "_10":11(int) "_11":12(int) "_12":13(int) "_13":14(int) "_14":15(int) "_15":16(int) "_16":17(int) "_17":18(int) "_18":19(int) "_19":20(int) "_20":21(int) "_21":22(int) "_22":23(int) "_23":24(int) "_24":25(int) "_25":26(int) "_26":27(int) "_27":28(int) "_28":29(int) "_29":30(int) "_30":31(int) "_31":32(int) "_32":33(int) "_33":34(int) "_34":35(int) "_35":36(int) "_36":37(int) "_37":38(int) "_38":39(int) "_39":40(int) "_40":41(int) "_41":42(int) "_42":43(int) "_43":44(int) "_44":45(int) "_45":46(int) "_46":47(int) "_47":48(int) "_48":49(int) "_49":50(int) "_50":51(int) "_51":52(int) "_52":53(int) "_53":54(int) "_54":55(int) "_55":56(int) "_56":57(int) "_57":58(int) "_58":59(int) "_59":60(int) "_60":61(int) "_61":62(int) "_62":63(int) "_63":64(int) "_64":65(int) "_0":67(int) "_0":69(int) "_1":70(int) "_2":71(int) "_3":72(int) "_4":73(int) "_5":74(int) "_6":75(int) "_7":76(int) "_8":77(int) "_9":78(int) "_10":79(int) "_11":80(int) "_12":81(int) "_13":82(int) "_14":83(int) "_15":84(int) "_16":85(int) "_17":86(int) "_18":87(int) "_19":88(int) "_20":89(int) "_21":90(int) "_22":91(int) "_23":92(int) "_24":93(int) "_25":94(int) "_26":95(int) "_27":96(int) "_28":97(int) "_29":98(int) "_30":99(int) "_31":100(int) "_32":101(int) "_33":102(int) "_34":103(int) "_35":104(int) "_36":105(int) "_37":106(int) "_38":107(int) "_39":108(int) "_40":109(int) "_41":110(int) "_42":111(int) "_43":112(int) "_44":113(int) "_45":114(int) "_46":115(int) "_47":116(int) "_48":117(int) "_49":118(int) "_50":119(int) "_51":120(int) "_52":121(int) "_53":122(int) "_54":123(int) "_55":124(int) "_56":125(int) "_57":126(int) "_58":127(int) "_59":128(int) "_60":129(int) "_61":130(int) "_62":131(int) "_63":132(int) "_64":133(int) "_0":135(int)
+ ├── prune: (1-65,67,69-133,135)
+ ├── reject-nulls: (1-65,67,69-133,135)
+ └── left-join (cross)
+      ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int) cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      ├── key: (66,68,134,136)
+      ├── fd: (66)-->(1-65), (68)-->(67), (134)~~>(69-133), (136)~~>(135), (66,68,134,136)-->(69-133,135)
+      ├── prune: (1-136)
+      ├── reject-nulls: (1-136)
+      ├── interesting orderings: (+66) (+68) (+134) (+136)
+      ├── full-join (cross)
+      │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (66,68)
+      │    ├── fd: (66)-->(1-65), (68)-->(67)
+      │    ├── prune: (1-68)
+      │    ├── reject-nulls: (1-68)
+      │    ├── interesting orderings: (+66) (+68)
+      │    ├── unfiltered-cols: (1-68)
+      │    ├── scan cs1
+      │    │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int!null)
+      │    │    ├── key: (66)
+      │    │    ├── fd: (66)-->(1-65)
+      │    │    ├── prune: (1-66)
+      │    │    ├── interesting orderings: (+66)
+      │    │    └── unfiltered-cols: (1-66)
+      │    ├── scan c1
+      │    │    ├── columns: c1._0:67(int) c1.rowid:68(int!null)
+      │    │    ├── key: (68)
+      │    │    ├── fd: (68)-->(67)
+      │    │    ├── prune: (67,68)
+      │    │    ├── interesting orderings: (+68)
+      │    │    └── unfiltered-cols: (67,68)
+      │    └── filters
+      │         └── true [type=bool]
+      ├── full-join (cross)
+      │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (134,136)
+      │    ├── fd: (134)-->(69-133), (136)-->(135)
+      │    ├── prune: (69-136)
+      │    ├── reject-nulls: (69-136)
+      │    ├── interesting orderings: (+134) (+136)
+      │    ├── unfiltered-cols: (69-136)
+      │    ├── scan cs2
+      │    │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int!null)
+      │    │    ├── key: (134)
+      │    │    ├── fd: (134)-->(69-133)
+      │    │    ├── prune: (69-134)
+      │    │    ├── interesting orderings: (+134)
+      │    │    └── unfiltered-cols: (69-134)
+      │    ├── scan c2
+      │    │    ├── columns: c2._0:135(int) c2.rowid:136(int!null)
+      │    │    ├── key: (136)
+      │    │    ├── fd: (136)-->(135)
+      │    │    ├── prune: (135,136)
+      │    │    ├── interesting orderings: (+136)
+      │    │    └── unfiltered-cols: (135,136)
+      │    └── filters
+      │         └── true [type=bool]
+      └── filters
+           └── true [type=bool]
+
+build format=show-ruleprops
+SELECT * FROM (cols cs1 FULL JOIN col c1 ON TRUE) RIGHT JOIN (cols cs2 FULL JOIN col c2 ON TRUE) ON TRUE
+----
+project
+ ├── columns: "_0":1(int) "_1":2(int) "_2":3(int) "_3":4(int) "_4":5(int) "_5":6(int) "_6":7(int) "_7":8(int) "_8":9(int) "_9":10(int) "_10":11(int) "_11":12(int) "_12":13(int) "_13":14(int) "_14":15(int) "_15":16(int) "_16":17(int) "_17":18(int) "_18":19(int) "_19":20(int) "_20":21(int) "_21":22(int) "_22":23(int) "_23":24(int) "_24":25(int) "_25":26(int) "_26":27(int) "_27":28(int) "_28":29(int) "_29":30(int) "_30":31(int) "_31":32(int) "_32":33(int) "_33":34(int) "_34":35(int) "_35":36(int) "_36":37(int) "_37":38(int) "_38":39(int) "_39":40(int) "_40":41(int) "_41":42(int) "_42":43(int) "_43":44(int) "_44":45(int) "_45":46(int) "_46":47(int) "_47":48(int) "_48":49(int) "_49":50(int) "_50":51(int) "_51":52(int) "_52":53(int) "_53":54(int) "_54":55(int) "_55":56(int) "_56":57(int) "_57":58(int) "_58":59(int) "_59":60(int) "_60":61(int) "_61":62(int) "_62":63(int) "_63":64(int) "_64":65(int) "_0":67(int) "_0":69(int) "_1":70(int) "_2":71(int) "_3":72(int) "_4":73(int) "_5":74(int) "_6":75(int) "_7":76(int) "_8":77(int) "_9":78(int) "_10":79(int) "_11":80(int) "_12":81(int) "_13":82(int) "_14":83(int) "_15":84(int) "_16":85(int) "_17":86(int) "_18":87(int) "_19":88(int) "_20":89(int) "_21":90(int) "_22":91(int) "_23":92(int) "_24":93(int) "_25":94(int) "_26":95(int) "_27":96(int) "_28":97(int) "_29":98(int) "_30":99(int) "_31":100(int) "_32":101(int) "_33":102(int) "_34":103(int) "_35":104(int) "_36":105(int) "_37":106(int) "_38":107(int) "_39":108(int) "_40":109(int) "_41":110(int) "_42":111(int) "_43":112(int) "_44":113(int) "_45":114(int) "_46":115(int) "_47":116(int) "_48":117(int) "_49":118(int) "_50":119(int) "_51":120(int) "_52":121(int) "_53":122(int) "_54":123(int) "_55":124(int) "_56":125(int) "_57":126(int) "_58":127(int) "_59":128(int) "_60":129(int) "_61":130(int) "_62":131(int) "_63":132(int) "_64":133(int) "_0":135(int)
+ ├── prune: (1-65,67,69-133,135)
+ ├── reject-nulls: (1-65,67,69-133,135)
+ └── right-join (cross)
+      ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int) cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      ├── key: (66,68,134,136)
+      ├── fd: (134)-->(69-133), (136)-->(135), (66)~~>(1-65), (68)~~>(67), (66,68,134,136)-->(1-65,67)
+      ├── prune: (1-136)
+      ├── reject-nulls: (1-136)
+      ├── interesting orderings: (+66) (+68) (+134) (+136)
+      ├── full-join (cross)
+      │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (66,68)
+      │    ├── fd: (66)-->(1-65), (68)-->(67)
+      │    ├── prune: (1-68)
+      │    ├── reject-nulls: (1-68)
+      │    ├── interesting orderings: (+66) (+68)
+      │    ├── scan cs1
+      │    │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int!null)
+      │    │    ├── key: (66)
+      │    │    ├── fd: (66)-->(1-65)
+      │    │    ├── prune: (1-66)
+      │    │    ├── interesting orderings: (+66)
+      │    │    └── unfiltered-cols: (1-66)
+      │    ├── scan c1
+      │    │    ├── columns: c1._0:67(int) c1.rowid:68(int!null)
+      │    │    ├── key: (68)
+      │    │    ├── fd: (68)-->(67)
+      │    │    ├── prune: (67,68)
+      │    │    ├── interesting orderings: (+68)
+      │    │    └── unfiltered-cols: (67,68)
+      │    └── filters
+      │         └── true [type=bool]
+      ├── full-join (cross)
+      │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (134,136)
+      │    ├── fd: (134)-->(69-133), (136)-->(135)
+      │    ├── prune: (69-136)
+      │    ├── reject-nulls: (69-136)
+      │    ├── interesting orderings: (+134) (+136)
+      │    ├── scan cs2
+      │    │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int!null)
+      │    │    ├── key: (134)
+      │    │    ├── fd: (134)-->(69-133)
+      │    │    ├── prune: (69-134)
+      │    │    ├── interesting orderings: (+134)
+      │    │    └── unfiltered-cols: (69-134)
+      │    ├── scan c2
+      │    │    ├── columns: c2._0:135(int) c2.rowid:136(int!null)
+      │    │    ├── key: (136)
+      │    │    ├── fd: (136)-->(135)
+      │    │    ├── prune: (135,136)
+      │    │    ├── interesting orderings: (+136)
+      │    │    └── unfiltered-cols: (135,136)
+      │    └── filters
+      │         └── true [type=bool]
+      └── filters
+           └── true [type=bool]
+
+build format=show-ruleprops
+SELECT * FROM (cols cs1 FULL JOIN col c1 ON TRUE) FULL JOIN (cols cs2 FULL JOIN col c2 ON TRUE) ON TRUE
+----
+project
+ ├── columns: "_0":1(int) "_1":2(int) "_2":3(int) "_3":4(int) "_4":5(int) "_5":6(int) "_6":7(int) "_7":8(int) "_8":9(int) "_9":10(int) "_10":11(int) "_11":12(int) "_12":13(int) "_13":14(int) "_14":15(int) "_15":16(int) "_16":17(int) "_17":18(int) "_18":19(int) "_19":20(int) "_20":21(int) "_21":22(int) "_22":23(int) "_23":24(int) "_24":25(int) "_25":26(int) "_26":27(int) "_27":28(int) "_28":29(int) "_29":30(int) "_30":31(int) "_31":32(int) "_32":33(int) "_33":34(int) "_34":35(int) "_35":36(int) "_36":37(int) "_37":38(int) "_38":39(int) "_39":40(int) "_40":41(int) "_41":42(int) "_42":43(int) "_43":44(int) "_44":45(int) "_45":46(int) "_46":47(int) "_47":48(int) "_48":49(int) "_49":50(int) "_50":51(int) "_51":52(int) "_52":53(int) "_53":54(int) "_54":55(int) "_55":56(int) "_56":57(int) "_57":58(int) "_58":59(int) "_59":60(int) "_60":61(int) "_61":62(int) "_62":63(int) "_63":64(int) "_64":65(int) "_0":67(int) "_0":69(int) "_1":70(int) "_2":71(int) "_3":72(int) "_4":73(int) "_5":74(int) "_6":75(int) "_7":76(int) "_8":77(int) "_9":78(int) "_10":79(int) "_11":80(int) "_12":81(int) "_13":82(int) "_14":83(int) "_15":84(int) "_16":85(int) "_17":86(int) "_18":87(int) "_19":88(int) "_20":89(int) "_21":90(int) "_22":91(int) "_23":92(int) "_24":93(int) "_25":94(int) "_26":95(int) "_27":96(int) "_28":97(int) "_29":98(int) "_30":99(int) "_31":100(int) "_32":101(int) "_33":102(int) "_34":103(int) "_35":104(int) "_36":105(int) "_37":106(int) "_38":107(int) "_39":108(int) "_40":109(int) "_41":110(int) "_42":111(int) "_43":112(int) "_44":113(int) "_45":114(int) "_46":115(int) "_47":116(int) "_48":117(int) "_49":118(int) "_50":119(int) "_51":120(int) "_52":121(int) "_53":122(int) "_54":123(int) "_55":124(int) "_56":125(int) "_57":126(int) "_58":127(int) "_59":128(int) "_60":129(int) "_61":130(int) "_62":131(int) "_63":132(int) "_64":133(int) "_0":135(int)
+ ├── prune: (1-65,67,69-133,135)
+ ├── reject-nulls: (1-65,67,69-133,135)
+ └── full-join (cross)
+      ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int) cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      ├── lax-key: (66,68,134,136)
+      ├── fd: (66)~~>(1-65), (68)~~>(67), (134)~~>(69-133), (136)~~>(135), (66,68,134,136)~~>(1-65,67,69-133,135)
+      ├── prune: (1-136)
+      ├── reject-nulls: (1-136)
+      ├── interesting orderings: (+66) (+68) (+134) (+136)
+      ├── full-join (cross)
+      │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int) c1._0:67(int) c1.rowid:68(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (66,68)
+      │    ├── fd: (66)-->(1-65), (68)-->(67)
+      │    ├── prune: (1-68)
+      │    ├── reject-nulls: (1-68)
+      │    ├── interesting orderings: (+66) (+68)
+      │    ├── unfiltered-cols: (1-68)
+      │    ├── scan cs1
+      │    │    ├── columns: cs1._0:1(int) cs1._1:2(int) cs1._2:3(int) cs1._3:4(int) cs1._4:5(int) cs1._5:6(int) cs1._6:7(int) cs1._7:8(int) cs1._8:9(int) cs1._9:10(int) cs1._10:11(int) cs1._11:12(int) cs1._12:13(int) cs1._13:14(int) cs1._14:15(int) cs1._15:16(int) cs1._16:17(int) cs1._17:18(int) cs1._18:19(int) cs1._19:20(int) cs1._20:21(int) cs1._21:22(int) cs1._22:23(int) cs1._23:24(int) cs1._24:25(int) cs1._25:26(int) cs1._26:27(int) cs1._27:28(int) cs1._28:29(int) cs1._29:30(int) cs1._30:31(int) cs1._31:32(int) cs1._32:33(int) cs1._33:34(int) cs1._34:35(int) cs1._35:36(int) cs1._36:37(int) cs1._37:38(int) cs1._38:39(int) cs1._39:40(int) cs1._40:41(int) cs1._41:42(int) cs1._42:43(int) cs1._43:44(int) cs1._44:45(int) cs1._45:46(int) cs1._46:47(int) cs1._47:48(int) cs1._48:49(int) cs1._49:50(int) cs1._50:51(int) cs1._51:52(int) cs1._52:53(int) cs1._53:54(int) cs1._54:55(int) cs1._55:56(int) cs1._56:57(int) cs1._57:58(int) cs1._58:59(int) cs1._59:60(int) cs1._60:61(int) cs1._61:62(int) cs1._62:63(int) cs1._63:64(int) cs1._64:65(int) cs1.rowid:66(int!null)
+      │    │    ├── key: (66)
+      │    │    ├── fd: (66)-->(1-65)
+      │    │    ├── prune: (1-66)
+      │    │    ├── interesting orderings: (+66)
+      │    │    └── unfiltered-cols: (1-66)
+      │    ├── scan c1
+      │    │    ├── columns: c1._0:67(int) c1.rowid:68(int!null)
+      │    │    ├── key: (68)
+      │    │    ├── fd: (68)-->(67)
+      │    │    ├── prune: (67,68)
+      │    │    ├── interesting orderings: (+68)
+      │    │    └── unfiltered-cols: (67,68)
+      │    └── filters
+      │         └── true [type=bool]
+      ├── full-join (cross)
+      │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int) c2._0:135(int) c2.rowid:136(int)
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (134,136)
+      │    ├── fd: (134)-->(69-133), (136)-->(135)
+      │    ├── prune: (69-136)
+      │    ├── reject-nulls: (69-136)
+      │    ├── interesting orderings: (+134) (+136)
+      │    ├── unfiltered-cols: (69-136)
+      │    ├── scan cs2
+      │    │    ├── columns: cs2._0:69(int) cs2._1:70(int) cs2._2:71(int) cs2._3:72(int) cs2._4:73(int) cs2._5:74(int) cs2._6:75(int) cs2._7:76(int) cs2._8:77(int) cs2._9:78(int) cs2._10:79(int) cs2._11:80(int) cs2._12:81(int) cs2._13:82(int) cs2._14:83(int) cs2._15:84(int) cs2._16:85(int) cs2._17:86(int) cs2._18:87(int) cs2._19:88(int) cs2._20:89(int) cs2._21:90(int) cs2._22:91(int) cs2._23:92(int) cs2._24:93(int) cs2._25:94(int) cs2._26:95(int) cs2._27:96(int) cs2._28:97(int) cs2._29:98(int) cs2._30:99(int) cs2._31:100(int) cs2._32:101(int) cs2._33:102(int) cs2._34:103(int) cs2._35:104(int) cs2._36:105(int) cs2._37:106(int) cs2._38:107(int) cs2._39:108(int) cs2._40:109(int) cs2._41:110(int) cs2._42:111(int) cs2._43:112(int) cs2._44:113(int) cs2._45:114(int) cs2._46:115(int) cs2._47:116(int) cs2._48:117(int) cs2._49:118(int) cs2._50:119(int) cs2._51:120(int) cs2._52:121(int) cs2._53:122(int) cs2._54:123(int) cs2._55:124(int) cs2._56:125(int) cs2._57:126(int) cs2._58:127(int) cs2._59:128(int) cs2._60:129(int) cs2._61:130(int) cs2._62:131(int) cs2._63:132(int) cs2._64:133(int) cs2.rowid:134(int!null)
+      │    │    ├── key: (134)
+      │    │    ├── fd: (134)-->(69-133)
+      │    │    ├── prune: (69-134)
+      │    │    ├── interesting orderings: (+134)
+      │    │    └── unfiltered-cols: (69-134)
+      │    ├── scan c2
+      │    │    ├── columns: c2._0:135(int) c2.rowid:136(int!null)
+      │    │    ├── key: (136)
+      │    │    ├── fd: (136)-->(135)
+      │    │    ├── prune: (135,136)
+      │    │    ├── interesting orderings: (+136)
+      │    │    └── unfiltered-cols: (135,136)
+      │    └── filters
+      │         └── true [type=bool]
+      └── filters
+           └── true [type=bool]
