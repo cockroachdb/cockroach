@@ -574,7 +574,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
-	tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 
 	// Find the non-nullable table columns. Mutation columns can be NULL during
 	// backfill, so they should be excluded.
@@ -645,7 +645,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 
 		if tableScope == nil {
 			tableScope = b.allocScope()
-			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
 		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
@@ -691,7 +691,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
-	tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 
 	// Skip to the first partial index we found above.
 	for ; indexOrd < numIndexes; indexOrd++ {

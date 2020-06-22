@@ -263,7 +263,6 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	)
 
 	fromClausePresent := len(from) > 0
-	numCols := len(mb.outScope.cols)
 
 	// If there is a FROM clause present, we must join all the tables
 	// together with the table being updated.
@@ -328,7 +327,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	}
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := 0; i < numCols; i++ {
+	for i := 0; i < len(mb.fetchOrds); i++ {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 }
@@ -389,7 +388,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
+	for i := range mb.fetchOrds {
 		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 }
@@ -401,6 +400,10 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 		// Determine the ordinal position of the named column in the table and
 		// add it as a target column.
 		if ord := findPublicTableColumnByName(mb.tab, name); ord != -1 {
+			// System columns are invalid target columns.
+			if cat.IsSystemColumn(mb.tab, ord) {
+				panic(pgerror.Newf(pgcode.InvalidColumnReference, "cannot modify system column %q", name))
+			}
 			mb.addTargetCol(ord)
 			continue
 		}
@@ -554,6 +557,11 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		}
 		// Skip columns that are already specified.
 		if scopeOrds[i] != -1 {
+			continue
+		}
+
+		// Skip system columns.
+		if cat.IsSystemColumn(mb.tab, i) {
 			continue
 		}
 
@@ -831,8 +839,8 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	if needResults {
 		private.ReturnCols = make(opt.ColList, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if cat.IsMutationColumn(mb.tab, i) {
-				// Only non-mutation columns are output columns.
+			if cat.IsMutationColumn(mb.tab, i) || cat.IsSystemColumn(mb.tab, i) {
+				// Only non-mutation and non-system columns are output columns.
 				continue
 			}
 			scopeOrd := mb.mapToReturnScopeOrd(i)
@@ -905,7 +913,7 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 	//
 	inScope := mb.outScope.replace()
 	inScope.expr = mb.outScope.expr
-	inScope.appendColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
+	inScope.appendOrdinaryColumnsFromTable(mb.md.TableMeta(mb.tabID), &mb.alias)
 
 	// extraAccessibleCols contains all the columns that the RETURNING
 	// clause can refer to in addition to the table columns. This is useful for
