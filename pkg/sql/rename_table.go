@@ -15,6 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -99,6 +101,18 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	isNewSchemaTemp, _, err := temporarySchemaSessionID(newTn.Schema())
+	if err != nil {
+		return err
+	}
+
+	if newTn.ExplicitSchema && !isNewSchemaTemp && tableDesc.Temporary {
+		return pgerror.New(
+			pgcode.FeatureNotSupported,
+			"cannot convert a temporary table to a persistent table during renames",
+		)
+	}
+
 	// oldTn and newTn are already normalized, so we can compare directly here.
 	if oldTn.Catalog() == newTn.Catalog() &&
 		oldTn.Schema() == newTn.Schema() &&
@@ -110,8 +124,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
-	newTbKey := sqlbase.MakePublicTableNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.ID, newTn.Table()).Key()
+	newTbKey := sqlbase.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
+		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table()).Key()
 
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
