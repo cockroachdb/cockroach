@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/pflag"
 )
 
@@ -175,6 +176,7 @@ func (c testCase) run(t *testing.T) {
 
 func TestDebugMergeLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, c := range cases {
 		t.Run(c.name, c.run)
 	}
