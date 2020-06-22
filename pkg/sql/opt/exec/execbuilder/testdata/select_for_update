@@ -523,80 +523,78 @@ root                 ·                 ·
 ·                    locking strength  for update
 
 query TTT
-EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
-·           distribution        local
-·           vectorized          true
-merge-join  ·                   ·
- │          type                semi
- │          equality            (a) = (a)
- │          left cols are key   ·
- │          right cols are key  ·
- │          mergeJoinOrder      +"(a=a)"
- ├── scan   ·                   ·
- │          table               t@primary
- │          spans               FULL SCAN
- │          locking strength    for update
- └── scan   ·                   ·
-·           table               t@primary
-·           spans               FULL SCAN
+·                    distribution           local
+·                    vectorized             true
+render               ·                      ·
+ └── lookup-join     ·                      ·
+      │              table                  t@primary
+      │              type                   inner
+      │              equality               (b) = (a)
+      │              equality cols are key  ·
+      │              parallel               ·
+      └── distinct   ·                      ·
+           │         distinct on            b
+           └── scan  ·                      ·
+·                    table                  t@primary
+·                    spans                  FULL SCAN
 
 query TTT
-EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ----
-·           distribution        local
-·           vectorized          true
-merge-join  ·                   ·
- │          type                semi
- │          equality            (a) = (a)
- │          left cols are key   ·
- │          right cols are key  ·
- │          mergeJoinOrder      +"(a=a)"
- ├── scan   ·                   ·
- │          table               t@primary
- │          spans               FULL SCAN
- └── scan   ·                   ·
-·           table               t@primary
-·           spans               FULL SCAN
-·           locking strength    for update
+·                    distribution           local
+·                    vectorized             true
+render               ·                      ·
+ └── lookup-join     ·                      ·
+      │              table                  t@primary
+      │              type                   inner
+      │              equality               (b) = (a)
+      │              equality cols are key  ·
+      │              parallel               ·
+      └── distinct   ·                      ·
+           │         distinct on            b
+           └── scan  ·                      ·
+·                    table                  t@primary
+·                    spans                  FULL SCAN
+·                    locking strength       for update
 
 query TTT
-EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
-·           distribution        local
-·           vectorized          true
-merge-join  ·                   ·
- │          type                semi
- │          equality            (a) = (a)
- │          left cols are key   ·
- │          right cols are key  ·
- │          mergeJoinOrder      +"(a=a)"
- ├── scan   ·                   ·
- │          table               t@primary
- │          spans               FULL SCAN
- │          locking strength    for update
- └── scan   ·                   ·
-·           table               t@primary
-·           spans               FULL SCAN
+·                    distribution           local
+·                    vectorized             true
+render               ·                      ·
+ └── lookup-join     ·                      ·
+      │              table                  t@primary
+      │              type                   inner
+      │              equality               (b) = (a)
+      │              equality cols are key  ·
+      │              parallel               ·
+      └── distinct   ·                      ·
+           │         distinct on            b
+           └── scan  ·                      ·
+·                    table                  t@primary
+·                    spans                  FULL SCAN
 
 query TTT
-EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
+EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ----
-·           distribution        local
-·           vectorized          true
-merge-join  ·                   ·
- │          type                semi
- │          equality            (a) = (a)
- │          left cols are key   ·
- │          right cols are key  ·
- │          mergeJoinOrder      +"(a=a)"
- ├── scan   ·                   ·
- │          table               t@primary
- │          spans               FULL SCAN
- └── scan   ·                   ·
-·           table               t@primary
-·           spans               FULL SCAN
-·           locking strength    for update
+·                    distribution           local
+·                    vectorized             true
+render               ·                      ·
+ └── lookup-join     ·                      ·
+      │              table                  t@primary
+      │              type                   inner
+      │              equality               (b) = (a)
+      │              equality cols are key  ·
+      │              parallel               ·
+      └── distinct   ·                      ·
+           │         distinct on            b
+           └── scan  ·                      ·
+·                    table                  t@primary
+·                    spans                  FULL SCAN
+·                    locking strength       for update
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.

@@ -541,7 +541,7 @@ EXPLAIN (VEC) SELECT l_returnflag, l_linestatus, sum(l_quantity) AS sum_qty, sum
               └ *colexec.projMultFloat64Float64Op
                 └ *colexec.projMinusFloat64ConstFloat64Op
                   └ *colexec.selLEInt64Int64ConstOp
-                    └ *colfetcher.colBatchScan
+                    └ *colfetcher.ColBatchScan
 
 # Query 2
 query T
@@ -559,18 +559,18 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
             │   ├ *rowexec.joinReader
             │   │ └ *colexec.selSuffixBytesBytesConstOp
             │   │   └ *colexec.selEQInt64Int64ConstOp
-            │   │     └ *colfetcher.colBatchScan
+            │   │     └ *colfetcher.ColBatchScan
             │   └ *colexec.hashJoiner
-            │     ├ *colfetcher.colBatchScan
+            │     ├ *colfetcher.ColBatchScan
             │     └ *colexec.hashJoiner
-            │       ├ *colfetcher.colBatchScan
+            │       ├ *colfetcher.ColBatchScan
             │       └ *colexec.selEQBytesBytesConstOp
-            │         └ *colfetcher.colBatchScan
+            │         └ *colfetcher.ColBatchScan
             └ *rowexec.joinReader
               └ *colexec.mergeJoinInnerOp
-                ├ *colfetcher.colBatchScan
+                ├ *colfetcher.ColBatchScan
                 └ *colexec.selEQBytesBytesConstOp
-                  └ *colfetcher.colBatchScan
+                  └ *colfetcher.ColBatchScan
 
 # Query 3
 query T
@@ -583,12 +583,12 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
       └ *colexec.hashAggregator
         └ *rowexec.joinReader
           └ *colexec.hashJoiner
-            ├ *colfetcher.colBatchScan
+            ├ *colfetcher.ColBatchScan
             └ *colexec.hashJoiner
               ├ *colexec.selLTInt64Int64ConstOp
-              │ └ *colfetcher.colBatchScan
+              │ └ *colfetcher.ColBatchScan
               └ *colexec.selEQBytesBytesConstOp
-                └ *colfetcher.colBatchScan
+                └ *colfetcher.ColBatchScan
 
 # Query 4
 query T
@@ -600,7 +600,7 @@ EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE 
     └ *colexec.hashAggregator
       └ *rowexec.joinReader
         └ *rowexec.indexJoiner
-          └ *colfetcher.colBatchScan
+          └ *colfetcher.ColBatchScan
 
 # Query 5
 query T
@@ -616,13 +616,13 @@ EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue 
             ├ *rowexec.joinReader
             │ └ *colexec.hashJoiner
             │   ├ *rowexec.indexJoiner
-            │   │ └ *colfetcher.colBatchScan
+            │   │ └ *colfetcher.ColBatchScan
             │   └ *rowexec.joinReader
             │     └ *colexec.hashJoiner
-            │       ├ *colfetcher.colBatchScan
+            │       ├ *colfetcher.ColBatchScan
             │       └ *colexec.selEQBytesBytesConstOp
-            │         └ *colfetcher.colBatchScan
-            └ *colfetcher.colBatchScan
+            │         └ *colfetcher.ColBatchScan
+            └ *colfetcher.ColBatchScan
 
 # Query 6
 query T
@@ -633,7 +633,7 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
   └ *colexec.orderedAggregator
     └ *colexec.distinctChainOps
       └ *rowexec.indexJoiner
-        └ *colfetcher.colBatchScan
+        └ *colfetcher.ColBatchScan
 
 # Query 7
 query T
@@ -648,7 +648,7 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
           └ *colexec.defaultBuiltinFuncOperator
             └ *colexec.constBytesOp
               └ *colexec.hashJoiner
-                ├ *colfetcher.colBatchScan
+                ├ *colfetcher.ColBatchScan
                 └ *rowexec.joinReader
                   └ *rowexec.joinReader
                     └ *rowexec.joinReader
@@ -656,8 +656,8 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
                         └ *colexec.caseOp
                           ├ *colexec.bufferOp
                           │ └ *colexec.hashJoiner
-                          │   ├ *colfetcher.colBatchScan
-                          │   └ *colfetcher.colBatchScan
+                          │   ├ *colfetcher.ColBatchScan
+                          │   └ *colfetcher.ColBatchScan
                           ├ *colexec.constBoolOp
                           │ └ *colexec.andProjOp
                           │   ├ *colexec.bufferOp
@@ -688,19 +688,19 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
           │       └ *colexec.constBytesOp
           │         └ *colexec.hashJoiner
           │           ├ *colexec.hashJoiner
-          │           │ ├ *colfetcher.colBatchScan
+          │           │ ├ *colfetcher.ColBatchScan
           │           │ └ *colexec.hashJoiner
           │           │   ├ *rowexec.joinReader
           │           │   │ └ *colexec.mergeJoinInnerOp
-          │           │   │   ├ *colfetcher.colBatchScan
+          │           │   │   ├ *colfetcher.ColBatchScan
           │           │   │   └ *colexec.selEQBytesBytesConstOp
-          │           │   │     └ *colfetcher.colBatchScan
+          │           │   │     └ *colfetcher.ColBatchScan
           │           │   └ *rowexec.joinReader
           │           │     └ *rowexec.joinReader
           │           │       └ *rowexec.joinReader
           │           │         └ *colexec.selEQBytesBytesConstOp
-          │           │           └ *colfetcher.colBatchScan
-          │           └ *colfetcher.colBatchScan
+          │           │           └ *colfetcher.ColBatchScan
+          │           └ *colfetcher.ColBatchScan
           ├ *colexec.projEQBytesBytesConstOp
           │ └ *colexec.bufferOp
           └ *colexec.constFloat64Op
@@ -722,15 +722,15 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
                 └ *colexec.constBytesOp
                   └ *colexec.hashJoiner
                     ├ *colexec.hashJoiner
-                    │ ├ *colfetcher.colBatchScan
+                    │ ├ *colfetcher.ColBatchScan
                     │ └ *rowexec.joinReader
                     │   └ *rowexec.joinReader
                     │     └ *rowexec.joinReader
                     │       └ *colexec.mergeJoinInnerOp
                     │         ├ *colexec.selRegexpBytesBytesConstOp
-                    │         │ └ *colfetcher.colBatchScan
-                    │         └ *colfetcher.colBatchScan
-                    └ *colfetcher.colBatchScan
+                    │         │ └ *colfetcher.ColBatchScan
+                    │         └ *colfetcher.ColBatchScan
+                    └ *colfetcher.ColBatchScan
 
 # Query 10
 query T
@@ -746,10 +746,10 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
             └ *colexec.hashJoiner
               ├ *rowexec.joinReader
               │ └ *colexec.hashJoiner
-              │   ├ *colfetcher.colBatchScan
+              │   ├ *colfetcher.ColBatchScan
               │   └ *rowexec.indexJoiner
-              │     └ *colfetcher.colBatchScan
-              └ *colfetcher.colBatchScan
+              │     └ *colfetcher.ColBatchScan
+              └ *colfetcher.ColBatchScan
 
 # Query 11
 query T
@@ -766,7 +766,7 @@ EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS valu
               └ *rowexec.joinReader
                 └ *rowexec.joinReader
                   └ *colexec.selEQBytesBytesConstOp
-                    └ *colfetcher.colBatchScan
+                    └ *colfetcher.ColBatchScan
 
 # Query 12
 query T
@@ -778,7 +778,7 @@ EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o
     └ *colexec.hashAggregator
       └ *rowexec.joinReader
         └ *rowexec.indexJoiner
-          └ *colfetcher.colBatchScan
+          └ *colfetcher.ColBatchScan
 
 # Query 13
 query T
@@ -791,8 +791,8 @@ EXPLAIN (VEC) SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, coun
       └ *colexec.hashAggregator
         └ *colexec.hashJoiner
           ├ *colexec.selNotRegexpBytesBytesConstOp
-          │ └ *colfetcher.colBatchScan
-          └ *colfetcher.colBatchScan
+          │ └ *colfetcher.ColBatchScan
+          └ *colfetcher.ColBatchScan
 
 # Query 14
 query T
@@ -809,9 +809,9 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
               └ *colexec.caseOp
                 ├ *colexec.bufferOp
                 │ └ *colexec.hashJoiner
-                │   ├ *colfetcher.colBatchScan
+                │   ├ *colfetcher.ColBatchScan
                 │   └ *rowexec.indexJoiner
-                │     └ *colfetcher.colBatchScan
+                │     └ *colfetcher.ColBatchScan
                 ├ *colexec.projMultFloat64Float64Op
                 │ └ *colexec.projMinusFloat64ConstFloat64Op
                 │   └ *colexec.projPrefixBytesBytesConstOp
@@ -829,14 +829,14 @@ EXPLAIN (VEC) SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM s
 │
 └ Node 1
   └ *colexec.mergeJoinInnerOp
-    ├ *colfetcher.colBatchScan
+    ├ *colfetcher.ColBatchScan
     └ *colexec.sortOp
       └ *colexec.selEQFloat64Float64Op
         └ *colexec.castOpNullAny
           └ *colexec.constNullOp
             └ *colexec.hashAggregator
               └ *rowexec.indexJoiner
-                └ *colfetcher.colBatchScan
+                └ *colfetcher.ColBatchScan
 
 statement ok
 DROP VIEW revenue0
@@ -852,13 +852,13 @@ EXPLAIN (VEC) SELECT p_brand, p_type, p_size, count(distinct ps_suppkey) AS supp
       └ *colexec.unorderedDistinct
         └ *colexec.hashJoiner
           ├ *colexec.mergeJoinLeftAntiOp
-          │ ├ *colfetcher.colBatchScan
+          │ ├ *colfetcher.ColBatchScan
           │ └ *colexec.selRegexpBytesBytesConstOp
-          │   └ *colfetcher.colBatchScan
+          │   └ *colfetcher.ColBatchScan
           └ *colexec.selectInOpInt64
             └ *colexec.selNotPrefixBytesBytesConstOp
               └ *colexec.selNEBytesBytesConstOp
-                └ *colfetcher.colBatchScan
+                └ *colfetcher.ColBatchScan
 
 # Query 17
 query T
@@ -878,7 +878,7 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, par
                     └ *rowexec.joinReader
                       └ *colexec.selEQBytesBytesConstOp
                         └ *colexec.selEQBytesBytesConstOp
-                          └ *colfetcher.colBatchScan
+                          └ *colfetcher.ColBatchScan
 
 # Query 18
 query T
@@ -890,15 +890,15 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
     └ *colexec.topKSorter
       └ *colexec.hashAggregator
         └ *colexec.hashJoiner
-          ├ *colfetcher.colBatchScan
+          ├ *colfetcher.ColBatchScan
           └ *colexec.hashJoiner
             ├ *colexec.mergeJoinLeftSemiOp
-            │ ├ *colfetcher.colBatchScan
+            │ ├ *colfetcher.ColBatchScan
             │ └ *colexec.selGTFloat64Float64ConstOp
             │   └ *colexec.orderedAggregator
             │     └ *colexec.distinctChainOps
-            │       └ *colfetcher.colBatchScan
-            └ *colfetcher.colBatchScan
+            │       └ *colfetcher.ColBatchScan
+            └ *colfetcher.ColBatchScan
 
 # Query 19
 query T
@@ -915,9 +915,9 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
             │ └ *colexec.hashJoiner
             │   ├ *colexec.selEQBytesBytesConstOp
             │   │ └ *colexec.selectInOpBytes
-            │   │   └ *colfetcher.colBatchScan
+            │   │   └ *colfetcher.ColBatchScan
             │   └ *colexec.selGEInt64Int64ConstOp
-            │     └ *colfetcher.colBatchScan
+            │     └ *colfetcher.ColBatchScan
             ├ *colexec.constBoolOp
             │ └ *colexec.orProjOp
             │   ├ *colexec.bufferOp
@@ -962,19 +962,19 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
   └ *colexec.sortOp
     └ *colexec.hashJoiner
       ├ *colexec.hashJoiner
-      │ ├ *colfetcher.colBatchScan
+      │ ├ *colfetcher.ColBatchScan
       │ └ *colexec.hashJoiner
       │   ├ *colexec.selGTInt64Float64Op
       │   │ └ *colexec.projMultFloat64Float64ConstOp
       │   │   └ *colexec.hashAggregator
       │   │     └ *colexec.hashJoiner
       │   │       ├ *rowexec.indexJoiner
-      │   │       │ └ *colfetcher.colBatchScan
-      │   │       └ *colfetcher.colBatchScan
+      │   │       │ └ *colfetcher.ColBatchScan
+      │   │       └ *colfetcher.ColBatchScan
       │   └ *colexec.selPrefixBytesBytesConstOp
-      │     └ *colfetcher.colBatchScan
+      │     └ *colfetcher.ColBatchScan
       └ *colexec.selEQBytesBytesConstOp
-        └ *colfetcher.colBatchScan
+        └ *colfetcher.ColBatchScan
 
 # Query 21
 query T
@@ -990,14 +990,14 @@ EXPLAIN (VEC) SELECT s_name, count(*) AS numwait FROM supplier, lineitem l1, ord
             ├ *rowexec.hashJoiner
             │ ├ *rowexec.mergeJoiner
             │ │ ├ *colexec.selGTInt64Int64Op
-            │ │ │ └ *colfetcher.colBatchScan
+            │ │ │ └ *colfetcher.ColBatchScan
             │ │ └ *colexec.selGTInt64Int64Op
-            │ │   └ *colfetcher.colBatchScan
-            │ └ *colfetcher.colBatchScan
+            │ │   └ *colfetcher.ColBatchScan
+            │ └ *colfetcher.ColBatchScan
             └ *rowexec.joinReader
               └ *rowexec.joinReader
                 └ *colexec.selEQBytesBytesConstOp
-                  └ *colfetcher.colBatchScan
+                  └ *colfetcher.ColBatchScan
 
 # Query 22
 query T
@@ -1015,4 +1015,4 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
                 └ *colexec.substringInt64Int64Operator
                   └ *colexec.constInt64Op
                     └ *colexec.constInt64Op
-                      └ *colfetcher.colBatchScan
+                      └ *colfetcher.ColBatchScan

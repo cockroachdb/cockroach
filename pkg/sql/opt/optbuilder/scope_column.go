@@ -43,6 +43,10 @@ type scopeColumn struct {
 	// to the table. It should not be visible to variable references.
 	mutation bool
 
+	// system is true if the column is an implicit system column. It should not
+	// be included in mutations.
+	system bool
+
 	// descending indicates whether this column is sorted in descending order.
 	// This field is only used for ordering columns.
 	descending bool
