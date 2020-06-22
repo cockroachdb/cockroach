@@ -209,3 +209,17 @@ func getEqualityIndicesAndMergeJoinOrdering(
 	}
 	return leftEqualityIndices, rightEqualityIndices, mergeJoinOrdering, nil
 }
+
+func collectSystemColumnsFromCfg(
+	colCfg *scanColumnsConfig, table *sqlbase.TableDescriptor,
+) (systemColumns []sqlbase.SystemColumnKind, systemColumnOrdinals []int) {
+	for i, id := range colCfg.wantedColumns {
+		sysColKind := sqlbase.GetSystemColumnKindFromColumnID(table, sqlbase.ColumnID(id))
+		if sysColKind != sqlbase.SystemColumnKind_NONE {
+			// The scan is requested to produce a system column.
+			systemColumns = append(systemColumns, sysColKind)
+			systemColumnOrdinals = append(systemColumnOrdinals, i)
+		}
+	}
+	return systemColumns, systemColumnOrdinals
+}

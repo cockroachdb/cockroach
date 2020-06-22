@@ -251,7 +251,7 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 	_ context.Context, _ string, resolved hlc.Timestamp,
 ) ([]byte, error) {
 	meta := map[string]interface{}{
-		`resolved`: tree.TimestampToDecimal(resolved).Decimal.String(),
+		`resolved`: tree.TimestampToDecimalDatum(resolved).Decimal.String(),
 	}
 	var jsonEntries interface{}
 	if e.wrapped {

@@ -1287,3 +1287,18 @@ NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
 NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
 NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
 NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
+
+# Ensure that the vectorized engine can plan and produce the MVCC system column.
+statement ok
+CREATE TABLE mvcc (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
+INSERT INTO mvcc VALUES (1, 2, 3)
+
+query B
+SELECT mvcc_timestamp IS NOT NULL FROM mvcc
+----
+true
+
+query B
+SELECT mvcc_timestamp IS NOT NULL FROM mvcc@i
+----
+true

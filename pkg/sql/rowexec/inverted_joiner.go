@@ -252,7 +252,7 @@ func newInvertedJoiner(
 	_, _, err = initRowFetcher(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
 		allIndexCols, false /* isCheck */, &ij.alloc, execinfra.ScanVisibilityPublic,
-		sqlbase.ScanLockingStrength_FOR_NONE,
+		sqlbase.ScanLockingStrength_FOR_NONE, nil, /* systemColumns */
 	)
 	if err != nil {
 		return nil, err

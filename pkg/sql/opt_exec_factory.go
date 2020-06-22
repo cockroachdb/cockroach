@@ -98,6 +98,9 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, needed)
 
+	// Check if any system columns are requested, as they need special handling.
+	scan.systemColumns, scan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
+
 	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// initTable checks that the current user has the correct privilege to access
@@ -617,6 +620,9 @@ func (ef *execFactory) ConstructIndexJoin(
 	colDescs := makeColDescList(table, tableCols)
 
 	tableScan := ef.planner.Scan()
+
+	// Check if any system columns are requested, as they need special handling.
+	tableScan.systemColumns, tableScan.systemColumnOrdinals = collectSystemColumnsFromCfg(&colCfg, tabDesc.TableDesc())
 
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
@@ -1877,7 +1883,7 @@ func (rb *renderBuilder) setOutput(exprs tree.TypedExprs, columns sqlbase.Result
 // included if their ordinal position in the table schema is in the cols set.
 func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []sqlbase.ColumnDescriptor {
 	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
-	for i, n := 0, table.DeletableColumnCount(); i < n; i++ {
+	for i, n := 0, table.DeletableAndSystemColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
 			continue
 		}
