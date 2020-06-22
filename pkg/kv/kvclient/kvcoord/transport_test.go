@@ -27,6 +27,7 @@ import (
 
 func TestTransportMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rd1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
@@ -105,6 +106,7 @@ func TestTransportMoveToFront(t *testing.T) {
 // came from gRPC responses (through the "snowball tracing" mechanism).
 func TestSpanImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	metrics := makeDistSenderMetrics()
 	gt := grpcTransport{

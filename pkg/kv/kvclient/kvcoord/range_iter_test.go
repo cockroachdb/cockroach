@@ -53,6 +53,7 @@ func init() {
 
 func TestRangeIterForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -89,6 +90,7 @@ func TestRangeIterForward(t *testing.T) {
 
 func TestRangeIterSeekForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -128,6 +130,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 
 func TestRangeIterReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -164,6 +167,7 @@ func TestRangeIterReverse(t *testing.T) {
 
 func TestRangeIterSeekReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
