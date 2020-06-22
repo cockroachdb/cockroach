@@ -19,6 +19,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
@@ -35,6 +36,7 @@ func TestDebugRemote(t *testing.T) {
 }
 
 func testDebugRemote(t *testing.T) {
+	t.Skip("this test uses auth-session, which has not been backported to 19.1")
 	cfg := cluster.TestConfig{
 		Name:     "TestDebugRemote",
 		Duration: *flagDuration,
@@ -49,6 +51,12 @@ func testDebugRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+
+	stdout, stderr, err := l.ExecCLI(ctx, 0, []string{"auth-session", "login", "root", "--only-cookie"})
+	if err != nil {
+		t.Fatalf("auth-session failed: %s\nstdout: %s\nstderr: %s\n", err, stdout, stderr)
+	}
+	cookie := strings.Trim(stdout, "\n")
 
 	testCases := []struct {
 		remoteDebug string
@@ -77,7 +85,12 @@ func testDebugRemote(t *testing.T) {
 				"/debug/logspy?duration=1ns",
 			} {
 				t.Run(url, func(t *testing.T) {
-					resp, err := cluster.HTTPClient.Get(l.URL(ctx, 0) + url)
+					req, err := http.NewRequest("GET", l.URL(ctx, 0)+url, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					req.Header.Set("Cookie", cookie)
+					resp, err := cluster.HTTPClient.Do(req)
 					if err != nil {
 						t.Fatalf("%d: %v", i, err)
 					}
