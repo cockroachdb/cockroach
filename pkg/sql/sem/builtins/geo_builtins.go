@@ -2216,40 +2216,56 @@ Note if geometries are the same, it will return the LineString with the minimum 
 	// Topology operations
 	"st_centroid": makeBuiltin(
 		defProps(),
-		geometryOverload1(
-			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				centroid, err := geomfn.Centroid(g.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(centroid), err
-			},
-			types.Geometry,
-			infoBuilder{
-				info:         "Returns the centroid of the given geometry.",
-				libraryUsage: usesGEOS,
-			},
-			tree.VolatilityImmutable,
-		),
-		stringOverload1(
-			func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeometry(s)
-				if err != nil {
-					return nil, err
-				}
-				centroid, err := geomfn.Centroid(g)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(centroid), err
-			},
-			types.Geometry,
-			infoBuilder{
-				info:         "Returns the centroid of the given string, which will be parsed as a geometry object.",
-				libraryUsage: usesGEOS,
-			}.String(),
-			tree.VolatilityImmutable,
-		),
+		append(
+			geographyOverload1WithUseSpheroid(
+				func(ctx *tree.EvalContext, g *tree.DGeography, useSphereOrSpheroid geogfn.UseSphereOrSpheroid) (tree.Datum, error) {
+					ret, err := geogfn.Centroid(g.Geography, useSphereOrSpheroid)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeography(ret), nil
+				},
+				types.Geography,
+				infoBuilder{
+					info: "Returns the centroid of given geography.",
+				},
+				tree.VolatilityImmutable,
+			),
+			geometryOverload1(
+				func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+					centroid, err := geomfn.Centroid(g.Geometry)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(centroid), err
+				},
+				types.Geometry,
+				infoBuilder{
+					info:         "Returns the centroid of the given geometry.",
+					libraryUsage: usesGEOS,
+				},
+				tree.VolatilityImmutable,
+			),
+			stringOverload1(
+				func(ctx *tree.EvalContext, s string) (tree.Datum, error) {
+					g, err := geo.ParseGeometry(s)
+					if err != nil {
+						return nil, err
+					}
+					centroid, err := geomfn.Centroid(g)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(centroid), err
+				},
+				types.Geometry,
+				infoBuilder{
+					info:         "Returns the centroid of the given string, which will be parsed as a geometry object.",
+					libraryUsage: usesGEOS,
+				}.String(),
+				tree.VolatilityImmutable,
+			),
+		)...,
 	),
 	"st_pointonsurface": makeBuiltin(
 		defProps(),

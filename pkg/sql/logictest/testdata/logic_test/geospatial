@@ -1685,6 +1685,29 @@ Square (left)                             POLYGON ((-1 0, -0.5 0, 0 0, 0 0.5, 0 
 Square (right)                            POLYGON ((0 0, 0.5 0, 1 0, 1 0.5, 1 1, 0.5 1.000038070652873, 0 1, 0 0.5, 0 0))                POLYGON ((0 0, 0.25 0, 0.5 0, 0.75 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.750000001449807 1.000028552944327, 0.5 1.000038070652873, 0.249999998550193 1.000028552944327, 0 1, 0 0.75, 0 0.5, 0 0.25, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, 0.45 0, 1 0, 1 0.5, 1 1, 0.45 1.000046065796834, -0.1 1, -0.1 0.5, -0.1 0))  POLYGON ((-0.1 0, 0.175 0, 0.45 0, 0.725 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.725000001929716 1.000034549281259, 0.45 1.000046065796834, 0.174999998070284 1.000034549281259, -0.1 1, -0.1 0.75, -0.1 0.5, -0.1 0.25, -0.1 0))
 
+# ST_Centroid for Geography
+query TTT
+SELECT
+  a.dsc,
+  ST_AsEWKT(ST_Centroid(a.geog, false)),
+  ST_AsEWKT(ST_Centroid(a.geog, true))
+FROM geog_operators_test a
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  SRID=4326;GEOMETRYCOLLECTION EMPTY                      SRID=4326;GEOMETRYCOLLECTION EMPTY
+Empty LineString                          SRID=4326;GEOMETRYCOLLECTION EMPTY                      SRID=4326;GEOMETRYCOLLECTION EMPTY
+Faraway point                             SRID=4326;POINT (5 5)                                   SRID=4326;POINT (5 5)
+Line going through left and right square  SRID=4326;POINT (0 0.500019038226216)                   SRID=4326;POINT (0 0.500019038226216)
+NULL                                      NULL                                                    NULL
+Point middle of Left Square               SRID=4326;POINT (-0.5 0.5)                              SRID=4326;POINT (-0.5 0.5)
+Point middle of Right Square              SRID=4326;POINT (0.5 0.5)                               SRID=4326;POINT (0.5 0.5)
+Square (left)                             SRID=4326;POINT (-0.499999999033419 0.500006343417203)  SRID=4326;POINT (-0.500000083989543 0.500006428376563)
+Square (right)                            SRID=4326;POINT (0.500000000966581 0.500006343417203)   SRID=4326;POINT (0.499999916010457 0.500006428376563)
+Square overlapping left and right square  SRID=4326;POINT (0.45000000128654 0.500010341293701)    SRID=4326;POINT (0.449999907835107 0.50001042625301)
+
+statement error st_centroid\(\): unhandled geography type \*geom.GeometryCollection
+SELECT ST_Centroid('GEOMETRYCOLLECTION(POINT(0 0), LINESTRING EMPTY)'::geography, true)
+
 query T
 SELECT ST_AsText(ST_Segmentize('MULTIPOINT (0 0, 1 1)'::geography, -1))
 ----
