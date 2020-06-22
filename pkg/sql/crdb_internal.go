@@ -285,7 +285,7 @@ CREATE TABLE crdb_internal.tables (
 					dbName,
 					tree.NewDInt(tree.DInt(int64(table.Version))),
 					tree.TimestampToInexactDTimestamp(table.ModificationTime),
-					tree.TimestampToDecimal(table.ModificationTime),
+					tree.TimestampToDecimalDatum(table.ModificationTime),
 					tree.NewDString(table.FormatVersion.String()),
 					tree.NewDString(table.State.String()),
 					leaseNodeDatum,
@@ -577,7 +577,7 @@ CREATE TABLE crdb_internal.jobs (
 						// Progress contains either fractionCompleted for traditional jobs,
 						// or the highWaterTimestamp for change feeds.
 						if highwater := progress.GetHighWater(); highwater != nil {
-							highWaterTimestamp = tree.TimestampToDecimal(*highwater)
+							highWaterTimestamp = tree.TimestampToDecimalDatum(*highwater)
 						} else {
 							fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 						}

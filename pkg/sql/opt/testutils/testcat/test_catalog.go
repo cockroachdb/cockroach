@@ -782,6 +782,11 @@ func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
 }
 
+// ColumnCountNoSystemColumns is part of the cat.Index interface.
+func (ti *Index) ColumnCountNoSystemColumns() int {
+	return len(ti.Columns)
+}
+
 // KeyColumnCount is part of the cat.Index interface.
 func (ti *Index) KeyColumnCount() int {
 	return ti.KeyCount

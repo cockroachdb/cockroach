@@ -509,6 +509,12 @@ func (os *optSequence) SequenceMarker() {}
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
+	// systemColumnDescs is the set of implicit system columns for the table.
+	// It contains column definitions for system columns like the MVCC Timestamp
+	// column and others. System columns have ordinals larger than the ordinals
+	// of physical columns and columns in mutations.
+	systemColumnDescs []cat.Column
+
 	// indexes are the inlined wrappers for the table's primary and secondary
 	// indexes.
 	indexes []optIndex
@@ -562,6 +568,15 @@ func newOptTable(
 		codec:    codec,
 		rawStats: stats,
 		zone:     tblZone,
+	}
+
+	// Set up the MVCC timestamp system column. However, we won't add it
+	// in case a column with the same name already exists in the table.
+	// Note that the column does not exist when err != nil. This check is done
+	// for migration purposes. We need to avoid adding the system column if the
+	// table has a column with this name for some reason.
+	if _, _, err := desc.FindColumnByName(sqlbase.MVCCTimestampColumnName); err != nil {
+		ot.systemColumnDescs = append(ot.systemColumnDescs, sqlbase.NewMVCCTimestampColumnDesc())
 	}
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
@@ -786,11 +801,14 @@ func (ot *optTable) IsVirtualTable() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.DeletableColumns())
+	return len(ot.desc.DeletableColumns()) + len(ot.systemColumnDescs)
 }
 
 // Column is part of the cat.Table interface.
 func (ot *optTable) Column(i int) cat.Column {
+	if i >= len(ot.desc.DeletableColumns()) {
+		return ot.systemColumnDescs[i-len(ot.desc.DeletableColumns())]
+	}
 	return &ot.desc.DeletableColumns()[i]
 }
 
@@ -801,8 +819,10 @@ func (ot *optTable) ColumnKind(i int) cat.ColumnKind {
 		return cat.Ordinary
 	case i < len(ot.desc.WritableColumns()):
 		return cat.WriteOnly
-	default:
+	case i < len(ot.desc.DeletableColumns()):
 		return cat.DeleteOnly
+	default:
+		return cat.SystemColumn
 	}
 }
 
@@ -904,10 +924,11 @@ type optIndex struct {
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []sqlbase.ColumnID
 
-	indexOrdinal  int
-	numCols       int
-	numKeyCols    int
-	numLaxKeyCols int
+	indexOrdinal     int
+	numCols          int
+	numKeyCols       int
+	numLaxKeyCols    int
+	numSystemColumns int
 }
 
 var _ cat.Index = &optIndex{}
@@ -921,6 +942,7 @@ func (oi *optIndex) init(
 	oi.desc = desc
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
+	oi.numSystemColumns = 0
 	if desc == &tab.desc.PrimaryIndex {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -937,6 +959,8 @@ func (oi *optIndex) init(
 			}
 		}
 		oi.numCols = tab.ColumnCount()
+		// The primary index stores some system columns, so remember that here.
+		oi.numSystemColumns = len(tab.systemColumnDescs)
 	} else {
 		oi.storedCols = desc.StoreColumnIDs
 		oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
@@ -946,7 +970,7 @@ func (oi *optIndex) init(
 		notNull := true
 		for _, id := range desc.ColumnIDs {
 			ord, _ := tab.lookupColumnOrdinal(id)
-			if tab.desc.DeletableColumns()[ord].Nullable {
+			if tab.Column(ord).IsNullable() {
 				notNull = false
 				break
 			}
@@ -996,6 +1020,11 @@ func (oi *optIndex) IsInverted() bool {
 // ColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
+}
+
+// ColumnCountNoSystemColumns is part of the cat.Index interface.
+func (oi *optIndex) ColumnCountNoSystemColumns() int {
+	return oi.numCols - oi.numSystemColumns
 }
 
 // Predicate is part of the cat.Index interface. It returns the predicate
@@ -1676,6 +1705,11 @@ func (oi *optVirtualIndex) IsInverted() bool {
 
 // ColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ColumnCount() int {
+	return oi.numCols
+}
+
+// ColumnCountNoSystemColumns is part of the cat.Index interface.
+func (oi *optVirtualIndex) ColumnCountNoSystemColumns() int {
 	return oi.numCols
 }
 

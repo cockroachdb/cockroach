@@ -184,6 +184,16 @@ func neededMutationFetchCols(
 		}
 	}
 
+	// System columns might have been added into the needed fetch col set from the
+	// primary index. These columns are implicit and should not be part of the set
+	// of fetch columns, so we remove them here.
+	table := tabMeta.Table
+	for i := 0; i < table.ColumnCount(); i++ {
+		if cat.IsSystemColumn(table, i) {
+			cols.Remove(tabMeta.MetaID.ColumnID(i))
+		}
+	}
+
 	return cols
 }
 
