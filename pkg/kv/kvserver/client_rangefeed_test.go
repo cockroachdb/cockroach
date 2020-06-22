@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +33,7 @@ import (
 // run on a user table.
 func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
@@ -107,6 +109,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 // the only such range that this can happen to is the RangeEventTable.
 func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		// Using ReplicationManual will disable the merge queue.

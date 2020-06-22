@@ -41,6 +41,7 @@ import (
 
 func TestReplicateQueueRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// This test was seen taking north of 20m under race.
@@ -169,6 +170,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 // allow a subsequent up-replication to an odd number.
 func TestReplicateQueueUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const replicaCount = 3
 
 	tc := testcluster.StartTestCluster(t, 1,
@@ -241,6 +243,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 // notice over-replicated ranges and remove replicas from them.
 func TestReplicateQueueDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	const replicaCount = 3
 
@@ -356,6 +359,7 @@ func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
 // processed by the replication queue (in particular, up-replicated).
 func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if testing.Short() || testutils.NightlyStress() || util.RaceEnabled {
 		t.Skip("https://github.com/cockroachdb/cockroach/issues/38565")
@@ -495,6 +499,7 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 
 func TestTransferLeaseToLaggingNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +33,7 @@ import (
 // immediately cleaned up.
 func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numStores = 3
 
 	testKnobs := kvserver.StoreTestingKnobs{}
@@ -144,6 +146,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 // removes a range from a store that no longer should have a replica.
 func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{

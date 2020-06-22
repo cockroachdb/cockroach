@@ -41,6 +41,7 @@ import (
 // expiration-based otherwise.
 func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
 		sc := kvserver.TestStoreConfig(nil)
@@ -92,6 +93,7 @@ func TestStoreRangeLease(t *testing.T) {
 // between expiration and epoch and back.
 func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
@@ -159,6 +161,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 // data is gossiped at startup.
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
@@ -230,6 +233,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 // network.
 func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -266,6 +270,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 
 func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -315,6 +320,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 // requests for nodes which are already in the VOTER_OUTGOING state will fail.
 func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	knobs, ltk := makeReplicationTestKnobs()
@@ -416,6 +422,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 // transfer.
 func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)

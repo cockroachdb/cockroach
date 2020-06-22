@@ -77,6 +77,7 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -189,6 +190,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // applied so they are not retried after recovery.
 func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	// Splits can cause our chosen keys to end up on ranges other than range 1,
 	// and trying to handle that complicates the test without providing any
@@ -264,6 +266,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -338,6 +341,7 @@ func TestReplicateRange(t *testing.T) {
 // persisted to disk and restored when a node is stopped and restarted.
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/40351")
 
@@ -436,6 +440,7 @@ func TestRestoreReplicas(t *testing.T) {
 // proposed.
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var runFilter atomic.Value
 	runFilter.Store(true)
@@ -504,6 +509,7 @@ func TestFailedReplicaChange(t *testing.T) {
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -599,6 +605,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -670,6 +677,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 // truncated.
 func TestSnapshotAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, changeTerm := range []bool{false, true} {
 		name := "sameTerm"
 		if changeTerm {
@@ -838,6 +846,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 // bug seen in #37056.
 func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -1038,6 +1047,7 @@ func (c fakeSnapshotStream) Context() context.Context {
 // incoming snapshot still cleans up the outstanding reservation that was made.
 func TestFailedSnapshotFillsReservation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -1079,6 +1089,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 // situation occurs when two replicas need snapshots at the same time.
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
 	// value mismatches, whether transient or permanent, skip this test if the
@@ -1152,6 +1163,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 // split range back to the restarted node.
 func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
@@ -1234,6 +1246,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// In this scenario, three different mechanisms detect the need to repropose
 	// commands. Test that each one is sufficient individually. We have this
@@ -1392,6 +1405,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 //    command to the leader.
 func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	// Drop the raft tick interval so the Raft group is ticked more.
@@ -1542,6 +1556,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 // under-replicated ranges and replicate them.
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer kvserver.SetMockAddSSTable()()
 	sc := kvserver.TestStoreConfig(nil)
 	// Prevent the split queue from creating additional ranges while we're
@@ -1620,6 +1635,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 // the first range; this verifies that those tests will not be affected.
 func TestUnreplicateFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -1642,6 +1658,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 // another change has been made to the RangeDescriptor since it was initiated.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
@@ -1722,6 +1739,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 // with a downed node.
 func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
 	// value mismatches, whether transient or permanent, skip this test if the
@@ -1793,6 +1811,7 @@ func TestProgressWithDownNode(t *testing.T) {
 //   - ensure that store can catch up with the rest of the group
 func TestReplicateRestartAfterTruncationWithRemoveAndReAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	runReplicateRestartAfterTruncation(t, true /* removeBeforeTruncateAndReAdd */)
 }
 
@@ -1802,6 +1821,7 @@ func TestReplicateRestartAfterTruncationWithRemoveAndReAdd(t *testing.T) {
 // without a new replica ID works correctly.
 func TestReplicateRestartAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	runReplicateRestartAfterTruncation(t, false /* removeBeforeTruncateAndReAdd */)
 }
 
@@ -2038,12 +2058,14 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testReplicaAddRemove(t, true /* addFirst */)
 }
 
 func TestReplicateRemoveAndAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testReplicaAddRemove(t, false /* addFirst */)
 }
@@ -2054,6 +2076,7 @@ func TestReplicateRemoveAndAdd(t *testing.T) {
 // to constantly catch up the slower node via snapshots. See #8659.
 func TestQuotaPool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const quota = 10000
 	const numReplicas = 3
@@ -2203,6 +2226,7 @@ func TestQuotaPool(t *testing.T) {
 // as active for the purpose of proposal throttling.
 func TestWedgedReplicaDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numReplicas = 3
 	const rangeID = 1
@@ -2301,6 +2325,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 // suppressing elections in an idle cluster.
 func TestRaftHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -2339,6 +2364,7 @@ func TestRaftHeartbeats(t *testing.T) {
 // coalesced heartbeats are not stalled out entirely.
 func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -2408,6 +2434,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 // races (primarily in asynchronous coalesced heartbeats).
 func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -2454,6 +2481,7 @@ outer:
 // is not KeyMin replicating to a fresh store can apply snapshots correctly.
 func TestReplicateAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
@@ -2510,6 +2538,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 // transferred away/replaced without campaigning the old one.
 func TestReplicaRemovalCampaign(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testData := []struct {
 		remove        bool
@@ -2612,6 +2641,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 // a remote node correctly after the Replica was removed from the Store.
 func TestRaftAfterRemoveRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.Clock = nil // manual clock
@@ -2679,6 +2709,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // reproduce a race (see #1911 and #9037).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	const rangeID = roachpb.RangeID(1)
@@ -2725,6 +2756,7 @@ func TestRaftRemoveRace(t *testing.T) {
 // placeholders.
 func TestRemovePlaceholderRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -2810,6 +2842,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftResponse(
 
 func TestReplicaGCRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -2997,6 +3030,7 @@ HAVING
 
 func TestDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Five nodes is too much to reliably run under testrace with our aggressive
@@ -3109,6 +3143,7 @@ func TestDecommission(t *testing.T) {
 // cannot cause other removed nodes to recreate their ranges.
 func TestReplicateRogueRemovedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	// Newly-started stores (including the "rogue" one) should not GC
@@ -3289,6 +3324,7 @@ func (errorChannelTestHandler) HandleSnapshot(
 // coming back from the dead cannot cause elections.
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -3422,6 +3458,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
@@ -3499,6 +3536,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 
 func TestReplicaLazyLoad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.RaftTickInterval = 10 * time.Millisecond // safe because there is only a single node
@@ -3549,6 +3587,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -3604,6 +3643,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 // without encountering an error.
 func TestLeaseHolderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -3633,6 +3673,7 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 // (not RaftGroupDeletedError, and even before the ReplicaGCQueue has run).
 func TestRemovedReplicaError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many
@@ -3679,6 +3720,7 @@ func TestRemovedReplicaError(t *testing.T) {
 
 func TestTransferRaftLeadership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numStores = 3
 	sc := kvserver.TestStoreConfig(nil)
@@ -3781,6 +3823,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 // Test that a single blocked replica does not block other replicas.
 func TestRaftBlockedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
@@ -3843,6 +3886,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 // up.
 func TestRangeQuiescence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
@@ -3920,6 +3964,7 @@ func TestRangeQuiescence(t *testing.T) {
 // lease points to a different replica.
 func TestInitRaftGroupOnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	// Don't timeout range leases (see the relation between
@@ -3999,6 +4044,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 // https://github.com/cockroachdb/cockroach/issues/13506 has been fixed.
 func TestFailedConfChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Trigger errors at apply time so they happen on both leaders and
 	// followers.
@@ -4079,6 +4125,7 @@ func TestFailedConfChange(t *testing.T) {
 // compactor queue.
 func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 
@@ -4138,6 +4185,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 
 func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var filterRangeIDAtomic int64
 
@@ -4307,6 +4355,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	sc := kvserver.TestStoreConfig(nil)
@@ -4391,6 +4440,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 // uncovered it when run under stress.
 func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.TraceAllRaftEvents = true
@@ -4459,6 +4509,7 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 // traffic on the SystemClass connection.
 func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
 	// value mismatches, whether transient or permanent, skip this test if the
@@ -4578,6 +4629,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 // but before those writes have been applied to its replicated state machine.
 func TestAckWriteBeforeApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, tc := range []struct {
 		repls            int
 		expAckBeforeAppl bool
@@ -4746,6 +4798,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //
 func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
 	// value mismatches, whether transient or permanent, skip this test if the
@@ -5169,6 +5222,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 // tested.
 func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	// These variables track the request count to make sure that all of the
 	// requests have made it to the Replica.

@@ -384,6 +384,7 @@ func mockStorePool(
 
 func TestAllocatorSimpleRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(1, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -403,6 +404,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 
 func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, _, _, a, _ := createTestAllocator(1, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -421,6 +423,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 
 func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(1, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -472,6 +475,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 
 func TestAllocatorExistingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(1, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -506,6 +510,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 
 func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stores := []*roachpb.StoreDescriptor{
 		{
@@ -621,6 +626,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 // randomly from amongst stores under the maxFractionUsedThreshold.
 func TestAllocatorRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stores := []*roachpb.StoreDescriptor{
 		{
@@ -711,6 +717,7 @@ func TestAllocatorRebalance(t *testing.T) {
 // to a target that we'll immediately remove.
 func TestAllocatorRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	stopper, g, _, a, _ := createTestAllocator(5, false /* deterministic */)
@@ -880,6 +887,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 
 func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, _, sp, a, _ := createTestAllocator(8, false /* deterministic */)
 	ctx := context.Background()
@@ -965,6 +973,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 // stores.
 func TestAllocatorRebalanceThrashing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type testStore struct {
 		rangeCount          int32
@@ -1100,6 +1109,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 // exceed the maxAvailCapacityThreshold.
 func TestAllocatorRebalanceByCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Setup the stores so that only one is below the standard deviation threshold.
 	stores := []*roachpb.StoreDescriptor{
@@ -1163,6 +1173,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
 	defer stopper.Stop(context.Background())
 
@@ -1227,6 +1238,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 // not choose to transfer leases to a store that is draining.
 func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, storePool, nl := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -1300,6 +1312,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 
 func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	ctx := context.Background()
@@ -1513,6 +1526,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 
 func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
 	defer stopper.Stop(context.Background())
 
@@ -1569,6 +1583,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 
 func TestAllocatorShouldTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
 	defer stopper.Stop(context.Background())
 
@@ -1622,6 +1637,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 
 func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, storePool, nl := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -1683,6 +1699,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 
 func TestAllocatorLeasePreferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
 	defer stopper.Stop(context.Background())
 
@@ -1839,6 +1856,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 
 func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
 	defer stopper.Stop(context.Background())
 
@@ -1934,6 +1952,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 
 func TestAllocatorRemoveTargetLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -2003,6 +2022,7 @@ func TestAllocatorRemoveTargetLocality(t *testing.T) {
 
 func TestAllocatorAllocateTargetLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -2085,6 +2105,7 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 
 func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -2325,6 +2346,7 @@ var (
 
 func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -2564,6 +2586,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 
 func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -2786,6 +2809,7 @@ func expectedStoreIDsMatch(expected []roachpb.StoreID, results candidateList) bo
 
 func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
@@ -3604,6 +3628,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 // request distributions and inter-node latencies.
 func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, storePool, _ := createTestStorePool(
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
@@ -3772,6 +3797,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	st := cluster.MakeTestingClusterSettings()
 	enableLoadBasedLeaseRebalancing.Override(&st.SV, true)
@@ -3882,6 +3908,7 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// List of replicas that will be passed to RemoveTarget
 	replicas := []roachpb.ReplicaDescriptor{
@@ -3968,6 +3995,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 func TestAllocatorComputeAction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
@@ -4448,6 +4476,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 
 func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	zone := zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(3),
@@ -4540,6 +4569,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 
 func TestAllocatorComputeActionDecommission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		zone            zonepb.ZoneConfig
@@ -4763,6 +4793,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 
 func TestAllocatorRemoveLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	zone := zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(3),
@@ -4797,6 +4828,7 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 
 func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// In this test, the configured zone config has a replication factor of five
 	// set. We are checking that the effective replication factor is rounded down
@@ -5007,6 +5039,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 
 func TestAllocatorGetNeededReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		zoneRepls  int32
@@ -5078,6 +5111,7 @@ func makeDescriptor(storeList []roachpb.StoreID) roachpb.RangeDescriptor {
 // ComputeAction returns AllocatorNoop when storePool is nil.
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
 	action, priority := a.ComputeAction(context.Background(), &zonepb.ZoneConfig{NumReplicas: proto.Int32(0)}, nil)
@@ -5093,6 +5127,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 // returned from an allocatorError.
 func TestAllocatorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	constraint := []zonepb.ConstraintsConjunction{
 		{Constraints: []zonepb.Constraint{{Value: "one", Type: zonepb.Constraint_REQUIRED}}},
@@ -5140,6 +5175,7 @@ func TestAllocatorError(t *testing.T) {
 // will not be sent to purgatory.
 func TestAllocatorThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	ctx := context.Background()
@@ -5190,6 +5226,7 @@ func TestAllocatorThrottled(t *testing.T) {
 
 func TestFilterBehindReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -5259,6 +5296,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 
 func TestFilterUnremovableReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -5331,6 +5369,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 
 func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -5389,6 +5428,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 // bad zone config, the replica will be rebalanced off of it.
 func TestAllocatorRebalanceAway(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	localityUS := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "datacenter", Value: "us"}}}
 	localityEUR := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "datacenter", Value: "eur"}}}
@@ -5559,6 +5599,7 @@ func (ts *testStore) compact() {
 
 func TestAllocatorFullDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()

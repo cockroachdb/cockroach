@@ -192,6 +192,7 @@ func (tq *testQueue) isDone() bool {
 // removed from multiple queues.
 func TestScannerAddToQueues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q1, q2 := &testQueue{}, &testQueue{}
@@ -239,6 +240,7 @@ func TestScannerAddToQueues(t *testing.T) {
 // of how many, to match scanInterval.
 func TestScannerTiming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	const runTime = 100 * time.Millisecond
 	const maxError = 7500 * time.Microsecond
@@ -273,6 +275,7 @@ func TestScannerTiming(t *testing.T) {
 // TestScannerPaceInterval tests that paceInterval returns the correct interval.
 func TestScannerPaceInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	durations := []time.Duration{
 		30 * time.Millisecond,
@@ -311,6 +314,7 @@ func TestScannerPaceInterval(t *testing.T) {
 // specified max idle time.
 func TestScannerMinMaxIdleTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const targetInterval = 100 * time.Millisecond
 	const minIdleTime = 10 * time.Millisecond
 	const maxIdleTime = 15 * time.Millisecond
@@ -328,6 +332,7 @@ func TestScannerMinMaxIdleTime(t *testing.T) {
 // replicas from being added to queues.
 func TestScannerDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
@@ -382,6 +387,7 @@ func TestScannerDisabled(t *testing.T) {
 
 func TestScannerDisabledWithZeroInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ranges := newTestRangeSet(1, t)
 	s := newReplicaScanner(makeAmbCtx(), nil, 0*time.Millisecond, 0, 0, ranges)
 	if !s.GetDisabled() {
@@ -392,6 +398,7 @@ func TestScannerDisabledWithZeroInterval(t *testing.T) {
 // TestScannerEmptyRangeSet verifies that an empty range set doesn't busy loop.
 func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
 	mc := hlc.NewManualClock(123)

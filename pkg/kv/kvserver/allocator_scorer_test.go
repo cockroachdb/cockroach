@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 )
@@ -47,6 +48,7 @@ func (s storeScores) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func TestOnlyValidAndNotFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		valid, invalid int
@@ -89,6 +91,7 @@ func TestOnlyValidAndNotFull(t *testing.T) {
 // selectGood when called with just invalid/full stores.
 func TestSelectGoodPanic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cl := candidateList{
 		candidate{
@@ -104,6 +107,7 @@ func TestSelectGoodPanic(t *testing.T) {
 // TestCandidateSelection tests select{good,bad} and {best,worst}constraints.
 func TestCandidateSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type scoreTuple struct {
 		diversity  int
@@ -240,6 +244,7 @@ func TestCandidateSelection(t *testing.T) {
 
 func TestBetterThan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCandidateList := candidateList{
 		{
@@ -315,6 +320,7 @@ func TestBetterThan(t *testing.T) {
 // desirable.
 func TestBestRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	candidates := []rebalanceOptions{
 		{
@@ -405,6 +411,7 @@ func TestBestRebalanceTarget(t *testing.T) {
 
 func TestStoreHasReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var existing []roachpb.ReplicaDescriptor
 	for i := 2; i < 10; i += 2 {
@@ -539,6 +546,7 @@ func testStoreReplicas(storeIDs []roachpb.StoreID) []roachpb.ReplicaDescriptor {
 
 func TestConstraintsCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		name        string
@@ -693,6 +701,7 @@ func TestConstraintsCheck(t *testing.T) {
 
 func TestAllocateConstraintsCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		name              string
@@ -927,6 +936,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 
 func TestRemoveConstraintsCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type expected struct {
 		valid, necessary bool
@@ -1060,6 +1070,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 
 func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	options := scorerOptions{}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
@@ -1216,6 +1227,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 
 func TestAllocateDiversityScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Given a range that's located on stores, rank order which of the testStores
 	// are the best fit for allocating a new replica on.
@@ -1270,6 +1282,7 @@ func TestAllocateDiversityScore(t *testing.T) {
 
 func TestRebalanceToDiversityScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Given a range that's located on stores, rank order which of the testStores
 	// are the best fit for rebalancing to.
@@ -1344,6 +1357,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 
 func TestRemovalDiversityScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Given a range that's located on stores, rank order which of the replicas
 	// should be removed.
@@ -1412,6 +1426,7 @@ func TestRemovalDiversityScore(t *testing.T) {
 
 func TestDiversityScoreEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		stores   []roachpb.StoreID
@@ -1470,6 +1485,7 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 
 func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	options := scorerOptions{}
 	storeList := StoreList{
@@ -1510,6 +1526,7 @@ func TestBalanceScore(t *testing.T) {
 
 func TestRebalanceConvergesOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	storeList := StoreList{
 		candidateRanges: stat{mean: 1000},
@@ -1545,6 +1562,7 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 
 func TestMaxCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	expectedCheck := map[roachpb.StoreID]bool{
 		testStoreUSa15:  false,

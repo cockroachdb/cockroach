@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +30,7 @@ import (
 // cluster had been upgraded from a previous version of cockroach.
 func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Control our own split destiny.
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{Store: &StoreTestingKnobs{

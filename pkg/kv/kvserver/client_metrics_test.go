@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -160,6 +161,7 @@ func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
 // are tracked properly.
 func TestStoreResolveMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// First prevent rot that would result from adding fields without handling
 	// them everywhere.
@@ -240,6 +242,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -344,6 +347,7 @@ func TestStoreMetrics(t *testing.T) {
 // based leases. Expiration based leases don't publish closed timestamps.
 func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{

@@ -30,6 +30,7 @@ import (
 // incrementing the value associated with a single key.
 func TestSingleKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if testing.Short() {
 		t.Skip("short flag")

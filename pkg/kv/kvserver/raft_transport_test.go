@@ -211,6 +211,7 @@ func (rttc *raftTransportTestContext) Send(
 
 func TestSendAndReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -377,6 +378,7 @@ func TestSendAndReceive(t *testing.T) {
 // messages are delivered in order.
 func TestInOrderDelivery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -414,6 +416,7 @@ func TestInOrderDelivery(t *testing.T) {
 // dropped waiting for raft node connection to be established.
 func TestRaftTransportCircuitBreaker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -467,6 +470,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 // store.
 func TestRaftTransportIndependentRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -513,6 +517,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 // doesn't get stuck in an endless retry loop against the wrong node.
 func TestReopenConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -611,6 +616,7 @@ func TestReopenConnection(t *testing.T) {
 // remote node does not block calls to SendAsync.
 func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 

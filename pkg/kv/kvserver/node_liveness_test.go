@@ -71,6 +71,7 @@ func pauseNodeLivenessHeartbeats(mtc *multiTestContext, pause bool) {
 
 func TestNodeLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -128,6 +129,7 @@ func TestNodeLiveness(t *testing.T) {
 
 func TestNodeLivenessInitialIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
@@ -167,6 +169,7 @@ func verifyEpochIncremented(t *testing.T, mtc *multiTestContext, nodeIdx int) {
 // node is invoked when it changes from state false to true.
 func TestNodeIsLiveCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -214,6 +217,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 // this node updates its own liveness status.
 func TestNodeHeartbeatCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -268,6 +272,8 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 // live.
 func TestNodeLivenessEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -337,6 +343,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 // restarted, the node liveness records are re-gossiped immediately.
 func TestNodeLivenessRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -398,6 +405,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 // clobbering in place.
 func TestNodeLivenessSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
@@ -457,6 +465,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 
 func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -501,6 +510,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 func TestNodeLivenessGetLivenesses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -557,6 +567,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 // to heartbeat all succeed.
 func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
@@ -590,6 +601,7 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 // attempts to increment liveness of another node all succeed.
 func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -624,6 +636,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 // nodes once they are aware of its draining state.
 func TestNodeLivenessSetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -721,6 +734,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 
 func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var injectError atomic.Value
 	var injectedErrorCount int32
@@ -779,6 +793,7 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 
 func TestNodeLivenessStatusMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	if testing.Short() {
 		t.Skip("short")
 	}
@@ -958,6 +973,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 // node's liveness record is updated and remains after restart.
 func TestNodeLivenessSetDecommissioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Sets itself to decommissioning.
 	testNodeLivenessSetDecommissioning(t, 0)
 	// Set another node to decommissioning.
@@ -971,6 +987,7 @@ func TestNodeLivenessSetDecommissioning(t *testing.T) {
 // See (*NodeLiveness).SetDecommissioning for details.
 func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
