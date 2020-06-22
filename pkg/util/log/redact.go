@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // EditSensitiveData describes how the messages in log entries should
@@ -93,11 +93,6 @@ func getEditor(editMode EditSensitiveData) redactEditor {
 // This is obsolete. Use redact.Safe directly.
 // TODO(knz): Remove this.
 var Safe = redact.Safe
-
-// SafeMessager aliases a type definition.
-// This is obsolete. Use redact.SafeFormatter instead.
-// TODO(knz): Remove this.
-type SafeMessager = redact.SafeMessager
 
 func init() {
 	// We consider booleans and numeric values to be always safe for
