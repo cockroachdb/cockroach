@@ -112,7 +112,7 @@ EXPLAIN (VEC) SELECT _inet & _inet FROM many_types
 │
 └ Node 1
   └ *colexec.projBitandDatumDatumOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT _inet & _inet FROM many_types
@@ -129,7 +129,7 @@ EXPLAIN (VEC) SELECT _inet - _int2 FROM many_types
 └ Node 1
   └ *colexec.projMinusDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _int2^_int4 FROM many_types
@@ -139,7 +139,7 @@ EXPLAIN (VEC) SELECT _int2^_int4 FROM many_types
   └ *colexec.projPowInt64Int64Op
     └ *colexec.castOp
       └ *colexec.castOp
-        └ *colfetcher.colBatchScan
+        └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _int2^_int FROM many_types
@@ -148,7 +148,7 @@ EXPLAIN (VEC) SELECT _int2^_int FROM many_types
 └ Node 1
   └ *colexec.projPowInt64Int64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _float^_float FROM many_types
@@ -156,7 +156,7 @@ EXPLAIN (VEC) SELECT _float^_float FROM many_types
 │
 └ Node 1
   └ *colexec.projPowFloat64Float64Op
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _decimal^_int4 FROM many_types
@@ -165,7 +165,7 @@ EXPLAIN (VEC) SELECT _decimal^_int4 FROM many_types
 └ Node 1
   └ *colexec.projPowDecimalInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query R rowsort
 SELECT _float^_float FROM many_types
@@ -197,7 +197,7 @@ EXPLAIN (VEC) SELECT _inet - 1 FROM many_types
 │
 └ Node 1
   └ *colexec.projMinusDatumInt64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT _inet - 1 FROM many_types
@@ -214,7 +214,7 @@ EXPLAIN (VEC) SELECT _int4 + _inet FROM many_types
 └ Node 1
   └ *colexec.projPlusDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT _int4 + _inet FROM many_types
@@ -230,7 +230,7 @@ EXPLAIN (VEC) SELECT 2 + _inet FROM many_types
 │
 └ Node 1
   └ *colexec.projPlusDatumInt64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT 2 + _inet FROM many_types
@@ -246,7 +246,7 @@ EXPLAIN (VEC) SELECT _time + _interval FROM many_types
 │
 └ Node 1
   └ *colexec.projPlusDatumIntervalOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT _time + _interval FROM many_types
@@ -262,7 +262,7 @@ EXPLAIN (VEC) SELECT _json - _int FROM many_types
 │
 └ Node 1
   └ *colexec.projMinusDatumInt64Op
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT _json - _int FROM many_types
@@ -278,7 +278,7 @@ EXPLAIN (VEC) SELECT _bytes || _bytes FROM many_types
 │
 └ Node 1
   └ *colexec.projConcatBytesBytesOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _bytes || _bytes FROM many_types
@@ -294,7 +294,7 @@ EXPLAIN (VEC) SELECT _string || _string FROM many_types
 │
 └ Node 1
   └ *colexec.projConcatBytesBytesOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _string || _string FROM many_types
@@ -310,7 +310,7 @@ EXPLAIN (VEC) SELECT _json || _json FROM many_types
 │
 └ Node 1
   └ *colexec.projConcatDatumDatumOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _json || _json FROM many_types
@@ -326,7 +326,7 @@ EXPLAIN (VEC) SELECT _varbit || _varbit FROM many_types
 │
 └ Node 1
   └ *colexec.projConcatDatumDatumOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _varbit || _varbit FROM many_types
@@ -342,7 +342,7 @@ EXPLAIN (VEC) SELECT _int << 1 FROM many_types
 │
 └ Node 1
   └ *colexec.projLShiftInt64Int64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _int >> 1 FROM many_types
@@ -350,7 +350,7 @@ EXPLAIN (VEC) SELECT _int >> 1 FROM many_types
 │
 └ Node 1
   └ *colexec.projRShiftInt64Int64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query I rowsort
 SELECT _int2 >> 1 FROM many_types
@@ -388,7 +388,7 @@ EXPLAIN (VEC) SELECT _varbit << 4 FROM many_types
 │
 └ Node 1
   └ *colexec.projLShiftDatumInt64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _varbit << _int2 FROM many_types
@@ -397,7 +397,7 @@ EXPLAIN (VEC) SELECT _varbit << _int2 FROM many_types
 └ Node 1
   └ *colexec.projLShiftDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _varbit << _int4 FROM many_types
@@ -406,7 +406,7 @@ EXPLAIN (VEC) SELECT _varbit << _int4 FROM many_types
 └ Node 1
   └ *colexec.projLShiftDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _varbit << _int FROM many_types
@@ -414,7 +414,7 @@ EXPLAIN (VEC) SELECT _varbit << _int FROM many_types
 │
 └ Node 1
   └ *colexec.projLShiftDatumInt64Op
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 
 query T
@@ -423,7 +423,7 @@ EXPLAIN (VEC) SELECT _varbit >> 4 FROM many_types
 │
 └ Node 1
   └ *colexec.projRShiftDatumInt64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _varbit >> _int2 FROM many_types
@@ -432,7 +432,7 @@ EXPLAIN (VEC) SELECT _varbit >> _int2 FROM many_types
 └ Node 1
   └ *colexec.projRShiftDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _varbit >> _int4 FROM many_types
@@ -441,7 +441,7 @@ EXPLAIN (VEC) SELECT _varbit >> _int4 FROM many_types
 └ Node 1
   └ *colexec.projRShiftDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC) SELECT _varbit >> _int FROM many_types
@@ -449,7 +449,7 @@ EXPLAIN (VEC) SELECT _varbit >> _int FROM many_types
 │
 └ Node 1
   └ *colexec.projRShiftDatumInt64Op
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _varbit >> 1 FROM many_types
@@ -482,7 +482,7 @@ EXPLAIN (VEC) SELECT _json -> _int2 FROM many_types
 └ Node 1
   └ *colexec.projJSONFetchValDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query I rowsort
 SELECT _int2^_int FROM many_types WHERE _int2 < 10 AND _int < 10
@@ -514,7 +514,7 @@ EXPLAIN (VEC) SELECT _json -> _int4 FROM many_types
 └ Node 1
   └ *colexec.projJSONFetchValDatumInt64Op
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 SELECT _json -> _int4 FROM many_types
@@ -530,7 +530,7 @@ EXPLAIN (VEC) SELECT _json -> _int FROM many_types
 │
 └ Node 1
   └ *colexec.projJSONFetchValDatumInt64Op
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _json -> _int FROM many_types
@@ -546,7 +546,7 @@ EXPLAIN (VEC) SELECT _json -> 2 FROM many_types
 │
 └ Node 1
   └ *colexec.projJSONFetchValDatumInt64ConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T
 SELECT _json -> 2 FROM many_types
@@ -563,7 +563,7 @@ EXPLAIN (VEC) SELECT _json -> 2 -> 'a' FROM many_types
 └ Node 1
   └ *colexec.projJSONFetchValDatumBytesConstOp
     └ *colexec.projJSONFetchValDatumInt64ConstOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 query T
 SELECT _json -> 2 -> 'a' FROM many_types
@@ -594,7 +594,7 @@ EXPLAIN (VEC) SELECT '[2, "hi", {"b": ["bar", {"c": 4}]}]'::jsonb -> _int FROM m
 │
 └ Node 1
   └ *colexec.projJSONFetchValDatumConstInt64Op
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query T rowsort
 SELECT '[2, "hi", {"b": ["bar", {"c": 4}]}]'::jsonb -> _int FROM many_types
@@ -613,7 +613,7 @@ EXPLAIN (VEC) SELECT B'11' <> _varbit FROM many_types
 │
 └ Node 1
   └ *colexec.projNEDatumDatumConstOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query B rowsort
 SELECT B'11' >= _varbit FROM many_types

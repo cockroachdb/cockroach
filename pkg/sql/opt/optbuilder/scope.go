@@ -219,15 +219,15 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	}
 }
 
-// appendColumnsFromTable adds all non-mutation columns from the given table
-// metadata to this scope.
-func (s *scope) appendColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
+// appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns from the
+// given table metadata to this scope.
+func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
 	tab := tabMeta.Table
 	if s.cols == nil {
 		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
 	}
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if cat.IsMutationColumn(tab, i) {
+		if cat.IsMutationColumn(tab, i) || cat.IsSystemColumn(tab, i) {
 			continue
 		}
 		tabCol := tab.Column(i)

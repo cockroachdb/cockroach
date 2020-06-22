@@ -58,9 +58,9 @@ SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDE
 render                                                                                      (cid int, sum decimal)
  │                                  render 0     (@2)[int]
  │                                  render 1     (@3)[decimal]
- └── sort                                                                                   (column6 decimal, cid int, sum decimal)  +column6
-      │                             order        +column6
-      └── render                                                                            (column6 decimal, cid int, sum decimal)
+ └── sort                                                                                   (column7 decimal, cid int, sum decimal)  +column7
+      │                             order        +column7
+      └── render                                                                            (column7 decimal, cid int, sum decimal)
            │                        render 0     ((1)[decimal] - (@2)[decimal])[decimal]
            │                        render 1     (@1)[int]
            │                        render 2     (@2)[decimal]
@@ -90,7 +90,7 @@ children:
 - name: sort
   attrs:
   - key: order
-    value: +column6
+    value: +column7
   children:
   - name: render
     attrs:

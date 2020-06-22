@@ -170,7 +170,14 @@ func neededMutationFetchCols(
 			if i == cat.PrimaryIndex && !keyCols.Intersects(updateCols) {
 				addFamilyCols(updateCols)
 			} else {
-				cols.UnionWith(indexCols)
+				// Add all of the index columns into cols.
+				indexCols.ForEach(func(col opt.ColumnID) {
+					ord := tabMeta.MetaID.ColumnOrdinal(col)
+					// We don't want to include system columns.
+					if !cat.IsSystemColumn(tabMeta.Table, ord) {
+						cols.Add(col)
+					}
+				})
 			}
 		}
 

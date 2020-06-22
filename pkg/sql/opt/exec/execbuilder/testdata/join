@@ -488,10 +488,10 @@ render               ·             ·                 (a, b, n, sq)           �
  │                   render 1      b                 ·                       ·
  │                   render 2      n                 ·                       ·
  │                   render 3      sq                ·                       ·
- └── hash-join       ·             ·                 (column6, a, b, n, sq)  ·
+ └── hash-join       ·             ·                 (column8, a, b, n, sq)  ·
       │              type          inner             ·                       ·
-      │              equality      (column6) = (sq)  ·                       ·
-      ├── render     ·             ·                 (column6, a, b)         ·
+      │              equality      (column8) = (sq)  ·                       ·
+      ├── render     ·             ·                 (column8, a, b)         ·
       │    │         render 0      a + b             ·                       ·
       │    │         render 1      a                 ·                       ·
       │    │         render 2      b                 ·                       ·
@@ -542,10 +542,10 @@ render               ·             ·                 (a, b, n, sq)           �
  │                   render 1      b                 ·                       ·
  │                   render 2      n                 ·                       ·
  │                   render 3      sq                ·                       ·
- └── hash-join       ·             ·                 (column6, a, b, n, sq)  ·
+ └── hash-join       ·             ·                 (column8, a, b, n, sq)  ·
       │              type          full outer        ·                       ·
-      │              equality      (column6) = (sq)  ·                       ·
-      ├── render     ·             ·                 (column6, a, b)         ·
+      │              equality      (column8) = (sq)  ·                       ·
+      ├── render     ·             ·                 (column8, a, b)         ·
       │    │         render 0      a + b             ·                       ·
       │    │         render 1      a                 ·                       ·
       │    │         render 2      b                 ·                       ·
@@ -566,12 +566,12 @@ render                    ·             ·                    (a, b, n, sq)    
  │                        render 1      b                    ·                       ·
  │                        render 2      n                    ·                       ·
  │                        render 3      sq                   ·                       ·
- └── filter               ·             ·                    (column6, a, b, n, sq)  ·
+ └── filter               ·             ·                    (column8, a, b, n, sq)  ·
       │                   filter        (b % 2) != (sq % 2)  ·                       ·
-      └── hash-join       ·             ·                    (column6, a, b, n, sq)  ·
+      └── hash-join       ·             ·                    (column8, a, b, n, sq)  ·
            │              type          full outer           ·                       ·
-           │              equality      (column6) = (sq)     ·                       ·
-           ├── render     ·             ·                    (column6, a, b)         ·
+           │              equality      (column8) = (sq)     ·                       ·
+           ├── render     ·             ·                    (column8, a, b)         ·
            │    │         render 0      a + b                ·                       ·
            │    │         render 1      a                    ·                       ·
            │    │         render 2      b                    ·                       ·
