@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
 	mysql "vitess.io/vitess/go/vt/sqlparser"
@@ -34,6 +35,7 @@ import (
 
 func TestMysqldumpDataReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	files := getMysqldumpTestdata(t)
 
@@ -119,6 +121,7 @@ func readMysqlCreateFrom(
 
 func TestMysqldumpSchemaReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	files := getMysqldumpTestdata(t)
 
@@ -226,6 +229,7 @@ func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
 
 func TestMysqlValueToDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	date := func(s string) tree.Datum {
 		d, _, err := tree.ParseDDate(nil, s)
