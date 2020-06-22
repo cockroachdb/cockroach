@@ -69,6 +69,7 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 // not-nil Txn with empty ID gets a new transaction initialized.
 func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	ctx := context.Background()
@@ -99,6 +100,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 // the minimum number of ranges.
 func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	ranges := []struct {
@@ -148,6 +150,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 // along range boundaries when they exceed the maximum intent bytes threshold.
 func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	a := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key(nil)}
 	b := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key(nil)}
 	c := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key(nil)}
@@ -277,6 +280,7 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 // Test that the theartbeat loop detects aborted transactions and stops.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
@@ -427,6 +431,7 @@ func verifyCleanup(key roachpb.Key, eng storage.Engine, t *testing.T, coords ...
 // sends resolve write intent requests.
 func TestTxnCoordSenderEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	ctx := context.Background()
@@ -513,6 +518,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 // transaction is, even on error.
 func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -572,6 +578,7 @@ func assertTransactionAbortedError(t *testing.T, e error) {
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	ctx := context.Background()
@@ -609,6 +616,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 // commit could be omitted.
 func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	ctx := context.Background()
@@ -635,6 +643,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 // observed, even if the error is on the first request.
 func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
 		key := roachpb.Key("a")
@@ -686,6 +695,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
 	plus10 := origTS.Add(10, 10)
@@ -868,6 +878,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 // used for reads by a single transaction, and their state can be combined.
 func TestTxnMultipleCoord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -916,6 +927,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 // overlapping ranges.
 func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
@@ -1061,6 +1073,7 @@ func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetr
 // function as other tests do.
 func TestTxnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 	value := []byte("value")
@@ -1089,6 +1102,7 @@ func TestTxnCommit(t *testing.T) {
 // TestTxnOnePhaseCommit verifies that 1PC metric tracking works.
 func TestTxnOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 
@@ -1122,6 +1136,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 
 func TestTxnAbortCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
 
@@ -1145,6 +1160,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 func TestTxnRestartCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	readKey := []byte("read")
 	writeKey := []byte("write")
@@ -1202,6 +1218,7 @@ func TestTxnRestartCount(t *testing.T) {
 
 func TestTxnDurations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	manual := s.Manual
 	defer cleanupFn()
@@ -1242,6 +1259,7 @@ func TestTxnDurations(t *testing.T) {
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
@@ -1380,6 +1398,7 @@ func (s *mockSender) Send(
 // handling errors on rollback in this regard.
 func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1447,6 +1466,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 // possible locks are properly tracked and attached to a subsequent EndTxn.
 func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1531,6 +1551,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 // EndTxnRequest.
 func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1585,6 +1606,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1681,6 +1703,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 // transaction does not prompt an EndTxn call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1721,6 +1744,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 // didn't, regardless of whether there is an error or not.
 func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1804,6 +1828,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 // not changed.
 func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1870,6 +1895,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 // they are incremented on successive commands.
 func TestSequenceNumbers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1923,6 +1949,7 @@ func TestSequenceNumbers(t *testing.T) {
 // on a transaction at the same time from multiple goroutines.
 func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1978,6 +2005,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 // always upgraded on successive requests.
 func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
@@ -2042,6 +2070,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 // of the deadline is done in the client.
 func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
@@ -2110,6 +2139,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 // an error if the transaction has already performed an operation.
 func TestTxnCoordSenderPipelining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s := createTestDB(t)
@@ -2179,6 +2209,7 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 // reads with writes.
 func TestAnchorKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
@@ -2232,6 +2263,7 @@ func TestAnchorKey(t *testing.T) {
 // errors and feed them to the root txn.
 func TestLeafTxnClientRejectError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to inject an error so that a leaf txn is "poisoned". This can
 	// happen, for example, if the leaf is used concurrently by multiple requests,
@@ -2280,6 +2312,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 // inconsistent state. See comments in TxnCoordSender.UpdateRootWithLeafFinalState().
 func TestUpdateRoootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), nil /* knobs */)
 	defer s.Stop()
 	ctx := context.Background()

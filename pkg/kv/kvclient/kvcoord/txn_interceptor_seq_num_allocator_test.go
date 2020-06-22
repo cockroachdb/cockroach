@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,6 +35,7 @@ func makeMockTxnSeqNumAllocator() (txnSeqNumAllocator, *mockLockedSender) {
 // previously allocated.
 func TestSequenceNumberAllocation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
 
@@ -111,6 +113,7 @@ func TestSequenceNumberAllocation(t *testing.T) {
 // previously allocated.
 func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
 
@@ -230,6 +233,7 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 // EndTxn requests should be assigned unique sequence numbers.
 func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
 
@@ -260,6 +264,7 @@ func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 // allocation resets to zero after an transaction epoch bump.
 func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
 
@@ -320,6 +325,7 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 // allocator updates its sequence counter based on the provided LeafTxnInitialState
 func TestSequenceNumberAllocationAfterLeafInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
 
@@ -358,6 +364,7 @@ func TestSequenceNumberAllocationAfterLeafInitialization(t *testing.T) {
 // savepoint with the cur seq num.
 func TestSequenceNumberAllocationSavepoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, mockSender := makeMockTxnSeqNumAllocator()
 	txn := makeTxnProto()
