@@ -63,7 +63,7 @@ root                                       ·              ·                   
                           └── insert       ·              ·                                     (a, rowid[hidden])  ·
                                │           into           x(a, rowid)                           ·                   ·
                                │           strategy       inserter                              ·                   ·
-                               └── values  ·              ·                                     (column1, column4)  ·
+                               └── values  ·              ·                                     (column1, column5)  ·
 ·                                          size           2 columns, 1 row                      ·                   ·
 ·                                          row 0, expr 0  1                                     ·                   ·
 ·                                          row 0, expr 1  unique_rowid()                        ·                   ·

@@ -176,6 +176,7 @@ var validationMap = []struct {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"AlterColumnTypeInProgress": {status: thisFieldReferencesNoObjects},
+			"SystemColumnKind":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{

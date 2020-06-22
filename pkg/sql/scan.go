@@ -108,6 +108,12 @@ type scanNode struct {
 	// mode of the Scan.
 	lockingStrength   sqlbase.ScanLockingStrength
 	lockingWaitPolicy sqlbase.ScanLockingWaitPolicy
+
+	// systemColumns and systemColumnOrdinals contain information about what
+	// system columns the scan needs to produce, and what row ordinals to
+	// write those columns out into.
+	systemColumns        []sqlbase.SystemColumnKind
+	systemColumnOrdinals []int
 }
 
 // scanColumnsConfig controls the "schema" of a scan node.
@@ -289,13 +295,23 @@ func initColsForScan(
 	for _, wc := range colCfg.wantedColumns {
 		var c *sqlbase.ColumnDescriptor
 		var err error
-		if id := sqlbase.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
-			c, err = desc.FindActiveColumnByID(id)
+		if sqlbase.IsColIDSystemColumn(sqlbase.ColumnID(wc)) {
+			// If the requested column is a system column, then retrieve the
+			// corresponding descriptor.
+			c, err = sqlbase.GetSystemColumnDescriptorFromID(sqlbase.ColumnID(wc))
+			if err != nil {
+				return nil, err
+			}
 		} else {
-			c, _, err = desc.FindReadableColumnByID(id)
-		}
-		if err != nil {
-			return cols, err
+			// Otherwise, collect the descriptors from the table's columns.
+			if id := sqlbase.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
+				c, err = desc.FindActiveColumnByID(id)
+			} else {
+				c, _, err = desc.FindReadableColumnByID(id)
+			}
+			if err != nil {
+				return cols, err
+			}
 		}
 
 		cols = append(cols, c)

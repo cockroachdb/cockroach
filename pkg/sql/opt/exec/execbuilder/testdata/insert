@@ -424,29 +424,29 @@ query TTTTT
 EXPLAIN (VERBOSE)
 INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
-·                                        distribution  local                  ·                              ·
-·                                        vectorized    false                  ·                              ·
-render                                   ·             ·                      ("?column?")                   ·
- │                                       render 0      x + v                  ·                              ·
- └── run                                 ·             ·                      (x, v, rowid[hidden])          ·
-      └── insert                         ·             ·                      (x, v, rowid[hidden])          ·
-           │                             into          insert_t(x, v, rowid)  ·                              ·
-           │                             strategy      inserter               ·                              ·
-           └── render                    ·             ·                      (length, "?column?", column9)  ·
-                │                        render 0      length                 ·                              ·
-                │                        render 1      "?column?"             ·                              ·
-                │                        render 2      unique_rowid()         ·                              ·
-                └── limit                ·             ·                      (length, "?column?", column8)  +column8
-                     │                   count         10                     ·                              ·
-                     └── sort            ·             ·                      (length, "?column?", column8)  +column8
-                          │              order         +column8               ·                              ·
-                          └── render     ·             ·                      (length, "?column?", column8)  ·
-                               │         render 0      length(k)              ·                              ·
-                               │         render 1      2                      ·                              ·
-                               │         render 2      k || v                 ·                              ·
-                               └── scan  ·             ·                      (k, v)                         ·
-·                                        table         kv@primary             ·                              ·
-·                                        spans         FULL SCAN              ·                              ·
+·                                        distribution  local                  ·                               ·
+·                                        vectorized    false                  ·                               ·
+render                                   ·             ·                      ("?column?")                    ·
+ │                                       render 0      x + v                  ·                               ·
+ └── run                                 ·             ·                      (x, v, rowid[hidden])           ·
+      └── insert                         ·             ·                      (x, v, rowid[hidden])           ·
+           │                             into          insert_t(x, v, rowid)  ·                               ·
+           │                             strategy      inserter               ·                               ·
+           └── render                    ·             ·                      (length, "?column?", column11)  ·
+                │                        render 0      length                 ·                               ·
+                │                        render 1      "?column?"             ·                               ·
+                │                        render 2      unique_rowid()         ·                               ·
+                └── limit                ·             ·                      (length, "?column?", column10)  +column10
+                     │                   count         10                     ·                               ·
+                     └── sort            ·             ·                      (length, "?column?", column10)  +column10
+                          │              order         +column10              ·                               ·
+                          └── render     ·             ·                      (length, "?column?", column10)  ·
+                               │         render 0      length(k)              ·                               ·
+                               │         render 1      2                      ·                               ·
+                               │         render 2      k || v                 ·                               ·
+                               └── scan  ·             ·                      (k, v)                          ·
+·                                        table         kv@primary             ·                               ·
+·                                        spans         FULL SCAN              ·                               ·
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
@@ -511,34 +511,34 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-·                                             distribution  local                                                ·                   ·
-·                                             vectorized    false                                                ·                   ·
-root                                          ·             ·                                                    (z)                 +z
- ├── sort                                     ·             ·                                                    (z)                 +z
- │    │                                       order         +z                                                   ·                   ·
- │    └── scan buffer node                    ·             ·                                                    (z)                 ·
- │                                            label         buffer 1                                             ·                   ·
- └── subquery                                 ·             ·                                                    ·                   ·
-      │                                       id            @S1                                                  ·                   ·
-      │                                       original sql  INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                   ·
-      │                                       exec mode     all rows                                             ·                   ·
-      └── buffer node                         ·             ·                                                    (z)                 ·
-           │                                  label         buffer 1                                             ·                   ·
-           └── spool                          ·             ·                                                    (z)                 ·
-                └── render                    ·             ·                                                    (z)                 ·
-                     │                        render 0      z                                                    ·                   ·
-                     └── run                  ·             ·                                                    (z, rowid[hidden])  ·
-                          └── insert          ·             ·                                                    (z, rowid[hidden])  ·
-                               │              into          xyz(x, y, z, rowid)                                  ·                   ·
-                               │              strategy      inserter                                             ·                   ·
-                               └── render     ·             ·                                                    (a, b, c, column9)  ·
-                                    │         render 0      a                                                    ·                   ·
-                                    │         render 1      b                                                    ·                   ·
-                                    │         render 2      c                                                    ·                   ·
-                                    │         render 3      unique_rowid()                                       ·                   ·
-                                    └── scan  ·             ·                                                    (a, b, c)           ·
-·                                             table         abc@primary                                          ·                   ·
-·                                             spans         FULL SCAN                                            ·                   ·
+·                                             distribution  local                                                ·                    ·
+·                                             vectorized    false                                                ·                    ·
+root                                          ·             ·                                                    (z)                  +z
+ ├── sort                                     ·             ·                                                    (z)                  +z
+ │    │                                       order         +z                                                   ·                    ·
+ │    └── scan buffer node                    ·             ·                                                    (z)                  ·
+ │                                            label         buffer 1                                             ·                    ·
+ └── subquery                                 ·             ·                                                    ·                    ·
+      │                                       id            @S1                                                  ·                    ·
+      │                                       original sql  INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
+      │                                       exec mode     all rows                                             ·                    ·
+      └── buffer node                         ·             ·                                                    (z)                  ·
+           │                                  label         buffer 1                                             ·                    ·
+           └── spool                          ·             ·                                                    (z)                  ·
+                └── render                    ·             ·                                                    (z)                  ·
+                     │                        render 0      z                                                    ·                    ·
+                     └── run                  ·             ·                                                    (z, rowid[hidden])   ·
+                          └── insert          ·             ·                                                    (z, rowid[hidden])   ·
+                               │              into          xyz(x, y, z, rowid)                                  ·                    ·
+                               │              strategy      inserter                                             ·                    ·
+                               └── render     ·             ·                                                    (a, b, c, column11)  ·
+                                    │         render 0      a                                                    ·                    ·
+                                    │         render 1      b                                                    ·                    ·
+                                    │         render 2      c                                                    ·                    ·
+                                    │         render 3      unique_rowid()                                       ·                    ·
+                                    └── scan  ·             ·                                                    (a, b, c)            ·
+·                                             table         abc@primary                                          ·                    ·
+·                                             spans         FULL SCAN                                            ·                    ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

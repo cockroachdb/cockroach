@@ -135,6 +135,15 @@ func ConvertColumnIDsToOrdinals(tab Table, columns []tree.ColumnID) (ordinals []
 			}
 			ord++
 		}
+		// Skip over the non-public columns to the system columns.
+		ord += tab.DeletableColumnCount() - tab.ColumnCount()
+		cnt = tab.DeletableAndSystemColumnCount()
+		for ord < cnt {
+			if tab.Column(ord).ColID() == StableID(c) {
+				break
+			}
+			ord++
+		}
 		if ord >= cnt {
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
 				"column [%d] does not exist", c))

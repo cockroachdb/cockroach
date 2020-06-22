@@ -75,23 +75,23 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 │ └ *colexec.isNullSelOp
 │   └ *colexec.castOp
 │     └ *colexec.ParallelUnorderedSynchronizer
-│       ├ *colfetcher.colBatchScan
+│       ├ *colfetcher.ColBatchScan
 │       ├ *colrpc.Inbox
 │       ├ *colrpc.Inbox
 │       ├ *colrpc.Inbox
 │       └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 # Check that the plan is local when experimental DistSQL planning is disabled.
 statement ok
@@ -104,7 +104,7 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 └ Node 1
   └ *colexec.isNullSelOp
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 statement ok
 SET experimental_distsql_planning = always
@@ -118,23 +118,23 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ├ Node 1
 │ └ *colexec.castOp
 │   └ *colexec.ParallelUnorderedSynchronizer
-│     ├ *colfetcher.colBatchScan
+│     ├ *colfetcher.ColBatchScan
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query TTT
 EXPLAIN SELECT k::REGCLASS FROM kv
@@ -173,7 +173,14 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 │
 └ Node 1
   └ *colexec.castOp
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 statement ok
 SET disable_partially_distributed_plans = false
+
+# Ensure that the new factory can materialize system columns.
+# TODO (rohany): The factory can't plan lookup joins yet. Add a test when it can.
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM kv LIMIT 1
+----
+true
