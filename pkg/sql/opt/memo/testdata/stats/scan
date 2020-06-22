@@ -874,3 +874,78 @@ select
  │         └── fd: (8)-->(2)
  └── filters
       └── (a:1 = 30) OR (a:1 = 40) [type=bool, outer=(1), constraints=(/1: [/30 - /30] [/40 - /40]; tight)]
+
+# Regression test for #50409.
+exec-ddl
+CREATE TABLE t (
+  x int primary key,
+  y int,
+  z int,
+  s string,
+  index (y),
+  index (s)
+)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS'[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "null_count": 500,
+    "distinct_count": 500
+  }
+]'
+----
+
+# The row count estimate of the scan should be approximately 2, to account for
+# the selectivity of the predicate on x. If the selectivity of x is ignored,
+# the row count estimate rises to 501 (and the index join is no longer chosen).
+opt
+SELECT * FROM t WHERE (y IS NULL AND x = 5) OR y = 5
+----
+index-join t
+ ├── columns: x:1(int!null) y:2(int) z:3(int) s:4(string)
+ ├── stats: [rows=167.000668, distinct(2)=2, null(2)=167.000668]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── select
+      ├── columns: x:1(int!null) y:2(int)
+      ├── stats: [rows=0.500668003, distinct(2)=0.500668003, null(2)=0.500668003]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan t@secondary
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── constraint: /2/1
+      │    │    ├── [/NULL/5 - /NULL/5]
+      │    │    └── [/5 - /5]
+      │    ├── stats: [rows=1.50200401, distinct(1)=1.50200401, null(1)=0, distinct(2)=1.50200401, null(2)=1.50200401]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── ((y:2 IS NULL) AND (x:1 = 5)) OR (y:2 = 5) [type=bool, outer=(1,2), constraints=(/2: [/NULL - /NULL] [/5 - /5])]
+
+opt
+SELECT * FROM t WHERE (s >= 'a' AND s <= 'b') OR  (s >= 'c' AND s <= 'd') OR (s >= 'e' AND s <= 'f')
+----
+index-join t
+ ├── columns: x:1(int!null) y:2(int) z:3(int) s:4(string!null)
+ ├── stats: [rows=111.111111, distinct(4)=11.1111111, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@secondary
+      ├── columns: x:1(int!null) s:4(string!null)
+      ├── constraint: /4/1
+      │    ├── [/'a' - /'b']
+      │    ├── [/'c' - /'d']
+      │    └── [/'e' - /'f']
+      ├── stats: [rows=111.111111, distinct(4)=11.1111111, null(4)=0]
+      ├── key: (1)
+      └── fd: (1)-->(4)
