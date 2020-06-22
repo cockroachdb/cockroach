@@ -1369,6 +1369,17 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::util::UnresolvedAddr* mutable_sql_address();
   void set_allocated_sql_address(::cockroach::util::UnresolvedAddr* sql_address);
 
+  bool has_tenant_address() const;
+  void clear_tenant_address();
+  static const int kTenantAddressFieldNumber = 11;
+  private:
+  const ::cockroach::util::UnresolvedAddr& _internal_tenant_address() const;
+  public:
+  const ::cockroach::util::UnresolvedAddr& tenant_address() const;
+  ::cockroach::util::UnresolvedAddr* release_tenant_address();
+  ::cockroach::util::UnresolvedAddr* mutable_tenant_address();
+  void set_allocated_tenant_address(::cockroach::util::UnresolvedAddr* tenant_address);
+
   bool has_started_at() const;
   void clear_started_at();
   static const int kStartedAtFieldNumber = 7;
@@ -1401,6 +1412,8 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   void clear_has_cluster_name();
   void set_has_sql_address();
   void clear_has_sql_address();
+  void set_has_tenant_address();
+  void clear_has_tenant_address();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -1413,6 +1426,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Locality* locality_;
   ::cockroach::roachpb::Version* serverversion_;
   ::cockroach::util::UnresolvedAddr* sql_address_;
+  ::cockroach::util::UnresolvedAddr* tenant_address_;
   ::google::protobuf::int64 started_at_;
   ::google::protobuf::int32 node_id_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
@@ -3257,13 +3271,13 @@ inline void StoreCapacity::set_allocated_writes_per_replica(::cockroach::roachpb
 // NodeDescriptor
 
 inline bool NodeDescriptor::has_node_id() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
+  return (_has_bits_[0] & 0x00000200u) != 0;
 }
 inline void NodeDescriptor::set_has_node_id() {
-  _has_bits_[0] |= 0x00000100u;
+  _has_bits_[0] |= 0x00000200u;
 }
 inline void NodeDescriptor::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000100u;
+  _has_bits_[0] &= ~0x00000200u;
 }
 inline void NodeDescriptor::clear_node_id() {
   node_id_ = 0;
@@ -3569,13 +3583,13 @@ inline void NodeDescriptor::set_allocated_build_tag(::std::string* build_tag) {
 }
 
 inline bool NodeDescriptor::has_started_at() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
+  return (_has_bits_[0] & 0x00000100u) != 0;
 }
 inline void NodeDescriptor::set_has_started_at() {
-  _has_bits_[0] |= 0x00000080u;
+  _has_bits_[0] |= 0x00000100u;
 }
 inline void NodeDescriptor::clear_has_started_at() {
-  _has_bits_[0] &= ~0x00000080u;
+  _has_bits_[0] &= ~0x00000100u;
 }
 inline void NodeDescriptor::clear_started_at() {
   started_at_ = GOOGLE_LONGLONG(0);
@@ -3736,6 +3750,59 @@ inline void NodeDescriptor::set_allocated_sql_address(::cockroach::util::Unresol
   }
   sql_address_ = sql_address;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.sql_address)
+}
+
+inline bool NodeDescriptor::has_tenant_address() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void NodeDescriptor::set_has_tenant_address() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void NodeDescriptor::clear_has_tenant_address() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline const ::cockroach::util::UnresolvedAddr& NodeDescriptor::_internal_tenant_address() const {
+  return *tenant_address_;
+}
+inline const ::cockroach::util::UnresolvedAddr& NodeDescriptor::tenant_address() const {
+  const ::cockroach::util::UnresolvedAddr* p = tenant_address_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.tenant_address)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::UnresolvedAddr*>(
+      &::cockroach::util::_UnresolvedAddr_default_instance_);
+}
+inline ::cockroach::util::UnresolvedAddr* NodeDescriptor::release_tenant_address() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.tenant_address)
+  clear_has_tenant_address();
+  ::cockroach::util::UnresolvedAddr* temp = tenant_address_;
+  tenant_address_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::UnresolvedAddr* NodeDescriptor::mutable_tenant_address() {
+  set_has_tenant_address();
+  if (tenant_address_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::UnresolvedAddr>(GetArenaNoVirtual());
+    tenant_address_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.tenant_address)
+  return tenant_address_;
+}
+inline void NodeDescriptor::set_allocated_tenant_address(::cockroach::util::UnresolvedAddr* tenant_address) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(tenant_address_);
+  }
+  if (tenant_address) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      tenant_address = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, tenant_address, submessage_arena);
+    }
+    set_has_tenant_address();
+  } else {
+    clear_has_tenant_address();
+  }
+  tenant_address_ = tenant_address;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.tenant_address)
 }
 
 // -------------------------------------------------------------------
