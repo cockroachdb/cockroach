@@ -65,6 +65,7 @@ func initRowFetcher(
 	alloc *sqlbase.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
 	lockStr sqlbase.ScanLockingStrength,
+	systemColumns []sqlbase.ColumnDescriptor,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
@@ -76,6 +77,9 @@ func initRowFetcher(
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = immutDesc.ReadableColumns
 	}
+	// Add on any requested system columns. We slice cols to avoid modifying
+	// the underlying table descriptor.
+	cols = append(cols[:len(cols):len(cols)], systemColumns...)
 	tableArgs := row.FetcherTableArgs{
 		Desc:             immutDesc,
 		Index:            index,

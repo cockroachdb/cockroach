@@ -183,6 +183,15 @@ func neededMutationFetchCols(
 		}
 	}
 
+	// System columns should not be included as part of the set of fetch
+	// columns because they aren't part of the KV that the SQL layer writes.
+	// These might get added from ReturningCols, or from the primary index.
+	// So, remove them before proceeding with the construction of fetch cols.
+	table := tabMeta.Table
+	for i := table.DeletableColumnCount(); i < table.DeletableAndSystemColumnCount(); i++ {
+		cols.Remove(tabMeta.MetaID.ColumnID(i))
+	}
+
 	return cols
 }
 

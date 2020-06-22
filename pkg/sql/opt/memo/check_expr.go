@@ -172,7 +172,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *InsertExpr:
 		tab := m.Metadata().Table(t.Table)
-		m.checkColListLen(t.InsertCols, tab.DeletableColumnCount(), "InsertCols")
+		m.checkColListLen(t.InsertCols, tab.DeletableAndSystemColumnCount(), "InsertCols")
 		m.checkColListLen(t.FetchCols, 0, "FetchCols")
 		m.checkColListLen(t.UpdateCols, 0, "UpdateCols")
 

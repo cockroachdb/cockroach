@@ -76,23 +76,23 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 │ └ *colexec.isNullSelOp
 │   └ *colexec.castOp
 │     └ *colexec.ParallelUnorderedSynchronizer
-│       ├ *colfetcher.colBatchScan
+│       ├ *colfetcher.ColBatchScan
 │       ├ *colrpc.Inbox
 │       ├ *colrpc.Inbox
 │       ├ *colrpc.Inbox
 │       └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 # Check that the plan is local when experimental DistSQL planning is disabled.
 statement ok
@@ -105,7 +105,7 @@ EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
 └ Node 1
   └ *colexec.isNullSelOp
     └ *colexec.castOp
-      └ *colfetcher.colBatchScan
+      └ *colfetcher.ColBatchScan
 
 statement ok
 SET experimental_distsql_planning = always
@@ -119,23 +119,23 @@ EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
 ├ Node 1
 │ └ *colexec.castOp
 │   └ *colexec.ParallelUnorderedSynchronizer
-│     ├ *colfetcher.colBatchScan
+│     ├ *colfetcher.ColBatchScan
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     ├ *colrpc.Inbox
 │     └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
-│   └ *colfetcher.colBatchScan
+│   └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
-    └ *colfetcher.colBatchScan
+    └ *colfetcher.ColBatchScan
 
 query TTT
 EXPLAIN SELECT k::REGCLASS FROM kv
@@ -162,3 +162,19 @@ SELECT kv.k FROM kv, kw WHERE kv.k = kw.k ORDER BY 1
 3
 4
 5
+
+# Ensure that the new factory can materialize system columns.
+statement ok
+CREATE TABLE mvcc (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
+INSERT INTO mvcc VALUES (1, 2, 3)
+
+query B
+SELECT mvcc_timestamp IS NOT NULL FROM mvcc
+----
+true
+
+# The factory can't plan lookup joins yet.
+# query B
+# SELECT mvcc_timestamp IS NOT NULL FROM mvcc@i
+# ----
+# true
