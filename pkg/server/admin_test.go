@@ -200,18 +200,70 @@ func TestAdminDebugTrace(t *testing.T) {
 	}
 }
 
+func TestAdminDebugAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	ts := s.(*TestServer)
+
+	url := debugURL(s)
+
+	// Unauthenticated.
+	client, err := ts.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected status code %d; got %d", http.StatusUnauthorized, resp.StatusCode)
+	}
+
+	// Authenticated as non-admin.
+	client, err = ts.GetAuthenticatedHTTPClient(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = client.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected status code %d; got %d", http.StatusUnauthorized, resp.StatusCode)
+	}
+
+	// Authenticated as admin.
+	client, err = ts.GetAuthenticatedHTTPClient(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = client.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status code %d; got %d", http.StatusOK, resp.StatusCode)
+	}
+}
+
 // TestAdminDebugRedirect verifies that the /debug/ endpoint is redirected to on
 // incorrect /debug/ paths.
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+	ts := s.(*TestServer)
 
 	expURL := debugURL(s)
 	origURL := expURL + "incorrect"
 
-	// There are no particular permissions on admin endpoints, TestUser is fine.
-	client, err := testutils.NewTestBaseContext(TestUser).GetHTTPClient()
+	// Must be admin to access debug endpoints
+	client, err := ts.GetAdminAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
