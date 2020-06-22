@@ -109,9 +109,9 @@ func (q *consistencyQueue) shouldQueue(
 // process() is called on every range for which this node is a lease holder.
 func (q *consistencyQueue) process(
 	ctx context.Context, repl *Replica, _ *config.SystemConfig,
-) error {
+) (bool, error) {
 	if q.interval() <= 0 {
-		return nil
+		return false, nil
 	}
 
 	// Call setQueueLastProcessed because the consistency checker targets a much
@@ -140,19 +140,19 @@ func (q *consistencyQueue) process(
 		default:
 		}
 
-		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
+		if shouldQuiesce && grpcutil.IsClosedConnection(pErr.GoError()) {
 			// Suppress noisy errors about closed GRPC connections when the
 			// server is quiescing.
-			err := pErr.GoError()
-			log.Errorf(ctx, "%v", err)
-			return err
+			return false, nil
 		}
-		return nil
+		err := pErr.GoError()
+		log.Errorf(ctx, "%v", err)
+		return false, err
 	}
 	if fn := repl.store.cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {
 		fn(resp)
 	}
-	return nil
+	return true, nil
 }
 
 func (q *consistencyQueue) timer(duration time.Duration) time.Duration {
