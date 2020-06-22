@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type variadicTestCase struct {
@@ -34,6 +35,7 @@ type variadicTestData struct {
 
 func TestVariadicFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := map[*VariadicType]variadicTestData{
 		{VarType: types.String}: {
 			"string...", []variadicTestCase{
@@ -128,6 +130,7 @@ func makeTestOverload(retType *types.T, params ...*types.T) overloadImpl {
 
 func TestTypeCheckOverloadedExprs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	intConst := func(s string) Expr {
 		return NewNumVal(constant.MakeFromLiteral(s, token.INT, 0), s, false /* negative */)
 	}

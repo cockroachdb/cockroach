@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,7 @@ import (
 
 func TestAllTypesCastableToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		if ok, _ := isCastDeepValid(typ, types.String); !ok {
 			t.Errorf("%s is not castable to STRING, all types should be", typ)
@@ -33,6 +35,7 @@ func TestAllTypesCastableToString(t *testing.T) {
 
 func TestAllTypesCastableFromString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		if ok, _ := isCastDeepValid(types.String, typ); !ok {
 			t.Errorf("%s is not castable from STRING, all types should be", typ)
@@ -42,6 +45,7 @@ func TestAllTypesCastableFromString(t *testing.T) {
 
 func TestCompareTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	pacificTimeZone := int32(7 * 60 * 60)
 	sydneyTimeZone := int32(-10 * 60 * 60)
