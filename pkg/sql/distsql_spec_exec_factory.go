@@ -40,16 +40,18 @@ type distSQLSpecExecFactory struct {
 		// localPlanCtx stores the local planning context of the gateway.
 		localPlanCtx *PlanningCtx
 	}
-	singleTenant bool
+	singleTenant  bool
+	gatewayNodeID roachpb.NodeID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
 func newDistSQLSpecExecFactory(p *planner) exec.Factory {
 	return &distSQLSpecExecFactory{
-		planner:      p,
-		dsp:          p.extendedEvalCtx.DistSQLPlanner,
-		singleTenant: p.execCfg.Codec.ForSystemTenant(),
+		planner:       p,
+		dsp:           p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
+		gatewayNodeID: roachpb.NodeID(p.execCfg.NodeID.SQLInstanceID()),
 	}
 }
 
@@ -99,7 +101,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(e.gatewayNodeID)
 	// Although we don't yet recommend distributing plans where soft limits
 	// propagate to scan nodes because we don't have infrastructure to only
 	// plan for a few ranges at a time, the propagation of the soft limits
@@ -129,7 +131,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		physPlan, err := e.dsp.createValuesPlan(
 			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
 		)
-		return planMaybePhysical{physPlan: physPlan, distribution: localPlan}, err
+		return planMaybePhysical{physPlan: physPlan}, err
 	}
 
 	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
@@ -190,13 +192,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.LimitHint = softLimit
 	}
 
-	planCtx := e.getPlanCtx(recommendation)
-	distribution := fullyDistributedPlan
-	if planCtx.isLocal {
-		distribution = localPlan
-	}
 	err = e.dsp.planTableReaders(
-		planCtx,
+		e.getPlanCtx(recommendation),
 		&p,
 		&tableReaderPlanningInfo{
 			spec:                   trSpec,
@@ -213,7 +210,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &p, distribution: distribution}, err
+	return planMaybePhysical{physPlan: &p}, err
 }
 
 func (e *distSQLSpecExecFactory) ConstructFilter(
@@ -235,9 +232,8 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 			// cannot be distributed, so we need to merge the streams on a
 			// single node. We could do so on one of the nodes that streams
 			// originate from, but for now we choose the gateway.
-			gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
 			physPlan.AddSingleGroupStage(
-				gatewayNodeID,
+				e.gatewayNodeID,
 				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 				execinfrapb.PostProcessSpec{},
 				physPlan.ResultTypes,
@@ -249,11 +245,6 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
 		return nil, err
 	}
-	distribution := localPlan
-	if physPlan.IsLastStageDistributed() {
-		distribution = fullyDistributedPlan
-	}
-	plan.distribution = plan.distribution.compose(distribution)
 	return plan, nil
 }
 

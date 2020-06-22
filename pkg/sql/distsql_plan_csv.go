@@ -195,7 +195,11 @@ func DistIngest(
 
 	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
 
-	var p PhysicalPlan
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+	p := MakePhysicalPlan(gatewayNodeID)
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
