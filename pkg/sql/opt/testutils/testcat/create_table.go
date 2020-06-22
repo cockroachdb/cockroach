@@ -410,12 +410,13 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	idx := &Index{
-		IdxName:     tt.makeIndexName(def.Name, typ),
-		Unique:      typ != nonUniqueIndex,
-		Inverted:    def.Inverted,
-		IdxZone:     &zonepb.ZoneConfig{},
-		table:       tt,
-		partitionBy: def.PartitionBy,
+		IdxName:          tt.makeIndexName(def.Name, typ),
+		Unique:           typ != nonUniqueIndex,
+		Inverted:         def.Inverted,
+		IdxZone:          &zonepb.ZoneConfig{},
+		table:            tt,
+		partitionBy:      def.PartitionBy,
+		numSystemColumns: 0,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
@@ -488,6 +489,8 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		if len(tt.Indexes) != 0 {
 			panic("primary index should always be 0th index")
 		}
+		// The primary index stores some system columns, so remember that here.
+		idx.numSystemColumns = tt.DeletableAndSystemColumnCount() - tt.DeletableColumnCount()
 		idx.ordinal = len(tt.Indexes)
 		tt.Indexes = append(tt.Indexes, idx)
 		return idx

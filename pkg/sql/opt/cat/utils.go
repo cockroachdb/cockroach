@@ -126,9 +126,19 @@ func ResolveTableIndex(
 // table. See tree.Table for more information on column ordinals.
 func ConvertColumnIDsToOrdinals(tab Table, columns []tree.ColumnID) (ordinals []int) {
 	ordinals = make([]int, len(columns))
+	numDeletableCols := tab.DeletableColumnCount() - tab.ColumnCount()
 	for i, c := range columns {
 		ord := 0
 		cnt := tab.ColumnCount()
+		for ord < cnt {
+			if tab.Column(ord).ColID() == StableID(c) {
+				break
+			}
+			ord++
+		}
+		// Skip over the non-public columns to the system columns.
+		ord += numDeletableCols
+		cnt = tab.DeletableAndSystemColumnCount()
 		for ord < cnt {
 			if tab.Column(ord).ColID() == StableID(c) {
 				break

@@ -751,7 +751,7 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	md := c.mem.Metadata()
 	tab := md.Table(tabID)
 	idx := tab.Index(idxOrd)
-	numCols := idx.ColumnCount()
+	numCols := idx.ColumnCountNoSystemColumns()
 
 	// Adjust cost based on how well the current locality matches the index's
 	// zone constraints.

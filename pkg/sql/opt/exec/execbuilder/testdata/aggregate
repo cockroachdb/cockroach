@@ -14,19 +14,19 @@ EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), 
 ·               distribution  local               ·                                                                                                                                                   ·
 ·               vectorized    true                ·                                                                                                                                                   ·
 group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
- │              aggregate 0   min(column5)        ·                                                                                                                                                   ·
- │              aggregate 1   max(column5)        ·                                                                                                                                                   ·
- │              aggregate 2   count(column8)      ·                                                                                                                                                   ·
- │              aggregate 3   sum_int(column5)    ·                                                                                                                                                   ·
- │              aggregate 4   avg(column5)        ·                                                                                                                                                   ·
- │              aggregate 5   sum(column5)        ·                                                                                                                                                   ·
- │              aggregate 6   stddev(column5)     ·                                                                                                                                                   ·
- │              aggregate 7   variance(column5)   ·                                                                                                                                                   ·
- │              aggregate 8   bool_and(column15)  ·                                                                                                                                                   ·
- │              aggregate 9   bool_or(column17)   ·                                                                                                                                                   ·
- │              aggregate 10  xor_agg(column19)   ·                                                                                                                                                   ·
+ │              aggregate 0   min(column6)        ·                                                                                                                                                   ·
+ │              aggregate 1   max(column6)        ·                                                                                                                                                   ·
+ │              aggregate 2   count(column9)      ·                                                                                                                                                   ·
+ │              aggregate 3   sum_int(column6)    ·                                                                                                                                                   ·
+ │              aggregate 4   avg(column6)        ·                                                                                                                                                   ·
+ │              aggregate 5   sum(column6)        ·                                                                                                                                                   ·
+ │              aggregate 6   stddev(column6)     ·                                                                                                                                                   ·
+ │              aggregate 7   variance(column6)   ·                                                                                                                                                   ·
+ │              aggregate 8   bool_and(column16)  ·                                                                                                                                                   ·
+ │              aggregate 9   bool_or(column18)   ·                                                                                                                                                   ·
+ │              aggregate 10  xor_agg(column20)   ·                                                                                                                                                   ·
  │              scalar        ·                   ·                                                                                                                                                   ·
- └── render     ·             ·                   (column5 int, column8 unknown, column15 bool, column17 bool, column19 bytes)                                                                        ·
+ └── render     ·             ·                   (column6 int, column9 unknown, column16 bool, column18 bool, column20 bytes)                                                                        ·
       │         render 0      (1)[int]            ·                                                                                                                                                   ·
       │         render 1      (NULL)[unknown]     ·                                                                                                                                                   ·
       │         render 2      (true)[bool]        ·                                                                                                                                                   ·
@@ -57,15 +57,15 @@ render               ·             ·                            (min int, max 
       │              aggregate 0   min(v)                       ·                                                                                                                                                    ·
       │              aggregate 1   max(v)                       ·                                                                                                                                                    ·
       │              aggregate 2   count(v)                     ·                                                                                                                                                    ·
-      │              aggregate 3   sum_int(column8)             ·                                                                                                                                                    ·
+      │              aggregate 3   sum_int(column9)             ·                                                                                                                                                    ·
       │              aggregate 4   avg(v)                       ·                                                                                                                                                    ·
       │              aggregate 5   sum(v)                       ·                                                                                                                                                    ·
       │              aggregate 6   stddev(v)                    ·                                                                                                                                                    ·
       │              aggregate 7   variance(v)                  ·                                                                                                                                                    ·
-      │              aggregate 8   bool_and(column14)           ·                                                                                                                                                    ·
-      │              aggregate 9   xor_agg(column16)            ·                                                                                                                                                    ·
+      │              aggregate 8   bool_and(column15)           ·                                                                                                                                                    ·
+      │              aggregate 9   xor_agg(column17)            ·                                                                                                                                                    ·
       │              scalar        ·                            ·                                                                                                                                                    ·
-      └── render     ·             ·                            (column8 int, column14 bool, column16 bytes, v int)                                                                                                  ·
+      └── render     ·             ·                            (column9 int, column15 bool, column17 bytes, v int)                                                                                                  ·
            │         render 0      (1)[int]                     ·                                                                                                                                                    ·
            │         render 1      ((v)[int] = (1)[int])[bool]  ·                                                                                                                                                    ·
            │         render 2      ((s)[string]::BYTES)[bytes]  ·                                                                                                                                                    ·
@@ -137,12 +137,12 @@ EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ·                    vectorized    true                        ·                              ·
 render               ·             ·                           (count int, r int)             ·
  │                   render 0      (count_rows)[int]           ·                              ·
- │                   render 1      (column6)[int]              ·                              ·
- └── group           ·             ·                           (column6 int, count_rows int)  ·
-      │              aggregate 0   column6                     ·                              ·
+ │                   render 1      (column7)[int]              ·                              ·
+ └── group           ·             ·                           (column7 int, count_rows int)  ·
+      │              aggregate 0   column7                     ·                              ·
       │              aggregate 1   count_rows()                ·                              ·
-      │              group by      column6                     ·                              ·
-      └── render     ·             ·                           (column6 int)                  ·
+      │              group by      column7                     ·                              ·
+      └── render     ·             ·                           (column7 int)                  ·
            │         render 0      ((k)[int] + (v)[int])[int]  ·                              ·
            └── scan  ·             ·                           (k int, v int)                 ·
 ·                    table         kv@primary                  ·                              ·
@@ -216,11 +216,11 @@ EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ·                          distribution  local                         ·             ·
 ·                          vectorized    true                          ·             ·
 group                      ·             ·                             (count)       ·
- │                         aggregate 0   count(column9)                ·             ·
+ │                         aggregate 0   count(column11)               ·             ·
  │                         scalar        ·                             ·             ·
- └── distinct              ·             ·                             (column9)     ·
-      │                    distinct on   column9                       ·             ·
-      └── render           ·             ·                             (column9)     ·
+ └── distinct              ·             ·                             (column11)    ·
+      │                    distinct on   column11                      ·             ·
+      └── render           ·             ·                             (column11)    ·
            │               render 0      ((k, v, w, s) AS k, v, w, s)  ·             ·
            └── cross-join  ·             ·                             (k, v, w, s)  ·
                 │          type          cross                         ·             ·
@@ -624,10 +624,10 @@ render                    ·             ·                (v int, count int)   
       │                   order         +count_rows      ·                                   ·
       └── group           ·             ·                (v int, count int, count_rows int)  ·
            │              aggregate 0   v                ·                                   ·
-           │              aggregate 1   count(column5)   ·                                   ·
+           │              aggregate 1   count(column6)   ·                                   ·
            │              aggregate 2   count_rows()     ·                                   ·
            │              group by      v                ·                                   ·
-           └── render     ·             ·                (column5 unknown, v int)            ·
+           └── render     ·             ·                (column6 unknown, v int)            ·
                 │         render 0      (NULL)[unknown]  ·                                   ·
                 │         render 1      (v)[int]         ·                                   ·
                 └── scan  ·             ·                (v int)                             ·
@@ -642,9 +642,9 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE
 ·               vectorized    true            ·             ·
 group           ·             ·               (v, count)    ·
  │              aggregate 0   v               ·             ·
- │              aggregate 1   count(column5)  ·             ·
+ │              aggregate 1   count(column6)  ·             ·
  │              group by      v               ·             ·
- └── render     ·             ·               (column5, v)  ·
+ └── render     ·             ·               (column6, v)  ·
       │         render 0      NULL            ·             ·
       │         render 1      v               ·             ·
       └── scan  ·             ·               (v)           ·
@@ -672,10 +672,10 @@ render               ·             ·                                      (cou
  │                   render 1      max                                    ·                      ·
  └── group           ·             ·                                      (v, count, max)        ·
       │              aggregate 0   v                                      ·                      ·
-      │              aggregate 1   count(column5) FILTER (WHERE column6)  ·                      ·
-      │              aggregate 2   max(column6) FILTER (WHERE column6)    ·                      ·
+      │              aggregate 1   count(column6) FILTER (WHERE column7)  ·                      ·
+      │              aggregate 2   max(column7) FILTER (WHERE column7)    ·                      ·
       │              group by      v                                      ·                      ·
-      └── render     ·             ·                                      (column5, column6, v)  ·
+      └── render     ·             ·                                      (column6, column7, v)  ·
            │         render 0      true                                   ·                      ·
            │         render 1      k > 5                                  ·                      ·
            │         render 2      v                                      ·                      ·
@@ -692,9 +692,9 @@ render               ·             ·                                      (cou
  │                   render 0      count                                  ·                      ·
  └── group           ·             ·                                      (v, count)             ·
       │              aggregate 0   v                                      ·                      ·
-      │              aggregate 1   count(column5) FILTER (WHERE column6)  ·                      ·
+      │              aggregate 1   count(column6) FILTER (WHERE column7)  ·                      ·
       │              group by      v                                      ·                      ·
-      └── render     ·             ·                                      (column5, column6, v)  ·
+      └── render     ·             ·                                      (column6, column7, v)  ·
            │         render 0      true                                   ·                      ·
            │         render 1      k > 5                                  ·                      ·
            │         render 2      v                                      ·                      ·
@@ -781,9 +781,9 @@ EXPLAIN (TYPES) SELECT min(v+1) FROM opt_test
 ·               distribution  local                       ·              ·
 ·               vectorized    true                        ·              ·
 group           ·             ·                           (min int)      ·
- │              aggregate 0   min(column3)                ·              ·
+ │              aggregate 0   min(column4)                ·              ·
  │              scalar        ·                           ·              ·
- └── render     ·             ·                           (column3 int)  ·
+ └── render     ·             ·                           (column4 int)  ·
       │         render 0      ((v)[int] + (1)[int])[int]  ·              ·
       └── scan  ·             ·                           (v int)        ·
 ·               table         opt_test@primary            ·              ·
@@ -965,11 +965,11 @@ EXPLAIN (TYPES) SELECT 1 a FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
 ·                         vectorized    true                                       ·                         ·
 render                    ·             ·                                          (a int)                   ·
  │                        render 0      (1)[int]                                   ·                         ·
- └── distinct             ·             ·                                          (column5 decimal, v int)  ·
-      │                   distinct on   column5, v                                 ·                         ·
-      └── filter          ·             ·                                          (column5 decimal, v int)  ·
-           │              filter        ((column5)[decimal] > (1)[decimal])[bool]  ·                         ·
-           └── render     ·             ·                                          (column5 decimal, v int)  ·
+ └── distinct             ·             ·                                          (column6 decimal, v int)  ·
+      │                   distinct on   column6, v                                 ·                         ·
+      └── filter          ·             ·                                          (column6 decimal, v int)  ·
+           │              filter        ((column6)[decimal] > (1)[decimal])[bool]  ·                         ·
+           └── render     ·             ·                                          (column6 decimal, v int)  ·
                 │         render 0      ((w)[int]::DECIMAL)[decimal]               ·                         ·
                 │         render 1      (v)[int]                                   ·                         ·
                 └── scan  ·             ·                                          (v int, w int)            ·
@@ -987,11 +987,11 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ·                    vectorized    true         ·               ·
 render               ·             ·            (m)             ·
  │                   render 0      min          ·               ·
- └── group           ·             ·            (column5, min)  ·
-      │              aggregate 0   column5      ·               ·
+ └── group           ·             ·            (column6, min)  ·
+      │              aggregate 0   column6      ·               ·
       │              aggregate 1   min(a)       ·               ·
-      │              group by      column5      ·               ·
-      └── render     ·             ·            (column5, a)    ·
+      │              group by      column6      ·               ·
+      └── render     ·             ·            (column6, a)    ·
            │         render 0      a            ·               ·
            │         render 1      a            ·               ·
            └── scan  ·             ·            (a)             ·
@@ -1005,11 +1005,11 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ·                    vectorized    true         ·               ·
 render               ·             ·            (m)             ·
  │                   render 0      min          ·               ·
- └── group           ·             ·            (column5, min)  ·
-      │              aggregate 0   column5      ·               ·
+ └── group           ·             ·            (column6, min)  ·
+      │              aggregate 0   column6      ·               ·
       │              aggregate 1   min(a)       ·               ·
-      │              group by      column5      ·               ·
-      └── render     ·             ·            (column5, a)    ·
+      │              group by      column6      ·               ·
+      └── render     ·             ·            (column6, a)    ·
            │         render 0      b            ·               ·
            │         render 1      a            ·               ·
            └── scan  ·             ·            (a, b)          ·
@@ -1075,9 +1075,9 @@ EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
 ·               distribution  local                   ·                ·
 ·               vectorized    true                    ·                ·
 group           ·             ·                       (string_agg)     ·
- │              aggregate 0   string_agg(s, column5)  ·                ·
+ │              aggregate 0   string_agg(s, column6)  ·                ·
  │              scalar        ·                       ·                ·
- └── render     ·             ·                       (column5, k, s)  +k
+ └── render     ·             ·                       (column6, k, s)  +k
       │         render 0      ','                     ·                ·
       │         render 1      k                       ·                ·
       │         render 2      s                       ·                ·
@@ -1132,9 +1132,9 @@ EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
 ·               distribution  local                   ·             ·
 ·               vectorized    true                    ·             ·
 group           ·             ·                       (string_agg)  ·
- │              aggregate 0   string_agg(s, column5)  ·             ·
+ │              aggregate 0   string_agg(s, column6)  ·             ·
  │              scalar        ·                       ·             ·
- └── render     ·             ·                       (column5, s)  ·
+ └── render     ·             ·                       (column6, s)  ·
       │         render 0      ', '                    ·             ·
       │         render 1      s                       ·             ·
       └── scan  ·             ·                       (s)           ·
@@ -1165,9 +1165,9 @@ sort                 ·             ·                              (company_id,
  │                   order         +company_id                    ·                                ·
  └── group           ·             ·                              (company_id, string_agg)         ·
       │              aggregate 0   company_id                     ·                                ·
-      │              aggregate 1   string_agg(employee, column4)  ·                                ·
+      │              aggregate 1   string_agg(employee, column5)  ·                                ·
       │              group by      company_id                     ·                                ·
-      └── render     ·             ·                              (column4, company_id, employee)  ·
+      └── render     ·             ·                              (column5, company_id, employee)  ·
            │         render 0      ','                            ·                                ·
            │         render 1      company_id                     ·                                ·
            │         render 2      employee                       ·                                ·
@@ -1192,9 +1192,9 @@ sort                 ·             ·                             (company_id, 
  │                   order         +company_id                   ·                               ·
  └── group           ·             ·                             (company_id, string_agg)        ·
       │              aggregate 0   company_id                    ·                               ·
-      │              aggregate 1   string_agg(column4, column5)  ·                               ·
+      │              aggregate 1   string_agg(column5, column6)  ·                               ·
       │              group by      company_id                    ·                               ·
-      └── render     ·             ·                             (column4, column5, company_id)  ·
+      └── render     ·             ·                             (column5, column6, company_id)  ·
            │         render 0      employee::BYTES               ·                               ·
            │         render 1      '\x2c'                        ·                               ·
            │         render 2      company_id                    ·                               ·
@@ -1219,9 +1219,9 @@ sort                 ·             ·                              (company_id,
  │                   order         +company_id                    ·                                ·
  └── group           ·             ·                              (company_id, string_agg)         ·
       │              aggregate 0   company_id                     ·                                ·
-      │              aggregate 1   string_agg(employee, column4)  ·                                ·
+      │              aggregate 1   string_agg(employee, column5)  ·                                ·
       │              group by      company_id                     ·                                ·
-      └── render     ·             ·                              (column4, company_id, employee)  ·
+      └── render     ·             ·                              (column5, company_id, employee)  ·
            │         render 0      NULL                           ·                                ·
            │         render 1      company_id                     ·                                ·
            │         render 2      employee                       ·                                ·
@@ -1246,9 +1246,9 @@ sort                 ·             ·                             (company_id, 
  │                   order         +company_id                   ·                               ·
  └── group           ·             ·                             (company_id, string_agg)        ·
       │              aggregate 0   company_id                    ·                               ·
-      │              aggregate 1   string_agg(column4, column5)  ·                               ·
+      │              aggregate 1   string_agg(column5, column6)  ·                               ·
       │              group by      company_id                    ·                               ·
-      └── render     ·             ·                             (column4, column5, company_id)  ·
+      └── render     ·             ·                             (column5, column6, company_id)  ·
            │         render 0      employee::BYTES               ·                               ·
            │         render 1      NULL                          ·                               ·
            │         render 2      company_id                    ·                               ·

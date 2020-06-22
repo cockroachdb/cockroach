@@ -1235,3 +1235,22 @@ query T
 SELECT c0 FROM t47715 ORDER by c1
 ----
 1819487610
+
+# Ensure that the vectorized engine can plan and produce the MVCC system column.
+statement ok
+RESET vectorize;
+CREATE TABLE mvcc (x INT PRIMARY KEY, y INT, z INT, INDEX i (z));
+INSERT INTO mvcc VALUES (1, 2, 3)
+
+statement ok
+SET vectorize = experimental_always
+
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc
+----
+true
+
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM mvcc@i
+----
+true
