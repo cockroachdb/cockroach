@@ -69,6 +69,22 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	}
 	cfg.SQLAddr = net.JoinHostPort(sqlHost, sqlPort)
 
+	// Validate the tenant advertise address. Use the provided advertise
+	// addr as default.
+	advTenantHost, advTenantPort, err := validateAdvertiseAddr(ctx,
+		cfg.TenantAdvertiseAddr, "--tenant-addr", cfg.TenantAddr, advHost)
+	if err != nil {
+		return errors.Wrap(err, "invalid --advertise-tenant-addr")
+	}
+	cfg.TenantAdvertiseAddr = net.JoinHostPort(advTenantHost, advTenantPort)
+
+	// Validate the tenant listen address - use the resolved listen addr as default.
+	tenantHost, tenantPort, err := validateListenAddr(ctx, cfg.TenantAddr, listenHost)
+	if err != nil {
+		return errors.Wrap(err, "invalid --tenant-addr")
+	}
+	cfg.TenantAddr = net.JoinHostPort(tenantHost, tenantPort)
+
 	// Validate the HTTP advertise address. Use the provided advertise
 	// addr as default.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,
@@ -320,6 +336,9 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 				msg.String())
 		}
 	}
+
+	// TODO(tbg): Verify that the tenant listen and advertise addresses are
+	// compatible with the provided certificate.
 
 	// Verify that the http listen and advertise addresses are
 	// compatible with the provided certificate.

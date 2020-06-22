@@ -414,12 +414,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// not work and if it doesn't, we let the invalid curSQLConn get
 			// used anyway so that anything that does *not* need it will
 			// still happen.
-			sqlAddr := node.Desc.SQLAddress
-			if sqlAddr.IsEmpty() {
-				// No SQL address: either a pre-19.2 node, or same address for both
-				// SQL and RPC.
-				sqlAddr = node.Desc.Address
-			}
+			sqlAddr := node.Desc.CheckedSQLAddress()
 			curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
 			if err := z.createJSON(prefix+"/status.json", node); err != nil {
 				return err

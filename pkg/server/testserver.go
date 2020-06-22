@@ -104,6 +104,8 @@ func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
 	baseCfg.AdvertiseAddr = util.TestAddr.String()
 	baseCfg.SQLAdvertiseAddr = util.TestAddr.String()
 	baseCfg.SplitListenSQL = true
+	baseCfg.TenantAdvertiseAddr = util.TestAddr.String()
+	baseCfg.SplitListenTenant = true
 	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	baseCfg.User = security.NodeUser
@@ -201,12 +203,16 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.AdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.SQLAddr = util.IsolatedTestAddr.String()
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
+		cfg.TenantAddr = util.IsolatedTestAddr.String()
+		cfg.TenantAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	} else {
 		cfg.Addr = util.TestAddr.String()
 		cfg.AdvertiseAddr = util.TestAddr.String()
 		cfg.SQLAddr = util.TestAddr.String()
 		cfg.SQLAdvertiseAddr = util.TestAddr.String()
+		cfg.TenantAddr = util.TestAddr.String()
+		cfg.TenantAdvertiseAddr = util.TestAddr.String()
 		cfg.HTTPAddr = util.TestAddr.String()
 	}
 	if params.Addr != "" {
@@ -216,6 +222,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLAddr != "" {
 		cfg.SQLAddr = params.SQLAddr
 		cfg.SQLAdvertiseAddr = params.SQLAddr
+	}
+	if params.TenantAddr != "" {
+		cfg.TenantAddr = params.TenantAddr
+		cfg.TenantAdvertiseAddr = params.TenantAddr
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
@@ -770,6 +780,11 @@ func (ts *TestServer) ServingSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
 }
 
+// ServingTenantAddr returns the server's Tenant address. Should be used by clients.
+func (ts *TestServer) ServingTenantAddr() string {
+	return ts.cfg.TenantAdvertiseAddr
+}
+
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
 func (ts *TestServer) HTTPAddr() string {
 	return ts.cfg.HTTPAddr
@@ -781,15 +796,21 @@ func (ts *TestServer) RPCAddr() string {
 	return ts.cfg.Addr
 }
 
-// DrainClients exports the drainClients() method for use by tests.
-func (ts *TestServer) DrainClients(ctx context.Context) error {
-	return ts.drainClients(ctx, nil /* reporter */)
-}
-
 // SQLAddr returns the server's listening SQL address.
 // Note: use ServingSQLAddr() instead unless there is a specific reason not to.
 func (ts *TestServer) SQLAddr() string {
 	return ts.cfg.SQLAddr
+}
+
+// TenantAddr returns the server's listening Tenant address.
+// Note: use ServingTenantAddr() instead unless there is a specific reason not to.
+func (ts *TestServer) TenantAddr() string {
+	return ts.cfg.TenantAddr
+}
+
+// DrainClients exports the drainClients() method for use by tests.
+func (ts *TestServer) DrainClients(ctx context.Context) error {
+	return ts.drainClients(ctx, nil /* reporter */)
 }
 
 // WriteSummaries implements TestServerInterface.
