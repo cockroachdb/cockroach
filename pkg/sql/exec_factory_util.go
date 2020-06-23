@@ -209,3 +209,29 @@ func getEqualityIndicesAndMergeJoinOrdering(
 	}
 	return leftEqualityIndices, rightEqualityIndices, mergeJoinOrdering, nil
 }
+
+func getResultColumnsForGroupBy(
+	inputCols sqlbase.ResultColumns, groupCols []exec.NodeColumnOrdinal, aggregations []exec.AggInfo,
+) sqlbase.ResultColumns {
+	columns := make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations))
+	for _, col := range groupCols {
+		columns = append(columns, inputCols[col])
+	}
+	for _, agg := range aggregations {
+		columns = append(columns, sqlbase.ResultColumn{
+			Name: agg.FuncName,
+			Typ:  agg.ResultType,
+		})
+	}
+	return columns
+}
+
+// convertOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
+// of ints.
+func convertOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
+	ints := make([]int, len(ordinals))
+	for i := range ordinals {
+		ints[i] = int(ordinals[i])
+	}
+	return ints
+}

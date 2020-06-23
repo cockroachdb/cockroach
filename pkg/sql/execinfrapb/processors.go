@@ -23,6 +23,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// GetAggregateFuncIdx converts the aggregate function name to the enum value
+// with the same string representation.
+func GetAggregateFuncIdx(funcName string) (int32, error) {
+	funcStr := strings.ToUpper(funcName)
+	funcIdx, ok := AggregatorSpec_Func_value[funcStr]
+	if !ok {
+		return 0, errors.Errorf("unknown aggregate %s", funcStr)
+	}
+	return funcIdx, nil
+}
+
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
@@ -138,6 +149,17 @@ func (spec *AggregatorSpec) IsRowCount() bool {
 		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
 		!spec.Aggregations[0].Distinct &&
 		spec.IsScalar()
+}
+
+// GetWindowFuncIdx converts the window function name to the enum value with
+// the same string representation.
+func GetWindowFuncIdx(funcName string) (int32, error) {
+	funcStr := strings.ToUpper(funcName)
+	funcIdx, ok := WindowerSpec_WindowFunc_value[funcStr]
+	if !ok {
+		return 0, errors.Errorf("unknown window function %s", funcStr)
+	}
+	return funcIdx, nil
 }
 
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
