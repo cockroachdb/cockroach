@@ -262,7 +262,7 @@ func startConnExecutor(
 		},
 		Codec: keys.SystemSQLCodec,
 		DistSQLPlanner: NewDistSQLPlanner(
-			ctx, execinfra.Version, st, roachpb.NodeDescriptor{NodeID: 1},
+			ctx, execinfra.Version, st, roachpb.NodeID(1),
 			nil, /* rpcCtx */
 			distsql.NewServer(ctx, execinfra.ServerConfig{
 				AmbientContext: testutils.MakeAmbientCtx(),

@@ -51,7 +51,7 @@ func newDistSQLSpecExecFactory(p *planner) exec.Factory {
 		planner:       p,
 		dsp:           p.extendedEvalCtx.DistSQLPlanner,
 		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
-		gatewayNodeID: roachpb.NodeID(p.execCfg.NodeID.SQLInstanceID()),
+		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 	}
 }
 

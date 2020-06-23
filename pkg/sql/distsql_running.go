@@ -126,7 +126,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localState distsql.LocalState,
 	vectorizeThresholdMet bool,
 ) (context.Context, flowinfra.Flow, error) {
-	thisNodeID := dsp.nodeDesc.NodeID
+	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("missing gateway flow")
@@ -320,8 +320,8 @@ func (dsp *DistSQLPlanner) Run(
 		leafInputState = &tis
 	}
 
-	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
-	if _, ok := flows[dsp.nodeDesc.NodeID]; !ok {
+	flows := plan.GenerateFlowSpecs()
+	if _, ok := flows[dsp.gatewayNodeID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
 		return func() {}
 	}

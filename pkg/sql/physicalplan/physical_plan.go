@@ -915,9 +915,7 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 // set of FlowSpecs (one per node involved in the plan).
 //
 // gateway is the current node's NodeID.
-func (p *PhysicalPlan) GenerateFlowSpecs(
-	gateway roachpb.NodeID,
-) map[roachpb.NodeID]*execinfrapb.FlowSpec {
+func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]*execinfrapb.FlowSpec {
 	// Only generate a flow ID for a remote plan because it will need to be
 	// referenced by remote nodes when connecting streams. This id generation is
 	// skipped for performance reasons on local flows.
@@ -930,7 +928,7 @@ func (p *PhysicalPlan) GenerateFlowSpecs(
 	for _, proc := range p.Processors {
 		flowSpec, ok := flows[proc.Node]
 		if !ok {
-			flowSpec = NewFlowSpec(flowID, gateway)
+			flowSpec = NewFlowSpec(flowID, p.GatewayNodeID)
 			flows[proc.Node] = flowSpec
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)

@@ -646,7 +646,7 @@ func StartTenant(
 	// the tenant from crashing.
 	//
 	// NB: this NodeID is actually used by the DistSQL planner.
-	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{NodeID: fakeNodeID})
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: fakeNodeID})
 
 	connManager := netutil.MakeServer(
 		args.stopper,

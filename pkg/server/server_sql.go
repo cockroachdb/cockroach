@@ -398,8 +398,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			ctx,
 			execinfra.Version,
 			cfg.Settings,
-			// The node descriptor will be set later, once it is initialized.
-			roachpb.NodeDescriptor{},
+			roachpb.NodeID(cfg.nodeIDContainer.SQLInstanceID()),
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
