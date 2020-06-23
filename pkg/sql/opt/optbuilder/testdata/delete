@@ -437,3 +437,35 @@ build
 DELETE FROM mutation ORDER BY p LIMIT 2
 ----
 error (42P10): column "p" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test partial index column values.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX (b),
+    INDEX (b) WHERE c = 'foo',
+    INDEX (c) WHERE a > b AND c = 'bar'
+)
+----
+
+build
+DELETE FROM partial_indexes
+----
+delete partial_indexes
+ ├── columns: <none>
+ ├── fetch columns: a:4 b:5 c:6
+ └── project
+      ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
+      ├── scan partial_indexes
+      │    ├── columns: a:4!null b:5 c:6
+      │    └── partial index predicates
+      │         ├── secondary: c:6 = 'foo'
+      │         └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      └── projections
+           ├── c:6 = 'foo' [as=partial_index_del1:7]
+           └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]

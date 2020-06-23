@@ -390,12 +390,12 @@ func (ru *Updater) UpdateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, traceKV); err != nil {
-			return nil, err
-		}
 		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
 		// not write entries to.
 		var ignoreIndexes util.FastIntSet
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, ignoreIndexes, traceKV); err != nil {
+			return nil, err
+		}
 		if err := ru.ri.InsertRow(
 			ctx, batch, ru.newValues, ignoreIndexes, false /* ignoreConflicts */, traceKV,
 		); err != nil {
