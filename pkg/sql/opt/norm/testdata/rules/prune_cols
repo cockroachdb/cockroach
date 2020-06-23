@@ -1848,38 +1848,43 @@ delete a
  ├── fetch columns: k:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── limit
-      ├── columns: k:5!null column9:9!null
-      ├── internal-ordering: +9
+ └── project
+      ├── columns: k:5!null
       ├── cardinality: [0 - 10]
       ├── immutable
       ├── key: (5)
-      ├── fd: (5)-->(9)
-      ├── sort
-      │    ├── columns: k:5!null column9:9!null
-      │    ├── immutable
-      │    ├── key: (5)
-      │    ├── fd: (5)-->(9)
-      │    ├── ordering: +9
-      │    ├── limit hint: 10.00
-      │    └── project
-      │         ├── columns: column9:9!null k:5!null
-      │         ├── immutable
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(9)
-      │         ├── select
-      │         │    ├── columns: k:5!null i:6!null
-      │         │    ├── key: (5)
-      │         │    ├── fd: (5)-->(6)
-      │         │    ├── scan a
-      │         │    │    ├── columns: k:5!null i:6
-      │         │    │    ├── key: (5)
-      │         │    │    └── fd: (5)-->(6)
-      │         │    └── filters
-      │         │         └── i:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
-      │         └── projections
-      │              └── i:6 * 2 [as=column9:9, outer=(6), immutable]
-      └── 10
+      └── limit
+           ├── columns: k:5!null column9:9!null
+           ├── internal-ordering: +9
+           ├── cardinality: [0 - 10]
+           ├── immutable
+           ├── key: (5)
+           ├── fd: (5)-->(9)
+           ├── sort
+           │    ├── columns: k:5!null column9:9!null
+           │    ├── immutable
+           │    ├── key: (5)
+           │    ├── fd: (5)-->(9)
+           │    ├── ordering: +9
+           │    ├── limit hint: 10.00
+           │    └── project
+           │         ├── columns: column9:9!null k:5!null
+           │         ├── immutable
+           │         ├── key: (5)
+           │         ├── fd: (5)-->(9)
+           │         ├── select
+           │         │    ├── columns: k:5!null i:6!null
+           │         │    ├── key: (5)
+           │         │    ├── fd: (5)-->(6)
+           │         │    ├── scan a
+           │         │    │    ├── columns: k:5!null i:6
+           │         │    │    ├── key: (5)
+           │         │    │    └── fd: (5)-->(6)
+           │         │    └── filters
+           │         │         └── i:6 > 0 [outer=(6), constraints=(/6: [/1 - ]; tight)]
+           │         └── projections
+           │              └── i:6 * 2 [as=column9:9, outer=(6), immutable]
+           └── 10
 
 # Prune when a secondary index is present on the table.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
