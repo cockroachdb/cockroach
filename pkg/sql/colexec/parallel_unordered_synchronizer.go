@@ -89,9 +89,13 @@ type ParallelUnorderedSynchronizer struct {
 	// allows the ParallelUnorderedSynchronizer to wait only on internal
 	// goroutines.
 	internalWaitGroup *sync.WaitGroup
-	cancelFn          context.CancelFunc
-	batchCh           chan *unorderedSynchronizerMsg
-	errCh             chan error
+	// cancelFn is a handle to a function that will cancel all inputs. This
+	// cancels an internal context and causes all inputs to immediately exit. This
+	// differs from a cancellation of the context passed to Next, where inputs
+	// will attempt to propagate this cancellation error.
+	cancelFn context.CancelFunc
+	batchCh  chan *unorderedSynchronizerMsg
+	errCh    chan error
 
 	// bufferedMeta is the metadata buffered during a
 	// ParallelUnorderedSynchronizer run.
@@ -183,7 +187,8 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 // affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	s.setState(parallelUnorderedSynchronizerStateRunning)
-	ctx, s.cancelFn = contextutil.WithCancel(ctx)
+	var internalCtx context.Context
+	internalCtx, s.cancelFn = contextutil.WithCancel(context.Background())
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
@@ -252,6 +257,8 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				case <-ctx.Done():
 					sendErr(ctx.Err())
 					return
+				case <-internalCtx.Done():
+					return
 				case s.batchCh <- msg:
 				}
 
@@ -266,6 +273,8 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				case <-s.readNextBatch[inputIdx]:
 				case <-ctx.Done():
 					sendErr(ctx.Err())
+					return
+				case <-internalCtx.Done():
 					return
 				}
 			}
