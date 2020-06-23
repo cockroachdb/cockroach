@@ -197,6 +197,13 @@ var ShowSyntaxColumns = ResultColumns{
 	{Name: "message", Typ: types.String},
 }
 
+var ShowLastQueryStatisticsColumns = ResultColumns{
+	{Name: "service_time", Typ: types.Interval},
+	{Name: "query_exec_time", Typ: types.Interval},
+	{Name: "planning_time", Typ: types.Interval},
+	{Name: "parsing_time", Typ: types.Interval},
+}
+
 // ShowFingerprintsColumns are the result columns of a
 // SHOW EXPERIMENTAL_FINGERPRINTS statement.
 var ShowFingerprintsColumns = ResultColumns{

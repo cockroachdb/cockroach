@@ -819,6 +819,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> show_savepoint_stmt
 %type <tree.Statement> show_stats_stmt
 %type <tree.Statement> show_syntax_stmt
+%type <tree.Statement> show_last_query_stats_stmt
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
@@ -3598,7 +3599,8 @@ zone_value:
 // SHOW CREATE, SHOW DATABASES, SHOW HISTOGRAM, SHOW INDEXES, SHOW
 // PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
-// SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS
+// SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS,
+// SHOW LAST QUERY STATISTICS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -3629,6 +3631,7 @@ show_stmt:
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
+| show_last_query_stats_stmt // EXTEND WITH HELP: SHOW LAST STATEMENT STATISTICS
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
 // since there will be no open cursors.
@@ -4099,6 +4102,16 @@ show_syntax_stmt:
     $$.val = &tree.ShowSyntax{Statement: $3}
   }
 | SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
+
+// %Help: SHOW LAST QUERY STATISTICS - display statistics for the last query issued
+// %Category: Misc
+// %Text: SHOW LAST QUERY STATISTICS
+show_last_query_stats_stmt:
+  SHOW LAST QUERY STATISTICS
+  {
+   /* SKIP DOC */
+   $$.val = &tree.ShowLastQueryStatistics{}
+  }
 
 // %Help: SHOW SAVEPOINT - display current savepoint properties
 // %Category: Cfg

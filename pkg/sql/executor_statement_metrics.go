@@ -52,11 +52,38 @@ const (
 	sessionNumPhases
 )
 
-// phaseTimes is the type of the session.phaseTimes array.
+// internalPhaseTimes is the type of the session.phaseTimes array.
 //
 // It's important that this is an array and not a slice, as we rely on the array
 // copy behavior.
-type phaseTimes [sessionNumPhases]time.Time
+type internalPhaseTimes [sessionNumPhases]time.Time
+
+// phaseTimes is a wrapper struct that holds an underlying array of session-
+// and transaction-level phase times.
+type phaseTimes struct {
+	internalPhaseTimes internalPhaseTimes
+}
+
+// getServiceLatency returns the time between a query being received and the end
+// of run.
+func (p *phaseTimes) getServiceLatency() time.Duration {
+	return p.internalPhaseTimes[plannerEndExecStmt].Sub(p.internalPhaseTimes[sessionQueryReceived])
+}
+
+// getRunLatency returns the time between a query execution starting and ending.
+func (p *phaseTimes) getRunLatency() time.Duration {
+	return p.internalPhaseTimes[plannerEndExecStmt].Sub(p.internalPhaseTimes[plannerStartExecStmt])
+}
+
+// getPlanningLatency returns the time it takes for a query to be planned.
+func (p *phaseTimes) getPlanningLatency() time.Duration {
+	return p.internalPhaseTimes[plannerEndLogicalPlan].Sub(p.internalPhaseTimes[plannerStartLogicalPlan])
+}
+
+// getParsingLatency returns the time it takes for a query to be parsed.
+func (p *phaseTimes) getParsingLatency() time.Duration {
+	return p.internalPhaseTimes[sessionEndParse].Sub(p.internalPhaseTimes[sessionStartParse])
+}
 
 // EngineMetrics groups a set of SQL metrics.
 type EngineMetrics struct {
@@ -108,19 +135,12 @@ func (ex *connExecutor) recordStatementSummary(
 ) {
 	phaseTimes := &ex.statsCollector.phaseTimes
 
-	// Compute the run latency. This is always recorded in the
-	// server metrics.
-	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
-
 	// Collect the statistics.
+	runLatRaw := phaseTimes.getRunLatency()
 	runLat := runLatRaw.Seconds()
-
-	parseLat := phaseTimes[sessionEndParse].
-		Sub(phaseTimes[sessionStartParse]).Seconds()
-	planLat := phaseTimes[plannerEndLogicalPlan].
-		Sub(phaseTimes[plannerStartLogicalPlan]).Seconds()
-	// service latency: time query received to end of run
-	svcLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionQueryReceived])
+	parseLat := phaseTimes.getParsingLatency().Seconds()
+	planLat := phaseTimes.getPlanningLatency().Seconds()
+	svcLatRaw := phaseTimes.getServiceLatency()
 	svcLat := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.
@@ -154,8 +174,8 @@ func (ex *connExecutor) recordStatementSummary(
 
 	if log.V(2) {
 		// ages since significant epochs
-		sessionAge := phaseTimes[plannerEndExecStmt].
-			Sub(phaseTimes[sessionInit]).Seconds()
+		sessionAge := phaseTimes.internalPhaseTimes[plannerEndExecStmt].
+			Sub(phaseTimes.internalPhaseTimes[sessionInit]).Seconds()
 
 		log.Infof(ctx,
 			"query stats: %d rows, %d retries, "+

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -254,7 +255,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if ex.sessionData.StmtTimeout > 0 {
 		timeoutTicker = time.AfterFunc(
-			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
+			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes.internalPhaseTimes[sessionQueryReceived]),
 			func() {
 				ex.cancelQuery(stmt.queryID)
 				queryTimedOut = true
@@ -481,7 +482,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
@@ -708,7 +708,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 ) error {
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes.internalPhaseTimes[plannerStartLogicalPlan] = timeutil.Now()
 
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.
@@ -734,11 +734,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(),
 			res.Err(),
-			ex.statsCollector.phaseTimes[sessionQueryReceived],
+			ex.statsCollector.phaseTimes.internalPhaseTimes[sessionQueryReceived],
 		)
 	}()
 
-	ex.statsCollector.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
+	ex.statsCollector.phaseTimes.internalPhaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
 
 	// Finally, process the planning error from above.
@@ -766,7 +766,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
-	ex.statsCollector.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes.internalPhaseTimes[plannerStartExecStmt] = timeutil.Now()
 
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
@@ -800,7 +800,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	bytesRead, rowsRead, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan, progAtomic)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
-	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+	ex.statsCollector.phaseTimes.internalPhaseTimes[plannerEndExecStmt] = timeutil.Now()
 
 	// Record the statement summary. This also closes the plan if the
 	// plan has not been closed earlier.
@@ -1105,6 +1105,8 @@ func (ex *connExecutor) runObserverStatement(
 	case *tree.SetTracing:
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
+	case *tree.ShowLastQueryStatistics:
+		return ex.runShowLastQueryStatistics(ctx, res)
 	default:
 		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
 		return nil
@@ -1140,6 +1142,24 @@ func (ex *connExecutor) runShowTransactionState(
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+}
+
+func (ex *connExecutor) runShowLastQueryStatistics(
+	ctx context.Context, res RestrictedCommandResult,
+) error {
+	res.SetColumns(ctx, sqlbase.ShowLastQueryStatisticsColumns)
+
+	phaseTimes := &ex.statsCollector.previousPhaseTimes
+	runLat := phaseTimes.getRunLatency().Seconds()
+	parseLat := phaseTimes.getParsingLatency().Seconds()
+	planLat := phaseTimes.getPlanningLatency().Seconds()
+	svcLat := phaseTimes.getServiceLatency().Seconds()
+
+	return res.AddRow(ctx,
+		tree.Datums{tree.NewDInterval(duration.FromFloat64(svcLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(runLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(planLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(parseLat), types.DefaultIntervalTypeMetadata)})
 }
 
 func (ex *connExecutor) runSetTracing(
@@ -1219,7 +1239,7 @@ func (ex *connExecutor) addActiveQuery(
 	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
-		start:         ex.phaseTimes[sessionQueryReceived],
+		start:         ex.phaseTimes.internalPhaseTimes[sessionQueryReceived],
 		rawStmt:       stmt.SQL,
 		phase:         preparing,
 		isDistributed: false,

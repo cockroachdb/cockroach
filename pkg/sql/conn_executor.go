@@ -625,7 +625,7 @@ func (s *Server) newConnExecutor(
 		ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 	})
 
-	ex.phaseTimes[sessionInit] = timeutil.Now()
+	ex.phaseTimes.internalPhaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
 		portals:   make(map[string]*PreparedPortal),
@@ -1019,6 +1019,7 @@ type connExecutor struct {
 	// safe to use when a statement is not being parallelized. It must be reset
 	// before using.
 	planner planner
+
 	// phaseTimes tracks session- and transaction-level phase times. It is
 	// copied-by-value when resetting statsCollector before executing each
 	// statement.
@@ -1348,9 +1349,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		res = stmtRes
 		curStmt := Statement{Statement: tcmd.Statement}
 
-		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
-		ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
-		ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
+		ex.phaseTimes.internalPhaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+		ex.phaseTimes.internalPhaseTimes[sessionStartParse] = tcmd.ParseStart
+		ex.phaseTimes.internalPhaseTimes[sessionEndParse] = tcmd.ParseEnd
 
 		stmtCtx := withStatement(ctx, ex.curStmt)
 		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */)
@@ -1388,13 +1389,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			Values: portal.Qargs,
 		}
 
-		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+		ex.phaseTimes.internalPhaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 		// When parsing has been done earlier, via a separate parse
 		// message, it is not any more part of the statistics collected
 		// for this execution. In that case, we simply report that
 		// parsing took no time.
-		ex.phaseTimes[sessionStartParse] = time.Time{}
-		ex.phaseTimes[sessionEndParse] = time.Time{}
+		ex.phaseTimes.internalPhaseTimes[sessionStartParse] = time.Time{}
+		ex.phaseTimes.internalPhaseTimes[sessionEndParse] = time.Time{}
 
 		stmtRes := ex.clientComm.CreateStatementResult(
 			portal.Stmt.AST,
@@ -2299,7 +2300,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		Username:        ex.sessionData.User,
 		ClientAddress:   remoteStr,
 		ApplicationName: ex.applicationName.Load().(string),
-		Start:           ex.phaseTimes[sessionInit].UTC(),
+		Start:           ex.phaseTimes.internalPhaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		ActiveTxn:       activeTxnInfo,
 		KvTxnID:         kvTxnID,
