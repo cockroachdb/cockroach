@@ -1,0 +1,42 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)')
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyckVHv0jAUxd_9FM19-pNU2YZPfZpRjCO4IePBhCymrje4MNp52yUasu9u1pIgCCr_t97bc87v3vYI9nsLAsr5cv52w3pq2ft18ZFt559XyzdZzp7eZeWm_LScsJOk3XNG-6BqnfzaIlsUWc4onIucWfel0Q7JYu3sU9C82qE58JPIF5MKOGijMJcHtCC2EEPFoSNTo7WGxtbRCzL1A0TEodFd78Z2xaE2hCCO4BrXIgjYjLlrlAppGgEHhU42rY_tqDlI-pmGQYBD2UltBXsJ1cDB9O6cap3cIYh44M8jx7fJ9N_k5C75DOy1IYWE6gJWjc5_SW6M_0HabwvTaKRpcjn9Hz-ZJpylryfAoeidYGnM09ndTWaPvOEabWe0xeuNbiZH4xqodhiexZqealyRqT0mlIX3-YZC68JtEopM-yv_yb-b4wfMybU5-at5dmGOhmp48SsAAP__ZdUlAw==
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)
+----
+1  16
+1  13
+2  16
+2  14
