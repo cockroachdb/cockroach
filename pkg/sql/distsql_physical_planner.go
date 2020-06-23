@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1238,34 +1237,30 @@ func (dsp *DistSQLPlanner) addSorters(p *PhysicalPlan, n *sortNode) {
 	)
 }
 
+// aggregatorPlanningInfo is a utility struct that contains the information
+// needed to perform the physical planning of aggregators once the specs have
+// been created.
+type aggregatorPlanningInfo struct {
+	aggregations         []execinfrapb.AggregatorSpec_Aggregation
+	argumentsColumnTypes [][]*types.T
+	isScalar             bool
+	groupCols            []int
+	groupColOrdering     sqlbase.ColumnOrdering
+	inputMergeOrdering   execinfrapb.Ordering
+	reqOrdering          ReqOrdering
+}
+
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
-// reflect the groupNode. An evaluator stage is added if necessary.
-// Invariants assumed:
-//  - There is strictly no "pre-evaluation" necessary. If the given query is
-//  'SELECT COUNT(k), v + w FROM kv GROUP BY v + w', the evaluation of the first
-//  'v + w' is done at the source of the groupNode.
-//  - We only operate on the following expressions:
-//      - ONLY aggregation functions, with arguments pre-evaluated. So for
-//        COUNT(k + v), we assume a stream of evaluated 'k + v' values.
-//      - Expressions that CONTAIN an aggregation function, e.g. 'COUNT(k) + 1'.
-//        This is evaluated in the post aggregation evaluator attached after.
-//      - Expressions that also appear verbatim in the GROUP BY expressions.
-//        For 'SELECT k GROUP BY k', the aggregation function added is IDENT,
-//        therefore k just passes through unchanged.
-//    All other expressions simply pass through unchanged, for e.g. '1' in
-//    'SELECT 1 GROUP BY k'.
+// reflect the groupNode.
 func (dsp *DistSQLPlanner) addAggregators(
 	planCtx *PlanningCtx, p *PhysicalPlan, n *groupNode,
 ) error {
 	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(n.funcs))
-	aggregationsColumnTypes := make([][]*types.T, len(n.funcs))
+	argumentsColumnTypes := make([][]*types.T, len(n.funcs))
 	for i, fholder := range n.funcs {
-		// Convert the aggregate function to the enum value with the same string
-		// representation.
-		funcStr := strings.ToUpper(fholder.funcName)
-		funcIdx, ok := execinfrapb.AggregatorSpec_Func_value[funcStr]
-		if !ok {
-			return errors.Errorf("unknown aggregate %s", funcStr)
+		funcIdx, err := execinfrapb.GetAggregateFuncIdx(fholder.funcName)
+		if err != nil {
+			return err
 		}
 		aggregations[i].Func = execinfrapb.AggregatorSpec_Func(funcIdx)
 		aggregations[i].Distinct = fholder.isDistinct()
@@ -1277,34 +1272,62 @@ func (dsp *DistSQLPlanner) addAggregators(
 			aggregations[i].FilterColIdx = &col
 		}
 		aggregations[i].Arguments = make([]execinfrapb.Expression, len(fholder.arguments))
-		aggregationsColumnTypes[i] = make([]*types.T, len(fholder.arguments))
+		argumentsColumnTypes[i] = make([]*types.T, len(fholder.arguments))
 		for j, argument := range fholder.arguments {
 			var err error
 			aggregations[i].Arguments[j], err = physicalplan.MakeExpression(argument, planCtx, nil)
 			if err != nil {
 				return err
 			}
-			aggregationsColumnTypes[i][j] = argument.ResolvedType()
-			if err != nil {
-				return err
-			}
+			argumentsColumnTypes[i][j] = argument.ResolvedType()
 		}
 	}
 
+	return dsp.planAggregators(planCtx, p, &aggregatorPlanningInfo{
+		aggregations:         aggregations,
+		argumentsColumnTypes: argumentsColumnTypes,
+		isScalar:             n.isScalar,
+		groupCols:            n.groupCols,
+		groupColOrdering:     n.groupColOrdering,
+		inputMergeOrdering:   dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap),
+		reqOrdering:          n.reqOrdering,
+	})
+}
+
+// planAggregators plans the aggregator processors. An evaluator stage is added
+// if necessary.
+// Invariants assumed:
+//  - There is strictly no "pre-evaluation" necessary. If the given query is
+//  'SELECT COUNT(k), v + w FROM kv GROUP BY v + w', the evaluation of the first
+//  'v + w' is done at the source of the groupNode.
+//  - We only operate on the following expressions:
+//      - ONLY aggregation functions, with arguments pre-evaluated. So for
+//        COUNT(k + v), we assume a stream of evaluated 'k + v' values.
+//      - Expressions that CONTAIN an aggregation function, e.g. 'COUNT(k) + 1'.
+//        These are set as render expressions in the post-processing spec and
+//        are evaluated on the rows that the aggregator returns.
+//      - Expressions that also appear verbatim in the GROUP BY expressions.
+//        For 'SELECT k GROUP BY k', the aggregation function added is IDENT,
+//        therefore k just passes through unchanged.
+//    All other expressions simply pass through unchanged, for e.g. '1' in
+//    'SELECT 1 GROUP BY k'.
+func (dsp *DistSQLPlanner) planAggregators(
+	planCtx *PlanningCtx, p *PhysicalPlan, info *aggregatorPlanningInfo,
+) error {
 	aggType := execinfrapb.AggregatorSpec_NON_SCALAR
-	if n.isScalar {
+	if info.isScalar {
 		aggType = execinfrapb.AggregatorSpec_SCALAR
 	}
 
 	inputTypes := p.ResultTypes
 
-	groupCols := make([]uint32, len(n.groupCols))
-	for i, idx := range n.groupCols {
+	groupCols := make([]uint32, len(info.groupCols))
+	for i, idx := range info.groupCols {
 		groupCols[i] = uint32(p.PlanToStreamColMap[idx])
 	}
-	orderedGroupCols := make([]uint32, len(n.groupColOrdering))
+	orderedGroupCols := make([]uint32, len(info.groupColOrdering))
 	var orderedGroupColSet util.FastIntSet
-	for i, c := range n.groupColOrdering {
+	for i, c := range info.groupColOrdering {
 		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[c.ColIdx])
 		orderedGroupColSet.Add(c.ColIdx)
 	}
@@ -1334,7 +1357,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	if prevStageNode == 0 {
 		// Check that all aggregation functions support a local stage.
 		multiStage = true
-		for _, e := range aggregations {
+		for _, e := range info.aggregations {
 			if e.Distinct {
 				// We can't do local aggregation for functions with distinct.
 				multiStage = false
@@ -1361,13 +1384,13 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// We can't do local aggregation, but we can do local distinct processing
 		// to reduce streaming duplicates, and aggregate on the final node.
 
-		ordering := dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap).Columns
+		ordering := info.inputMergeOrdering.Columns
 		orderedColsMap := make(map[uint32]struct{})
 		for _, ord := range ordering {
 			orderedColsMap[ord.ColIdx] = struct{}{}
 		}
 		distinctColsMap := make(map[uint32]struct{})
-		for _, agg := range aggregations {
+		for _, agg := range info.aggregations {
 			for _, c := range agg.ColIdx {
 				distinctColsMap[c] = struct{}{}
 			}
@@ -1405,7 +1428,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	if !multiStage {
 		finalAggsSpec = execinfrapb.AggregatorSpec{
 			Type:             aggType,
-			Aggregations:     aggregations,
+			Aggregations:     info.aggregations,
 			GroupCols:        groupCols,
 			OrderedGroupCols: orderedGroupCols,
 		}
@@ -1421,7 +1444,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		nLocalAgg := 0
 		nFinalAgg := 0
 		needRender := false
-		for _, e := range aggregations {
+		for _, e := range info.aggregations {
 			info := physicalplan.DistAggregationTable[e.Func]
 			nLocalAgg += len(info.LocalStage)
 			nFinalAgg += len(info.FinalStage)
@@ -1456,7 +1479,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// finalIdx is the index of the final aggregation with respect
 		// to all final aggregations.
 		finalIdx := 0
-		for _, e := range aggregations {
+		for _, e := range info.aggregations {
 			info := physicalplan.DistAggregationTable[e.Func]
 
 			// relToAbsLocalIdx maps each local stage for the given
@@ -1596,18 +1619,18 @@ func (dsp *DistSQLPlanner) addAggregators(
 				intermediateTypes = append(intermediateTypes, inputTypes[groupColIdx])
 			}
 			finalGroupCols[i] = uint32(idx)
-			if orderedGroupColSet.Contains(n.groupCols[i]) {
+			if orderedGroupColSet.Contains(info.groupCols[i]) {
 				finalOrderedGroupCols = append(finalOrderedGroupCols, uint32(idx))
 			}
 		}
 
 		// Create the merge ordering for the local stage (this will be maintained
 		// for results going into the final stage).
-		ordCols := make([]execinfrapb.Ordering_Column, len(n.groupColOrdering))
-		for i, o := range n.groupColOrdering {
+		ordCols := make([]execinfrapb.Ordering_Column, len(info.groupColOrdering))
+		for i, o := range info.groupColOrdering {
 			// Find the group column.
 			found := false
-			for j, col := range n.groupCols {
+			for j, col := range info.groupCols {
 				if col == o.ColIdx {
 					ordCols[i].ColIdx = finalGroupCols[j]
 					found = true
@@ -1647,13 +1670,13 @@ func (dsp *DistSQLPlanner) addAggregators(
 
 		if needRender {
 			// Build rendering expressions.
-			renderExprs := make([]execinfrapb.Expression, len(aggregations))
+			renderExprs := make([]execinfrapb.Expression, len(info.aggregations))
 			h := tree.MakeTypesOnlyIndexedVarHelper(finalPreRenderTypes)
 			// finalIdx is an index inside finalAggs. It is used to
 			// keep track of the finalAggs results that correspond
 			// to each aggregation.
 			finalIdx := 0
-			for i, e := range aggregations {
+			for i, e := range info.aggregations {
 				info := physicalplan.DistAggregationTable[e.Func]
 				if info.FinalRendering == nil {
 					// mappedIdx corresponds to the index
@@ -1694,7 +1717,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 				finalIdx += len(info.FinalStage)
 			}
 			finalAggsPost.RenderExprs = renderExprs
-		} else if len(finalAggs) < len(aggregations) {
+		} else if len(finalAggs) < len(info.aggregations) {
 			// We want to ensure we map the streams properly now
 			// that we've potential reduced the number of final
 			// aggregation output streams. We use finalIdxMap to
@@ -1710,15 +1733,13 @@ func (dsp *DistSQLPlanner) addAggregators(
 
 	// Set up the final stage.
 
-	finalOutTypes := make([]*types.T, len(aggregations))
-	for i, agg := range aggregations {
+	finalOutTypes := make([]*types.T, len(info.aggregations))
+	for i, agg := range info.aggregations {
 		argTypes := make([]*types.T, len(agg.ColIdx)+len(agg.Arguments))
 		for j, c := range agg.ColIdx {
 			argTypes[j] = inputTypes[c]
 		}
-		for j, argumentColumnType := range aggregationsColumnTypes[i] {
-			argTypes[len(agg.ColIdx)+j] = argumentColumnType
-		}
+		copy(argTypes[len(agg.ColIdx):], info.argumentsColumnTypes[i])
 		var err error
 		_, returnTyp, err := execinfrapb.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
@@ -1731,7 +1752,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	// planNode columns to stream columns because the aggregator
 	// has been programmed to produce the same columns as the groupNode.
 	if !planToStreamMapSet {
-		p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(aggregations))
+		p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(info.aggregations))
 	}
 
 	if len(finalAggsSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
@@ -1798,7 +1819,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 
 		p.ResultTypes = finalOutTypes
-		p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap))
+		p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, p.PlanToStreamColMap))
 	}
 
 	return nil

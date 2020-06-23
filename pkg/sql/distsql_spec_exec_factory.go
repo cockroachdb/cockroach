@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
@@ -361,6 +363,105 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	)
 }
 
+func populateAggFuncSpec(
+	spec *execinfrapb.AggregatorSpec_Aggregation,
+	funcName string,
+	distinct bool,
+	argCols []exec.NodeColumnOrdinal,
+	constArgs []tree.Datum,
+	filter exec.NodeColumnOrdinal,
+	planCtx *PlanningCtx,
+	physPlan *PhysicalPlan,
+) (argumentsColumnTypes []*types.T, err error) {
+	funcIdx, err := execinfrapb.GetAggregateFuncIdx(funcName)
+	if err != nil {
+		return nil, err
+	}
+	spec.Func = execinfrapb.AggregatorSpec_Func(funcIdx)
+	spec.Distinct = distinct
+	spec.ColIdx = make([]uint32, len(argCols))
+	for i, col := range argCols {
+		spec.ColIdx[i] = uint32(col)
+	}
+	if filter != tree.NoColumnIdx {
+		filterColIdx := uint32(physPlan.PlanToStreamColMap[filter])
+		spec.FilterColIdx = &filterColIdx
+	}
+	if len(constArgs) > 0 {
+		spec.Arguments = make([]execinfrapb.Expression, len(constArgs))
+		argumentsColumnTypes = make([]*types.T, len(constArgs))
+		for k, argument := range constArgs {
+			var err error
+			spec.Arguments[k], err = physicalplan.MakeExpression(argument, planCtx, nil)
+			if err != nil {
+				return nil, err
+			}
+			argumentsColumnTypes[k] = argument.ResolvedType()
+		}
+	}
+	return argumentsColumnTypes, nil
+}
+
+func (e *distSQLSpecExecFactory) constructAggregators(
+	input exec.Node,
+	groupCols []exec.NodeColumnOrdinal,
+	groupColOrdering sqlbase.ColumnOrdering,
+	aggregations []exec.AggInfo,
+	reqOrdering exec.OutputOrdering,
+	isScalar bool,
+) (exec.Node, error) {
+	physPlan, plan := getPhysPlan(input)
+	// planAggregators() itself decides whether to distribute the aggregation.
+	planCtx := e.getPlanCtx(shouldDistribute)
+	aggregationSpecs := make([]execinfrapb.AggregatorSpec_Aggregation, len(groupCols)+len(aggregations))
+	argumentsColumnTypes := make([][]*types.T, len(groupCols)+len(aggregations))
+	var err error
+	if len(groupCols) > 0 {
+		argColsScratch := []exec.NodeColumnOrdinal{0}
+		noFilter := exec.NodeColumnOrdinal(tree.NoColumnIdx)
+		for i, col := range groupCols {
+			spec := &aggregationSpecs[i]
+			argColsScratch[0] = col
+			_, err = populateAggFuncSpec(
+				spec, builtins.AnyNotNull, false /* distinct*/, argColsScratch,
+				nil /* constArgs */, noFilter, planCtx, physPlan,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	for j := range aggregations {
+		i := len(groupCols) + j
+		spec := &aggregationSpecs[i]
+		agg := &aggregations[j]
+		argumentsColumnTypes[i], err = populateAggFuncSpec(
+			spec, agg.FuncName, agg.Distinct, agg.ArgCols,
+			agg.ConstArgs, agg.Filter, planCtx, physPlan,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := e.dsp.planAggregators(
+		planCtx,
+		physPlan,
+		&aggregatorPlanningInfo{
+			aggregations:         aggregationSpecs,
+			argumentsColumnTypes: argumentsColumnTypes,
+			isScalar:             isScalar,
+			groupCols:            convertOrdinalsToInts(groupCols),
+			groupColOrdering:     groupColOrdering,
+			inputMergeOrdering:   physPlan.MergeOrdering,
+			reqOrdering:          ReqOrdering(reqOrdering),
+		},
+	); err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = getResultColumnsForGroupBy(physPlan.ResultColumns, groupCols, aggregations)
+	return plan, nil
+}
+
 func (e *distSQLSpecExecFactory) ConstructGroupBy(
 	input exec.Node,
 	groupCols []exec.NodeColumnOrdinal,
@@ -368,13 +469,27 @@ func (e *distSQLSpecExecFactory) ConstructGroupBy(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return e.constructAggregators(
+		input,
+		groupCols,
+		groupColOrdering,
+		aggregations,
+		reqOrdering,
+		false, /* isScalar */
+	)
 }
 
 func (e *distSQLSpecExecFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return e.constructAggregators(
+		input,
+		nil, /* groupCols */
+		nil, /* groupColOrdering */
+		aggregations,
+		exec.OutputOrdering{}, /* reqOrdering */
+		true,                  /* isScalar */
+	)
 }
 
 func (e *distSQLSpecExecFactory) ConstructDistinct(
