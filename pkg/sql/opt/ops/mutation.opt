@@ -104,7 +104,7 @@ define MutationPrivate {
     # TODO(radu): we don't actually implement this optimization currently.
     CheckCols ColList
 
-    # IndexPredicateCols are columns from the Input expression containing the
+    # PartialIndexPutCols are columns from the Input expression containing the
     # results of evaluating each partial index predicate from the target table
     # for the mutation. Evaluating a partial index predicate produces a boolean
     # value which is projected as a column and used during execution to
@@ -123,8 +123,14 @@ define MutationPrivate {
     # the predicate expression of the index on a. The second is the result of
     # evaluating the predicate of the index on c. The index on b is not a
     # partial index, because it has no predicate, so it is not included in
-    # IndexPredicateCols.
-    IndexPredicateCols ColList
+    # PartialIndexPutCols.
+    PartialIndexPutCols ColList
+
+    # PartialIndexDelCols is similar to PartialIndexPutCols, but instead
+    # indicates when the previous version of a row must be deleted from a
+    # partial index during updates or deletes in order to maintain the state of
+    # the index.
+    PartialIndexDelCols ColList
 
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.

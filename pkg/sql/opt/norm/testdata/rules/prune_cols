@@ -43,6 +43,16 @@ CREATE TABLE family (
 )
 ----
 
+exec-ddl
+CREATE TABLE partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX (b) WHERE c = 'foo',
+    INDEX (c) WHERE a > b AND c = 'bar'
+)
+----
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
@@ -1928,6 +1938,31 @@ delete a
       ├── columns: k:5!null s:8
       ├── key: (5)
       └── fd: (5)-->(8)
+
+# Do not prune columns that are required for evaluating partial index
+# predicates.
+norm expect-not=(PruneMutationFetchCols,PruneMutationInputCols)
+DELETE FROM partial_indexes RETURNING a
+----
+delete partial_indexes
+ ├── columns: a:1!null
+ ├── fetch columns: a:4 b:5 c:6
+ ├── volatile, mutations
+ ├── key: (1)
+ └── project
+      ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
+      ├── key: (4)
+      ├── fd: (4)-->(5,6,8), (6)-->(7)
+      ├── scan partial_indexes
+      │    ├── columns: a:4!null b:5 c:6
+      │    ├── partial index predicates
+      │    │    ├── secondary: c:6 = 'foo'
+      │    │    └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      │    ├── key: (4)
+      │    └── fd: (4)-->(5,6)
+      └── projections
+           ├── c:6 = 'foo' [as=partial_index_del1:7, outer=(6)]
+           └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8, outer=(4-6)]
 
 # Prune secondary family column not needed for the update.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
