@@ -279,6 +279,22 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (ij *InvertedJoinerSpec) summary() (string, []string) {
+	index := ij.Table.Indexes[ij.IndexIdx-1].Name
+	details := make([]string, 0, 4)
+	if ij.Type != sqlbase.InnerJoin {
+		details = append(details, joinTypeDetail(ij.Type))
+	}
+	details = append(details, fmt.Sprintf("%s@%s", index, ij.Table.Name))
+	details = append(details, fmt.Sprintf("Inverted join on: @%d", ij.LookupColumn+1))
+	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
+	if !ij.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", ij.OnExpr))
+	}
+	return "InvertedJoiner", details
+}
+
+// summary implements the diagramCellType interface.
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {

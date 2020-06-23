@@ -928,6 +928,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&indexJoinNode{}):         "index-join",
 	reflect.TypeOf(&insertNode{}):            "insert",
 	reflect.TypeOf(&insertFastPathNode{}):    "insert-fast-path",
+	reflect.TypeOf(&invertedJoinNode{}):      "inverted-join",
 	reflect.TypeOf(&joinNode{}):              "join",
 	reflect.TypeOf(&limitNode{}):             "limit",
 	reflect.TypeOf(&lookupJoinNode{}):        "lookup-join",

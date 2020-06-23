@@ -592,3 +592,20 @@ INSERT INTO t VALUES (1.00, ARRAY[1,2])
 CPut /Table/56/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
 InitPut /Table/56/2/1/1/0 -> /BYTES/0x1503348964
 InitPut /Table/56/2/2/1/0 -> /BYTES/0x1503348964
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+CREATE TABLE geo_table2(
+  k int primary key,
+  geom geometry
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM geo_table2 JOIN geo_table ON ST_Intersects(geo_table2.geom, geo_table.geom)
+----

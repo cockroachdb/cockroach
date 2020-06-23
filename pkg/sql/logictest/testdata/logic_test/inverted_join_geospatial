@@ -1,0 +1,40 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE ltable(
+  k int primary key,
+  geom geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)')
+
+statement ok
+CREATE TABLE rtable(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query II
+SELECT ltable.k, rtable.k FROM ltable JOIN rtable ON ST_Intersects(ltable.geom, rtable.geom)
+----
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT ltable.k, rtable.k
+FROM ltable JOIN rtable ON ST_Intersects(ltable.geom, rtable.geom)]
+----
+
+# TODO: more test cases. Non-local ...
