@@ -1059,3 +1059,8 @@ query T
 SELECT * FROM enum_data_type
 ----
 hello
+
+query T
+SELECT to_json('hello'::greeting)
+----
+"hello"
