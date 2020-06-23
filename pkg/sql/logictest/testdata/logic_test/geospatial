@@ -26,6 +26,21 @@ SELECT 'SRID=404;POINT(1.0 2.0)'::geometry
 statement error unknown SRID for Geography: 404
 SELECT 'SRID=404;POINT(1.0 2.0)'::geography
 
+statement ok
+CREATE TABLE geo_table_negative_values(
+  a geometry(geometry, -1),
+  b geography(geometry, -2)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE geo_table_negative_values]
+----
+CREATE TABLE geo_table_negative_values (
+   a GEOMETRY(GEOMETRY) NULL,
+   b GEOGRAPHY(GEOMETRY) NULL,
+   FAMILY fam_0_b_a_rowid (b, a, rowid)
+)
+
 statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
 SELECT 'SRID=3857;POINT(1.0 2.0)'::geography
 
