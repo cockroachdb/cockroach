@@ -75,6 +75,10 @@ type PrometheusExportable interface {
 	ToPrometheusMetric() *prometheusgo.Metric
 }
 
+type PrometheusIterable interface {
+	Each([]*prometheusgo.LabelPair, func(metric *prometheusgo.Metric))
+}
+
 // GetName returns the metric's name.
 func (m *Metadata) GetName() string {
 	return m.Name
