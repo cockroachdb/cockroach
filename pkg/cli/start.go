@@ -1039,33 +1039,41 @@ If problems persist, please see %s.`
 	// forcefully terminated.
 
 	const hardShutdownHint = " - node may take longer to restart & clients may need to wait for leases to expire"
-	select {
-	case sig := <-signalCh:
-		switch sig {
-		case quitSignal:
-			// A SIGQUIT is received during the "graceful shutdown" phase
-			// initiated by another signal. Take this as a request to get
-			// the stacks at this point.
-			log.DumpStacks(shutdownCtx)
+	for {
+		select {
+		case sig := <-signalCh:
+			switch sig {
+			case termSignal:
+				// Double SIGTERM, or SIGTERM after another signal: continue
+				// the graceful shutdown.
+				log.Infof(shutdownCtx, "received additional signal '%s'; continuing graceful shutdown", sig)
+				continue
+			case quitSignal:
+				// A SIGQUIT is received during the "graceful shutdown" phase
+				// initiated by another signal. Take this as a request to get
+				// the stacks at this point.
+				log.DumpStacks(shutdownCtx)
+			}
+
+			// This new signal is not welcome, as it interferes with the graceful
+			// shutdown process.
+			log.Shoutf(shutdownCtx, log.Severity_ERROR,
+				"received signal '%s' during shutdown, initiating hard shutdown%s",
+				log.Safe(sig), log.Safe(hardShutdownHint))
+			handleSignalDuringShutdown(sig)
+			panic("unreachable")
+
+		case <-stopper.IsStopped():
+			const msgDone = "server drained and shutdown completed"
+			log.Infof(shutdownCtx, msgDone)
+			fmt.Fprintln(os.Stdout, msgDone)
+
+		case <-stopWithoutDrain:
+			const msgDone = "too early to drain; used hard shutdown instead"
+			log.Infof(shutdownCtx, msgDone)
+			fmt.Fprintln(os.Stdout, msgDone)
 		}
-
-		// This new signal is not welcome, as it interferes with the graceful
-		// shutdown process.
-		log.Shoutf(shutdownCtx, log.Severity_ERROR,
-			"received signal '%s' during shutdown, initiating hard shutdown%s",
-			log.Safe(sig), log.Safe(hardShutdownHint))
-		handleSignalDuringShutdown(sig)
-		panic("unreachable")
-
-	case <-stopper.IsStopped():
-		const msgDone = "server drained and shutdown completed"
-		log.Infof(shutdownCtx, msgDone)
-		fmt.Fprintln(os.Stdout, msgDone)
-
-	case <-stopWithoutDrain:
-		const msgDone = "too early to drain; used hard shutdown instead"
-		log.Infof(shutdownCtx, msgDone)
-		fmt.Fprintln(os.Stdout, msgDone)
+		break
 	}
 
 	return returnErr
