@@ -492,6 +492,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:7704ad50ebd76fee729a8e20830b987eae6d7a01590a88f43806868fd8f90ccb"
+  name = "github.com/cockroachdb/redact"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "cd282804bbd3cd122cf2f406a0707084bfb6a4bf"
+
+[[projects]]
+  branch = "master"
   digest = "1:7fd6f030a3e71e62c6a04a74b7d1777995b39730cd5cc905aab2b726f3455863"
   name = "github.com/cockroachdb/returncheck"
   packages = ["."]
@@ -2179,6 +2187,7 @@
     "github.com/cockroachdb/pebble/sstable",
     "github.com/cockroachdb/pebble/tool",
     "github.com/cockroachdb/pebble/vfs",
+    "github.com/cockroachdb/redact",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/sentry-go",
     "github.com/cockroachdb/stress",

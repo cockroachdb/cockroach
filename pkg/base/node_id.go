@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/redact"
+	"github.com/cockroachdb/redact"
 )
 
 // NodeIDContainer is used to share a single roachpb.NodeID instance between
