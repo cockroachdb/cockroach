@@ -65,6 +65,7 @@ interface SingleStatementStatistics {
   statement: string;
   app: string[];
   distSQL: Fraction;
+  vec: Fraction;
   opt: Fraction;
   implicit_txn: Fraction;
   failed: Fraction;
@@ -268,7 +269,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     if (!this.props.statement) {
       return null;
     }
-    const { stats, statement, app, distSQL, opt, failed, implicit_txn } = this.props.statement;
+    const { stats, statement, app, distSQL, vec, opt, failed, implicit_txn } = this.props.statement;
 
     if (!stats) {
       const sourceApp = getMatchParamByName(this.props.match, appAttr);
@@ -352,6 +353,10 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <h4 className={summaryCardStylesCx("summary--card__item--label")}>Distributed execution?</h4>
                   <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderBools(distSQL) }</p>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Vectorized execution?</h4>
+                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderBools(vec) }</p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <h4 className={summaryCardStylesCx("summary--card__item--label")}>Used cost-based optimizer?</h4>
@@ -622,6 +627,7 @@ export const selectStatement = createSelector(
       byNode: coalesceNodeStats(results),
       app: _.uniq(results.map(s => s.app)),
       distSQL: fractionMatching(results, s => s.distSQL),
+      vec: fractionMatching(results, s => s.vec),
       opt: fractionMatching(results, s => s.opt),
       implicit_txn: fractionMatching(results, s => s.implicit_txn),
       failed: fractionMatching(results, s => s.failed),

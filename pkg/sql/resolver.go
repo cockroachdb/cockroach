@@ -184,7 +184,15 @@ func (p *planner) ResolveType(
 
 // ResolveTypeByID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	name, desc, err := resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, sqlbase.ID(id), tree.ObjectLookupFlags{})
+	name, desc, err := resolver.ResolveTypeDescByID(
+		ctx,
+		p.txn,
+		p.ExecCfg().Codec,
+		sqlbase.ID(id),
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
