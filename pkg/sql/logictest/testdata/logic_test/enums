@@ -553,7 +553,8 @@ enum_computed  CREATE TABLE enum_computed (
                FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
 )
 
-# Test information_schema.columns.
+# Test information_schema.columns. generation_expression should not be
+# formatted with type annotations.
 query TT
 SELECT
   column_name, generation_expression
@@ -564,8 +565,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  'hello':::public.greeting
-z  w = 'howdy':::public.greeting
+y  'hello'
+z  w = 'howdy'
 
 # Test check constraints with enum values.
 statement ok
@@ -1059,3 +1060,8 @@ query T
 SELECT * FROM enum_data_type
 ----
 hello
+
+query T
+SELECT to_json('hello'::greeting)
+----
+"hello"

@@ -1417,7 +1417,7 @@ WHERE table_schema = 'public' AND table_name = 'computed'
 ----
 column_name  is_generated  generation_expression  is_updatable
 a            NO            ·                      YES
-b            YES           a + 1:::INT8           NO
+b            YES           a + 1                  NO
 rowid        NO            ·                      YES
 
 statement ok

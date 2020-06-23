@@ -393,7 +393,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					if err != nil {
 						return err
 					}
-					colComputed = tree.NewDString(tree.SerializeForDisplay(colExpr))
+					colComputed = tree.NewDString(tree.AsString(colExpr))
 				}
 				return addRow(
 					dbNameStr,                    // table_catalog
