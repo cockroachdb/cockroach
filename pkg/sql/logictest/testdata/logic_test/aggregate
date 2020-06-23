@@ -1,5 +1,3 @@
-# LogicTest: default-configs local-spec-planning fakedist-spec-planning
-
 subtest other
 
 statement ok
