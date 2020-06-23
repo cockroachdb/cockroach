@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -437,7 +438,7 @@ const fakeNodeID = roachpb.NodeID(123456789)
 
 func makeSQLServerArgs(
 	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
-) sqlServerArgs {
+) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 	baseCfg.AmbientCtx.AddLogTag("sql", nil)
 	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
@@ -448,6 +449,10 @@ func makeSQLServerArgs(
 	baseCfg.ClusterName = kvClusterName
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
+
+	// TODO(tbg): expose this registry via prometheus. See:
+	// https://github.com/cockroachdb/cockroach/issues/47905
+	registry := metric.NewRegistry()
 
 	var rpcTestingKnobs rpc.ContextTestingKnobs
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
@@ -462,18 +467,14 @@ func makeSQLServerArgs(
 		Knobs:      rpcTestingKnobs,
 	})
 
-	// TODO(tbg): expose this registry via prometheus. See:
-	// https://github.com/cockroachdb/cockroach/issues/47905
-	registry := metric.NewRegistry()
-
 	var dsKnobs kvcoord.ClientTestingKnobs
 	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
 		dsKnobs = *dsKnobsP
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
 
-	// TODO(nvb): this use of Gossip needs to go. Tracked in:
-	// https://github.com/cockroachdb/cockroach/issues/47909
+	// TODO(ajwerner): this use of Gossip needs to go. Tracked in:
+	// https://github.com/cockroachdb/cockroach/issues/47150
 	var g *gossip.Gossip
 	{
 		var nodeID base.NodeIDContainer
@@ -493,21 +494,28 @@ func makeSQLServerArgs(
 		)
 	}
 
-	nodeDialer := nodedialer.New(
+	tenantProxy, err := kvtenant.Factory.NewProxy(
+		baseCfg.AmbientCtx,
 		rpcContext,
-		gossip.AddressResolver(g), // TODO(nvb): break gossip dep
+		rpcRetryOptions,
+		sqlCfg.TenantKVAddrs,
 	)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+	resolver := kvcoord.AddressResolver(tenantProxy, baseCfg.Locality)
+	nodeDialer := nodedialer.New(rpcContext, resolver)
+
 	dsCfg := kvcoord.DistSenderConfig{
-		AmbientCtx:         baseCfg.AmbientCtx,
-		Settings:           st,
-		Clock:              clock,
-		NodeDescs:          g,
-		RPCRetryOptions:    &rpcRetryOptions,
-		RPCContext:         rpcContext,
-		NodeDialer:         nodeDialer,
-		RangeDescriptorDB:  nil, // use DistSender itself
-		FirstRangeProvider: g,
-		TestingKnobs:       dsKnobs,
+		AmbientCtx:        baseCfg.AmbientCtx,
+		Settings:          st,
+		Clock:             clock,
+		NodeDescs:         tenantProxy,
+		RPCRetryOptions:   &rpcRetryOptions,
+		RPCContext:        rpcContext,
+		NodeDialer:        nodeDialer,
+		RangeDescriptorDB: tenantProxy,
+		TestingKnobs:      dsKnobs,
 	}
 	ds := kvcoord.NewDistSender(dsCfg)
 
@@ -586,6 +594,7 @@ func makeSQLServerArgs(
 				uri, user string) (cloud.ExternalStorage, error) {
 				return nil, errors.New("external uri storage is not available to secondary tenants")
 			},
+			tenantProxy: tenantProxy,
 		},
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
@@ -598,7 +607,7 @@ func makeSQLServerArgs(
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
-	}
+	}, nil
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
@@ -639,7 +648,10 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (pgAddr string, _ error) {
-	args := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	if err != nil {
+		return "", err
+	}
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", err
@@ -677,6 +689,8 @@ func StartTenant(
 	)
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
 
+	// TODO(ajwerner): this use of Gossip needs to go. Tracked in:
+	// https://github.com/cockroachdb/cockroach/issues/47150
 	{
 		rs := make([]resolver.Resolver, len(sqlCfg.TenantKVAddrs))
 		for i := range rs {
