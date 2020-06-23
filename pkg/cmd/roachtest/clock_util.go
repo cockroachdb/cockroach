@@ -19,11 +19,17 @@ import (
 
 // isAlive returns whether the node queried by db is alive.
 func isAlive(db *gosql.DB, l *logger) bool {
-	_, err := db.Exec("SHOW DATABASES")
-	if err != nil {
-		l.Printf("isAlive returned err=%v\n", err)
+	// The cluster might have just restarted, in which case the first call to db
+	// might return an error. In fact, the first db.Ping() reliably returns an
+	// error (but a db.Exec() only seldomly returns an error). So, we're gonna
+	// Ping() twice to allow connections to be re-established.
+	_ = db.Ping()
+	if err := db.Ping(); err != nil {
+		l.Printf("isAlive returned err=%v (%T)", err, err)
+	} else {
+		return true
 	}
-	return err == nil
+	return false
 }
 
 // dbUnixEpoch returns the current time in db.

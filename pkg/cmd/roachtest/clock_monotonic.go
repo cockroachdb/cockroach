@@ -39,6 +39,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 
 	db := c.Conn(ctx, c.spec.NodeCount)
 	defer db.Close()
+
 	if _, err := db.Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING server.clock.persist_upper_bound_interval = '%v'`,
 			tc.persistWallTimeInterval)); err != nil {
