@@ -566,7 +566,7 @@ error (42P10): source "t" has 1 columns available but 2 columns specified
 build
 WITH t AS (SELECT a FROM x) SELECT a, x.t FROM t
 ----
-error (42P01): no data source matches prefix: x
+error (42P01): no data source matches prefix: x in this context
 
 # Nested WITH, name shadowing
 build
