@@ -113,15 +113,15 @@ SHOW CREATE TABLE t6
 ----
 t6  CREATE TABLE t6 (
     a INT8 NULL,
-    INDEX t6_a_idx (a ASC) WHERE a > 0,
-    INDEX t6_a_idx1 (a ASC) WHERE a > 1,
-    INDEX t6_a_idx2 (a DESC) WHERE a > 2,
-    UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3,
-    UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4,
-    UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5,
-    INDEX t6i1 (a ASC) WHERE a > 6,
-    INDEX t6i2 (a ASC) WHERE a > 7,
-    INDEX t6i3 (a DESC) WHERE a > 8,
+    INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
+    INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
+    INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
+    UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
+    UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
+    UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+    INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
+    INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
+    INDEX t6i3 (a DESC) WHERE a > 8:::INT8,
     FAMILY "primary" (a, rowid)
 )
 
@@ -135,15 +135,15 @@ SHOW CREATE TABLE t6
 ----
 t6  CREATE TABLE t6 (
     b INT8 NULL,
-    INDEX t6_a_idx (b ASC) WHERE b > 0,
-    INDEX t6_a_idx1 (b ASC) WHERE b > 1,
-    INDEX t6_a_idx2 (b DESC) WHERE b > 2,
-    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3,
-    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4,
-    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5,
-    INDEX t6i1 (b ASC) WHERE b > 6,
-    INDEX t6i2 (b ASC) WHERE b > 7,
-    INDEX t6i3 (b DESC) WHERE b > 8,
+    INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+    INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+    INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+    INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+    INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
     FAMILY "primary" (b, rowid)
 )
 
@@ -157,14 +157,14 @@ SHOW CREATE TABLE t7
 ----
 t7  CREATE TABLE t7 (
     b INT8 NULL,
-    INDEX t6_a_idx (b ASC) WHERE b > 0,
-    INDEX t6_a_idx1 (b ASC) WHERE b > 1,
-    INDEX t6_a_idx2 (b DESC) WHERE b > 2,
-    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3,
-    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4,
-    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5,
-    INDEX t6i1 (b ASC) WHERE b > 6,
-    INDEX t6i2 (b ASC) WHERE b > 7,
-    INDEX t6i3 (b DESC) WHERE b > 8,
+    INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+    INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+    INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+    INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+    INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
     FAMILY "primary" (b, rowid)
 )

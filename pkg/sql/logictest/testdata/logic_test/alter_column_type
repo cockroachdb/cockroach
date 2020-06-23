@@ -547,3 +547,12 @@ INSERT INTO t30 VALUES (e'a\\01');
 
 statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
+
+# Regression 50069, ALTER COLUMN TYPE USING EXPRESSION must only refer to
+# columns inside the current table.
+statement ok
+CREATE TABLE t50069_a (x INT);
+CREATE TABLE t50069_b (x INT);
+
+statement error pq: no data source matches prefix: t50069b in this context
+ALTER TABLE t50069_a ALTER COLUMN x TYPE INT USING (t50069b.x + 1)

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func TestIndexPredicateValidator_Validate(t *testing.T) {
+func TestValidateExpr(t *testing.T) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 
@@ -37,43 +37,32 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	validator := NewIndexPredicateValidator(ctx, tn, &desc, &semaCtx)
-
 	testData := []struct {
 		expr          string
 		expectedValid bool
 		expectedExpr  string
+		typ           *types.T
+		allowImpure   bool
 	}{
-		// Allow expressions that result in a bool.
-		{"a", true, "a"},
-		{"b = 0", true, "b = 0:::INT8"},
-		{"a AND b = 0", true, "a AND (b = 0:::INT8)"},
-		{"a IS NULL", true, "a IS NULL"},
-		{"b IN (1, 2)", true, "b IN (1:::INT8, 2:::INT8)"},
+		// De-qualify column names.
+		{"bar.a", true, "a", types.Bool, false},
+		{"foo.bar.a", true, "a", types.Bool, false},
+		{"bar.b = 0", true, "b = 0:::INT8", types.Bool, false},
+		{"foo.bar.b = 0", true, "b = 0:::INT8", types.Bool, false},
+		{"bar.a AND foo.bar.b = 0", true, "a AND (b = 0:::INT8)", types.Bool, false},
 
-		// Allow immutable functions.
-		{"abs(b) > 0", true, "abs(b) > 0:::INT8"},
-		{"c || c = 'foofoo'", true, "(c || c) = 'foofoo':::STRING"},
-		{"lower(c) = 'bar'", true, "lower(c) = 'bar':::STRING"},
+		// Validates the type of the expression.
+		{"concat(c, c)", true, "concat(c, c)", types.String, false},
+		{"concat(c, c)", false, "", types.Int, false},
+		{"b + 1", true, "b + 1:::INT8", types.Int, false},
+		{"b + 1", false, "", types.Bool, false},
 
-		// Disallow references to columns not in the table.
-		{"d", false, ""},
-		{"t.a", false, ""},
+		// Validates that the expression has no variable expressions.
+		{"$1", false, "", types.Any, false},
 
-		// Disallow expressions that do not result in a bool.
-		{"b", false, ""},
-		{"abs(b)", false, ""},
-		{"lower(c)", false, ""},
-
-		// Disallow subqueries.
-		{"exists(select 1)", false, ""},
-		{"b IN (select 1)", false, ""},
-
-		// Disallow mutable, aggregate, window, and set returning functions.
-		{"b > random()", false, ""},
-		{"sum(b) > 10", false, ""},
-		{"row_number() OVER () > 1", false, ""},
-		{"generate_series(1, 1) > 2", false, ""},
+		// Validates that impure functions are allowed or disallowed.
+		{"now()", true, "now():::TIMESTAMPTZ", types.TimestampTZ, true},
+		{"now()", false, "", types.Any, false},
 	}
 
 	for _, d := range testData {
@@ -83,7 +72,16 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			r, err := validator.Validate(expr)
+			expr, _, err = ValidateExpr(
+				ctx,
+				&desc,
+				expr,
+				d.typ,
+				"test-validate-expr",
+				&semaCtx,
+				d.allowImpure,
+				&tn,
+			)
 
 			if !d.expectedValid {
 				if err == nil {
@@ -98,7 +96,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: expected valid expression, but found error: %s", d.expr, err)
 			}
 
-			s := tree.Serialize(r)
+			s := tree.Serialize(expr)
 			if s != d.expectedExpr {
 				t.Errorf("%s: expected %q, got %q", d.expr, d.expectedExpr, s)
 			}
