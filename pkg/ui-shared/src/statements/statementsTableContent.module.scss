@@ -1,0 +1,46 @@
+@import '../core/palette.module';
+@import '../core/index.module';
+
+.cl-table-link__description {
+  font-size: $font-size--small;
+  line-height: 22px;
+  color: $colors--neutral-1;
+  white-space: pre-wrap;
+  margin-bottom: 0;
+}
+
+.cl-table-link__statement-tooltip--fixed-width {
+  max-width: max-content;
+
+  :global(.ant-tooltip-content) {
+    max-width: 500px;
+  }
+}
+
+.tooltip__table--title {
+  font-family: $font-family--base;
+  font-weight: 600;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  letter-spacing: 0.3px;
+  color: $colors--neutral-0;
+
+  a {
+    color: $colors--neutral-0;
+    text-decoration: underline;
+
+    &:hover {
+      opacity: 0.7;
+      color: $colors--neutral-0;
+    }
+  }
+
+  code {
+    font-family: $font-family--monospace;
+    line-height: $line-height--medium;
+    color: $colors--neutral-8;
+    background: $colors--neutral-4;
+    border-radius: 3px;
+    padding: 2px 5px;
+  }
+}

@@ -1,0 +1,165 @@
+@import '../core/palette.module';
+@import '../core/index.module';
+
+.summary-section {
+  width: 100%;
+  float: left;
+  background-color: $colors--neutral-0;
+  margin-bottom: 10px;
+  padding: 15px 24px 12px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-family: $font-family--base;
+}
+
+.summary-headline {
+  margin-bottom: 12px;
+
+  &__title, &__value {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 24px;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+  }
+
+  &__title {
+    font-family: $font-family--bold;
+    padding: 6px 0;
+    text-transform: uppercase;
+    color: $colors--neutral-8;
+  }
+
+  &__value {
+    font-weight: 200;
+    font-size: 30px;
+  }
+}
+
+.summary-label {
+  font-family: $font-family--bold;
+  color: $colors--neutral-8;
+  font-size: 14px;
+  line-height: 24px;
+  letter-spacing: 0.1px;
+  padding-bottom: 12px;
+  text-align: center;
+}
+
+.summary-stat {
+  //TODO(davidh)(migration-leftovers): clearfix();
+  padding: 10px 0;
+  line-height: 18px;
+
+  &__body {
+    //TODO(davidh)(migration-leftovers): clearfix();
+  }
+
+  &__title, &__value {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 24px;
+    letter-spacing: 0.1px;
+    white-space: nowrap;
+  }
+
+  &__title {
+    font-family: $font-family--bold;
+    font-size: 14px;
+    line-height: 24px;
+    letter-spacing: 0.1px;
+    color: $body-color;
+    float: left;
+
+    a {
+      font-family: $font-family--base;
+      text-decoration: none;
+      color: $colors--primary-blue-3;
+      line-height: 22px;
+      padding-left: 6px;
+    }
+  }
+
+  &__value {
+    float: right;
+  }
+
+  &__tooltip {
+    display: block;
+    clear: both;
+    font-size: 12px;
+    line-height: 18px;
+    letter-spacing: 0.1px;
+    font-family: $font-family--base;
+    color: $colors--neutral-6;
+  }
+
+  & + & {
+    border-top: 1px solid rgb(242, 242, 242);
+  }
+
+  &--number &__value {
+    color: $colors--primary-green-3;
+  }
+
+  &--dead &__value {
+    color: $alert-color;
+    text-transform: capitalize;
+  }
+
+  &--suspect &__value {
+    color: $warning-color;
+    text-transform: capitalize;
+  }
+
+  &--decommissioning &__value {
+    color: $warning-color;
+    text-transform: capitalize;
+  }
+
+  &--healthy &__value {
+    color: $healthy-color;
+    text-transform: capitalize;
+  }
+
+  &--link &__value {
+    a {
+      text-decoration: none;
+      font-family: $font-family--base;
+      color: $link-color;
+    }
+  }
+}
+
+.summary-stat-breakdown {
+  padding: 2px 0;
+
+  &--dead {
+    color: $alert-color;
+  }
+
+  &--suspect {
+    color: $warning-color;
+  }
+
+  &--decommissioning {
+    color: $warning-color;
+  }
+
+  &--healthy {
+    color: $healthy-color;
+  }
+
+  &__body {
+    //TODO(davidh)(migration-leftovers): @include clearfix();
+  }
+
+  &__title {
+    float: left;
+    margin-right: 2em;
+  }
+
+  &__value {
+    float: right;
+  }
+}

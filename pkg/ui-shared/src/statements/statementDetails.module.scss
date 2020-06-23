@@ -1,0 +1,140 @@
+@import '../core/palette.module';
+@import '../core/table.module';
+@import '../core/index.module';
+
+.app-name {
+  white-space: nowrap;
+
+  &__unset {
+    color: $tooltip-color;
+    font-style: italic;
+  }
+}
+
+.section {
+  flex: 0 0 auto;
+  padding: 12px 24px;
+  max-width: $max-window-width;
+  //TODO(davidh)(migration-leftovers) don't think we need this???: clearfix();
+
+  &--heading {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  &--container {
+    padding: 0 24px 0 0;
+  }
+}
+
+.page--header {
+  padding: 0;
+
+  &__title {
+    font-family: $font-family--base;
+    font-size: 20px;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $colors--neutral-8;
+    margin-bottom: 25px;
+  }
+}
+
+.base-heading {
+  font-size: 24px;
+  font-family: SourceSansPro-Regular;
+}
+
+.back-link {
+  text-decoration: none;
+  color: $link-color;
+}
+
+.cockroach--tabs {
+  :global(.ant-tabs-bar) {
+    border-bottom: 1px solid $grey2;
+  }
+
+  :global(.ant-tabs-tab) {
+    font-family: SourceSansPro-Regular;
+    font-size: 16px;
+    line-height: 1.5;
+    letter-spacing: normal;
+    color: $placeholder;
+
+    &:hover {
+      color: $adminui-grey-1;
+    }
+  }
+
+  :global(.ant-tabs-tab-active) {
+    color: $adminui-grey-1;
+  }
+
+  :global(.ant-tabs-ink-bar) {
+    height: 3px;
+    border-radius: 40px;
+    background-color: $blue;
+  }
+}
+
+.table-details {
+  .summary--card__counting {
+    margin-bottom: 15px;
+
+    &--value {
+      margin: 0;
+      color: $colors--neutral-8;
+      line-height: 32px;
+    }
+
+    &--label {
+      font-size: 14px;
+      line-height: 22px;
+      letter-spacing: 0.1px;
+    }
+  }
+}
+
+.last-cleared-tooltip, .numeric-stats-table, .plan-view-table {
+  &__tooltip {
+    width: 36px;
+    height: 16px;
+    display: inline-block;
+
+
+    text-transform: none;
+    font-weight: normal;
+    white-space: normal;
+    letter-spacing: normal;
+    font-size: 14px;
+  }
+
+  &__tooltip-hover-area {
+    width: 100%;
+    padding: 0px 10px;
+  }
+
+  &__info-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid $tooltip-color;
+    font-size: 12px;
+    line-height: 14px;
+    text-align: center;
+    color: $tooltip-color;
+  }
+
+  .hover-tooltip--hovered &__info-icon {
+    border-color: $body-color;
+    color: $body-color;
+  }
+}
+
+.statements-table {
+  &__col-query-text {
+    font-family: $font-family--monospace;
+    white-space: pre-wrap;
+  }
+}

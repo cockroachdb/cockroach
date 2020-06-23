@@ -1,0 +1,19 @@
+# this file
+.npmignore
+
+# all things git
+.git*
+
+# source
+src/
+
+# source maps
+*/**/*.js.map
+
+# eslint
+.eslintignore
+.eslintrc
+
+# project configs
+*.config.js
+tsconfig.json

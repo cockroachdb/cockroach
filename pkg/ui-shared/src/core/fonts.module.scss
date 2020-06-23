@@ -1,0 +1,38 @@
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//@function file($name, $ext, $path) {
+//  @return $path + '/' + $name + '.' + $ext
+//}
+//
+//@mixin font-face($family, $style: 'normal') {
+//@font-face {
+//    font-family: $family;
+//    src: url(file($family, 'woff2', '../fonts')) format('woff2'), url(file($family, 'woff', '../fonts')) format('woff');
+//    font-weight: normal;
+//    font-style: $style;
+//    text-rendering: optimizeLegibility;
+//  }
+//}
+//@include font-face('Lato-Light');
+//@include font-face('Lato-Bold');
+//@include font-face('Lato-Regular');
+//@include font-face('Lato-Medium');
+//@include font-face('RobotoMono-Bold');
+//@include font-face('RobotoMono-Regular');
+//@include font-face('RobotoMono-Medium');
+//@include font-face('Inconsolata-Regular');
+//@include font-face('SourceSansPro-Bold');
+//@include font-face('SourceSansPro-Regular');
+//@include font-face('SourceSansPro-SemiBold');
+//@include font-face('SFMono-Semibold');

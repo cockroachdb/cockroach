@@ -1,0 +1,57 @@
+@import '../core/index.module';
+
+.tooltip-overlay {
+  .ant-tooltip-content {
+    .ant-tooltip-inner {
+      @include text--body;
+      line-height: $line-height--small;
+      padding: $spacing-x-small $spacing-small;
+      color: $colors--white;
+      background: $colors--neutral-8;
+    }
+
+    .ant-tooltip-arrow {
+      color: $colors--neutral-8;
+    }
+  }
+}
+
+.tooltip-overlay.crl-tooltip--theme-blue {
+  .ant-tooltip-content {
+    .ant-tooltip-inner {
+      background: $colors--neutral-6;
+    }
+
+    .ant-tooltip-arrow {
+      color: $colors--neutral-6;
+    }
+  }
+}
+
+.tooltip__table--title {
+  font-family: $font-family--base;
+  font-weight: 600;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  letter-spacing: 0.3px;
+  color: $colors--neutral-0;
+
+  a {
+    color: $colors--neutral-0;
+    text-decoration: underline;
+
+    &:hover {
+      opacity: 0.7;
+      color: $colors--neutral-0;
+    }
+  }
+
+  code {
+    font-family: $font-family--monospace;
+    line-height: $line-height--medium;
+    color: $colors--neutral-8;
+    background: $colors--neutral-4;
+    border-radius: 3px;
+    padding: 2px 5px;
+  }
+}
