@@ -842,6 +842,10 @@ func MakeTimeTZ(precision int32) *T {
 // MakeGeometry constructs a new instance of a GEOMETRY type (oid = T_geometry)
 // that has the given shape and SRID.
 func MakeGeometry(shape geopb.Shape, srid geopb.SRID) *T {
+	// Negative values are promoted to 0.
+	if srid < 0 {
+		srid = 0
+	}
 	return &T{InternalType: InternalType{
 		Family: GeometryFamily,
 		Oid:    oidext.T_geometry,
@@ -855,6 +859,10 @@ func MakeGeometry(shape geopb.Shape, srid geopb.SRID) *T {
 
 // MakeGeography constructs a new instance of a geography-related type.
 func MakeGeography(shape geopb.Shape, srid geopb.SRID) *T {
+	// Negative values are promoted to 0.
+	if srid < 0 {
+		srid = 0
+	}
 	return &T{InternalType: InternalType{
 		Family: GeographyFamily,
 		Oid:    oidext.T_geography,
