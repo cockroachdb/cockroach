@@ -29,7 +29,7 @@ type RangeIterator struct {
 	scanDir ScanDirection
 	key     roachpb.RKey
 	desc    *roachpb.RangeDescriptor
-	token   *EvictionToken
+	token   EvictionToken
 	init    bool
 	err     error
 }
@@ -71,7 +71,7 @@ func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 
 // Token returns the eviction token corresponding to the range
 // descriptor for the current iteration. The iterator must be valid.
-func (ri *RangeIterator) Token() *EvictionToken {
+func (ri *RangeIterator) Token() EvictionToken {
 	if !ri.Valid() {
 		panic(ri.Error())
 	}

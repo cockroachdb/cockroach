@@ -31,7 +31,7 @@ type singleRangeInfo struct {
 	desc  *roachpb.RangeDescriptor
 	rs    roachpb.RSpan
 	ts    hlc.Timestamp
-	token *EvictionToken
+	token EvictionToken
 }
 
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
@@ -141,7 +141,7 @@ func (ds *DistSender) partialRangeFeed(
 		// If we've cleared the descriptor on a send failure, re-lookup.
 		if rangeInfo.desc == nil {
 			var err error
-			rangeInfo.desc, rangeInfo.token, err = ds.getDescriptor(ctx, rangeInfo.rs.Key, nil, false)
+			rangeInfo.desc, rangeInfo.token, err = ds.getDescriptor(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				continue
