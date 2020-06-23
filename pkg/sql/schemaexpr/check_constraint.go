@@ -86,29 +86,17 @@ func (b *CheckConstraintBuilder) Build(
 		}
 	}
 
-	source := sqlbase.NewSourceInfoForSingleTable(
-		b.tableName, sqlbase.ResultColumnsFromColDescs(
-			b.desc.GetID(),
-			b.desc.TableDesc().AllNonDropColumns(),
-		),
-	)
-
-	// Strip the database and table names from any qualified column names.
-	expr, err := DequalifyColumnRefs(b.ctx, source, c.Expr)
-	if err != nil {
-		return nil, err
-	}
-
 	// Verify that the expression results in a boolean and does not use
 	// invalid functions.
 	typedExpr, colIDs, err := ReplaceColumnVarsAndSanitizeExpr(
 		b.ctx,
 		b.desc,
-		expr,
+		c.Expr,
 		types.Bool,
 		"CHECK",
 		b.semaCtx,
 		true, /* allowImpure */
+		b.tableName,
 	)
 	if err != nil {
 		return nil, err

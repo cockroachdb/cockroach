@@ -54,7 +54,7 @@ func NewComputedColumnValidator(
 // It additionally updates the target computed column with the serialized
 // typed expression.
 // TODO(mgartner): Add unit tests for Validate.
-func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
+func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef, tn tree.TableName) error {
 	if d.HasDefaultExpr() {
 		return pgerror.New(
 			pgcode.InvalidTableDefinition,
@@ -118,7 +118,9 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		defType,
 		"computed column",
 		v.semaCtx,
-		false /* allowImpure */)
+		false, /* allowImpure */
+		tn,
+	)
 	if err != nil {
 		return err
 	}

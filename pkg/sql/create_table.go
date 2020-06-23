@@ -1674,7 +1674,7 @@ func MakeTableDesc(
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
-				if err := computedColValidator.Validate(d); err != nil {
+				if err := computedColValidator.Validate(d, n.Table); err != nil {
 					return desc, err
 				}
 			}

@@ -56,7 +56,7 @@ func NewIndexPredicateValidator(
 //     functions.
 //
 func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
-	_, _, err := ReplaceColumnVarsAndSanitizeExpr(
+	expr, _, err := ReplaceColumnVarsAndSanitizeExpr(
 		v.ctx,
 		v.desc,
 		expr,
@@ -64,19 +64,11 @@ func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
 		"index predicate",
 		v.semaCtx,
 		false, /* allowImpure */
+		v.tableName,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	source := sqlbase.NewSourceInfoForSingleTable(
-		v.tableName, sqlbase.ResultColumnsFromColDescs(
-			v.desc.GetID(),
-			v.desc.TableDesc().AllNonDropColumns(),
-		),
-	)
-
-	// Dequalify column references so that they do not contain database or
-	// table names.
-	return DequalifyColumnRefs(v.ctx, source, expr)
+	return expr, nil
 }

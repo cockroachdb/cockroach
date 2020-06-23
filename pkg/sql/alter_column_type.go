@@ -58,6 +58,7 @@ func AlterColumnType(
 	t *tree.AlterTableAlterColumnType,
 	params runParams,
 	cmds tree.AlterTableCmds,
+	tn tree.TableName,
 ) error {
 
 	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
@@ -114,7 +115,7 @@ func AlterColumnType(
 	case schemachange.ColumnConversionTrivial:
 		col.Type = typ
 	case schemachange.ColumnConversionGeneral, schemachange.ColumnConversionValidate:
-		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds); err != nil {
+		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
 			return err
 		}
 		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion.NextMutationID); err != nil {
@@ -139,6 +140,7 @@ func alterColumnTypeGeneral(
 	using tree.Expr,
 	params runParams,
 	cmds tree.AlterTableCmds,
+	tn tree.TableName,
 ) error {
 	// Make sure that all nodes in the cluster are able to perform
 	// general alter column type conversions.
@@ -245,6 +247,7 @@ func alterColumnTypeGeneral(
 			"ALTER COLUMN TYPE USING EXPRESSION",
 			&params.p.semaCtx,
 			true, /* allowImpure */
+			tn,
 		)
 
 		if err != nil {

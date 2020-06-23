@@ -295,10 +295,22 @@ func ReplaceColumnVarsAndSanitizeExpr(
 	op string,
 	semaCtx *tree.SemaContext,
 	allowImpure bool,
+	tn tree.TableName,
 ) (tree.TypedExpr, sqlbase.TableColSet, error) {
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
 	replacedExpr, colIDs, err := replaceVars(desc, expr)
+	if err != nil {
+		return nil, colIDs, err
+	}
+
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		tn, sqlbase.ResultColumnsFromColDescs(
+			desc.GetID(),
+			desc.TableDesc().AllNonDropColumns(),
+		),
+	)
+	expr, err = DequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
 		return nil, colIDs, err
 	}
