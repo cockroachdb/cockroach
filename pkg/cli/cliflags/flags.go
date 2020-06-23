@@ -972,6 +972,12 @@ When no node ID is specified, also lists all nodes that have been decommissioned
 in the history of the cluster.`,
 	}
 
+	NodeDecommissionSelf = FlagInfo{
+		Name: "self",
+		Description: `Use the node ID of the node connected to via --host
+as target of the decommissioning or recommissioning command.`,
+	}
+
 	SQLFmtLen = FlagInfo{
 		Name: "print-width",
 		Description: `
