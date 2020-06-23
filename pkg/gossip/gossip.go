@@ -261,10 +261,11 @@ type Gossip struct {
 
 	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
-	resolverIdx    int
-	resolvers      []resolver.Resolver
-	resolversTried map[int]struct{} // Set of attempted resolver indexes
-	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
+	resolverIdx       int
+	resolvers         []resolver.Resolver
+	resolversTried    map[int]struct{} // Set of attempted resolver indexes
+	nodeDescs         map[roachpb.NodeID]*roachpb.NodeDescriptor
+	nodeDescsChannels []chan<- struct{}
 	// storeMap maps store IDs to node IDs.
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 
@@ -554,6 +555,14 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 	return g.getNodeDescriptorLocked(nodeID)
 }
 
+// GetAllNodeDescriptors returns the descriptors of all nodes in the gossip
+// network. The returned slice will be sorted in increasing NodeID order.
+func (g *Gossip) GetAllNodeDescriptors() []*roachpb.NodeDescriptor {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.getAllNodeDescriptorsLocked()
+}
+
 // LogStatus logs the current status of gossip such as the incoming and
 // outgoing connections.
 func (g *Gossip) LogStatus() {
@@ -833,6 +842,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	existingDesc, ok := g.nodeDescs[desc.NodeID]
 	if !ok || !proto.Equal(existingDesc, &desc) {
 		g.nodeDescs[desc.NodeID] = &desc
+		g.notifyNodeDescriptorsUpdatedLocked()
 	}
 	// Skip all remaining logic if the address hasn't changed, since that's all
 	// the logic cares about.
@@ -864,6 +874,50 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 	delete(g.nodeDescs, nodeID)
 	g.recomputeMaxPeersLocked()
+	g.notifyNodeDescriptorsUpdatedLocked()
+}
+
+func (g *Gossip) notifyNodeDescriptorsUpdatedLocked() {
+	for _, c := range g.nodeDescsChannels {
+		select {
+		case c <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// RegisterNodeDescriptorChannel registers a channel to signify updates to the
+// nodes in the gossip network. It is notified after registration and whenever
+// there are changes the the node descriptors tracked by the gossip instance.
+// After a channel notification, a call to GetAllNodeDescriptors is guaranteed
+// to observe the updated descriptor state. Returns the channel and a function
+// to unregister the channel.
+func (g *Gossip) RegisterNodeDescriptorChannel() (<-chan struct{}, func()) {
+	// Create channel that receives new node descriptor notifications.
+	// The channel has a size of 1 to prevent gossip from blocking on it.
+	c := make(chan struct{}, 1)
+
+	// Notify the channel right away.
+	c <- struct{}{}
+
+	g.mu.Lock()
+	g.nodeDescsChannels = append(g.nodeDescsChannels, c)
+	g.mu.Unlock()
+
+	unregister := func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		for i, targetC := range g.nodeDescsChannels {
+			if targetC == c {
+				numCs := len(g.nodeDescsChannels)
+				g.nodeDescsChannels[i] = g.nodeDescsChannels[numCs-1]
+				g.nodeDescsChannels[numCs-1] = nil // for GC
+				g.nodeDescsChannels = g.nodeDescsChannels[:numCs-1]
+				break
+			}
+		}
+	}
+	return c, unregister
 }
 
 // updateStoreMaps is a gossip callback which is used to update storeMap.
@@ -989,6 +1043,22 @@ func (g *Gossip) getNodeIDSQLAddressLocked(nodeID roachpb.NodeID) (*util.Unresol
 		return nil, err
 	}
 	return &nd.SQLAddress, nil
+}
+
+// getAllNodeDescriptorsLocked returns the descriptors of all active nodes in
+// the gossip network. The returned slice will be sorted in increasing NodeID
+// order. The mutex is assumed held by the caller. This method is called
+// externally via GetAllNodeDescriptors.
+func (g *Gossip) getAllNodeDescriptorsLocked() []*roachpb.NodeDescriptor {
+	descs := make([]*roachpb.NodeDescriptor, 0, len(g.nodeDescs))
+	for _, desc := range g.nodeDescs {
+		descs = append(descs, desc)
+	}
+	sort.Slice(descs, func(i, j int) bool {
+		// NodeID is the map key for nodeDescs, so it must be unique.
+		return descs[i].NodeID < descs[j].NodeID
+	})
+	return descs
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -1165,19 +1235,18 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 // system config. It is notified after registration (if a system config is
 // already set), and whenever a new system config is successfully unmarshaled.
 func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
-	g.systemConfigMu.Lock()
-	defer g.systemConfigMu.Unlock()
-
 	// Create channel that receives new system config notifications.
 	// The channel has a size of 1 to prevent gossip from blocking on it.
 	c := make(chan struct{}, 1)
-	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
 	// Notify the channel right away if we have a config.
 	if g.systemConfig != nil {
 		c <- struct{}{}
 	}
 
+	g.systemConfigMu.Lock()
+	g.systemConfigChannels = append(g.systemConfigChannels, c)
+	g.systemConfigMu.Unlock()
 	return c
 }
 

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -934,4 +935,56 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestRegisterNodeDescriptorChannel tests NodeDescriptor subscriptions
+// (RegisterNodeDescriptorChannel) and retrieval (GetAllNodeDescriptors).
+func TestRegisterNodeDescriptorChannel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	require.Equal(t, 0, len(g.nodeDescsChannels))
+
+	// Register a NodeDescriptor listener channel.
+	c, unregister := g.RegisterNodeDescriptorChannel()
+	defer unregister() // can be called multiple times
+	require.Equal(t, 1, len(g.nodeDescsChannels))
+
+	// The channel should already be notified.
+	require.Equal(t, 1, len(c))
+	<-c
+
+	// Gossip starts with no NodeDescriptors.
+	expNodes := []*roachpb.NodeDescriptor{}
+	require.Equal(t, expNodes, g.GetAllNodeDescriptors())
+
+	// Add NodeDescriptors to the info store.
+	for i := 1; i <= 3; i++ {
+		node := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr("tcp", fmt.Sprintf("1.1.1.1:%d", i)),
+		}
+		if err := g.SetNodeDescriptor(node); err != nil {
+			t.Fatalf("failed setting node descriptor %+v: %s", node, err)
+		}
+		<-c
+		expNodes = append(expNodes, node)
+		require.Equal(t, expNodes, g.GetAllNodeDescriptors())
+	}
+
+	// Move node 2 to the address of node 3.
+	movedNode := expNodes[1]
+	movedNode.Address = expNodes[2].Address
+	if err := g.SetNodeDescriptor(movedNode); err != nil {
+		t.Fatal(err)
+	}
+	<-c
+	require.Equal(t, expNodes, g.GetAllNodeDescriptors())
+
+	// Unregister the listener.
+	unregister()
+	require.Equal(t, 0, len(g.nodeDescsChannels))
 }

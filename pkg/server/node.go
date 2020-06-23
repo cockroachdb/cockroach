@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -947,12 +946,40 @@ func (n *Node) setupSpanForIncomingRPC(
 	return ctx, finishSpan
 }
 
+// RangeLookup implements the roachpb.InternalServer interface.
+func (n *Node) RangeLookup(
+	ctx context.Context, req *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	ctx = n.storeCfg.AmbientCtx.AnnotateCtx(ctx)
+
+	// Proxy the RangeLookup through the local DB. Note that this does not use
+	// the local RangeDescriptorCache itself (for the direct range descriptor).
+	// To be able to do so, we'd have to let tenant's evict descriptors from our
+	// cache in order to avoid serving the same stale descriptor over and over
+	// again. Because of that, using our own cache doesn't seem worth it, at
+	// least for now.
+	sender := n.storeCfg.DB.NonTransactionalSender()
+	rs, preRs, err := kv.RangeLookup(
+		ctx,
+		sender,
+		req.Key.AsRawKey(),
+		req.ReadConsistency,
+		req.PrefetchNum,
+		req.PrefetchReverse,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &roachpb.RangeLookupResponse{
+		Descriptors:           rs,
+		PrefetchedDescriptors: preRs,
+	}, nil
+}
+
 // RangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
-	growstack.Grow()
-
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -962,4 +989,32 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// NodeInfo implements the roachpb.InternalServer interface.
+func (n *Node) NodeInfo(
+	args *roachpb.NodeInfoRequest, stream roachpb.Internal_NodeInfoServer,
+) error {
+	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
+	ctxDone := ctx.Done()
+
+	// Register a listener for gossip updates to NodeDescriptors.
+	// ch will be immediately signaled.
+	ch, unregisterCh := n.storeCfg.Gossip.RegisterNodeDescriptorChannel()
+	defer unregisterCh()
+
+	// Stream all node descriptors to the client each time any
+	// are updated.
+	for {
+		select {
+		case <-ch:
+			descs := n.storeCfg.Gossip.GetAllNodeDescriptors()
+			resp := &roachpb.NodeInfoResponse{Descriptors: descs}
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+		case <-ctxDone:
+			return ctx.Err()
+		}
+	}
 }

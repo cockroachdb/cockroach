@@ -525,73 +525,104 @@ type internalClientAdapter struct {
 	roachpb.InternalServer
 }
 
+// Batch implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
 	return a.InternalServer.Batch(ctx, ba)
 }
 
-type rangeFeedClientAdapter struct {
-	ctx    context.Context
-	eventC chan *roachpb.RangeFeedEvent
-	errC   chan error
+// RangeLookup implements the roachpb.InternalClient interface.
+func (a internalClientAdapter) RangeLookup(
+	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
+) (*roachpb.RangeLookupResponse, error) {
+	return a.InternalServer.RangeLookup(ctx, rl)
 }
 
-// roachpb.Internal_RangeFeedServer methods.
-func (a rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
-	// Prioritize eventC. Both channels are buffered and the only guarantee we
+type respStreamClientAdapter struct {
+	ctx   context.Context
+	respC chan interface{}
+	errC  chan error
+}
+
+func makeRespStreamClientAdapter(ctx context.Context) respStreamClientAdapter {
+	return respStreamClientAdapter{
+		ctx:   ctx,
+		respC: make(chan interface{}, 128),
+		errC:  make(chan error, 1),
+	}
+}
+
+// grpc.ClientStream methods.
+func (respStreamClientAdapter) Header() (metadata.MD, error) { panic("unimplemented") }
+func (respStreamClientAdapter) Trailer() metadata.MD         { panic("unimplemented") }
+func (respStreamClientAdapter) CloseSend() error             { panic("unimplemented") }
+
+// grpc.ServerStream methods.
+func (respStreamClientAdapter) SetHeader(metadata.MD) error  { panic("unimplemented") }
+func (respStreamClientAdapter) SendHeader(metadata.MD) error { panic("unimplemented") }
+func (respStreamClientAdapter) SetTrailer(metadata.MD)       { panic("unimplemented") }
+
+// grpc.Stream methods.
+func (a respStreamClientAdapter) Context() context.Context  { return a.ctx }
+func (respStreamClientAdapter) SendMsg(m interface{}) error { panic("unimplemented") }
+func (respStreamClientAdapter) RecvMsg(m interface{}) error { panic("unimplemented") }
+
+func (a respStreamClientAdapter) recvInternal() (interface{}, error) {
+	// Prioritize respC. Both channels are buffered and the only guarantee we
 	// have is that once an error is sent on errC no other events will be sent
-	// on eventC again.
+	// on respC again.
 	select {
-	case e := <-a.eventC:
-		return e, nil
+	case r := <-a.respC:
+		return r, nil
 	case err := <-a.errC:
 		select {
-		case e := <-a.eventC:
+		case r := <-a.respC:
 			a.errC <- err
-			return e, nil
+			return r, nil
 		default:
 			return nil, err
 		}
 	}
 }
 
-// roachpb.Internal_RangeFeedServer methods.
-func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
+func (a respStreamClientAdapter) sendInternal(r interface{}) error {
 	select {
-	case a.eventC <- e:
+	case a.respC <- r:
 		return nil
 	case <-a.ctx.Done():
 		return a.ctx.Err()
 	}
 }
 
-// grpc.ClientStream methods.
-func (rangeFeedClientAdapter) Header() (metadata.MD, error) { panic("unimplemented") }
-func (rangeFeedClientAdapter) Trailer() metadata.MD         { panic("unimplemented") }
-func (rangeFeedClientAdapter) CloseSend() error             { panic("unimplemented") }
+type rangeFeedClientAdapter struct {
+	respStreamClientAdapter
+}
 
-// grpc.ServerStream methods.
-func (rangeFeedClientAdapter) SetHeader(metadata.MD) error  { panic("unimplemented") }
-func (rangeFeedClientAdapter) SendHeader(metadata.MD) error { panic("unimplemented") }
-func (rangeFeedClientAdapter) SetTrailer(metadata.MD)       { panic("unimplemented") }
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
+	e, err := a.recvInternal()
+	if err != nil {
+		return nil, err
+	}
+	return e.(*roachpb.RangeFeedEvent), nil
+}
 
-// grpc.Stream methods.
-func (a rangeFeedClientAdapter) Context() context.Context  { return a.ctx }
-func (rangeFeedClientAdapter) SendMsg(m interface{}) error { panic("unimplemented") }
-func (rangeFeedClientAdapter) RecvMsg(m interface{}) error { panic("unimplemented") }
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
+	return a.sendInternal(e)
+}
 
 var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
 var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
 
+// RangeFeed implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	rfAdapter := rangeFeedClientAdapter{
-		ctx:    ctx,
-		eventC: make(chan *roachpb.RangeFeedEvent, 128),
-		errC:   make(chan error, 1),
+		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
 
 	go func() {
@@ -604,6 +635,48 @@ func (a internalClientAdapter) RangeFeed(
 	}()
 
 	return rfAdapter, nil
+}
+
+type nodeInfoClientAdapter struct {
+	respStreamClientAdapter
+}
+
+// roachpb.Internal_NodeInfoServer methods.
+func (a nodeInfoClientAdapter) Recv() (*roachpb.NodeInfoResponse, error) {
+	r, err := a.recvInternal()
+	if err != nil {
+		return nil, err
+	}
+	return r.(*roachpb.NodeInfoResponse), nil
+}
+
+// roachpb.Internal_NodeInfoServer methods.
+func (a nodeInfoClientAdapter) Send(r *roachpb.NodeInfoResponse) error {
+	return a.sendInternal(r)
+}
+
+var _ roachpb.Internal_NodeInfoClient = nodeInfoClientAdapter{}
+var _ roachpb.Internal_NodeInfoServer = nodeInfoClientAdapter{}
+
+// NodeInfo implements the roachpb.InternalClient interface.
+func (a internalClientAdapter) NodeInfo(
+	ctx context.Context, args *roachpb.NodeInfoRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_NodeInfoClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	niAdapter := nodeInfoClientAdapter{
+		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
+	}
+
+	go func() {
+		defer cancel()
+		err := a.InternalServer.NodeInfo(args, niAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		niAdapter.errC <- err
+	}()
+
+	return niAdapter, nil
 }
 
 var _ roachpb.InternalClient = internalClientAdapter{}

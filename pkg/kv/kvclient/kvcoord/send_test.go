@@ -45,7 +45,17 @@ func (n Node) Batch(
 	return &roachpb.BatchResponse{}, nil
 }
 
+func (n Node) RangeLookup(
+	_ context.Context, _ *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	panic("unimplemented")
+}
+
 func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer) error {
+	panic("unimplemented")
+}
+
+func (n Node) NodeInfo(_ *roachpb.NodeInfoRequest, _ roachpb.Internal_NodeInfoServer) error {
 	panic("unimplemented")
 }
 

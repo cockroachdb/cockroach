@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[119];
+  static const ::google::protobuf::internal::ParseTable schema[123];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -270,6 +270,12 @@ extern MergeRequestDefaultTypeInternal _MergeRequest_default_instance_;
 class MergeResponse;
 class MergeResponseDefaultTypeInternal;
 extern MergeResponseDefaultTypeInternal _MergeResponse_default_instance_;
+class NodeInfoRequest;
+class NodeInfoRequestDefaultTypeInternal;
+extern NodeInfoRequestDefaultTypeInternal _NodeInfoRequest_default_instance_;
+class NodeInfoResponse;
+class NodeInfoResponseDefaultTypeInternal;
+extern NodeInfoResponseDefaultTypeInternal _NodeInfoResponse_default_instance_;
 class PushTxnRequest;
 class PushTxnRequestDefaultTypeInternal;
 extern PushTxnRequestDefaultTypeInternal _PushTxnRequest_default_instance_;
@@ -312,6 +318,12 @@ extern RangeFeedValueDefaultTypeInternal _RangeFeedValue_default_instance_;
 class RangeInfo;
 class RangeInfoDefaultTypeInternal;
 extern RangeInfoDefaultTypeInternal _RangeInfo_default_instance_;
+class RangeLookupRequest;
+class RangeLookupRequestDefaultTypeInternal;
+extern RangeLookupRequestDefaultTypeInternal _RangeLookupRequest_default_instance_;
+class RangeLookupResponse;
+class RangeLookupResponseDefaultTypeInternal;
+extern RangeLookupResponseDefaultTypeInternal _RangeLookupResponse_default_instance_;
 class RangeStatsRequest;
 class RangeStatsRequestDefaultTypeInternal;
 extern RangeStatsRequestDefaultTypeInternal _RangeStatsRequest_default_instance_;
@@ -489,6 +501,8 @@ template<> ::cockroach::roachpb::LeaseInfoRequest* Arena::CreateMaybeMessage<::c
 template<> ::cockroach::roachpb::LeaseInfoResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoResponse>(Arena*);
 template<> ::cockroach::roachpb::MergeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeRequest>(Arena*);
 template<> ::cockroach::roachpb::MergeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeResponse>(Arena*);
+template<> ::cockroach::roachpb::NodeInfoRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::NodeInfoRequest>(Arena*);
+template<> ::cockroach::roachpb::NodeInfoResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::NodeInfoResponse>(Arena*);
 template<> ::cockroach::roachpb::PushTxnRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PushTxnRequest>(Arena*);
 template<> ::cockroach::roachpb::PushTxnResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::PushTxnResponse>(Arena*);
 template<> ::cockroach::roachpb::PutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::PutRequest>(Arena*);
@@ -503,6 +517,8 @@ template<> ::cockroach::roachpb::RangeFeedEvent* Arena::CreateMaybeMessage<::coc
 template<> ::cockroach::roachpb::RangeFeedRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeFeedRequest>(Arena*);
 template<> ::cockroach::roachpb::RangeFeedValue* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeFeedValue>(Arena*);
 template<> ::cockroach::roachpb::RangeInfo* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeInfo>(Arena*);
+template<> ::cockroach::roachpb::RangeLookupRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeLookupRequest>(Arena*);
+template<> ::cockroach::roachpb::RangeLookupResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeLookupResponse>(Arena*);
 template<> ::cockroach::roachpb::RangeStatsRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeStatsRequest>(Arena*);
 template<> ::cockroach::roachpb::RangeStatsResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::RangeStatsResponse>(Arena*);
 template<> ::cockroach::roachpb::RecomputeStatsRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::RecomputeStatsRequest>(Arena*);
@@ -16194,6 +16210,253 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
 };
 // -------------------------------------------------------------------
 
+class RangeLookupRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.RangeLookupRequest) */ {
+ public:
+  RangeLookupRequest();
+  virtual ~RangeLookupRequest();
+
+  RangeLookupRequest(const RangeLookupRequest& from);
+
+  inline RangeLookupRequest& operator=(const RangeLookupRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  RangeLookupRequest(RangeLookupRequest&& from) noexcept
+    : RangeLookupRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline RangeLookupRequest& operator=(RangeLookupRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const RangeLookupRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const RangeLookupRequest* internal_default_instance() {
+    return reinterpret_cast<const RangeLookupRequest*>(
+               &_RangeLookupRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    114;
+
+  void Swap(RangeLookupRequest* other);
+  friend void swap(RangeLookupRequest& a, RangeLookupRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline RangeLookupRequest* New() const final {
+    return CreateMaybeMessage<RangeLookupRequest>(NULL);
+  }
+
+  RangeLookupRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<RangeLookupRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const RangeLookupRequest& from);
+  void MergeFrom(const RangeLookupRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(RangeLookupRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // int64 prefetch_num = 3;
+  void clear_prefetch_num();
+  static const int kPrefetchNumFieldNumber = 3;
+  ::google::protobuf::int64 prefetch_num() const;
+  void set_prefetch_num(::google::protobuf::int64 value);
+
+  // .cockroach.roachpb.ReadConsistencyType read_consistency = 2;
+  void clear_read_consistency();
+  static const int kReadConsistencyFieldNumber = 2;
+  ::cockroach::roachpb::ReadConsistencyType read_consistency() const;
+  void set_read_consistency(::cockroach::roachpb::ReadConsistencyType value);
+
+  // bool prefetch_reverse = 4;
+  void clear_prefetch_reverse();
+  static const int kPrefetchReverseFieldNumber = 4;
+  bool prefetch_reverse() const;
+  void set_prefetch_reverse(bool value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeLookupRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::int64 prefetch_num_;
+  int read_consistency_;
+  bool prefetch_reverse_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class RangeLookupResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.RangeLookupResponse) */ {
+ public:
+  RangeLookupResponse();
+  virtual ~RangeLookupResponse();
+
+  RangeLookupResponse(const RangeLookupResponse& from);
+
+  inline RangeLookupResponse& operator=(const RangeLookupResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  RangeLookupResponse(RangeLookupResponse&& from) noexcept
+    : RangeLookupResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline RangeLookupResponse& operator=(RangeLookupResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const RangeLookupResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const RangeLookupResponse* internal_default_instance() {
+    return reinterpret_cast<const RangeLookupResponse*>(
+               &_RangeLookupResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    115;
+
+  void Swap(RangeLookupResponse* other);
+  friend void swap(RangeLookupResponse& a, RangeLookupResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline RangeLookupResponse* New() const final {
+    return CreateMaybeMessage<RangeLookupResponse>(NULL);
+  }
+
+  RangeLookupResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<RangeLookupResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const RangeLookupResponse& from);
+  void MergeFrom(const RangeLookupResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(RangeLookupResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  int descriptors_size() const;
+  void clear_descriptors();
+  static const int kDescriptorsFieldNumber = 1;
+  ::cockroach::roachpb::RangeDescriptor* mutable_descriptors(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+      mutable_descriptors();
+  const ::cockroach::roachpb::RangeDescriptor& descriptors(int index) const;
+  ::cockroach::roachpb::RangeDescriptor* add_descriptors();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+      descriptors() const;
+
+  int prefetched_descriptors_size() const;
+  void clear_prefetched_descriptors();
+  static const int kPrefetchedDescriptorsFieldNumber = 2;
+  ::cockroach::roachpb::RangeDescriptor* mutable_prefetched_descriptors(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+      mutable_prefetched_descriptors();
+  const ::cockroach::roachpb::RangeDescriptor& prefetched_descriptors(int index) const;
+  ::cockroach::roachpb::RangeDescriptor* add_prefetched_descriptors();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+      prefetched_descriptors() const;
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.RangeLookupResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor > descriptors_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor > prefetched_descriptors_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.RangeFeedRequest) */ {
  public:
   RangeFeedRequest();
@@ -16228,7 +16491,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    116;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16353,7 +16616,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    117;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16485,7 +16748,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    118;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16603,7 +16866,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    119;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -16709,7 +16972,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    118;
+    120;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -16803,6 +17066,207 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::RangeFeedValue* val_;
   ::cockroach::roachpb::RangeFeedCheckpoint* checkpoint_;
   ::cockroach::roachpb::RangeFeedError* error_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class NodeInfoRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.NodeInfoRequest) */ {
+ public:
+  NodeInfoRequest();
+  virtual ~NodeInfoRequest();
+
+  NodeInfoRequest(const NodeInfoRequest& from);
+
+  inline NodeInfoRequest& operator=(const NodeInfoRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  NodeInfoRequest(NodeInfoRequest&& from) noexcept
+    : NodeInfoRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline NodeInfoRequest& operator=(NodeInfoRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const NodeInfoRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const NodeInfoRequest* internal_default_instance() {
+    return reinterpret_cast<const NodeInfoRequest*>(
+               &_NodeInfoRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    121;
+
+  void Swap(NodeInfoRequest* other);
+  friend void swap(NodeInfoRequest& a, NodeInfoRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline NodeInfoRequest* New() const final {
+    return CreateMaybeMessage<NodeInfoRequest>(NULL);
+  }
+
+  NodeInfoRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<NodeInfoRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const NodeInfoRequest& from);
+  void MergeFrom(const NodeInfoRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(NodeInfoRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.NodeInfoRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class NodeInfoResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.NodeInfoResponse) */ {
+ public:
+  NodeInfoResponse();
+  virtual ~NodeInfoResponse();
+
+  NodeInfoResponse(const NodeInfoResponse& from);
+
+  inline NodeInfoResponse& operator=(const NodeInfoResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  NodeInfoResponse(NodeInfoResponse&& from) noexcept
+    : NodeInfoResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline NodeInfoResponse& operator=(NodeInfoResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const NodeInfoResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const NodeInfoResponse* internal_default_instance() {
+    return reinterpret_cast<const NodeInfoResponse*>(
+               &_NodeInfoResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    122;
+
+  void Swap(NodeInfoResponse* other);
+  friend void swap(NodeInfoResponse& a, NodeInfoResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline NodeInfoResponse* New() const final {
+    return CreateMaybeMessage<NodeInfoResponse>(NULL);
+  }
+
+  NodeInfoResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<NodeInfoResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const NodeInfoResponse& from);
+  void MergeFrom(const NodeInfoResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(NodeInfoResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // repeated .cockroach.roachpb.NodeDescriptor descriptors = 1;
+  int descriptors_size() const;
+  void clear_descriptors();
+  static const int kDescriptorsFieldNumber = 1;
+  ::cockroach::roachpb::NodeDescriptor* mutable_descriptors(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeDescriptor >*
+      mutable_descriptors();
+  const ::cockroach::roachpb::NodeDescriptor& descriptors(int index) const;
+  ::cockroach::roachpb::NodeDescriptor* add_descriptors();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeDescriptor >&
+      descriptors() const;
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.NodeInfoResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeDescriptor > descriptors_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -33868,6 +34332,160 @@ BatchResponse::responses() const {
 
 // -------------------------------------------------------------------
 
+// RangeLookupRequest
+
+inline void RangeLookupRequest::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& RangeLookupRequest::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupRequest.key)
+  return key_.GetNoArena();
+}
+inline void RangeLookupRequest::set_key(const ::std::string& value) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeLookupRequest.key)
+}
+#if LANG_CXX11
+inline void RangeLookupRequest::set_key(::std::string&& value) {
+  
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RangeLookupRequest.key)
+}
+#endif
+inline void RangeLookupRequest::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RangeLookupRequest.key)
+}
+inline void RangeLookupRequest::set_key(const void* value, size_t size) {
+  
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.RangeLookupRequest.key)
+}
+inline ::std::string* RangeLookupRequest::mutable_key() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupRequest.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* RangeLookupRequest::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RangeLookupRequest.key)
+  
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void RangeLookupRequest::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    
+  } else {
+    
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeLookupRequest.key)
+}
+
+// .cockroach.roachpb.ReadConsistencyType read_consistency = 2;
+inline void RangeLookupRequest::clear_read_consistency() {
+  read_consistency_ = 0;
+}
+inline ::cockroach::roachpb::ReadConsistencyType RangeLookupRequest::read_consistency() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupRequest.read_consistency)
+  return static_cast< ::cockroach::roachpb::ReadConsistencyType >(read_consistency_);
+}
+inline void RangeLookupRequest::set_read_consistency(::cockroach::roachpb::ReadConsistencyType value) {
+  
+  read_consistency_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeLookupRequest.read_consistency)
+}
+
+// int64 prefetch_num = 3;
+inline void RangeLookupRequest::clear_prefetch_num() {
+  prefetch_num_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 RangeLookupRequest::prefetch_num() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupRequest.prefetch_num)
+  return prefetch_num_;
+}
+inline void RangeLookupRequest::set_prefetch_num(::google::protobuf::int64 value) {
+  
+  prefetch_num_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeLookupRequest.prefetch_num)
+}
+
+// bool prefetch_reverse = 4;
+inline void RangeLookupRequest::clear_prefetch_reverse() {
+  prefetch_reverse_ = false;
+}
+inline bool RangeLookupRequest::prefetch_reverse() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupRequest.prefetch_reverse)
+  return prefetch_reverse_;
+}
+inline void RangeLookupRequest::set_prefetch_reverse(bool value) {
+  
+  prefetch_reverse_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RangeLookupRequest.prefetch_reverse)
+}
+
+// -------------------------------------------------------------------
+
+// RangeLookupResponse
+
+inline int RangeLookupResponse::descriptors_size() const {
+  return descriptors_.size();
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::mutable_descriptors(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupResponse.descriptors)
+  return descriptors_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+RangeLookupResponse::mutable_descriptors() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeLookupResponse.descriptors)
+  return &descriptors_;
+}
+inline const ::cockroach::roachpb::RangeDescriptor& RangeLookupResponse::descriptors(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupResponse.descriptors)
+  return descriptors_.Get(index);
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::add_descriptors() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeLookupResponse.descriptors)
+  return descriptors_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+RangeLookupResponse::descriptors() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.descriptors)
+  return descriptors_;
+}
+
+inline int RangeLookupResponse::prefetched_descriptors_size() const {
+  return prefetched_descriptors_.size();
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::mutable_prefetched_descriptors(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RangeLookupResponse.prefetched_descriptors)
+  return prefetched_descriptors_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >*
+RangeLookupResponse::mutable_prefetched_descriptors() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.RangeLookupResponse.prefetched_descriptors)
+  return &prefetched_descriptors_;
+}
+inline const ::cockroach::roachpb::RangeDescriptor& RangeLookupResponse::prefetched_descriptors(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RangeLookupResponse.prefetched_descriptors)
+  return prefetched_descriptors_.Get(index);
+}
+inline ::cockroach::roachpb::RangeDescriptor* RangeLookupResponse::add_prefetched_descriptors() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.RangeLookupResponse.prefetched_descriptors)
+  return prefetched_descriptors_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::RangeDescriptor >&
+RangeLookupResponse::prefetched_descriptors() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.RangeLookupResponse.prefetched_descriptors)
+  return prefetched_descriptors_;
+}
+
+// -------------------------------------------------------------------
+
 // RangeFeedRequest
 
 inline bool RangeFeedRequest::has_header() const {
@@ -34449,9 +35067,52 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RangeFeedEvent.error)
 }
 
+// -------------------------------------------------------------------
+
+// NodeInfoRequest
+
+// -------------------------------------------------------------------
+
+// NodeInfoResponse
+
+// repeated .cockroach.roachpb.NodeDescriptor descriptors = 1;
+inline int NodeInfoResponse::descriptors_size() const {
+  return descriptors_.size();
+}
+inline ::cockroach::roachpb::NodeDescriptor* NodeInfoResponse::mutable_descriptors(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeInfoResponse.descriptors)
+  return descriptors_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeDescriptor >*
+NodeInfoResponse::mutable_descriptors() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.NodeInfoResponse.descriptors)
+  return &descriptors_;
+}
+inline const ::cockroach::roachpb::NodeDescriptor& NodeInfoResponse::descriptors(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeInfoResponse.descriptors)
+  return descriptors_.Get(index);
+}
+inline ::cockroach::roachpb::NodeDescriptor* NodeInfoResponse::add_descriptors() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.NodeInfoResponse.descriptors)
+  return descriptors_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::NodeDescriptor >&
+NodeInfoResponse::descriptors() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.NodeInfoResponse.descriptors)
+  return descriptors_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

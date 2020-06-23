@@ -2006,6 +2006,22 @@ message BatchResponse {
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
+// RangeLookupRequest is a request to proxy a RangeLookup through a Tenant
+// service. Its fields correspond to a subset of the args of kv.RangeLookup.
+message RangeLookupRequest {
+  bytes               key              = 1 [(gogoproto.casttype) = "RKey"];
+  ReadConsistencyType read_consistency = 2;
+  int64               prefetch_num     = 3;
+  bool                prefetch_reverse = 4;
+}
+
+// RangeLookupResponse is returned from a RangeLookup request proxied through a
+// Tenant service. Its fields correspond to the return values of kv.RangeLookup.
+message RangeLookupResponse {
+  repeated RangeDescriptor descriptors            = 1 [(gogoproto.nullable) = false];
+  repeated RangeDescriptor prefetched_descriptors = 2 [(gogoproto.nullable) = false];
+}
+
 // RangeFeedRequest is a request that expresses the intention to establish a
 // RangeFeed stream over the provided span, starting at the specified timestamp.
 message RangeFeedRequest {
@@ -2059,8 +2075,30 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+// NodeInfoRequest is a request to establish an indefinite stream on a Tenant
+// service that provides an initial NodeInfoResponse and a NodeInfoResponse
+// whenever the collection of KV nodes in a cluster changes. It effectively
+// proxies any updates to NodeDescriptors in the KV gossip network back to the
+// client of the request.
+message NodeInfoRequest {}
+
+// NodeInfoResponse is streamed back on a Nodes stream established on a Tenant
+// service. It contains a complete collection of the KV nodes in a cluster.
+message NodeInfoResponse {
+    repeated NodeDescriptor descriptors = 1;
+}
+
 // Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
-  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+  rpc Batch       (BatchRequest)       returns (BatchResponse)           {}
+  rpc RangeLookup (RangeLookupRequest) returns (RangeLookupResponse)     {}
+  rpc RangeFeed   (RangeFeedRequest)   returns (stream RangeFeedEvent)   {}
+  // TODO DURING REVIEW: I initially made this streaming interface more
+  // broadly defined as ClusterInfo. In addition to NodeDescriptors, it
+  // contained StoreDescriptors and the tenant ZoneConfig. The need for
+  // SQL-only processes to have access to StoreDescriptors is going away
+  // with #49997 and the tenant ZoneConfig updates might be better serviced
+  // with a polling mechanism, so I specialized the request. I'm curious
+  // what reviewers think about this.
+  rpc NodeInfo    (NodeInfoRequest)    returns (stream NodeInfoResponse) {}
 }

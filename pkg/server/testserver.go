@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -449,6 +450,10 @@ func makeSQLServerArgs(
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
 
+	// TODO(tbg): expose this registry via prometheus. See:
+	// https://github.com/cockroachdb/cockroach/issues/47905
+	registry := metric.NewRegistry()
+
 	var rpcTestingKnobs rpc.ContextTestingKnobs
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		rpcTestingKnobs = p.ContextTestingKnobs
@@ -462,18 +467,14 @@ func makeSQLServerArgs(
 		Knobs:      rpcTestingKnobs,
 	})
 
-	// TODO(tbg): expose this registry via prometheus. See:
-	// https://github.com/cockroachdb/cockroach/issues/47905
-	registry := metric.NewRegistry()
-
 	var dsKnobs kvcoord.ClientTestingKnobs
 	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
 		dsKnobs = *dsKnobsP
 	}
 	rpcRetryOptions := base.DefaultRetryOptions()
 
-	// TODO(nvb): this use of Gossip needs to go. Tracked in:
-	// https://github.com/cockroachdb/cockroach/issues/47909
+	// TODO(ajwerner): this use of Gossip needs to go. Tracked in:
+	// https://github.com/cockroachdb/cockroach/issues/47150
 	var g *gossip.Gossip
 	{
 		var nodeID base.NodeIDContainer
@@ -493,21 +494,25 @@ func makeSQLServerArgs(
 		)
 	}
 
-	nodeDialer := nodedialer.New(
+	tenantProxy := kvtenant.NewProxy(
+		stopper,
 		rpcContext,
-		gossip.AddressResolver(g), // TODO(nvb): break gossip dep
+		rpcRetryOptions,
+		sqlCfg.TenantKVAddrs,
 	)
+	resolver := kvcoord.AddressResolver(tenantProxy, baseCfg.Locality)
+	nodeDialer := nodedialer.New(rpcContext, resolver)
+
 	dsCfg := kvcoord.DistSenderConfig{
-		AmbientCtx:         baseCfg.AmbientCtx,
-		Settings:           st,
-		Clock:              clock,
-		NodeDescs:          g,
-		RPCRetryOptions:    &rpcRetryOptions,
-		RPCContext:         rpcContext,
-		NodeDialer:         nodeDialer,
-		RangeDescriptorDB:  nil, // use DistSender itself
-		FirstRangeProvider: g,
-		TestingKnobs:       dsKnobs,
+		AmbientCtx:        baseCfg.AmbientCtx,
+		Settings:          st,
+		Clock:             clock,
+		NodeDescs:         tenantProxy,
+		RPCRetryOptions:   &rpcRetryOptions,
+		RPCContext:        rpcContext,
+		NodeDialer:        nodeDialer,
+		RangeDescriptorDB: tenantProxy,
+		TestingKnobs:      dsKnobs,
 	}
 	ds := kvcoord.NewDistSender(dsCfg)
 
@@ -585,6 +590,7 @@ func makeSQLServerArgs(
 			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
 				return nil, errors.New("external uri storage is not available to secondary tenants")
 			},
+			tenantProxy: tenantProxy,
 		},
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
@@ -674,6 +680,8 @@ func StartTenant(
 	)
 	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
 
+	// TODO(ajwerner): this use of Gossip needs to go. Tracked in:
+	// https://github.com/cockroachdb/cockroach/issues/47150
 	{
 		rs := make([]resolver.Resolver, len(sqlCfg.TenantKVAddrs))
 		for i := range rs {
