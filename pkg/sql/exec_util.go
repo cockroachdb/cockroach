@@ -2130,6 +2130,9 @@ type sqlStatsCollector struct {
 	appStats *appStats
 	// phaseTimes tracks session-level phase times.
 	phaseTimes phaseTimes
+	// previousPhaseTimes tracks the session-level phase times for the previous
+	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
+	previousPhaseTimes phaseTimes
 }
 
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
@@ -2171,9 +2174,11 @@ func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, i
 }
 
 func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
+	previousPhaseTimes := &s.phaseTimes
 	*s = sqlStatsCollector{
-		sqlStats:   sqlStats,
-		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		sqlStats:           sqlStats,
+		appStats:           appStats,
+		previousPhaseTimes: *previousPhaseTimes,
+		phaseTimes:         *phaseTimes,
 	}
 }
