@@ -55,11 +55,11 @@ func TestJobLease(t *testing.T) {
 		rts.check(t, jobs.StatusRunning)
 
 		// At this point job is running; resume is blocked waiting on rts.resumeCh.
-		claim, err := cm.CreateClaim(context.Background(), "nodeID", time.Minute)
+		epoch, err := cm.GetLiveEpoch(context.Background(), "nodeID", time.Minute)
 		require.NoError(t, err)
 		_ = rts.sqlDB.Query(
 			t, `UPDATE system.jobs SET sqlliveness_name = $1, sqlliveness_epoch = $2 WHERE id = $3`,
-			claim.Name, claim.Epoch, *j.ID(),
+			"nodeID", epoch, *j.ID(),
 		)
 
 		rts.resumeCh <- nil
@@ -72,7 +72,7 @@ func TestJobLease(t *testing.T) {
 		const stmt = "SELECT sqlliveness_name, sqlliveness_epoch FROM system.jobs WHERE id = $1"
 		rts.sqlDB.QueryRow(t, stmt, *j.ID()).Scan(&Name, &Epoch)
 
-		require.Equal(t, claim.Name, Name)
-		require.Equal(t, claim.Epoch, Epoch)
+		require.Equal(t, "nodeID", Name)
+		require.Equal(t, epoch, Epoch)
 	})
 }

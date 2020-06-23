@@ -29,9 +29,9 @@ type Claim struct {
 
 // OptionalNodeLivenessI is the interface used in OptionalNodeLiveness.
 type ClaimManager interface {
-	CreateClaim(context.Context, string, time.Duration) (*Claim, error)
+	GetLiveEpoch(context.Context, string, time.Duration) (int64, error)
 	ExtendClaim(context.Context, *Claim, time.Duration) (*time.Time, error)
-	GetLiveClaims(context.Context) ([]*Claim, error)
+	GetLiveClaims(context.Context) ([]Claim, error)
 }
 
 type SqlLiveness struct {
@@ -46,8 +46,8 @@ func NewSqlLiveness(db *kv.DB, ex sqlutil.InternalExecutor) ClaimManager {
 	}
 }
 
-func (l *SqlLiveness) GetLiveClaims(ctx context.Context) ([]*Claim, error) {
-	var res []*Claim
+func (l *SqlLiveness) GetLiveClaims(ctx context.Context) ([]Claim, error) {
+	var res []Claim
 	var rows []tree.Datums
 	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
@@ -56,15 +56,15 @@ func (l *SqlLiveness) GetLiveClaims(ctx context.Context) ([]*Claim, error) {
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			`UPDATE system.sqlliveness
 			SET epoch = CASE WHEN expiration <= now() THEN epoch + 1 ELSE epoch END
-			WHERE epoch NOT NULL RETURNING name, epoch`,
+			WHERE epoch IS NOT NULL RETURNING name, epoch`,
 		)
 		return err
 	}); err != nil {
 		return nil, errors.Wrapf(err, "update sqlliveness claims")
 	}
-	res = make([]*Claim, len(rows))
+	res = make([]Claim, len(rows))
 	for i, r := range rows {
-		res[i] = &Claim{
+		res[i] = Claim{
 			Name:  string(*r[0].(*tree.DString)),
 			Epoch: int64(*r[1].(*tree.DInt)),
 		}
@@ -76,24 +76,42 @@ var (
 	MissingClaimErr = errors.New("")
 )
 
-func (l *SqlLiveness) CreateClaim(
+func (l *SqlLiveness) GetLiveEpoch(
 	ctx context.Context, name string, d time.Duration,
-) (*Claim, error) {
+) (int64, error) {
+	var epoch int64
 	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := l.ex.QueryRowEx(
+		row, err := l.ex.QueryRowEx(
 			ctx, "extend-claim", txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			`INSERT INTO system.sqlliveness VALUES ($1, 0, now() + $2)`,
+			`UPDATE system.sqlliveness
+			SET
+				epoch = CASE WHEN expiration <= now() THEN epoch + 1 ELSE epoch END,
+			  expiration = now() + $2
+			WHERE name = $1 RETURNING epoch`,
 			name, d.Microseconds(),
 		)
 		if err != nil {
 			return errors.Wrapf(err, "create claim for name %s)", name)
 		}
+		if row == nil {
+			_, err = l.ex.QueryRowEx(
+				ctx, "insert-claim", txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				`INSERT INTO system.sqlliveness VALUES ($1, 0, now() + $2)`,
+				name, d.Microseconds(),
+			)
+			if err != nil {
+				return errors.Wrapf(err, "create claim for name %s)", name)
+			}
+		} else {
+			epoch = int64(*row[0].(*tree.DInt))
+		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return -1, err
 	}
-	return &Claim{Name: name, Epoch: 0}, nil
+	return epoch, nil
 }
 
 func (l *SqlLiveness) ExtendClaim(
