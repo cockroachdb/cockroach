@@ -319,7 +319,7 @@ func newPhysPlanForExplainPurposes(
 	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner, plan planMaybePhysical,
 ) (*PhysicalPlan, error) {
 	if plan.isPhysicalPlan() {
-		return plan.physPlan, nil
+		return plan.physPlan.PhysicalPlan, nil
 	}
 	var physPlan *PhysicalPlan
 	var err error
