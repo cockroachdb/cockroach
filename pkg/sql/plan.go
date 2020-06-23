@@ -310,6 +310,25 @@ type planTop struct {
 	distSQLDiagrams []execinfrapb.FlowDiagram
 }
 
+// physicalPlanTop is a utility wrapper around PhysicalPlan that allows for
+// storing planNodes that "power" the processors in the physical plan.
+type physicalPlanTop struct {
+	// PhysicalPlan contains the physical plan that has not yet been finalized.
+	*PhysicalPlan
+	// planNodesToClose contains the planNodes that are a part of the physical
+	// plan (via planNodeToRowSource wrapping). These planNodes need to be
+	// closed explicitly since we don't have a planNode tree that performs the
+	// closure.
+	planNodesToClose []planNode
+}
+
+func (p *physicalPlanTop) Close(ctx context.Context) {
+	for _, plan := range p.planNodesToClose {
+		plan.Close(ctx)
+	}
+	p.planNodesToClose = nil
+}
+
 // planMaybePhysical is a utility struct representing a plan. It can currently
 // use either planNode or DistSQL spec representation, but eventually will be
 // replaced by the latter representation directly.
@@ -317,23 +336,30 @@ type planMaybePhysical struct {
 	planNode planNode
 	// physPlan (when non-nil) contains the physical plan that has not yet
 	// been finalized.
-	physPlan *PhysicalPlan
+	physPlan *physicalPlanTop
 }
 
-func (p planMaybePhysical) isPhysicalPlan() bool {
+func (p *planMaybePhysical) isPhysicalPlan() bool {
 	return p.physPlan != nil
 }
 
-func (p planMaybePhysical) planColumns() sqlbase.ResultColumns {
+func (p *planMaybePhysical) planColumns() sqlbase.ResultColumns {
 	if p.isPhysicalPlan() {
 		return p.physPlan.ResultColumns
 	}
 	return planColumns(p.planNode)
 }
 
-func (p planMaybePhysical) Close(ctx context.Context) {
+// Close closes the pieces of the plan that haven't been yet closed. Note that
+// it also resets the corresponding fields.
+func (p *planMaybePhysical) Close(ctx context.Context) {
 	if p.planNode != nil {
 		p.planNode.Close(ctx)
+		p.planNode = nil
+	}
+	if p.physPlan != nil {
+		p.physPlan.Close(ctx)
+		p.physPlan = nil
 	}
 }
 
@@ -369,32 +395,15 @@ type checkPlan struct {
 
 // close calls Close on all plan trees.
 func (p *planComponents) close(ctx context.Context) {
-	if p.main.planNode != nil {
-		p.main.Close(ctx)
-		p.main.planNode = nil
-	}
-
+	p.main.Close(ctx)
 	for i := range p.subqueryPlans {
-		// Once a subquery plan has been evaluated, it already closes its
-		// plan.
-		if p.subqueryPlans[i].plan.planNode != nil {
-			p.subqueryPlans[i].plan.Close(ctx)
-			p.subqueryPlans[i].plan.planNode = nil
-		}
+		p.subqueryPlans[i].plan.Close(ctx)
 	}
-
 	for i := range p.cascades {
-		if p.cascades[i].plan.planNode != nil {
-			p.cascades[i].plan.Close(ctx)
-			p.cascades[i].plan.planNode = nil
-		}
+		p.cascades[i].plan.Close(ctx)
 	}
-
 	for i := range p.checkPlans {
-		if p.checkPlans[i].plan.planNode != nil {
-			p.checkPlans[i].plan.Close(ctx)
-			p.checkPlans[i].plan.planNode = nil
-		}
+		p.checkPlans[i].plan.Close(ctx)
 	}
 }
 
