@@ -825,7 +825,7 @@ func applyColumnMutation(
 			if err != nil {
 				return err
 			}
-			s := tree.Serialize(t.Default)
+			s := tree.Serialize(expr)
 			col.DefaultExpr = &s
 
 			// Add references to the sequence descriptors this column is now using.
