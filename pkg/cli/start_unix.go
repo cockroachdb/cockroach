@@ -32,6 +32,10 @@ import (
 // must terminate the process.
 var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM, unix.SIGQUIT}
 
+// termSignal is the signal that causes an idempotent graceful
+// shutdown (i.e. second occurrence does not incur hard shutdown).
+var termSignal os.Signal = unix.SIGTERM
+
 // quitSignal is the signal to recognize to dump Go stacks.
 var quitSignal os.Signal = unix.SIGQUIT
 
