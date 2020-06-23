@@ -496,8 +496,8 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 // the right range). This is useful for ReverseScans, which call this method
 // with their exclusive EndKey.
 func (ds *DistSender) getDescriptor(
-	ctx context.Context, descKey roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+	ctx context.Context, descKey roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, EvictionToken, error) {
 	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptorWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
@@ -1279,7 +1279,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 	ba roachpb.BatchRequest,
 	rs roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
-	evictToken *EvictionToken,
+	evictToken EvictionToken,
 	withCommit bool,
 	batchIdx int,
 	responseCh chan response,
@@ -1326,7 +1326,7 @@ func (ds *DistSender) sendPartialBatch(
 	ba roachpb.BatchRequest,
 	rs roachpb.RSpan,
 	desc *roachpb.RangeDescriptor,
-	evictToken *EvictionToken,
+	evictToken EvictionToken,
 	withCommit bool,
 	batchIdx int,
 	needsTruncate bool,
