@@ -162,9 +162,23 @@ func (m *mockInternalClient) Batch(
 	return br, nil
 }
 
+// RangeLookup implements the roachpb.InternalClient interface.
+func (m *mockInternalClient) RangeLookup(
+	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
+) (*roachpb.RangeLookupResponse, error) {
+	return nil, fmt.Errorf("unsupported RangeLookup call")
+}
+
 // RangeFeed is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) RangeFeed(
 	ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	return nil, fmt.Errorf("unsupported RangeFeed call")
+}
+
+// GossipSubscription is part of the roachpb.InternalClient interface.
+func (m *mockInternalClient) GossipSubscription(
+	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_GossipSubscriptionClient, error) {
+	return nil, fmt.Errorf("unsupported GossipSubscripion call")
 }
