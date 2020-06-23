@@ -75,6 +75,21 @@ type PrometheusExportable interface {
 	ToPrometheusMetric() *prometheusgo.Metric
 }
 
+// PrometheusIterable is an extension of PrometheusExportable to indicate that
+// this metric is comprised of children metrics which augment the parent's
+// label values.
+//
+// The motivating use-case for this interface is the existence of tenants. We'd
+// like to capture per-tenant metrics and expose them to prometheus while not
+// polluting the internal tsdb.
+type PrometheusIterable interface {
+	PrometheusExportable
+
+	// Each takes a slice of label pairs associated with the parent metric and
+	// calls the passed function with each of the children metrics.
+	Each([]*prometheusgo.LabelPair, func(metric *prometheusgo.Metric))
+}
+
 // GetName returns the metric's name.
 func (m *Metadata) GetName() string {
 	return m.Name

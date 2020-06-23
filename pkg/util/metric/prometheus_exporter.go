@@ -73,6 +73,14 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry) {
 
 			family := pm.findOrCreateFamily(prom)
 			family.Metric = append(family.Metric, m)
+
+			// Deal with metrics which have children which are exposed to
+			// prometheus.
+			if promIter, ok := v.(PrometheusIterable); ok {
+				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+					family.Metric = append(family.Metric, metric)
+				})
+			}
 		}
 	})
 }
