@@ -23,6 +23,7 @@ import (
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/wkb"
+	"github.com/twpayne/go-geom/encoding/wkbcommon"
 )
 
 // parseEWKBRaw creates a geopb.SpatialObject from an EWKB
@@ -89,7 +90,7 @@ func parseEWKB(
 
 // parseWKB takes given bytes assumed to be WKB and transforms it into a SpatialObject.
 func parseWKB(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
-	t, err := wkb.Unmarshal(b)
+	t, err := wkb.Unmarshal(b, wkbcommon.WKBOptionEmptyPointHandling(wkbcommon.EmptyPointHandlingNaN))
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
