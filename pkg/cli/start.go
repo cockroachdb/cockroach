@@ -1041,6 +1041,14 @@ If problems persist, please see %s.`
 	const hardShutdownHint = " - node may take longer to restart & clients may need to wait for leases to expire"
 	select {
 	case sig := <-signalCh:
+		switch sig {
+		case quitSignal:
+			// A SIGQUIT is received during the "graceful shutdown" phase
+			// initiated by another signal. Take this as a request to get
+			// the stacks at this point.
+			log.DumpStacks(shutdownCtx)
+		}
+
 		// This new signal is not welcome, as it interferes with the graceful
 		// shutdown process.
 		log.Shoutf(shutdownCtx, log.Severity_ERROR,
