@@ -204,6 +204,13 @@ func NewProcessor(
 			outputs[0], false, /* disableTempStorage */
 		)
 	}
+	if core.InvertedJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newInvertedJoiner(
+			flowCtx, processorID, core.InvertedJoiner, nil, inputs[0], post, outputs[0])
+	}
 	if core.Backfiller != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err

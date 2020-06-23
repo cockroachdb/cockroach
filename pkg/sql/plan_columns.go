@@ -93,6 +93,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *invertedFilterNode:
 		return n.resultColumns
+	case *invertedJoinNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:

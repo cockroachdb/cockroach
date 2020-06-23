@@ -385,6 +385,22 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		n.input = v.visit(n.input)
 
+	case *invertedJoinNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
+			v.observer.attr(name, "type", joinTypeStr(n.joinType))
+		}
+		if v.observer.expr != nil {
+			v.expr(name, "", -1, n.invertedExpr)
+			if n.onExpr != nil && n.onExpr != tree.DBoolTrue {
+				v.expr(name, "onExpr", -1, n.onExpr)
+			}
+		}
+		if n.CanParallelize() {
+			v.observer.attr(name, "parallel", "")
+		}
+		n.input = v.visit(n.input)
+
 	case *limitNode:
 		if v.observer.expr != nil {
 			v.expr(name, "count", -1, n.countExpr)
@@ -936,6 +952,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&insertNode{}):            "insert",
 	reflect.TypeOf(&insertFastPathNode{}):    "insert-fast-path",
 	reflect.TypeOf(&invertedFilterNode{}):    "inverted-filter",
+	reflect.TypeOf(&invertedJoinNode{}):      "inverted-join",
 	reflect.TypeOf(&joinNode{}):              "join",
 	reflect.TypeOf(&limitNode{}):             "limit",
 	reflect.TypeOf(&lookupJoinNode{}):        "lookup-join",
