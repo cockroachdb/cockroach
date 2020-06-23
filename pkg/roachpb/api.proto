@@ -2047,6 +2047,24 @@ message BatchResponse {
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
+// RangeLookupRequest is a request to proxy a RangeLookup through a Tenant
+// service. Its fields correspond to a subset of the args of kv.RangeLookup.
+message RangeLookupRequest {
+  bytes               key              = 1 [(gogoproto.casttype) = "RKey"];
+  ReadConsistencyType read_consistency = 2;
+  int64               prefetch_num     = 3;
+  bool                prefetch_reverse = 4;
+}
+
+// RangeLookupResponse is returned from a RangeLookup request proxied through a
+// Tenant service. Its fields correspond to the return values of kv.RangeLookup.
+message RangeLookupResponse {
+  repeated RangeDescriptor descriptors            = 1 [(gogoproto.nullable) = false];
+  repeated RangeDescriptor prefetched_descriptors = 2 [(gogoproto.nullable) = false];
+  // If non-nil, the other fields will be empty.
+  Error error = 3;
+}
+
 // RangeFeedRequest is a request that expresses the intention to establish a
 // RangeFeed stream over the provided span, starting at the specified timestamp.
 message RangeFeedRequest {
@@ -2100,8 +2118,33 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+// GossipSubscriptionRequest initiates a game of telephone. It establishes an
+// indefinite stream that proxies gossip information overheard by the recipient
+// node back to the caller. Gossip information is filtered down to just those
+// identified by a key matching any of the specified patterns.
+//
+// Upon establishment of the stream, all existing information that matches one
+// or more of the patterns is returned. After this point, only new information
+// matching the patterns is returned.
+message GossipSubscriptionRequest {
+  repeated string patterns = 1;
+}
+
+// GossipSubscriptionEvent is a single piece of proxied gossip information.
+message GossipSubscriptionEvent {
+  string key     = 1;
+  Value  content = 2 [(gogoproto.nullable) = false];
+  // Which pattern does this gossip information match?
+  string pattern_matched = 3;
+  // If non-nil, the other fields will be empty and this will be the final event
+  // send on the stream before it is terminated.
+  Error error = 4;
+}
+
 // Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
-  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+  rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
+  rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
+  rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
+  rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
 }

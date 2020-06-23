@@ -1151,19 +1151,18 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 // system config. It is notified after registration (if a system config is
 // already set), and whenever a new system config is successfully unmarshaled.
 func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
-	g.systemConfigMu.Lock()
-	defer g.systemConfigMu.Unlock()
-
 	// Create channel that receives new system config notifications.
 	// The channel has a size of 1 to prevent gossip from blocking on it.
 	c := make(chan struct{}, 1)
+
+	g.systemConfigMu.Lock()
+	defer g.systemConfigMu.Unlock()
 	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
 	// Notify the channel right away if we have a config.
 	if g.systemConfig != nil {
 		c <- struct{}{}
 	}
-
 	return c
 }
 
