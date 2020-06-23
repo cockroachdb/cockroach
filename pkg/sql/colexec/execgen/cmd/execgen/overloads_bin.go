@@ -127,13 +127,6 @@ func registerBinOpOutputTypes() {
 			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
 			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
 		}
-
-		for _, compatibleFamily := range compatibleCanonicalTypeFamilies[typeconv.DatumVecCanonicalTypeFamily] {
-			for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
-				binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
-				binOpOutputTypes[binOp][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
-			}
-		}
 	}
 	// There is a special case for division with integers; it should have a
 	// decimal result.
@@ -156,6 +149,26 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.TimestampTZ
+	for _, compatibleFamily := range []types.Family{
+		types.IntFamily,      // types.Date + types.Time
+		types.IntervalFamily, // types.Time + types.Interval
+	} {
+		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
+			binOpOutputTypes[tree.Plus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
+			binOpOutputTypes[tree.Plus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+		}
+	}
+	for _, compatibleFamily := range []types.Family{
+		typeconv.DatumVecCanonicalTypeFamily, // types.INet - types.INet
+		types.IntFamily,                      // types.Date - types.Time
+		types.IntervalFamily,                 // types.Time - types.Interval
+		types.BytesFamily,                    // types.Jsonb - types.String
+	} {
+		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
+			binOpOutputTypes[tree.Minus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
+			binOpOutputTypes[tree.Minus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+		}
+	}
 
 	// Other arithmetic binary operators.
 	for _, binOp := range []tree.BinaryOperator{tree.FloorDiv, tree.Mod, tree.Pow} {
