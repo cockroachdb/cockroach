@@ -13,14 +13,10 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/twpayne/go-geom"
 )
 
 // Centroid returns the Centroid of a given Geometry.
 func Centroid(g *geo.Geometry) (*geo.Geometry, error) {
-	if g.Empty() {
-		return geo.NewGeometryFromGeom(geom.NewPointEmpty(g.Layout()))
-	}
 	centroidEWKB, err := geos.Centroid(g.EWKB())
 	if err != nil {
 		return nil, err
@@ -30,9 +26,6 @@ func Centroid(g *geo.Geometry) (*geo.Geometry, error) {
 
 // PointOnSurface returns the PointOnSurface of a given Geometry.
 func PointOnSurface(g *geo.Geometry) (*geo.Geometry, error) {
-	if g.Empty() {
-		return geo.NewGeometryFromGeom(geom.NewPointEmpty(g.Layout()))
-	}
 	pointOnSurfaceEWKB, err := geos.PointOnSurface(g.EWKB())
 	if err != nil {
 		return nil, err

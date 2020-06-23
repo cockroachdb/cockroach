@@ -30,12 +30,6 @@ func LineInterpolatePoints(g *geo.Geometry, fraction float64, repeat bool) (*geo
 	if err != nil {
 		return nil, err
 	}
-	// Empty geometries do not react well in GEOS, so we have to
-	// convert and check beforehand.
-	// Remove after #49209 is resolved.
-	if geomRepr.Empty() {
-		return geo.NewGeometryFromGeom(geom.NewPointEmpty(geom.XY))
-	}
 	switch geomRepr := geomRepr.(type) {
 	case *geom.LineString:
 		// In case fraction is greater than 0.5 or equal to 0 or repeat is false,

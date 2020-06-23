@@ -263,12 +263,6 @@ func (g *Geometry) BoundingBoxIntersects(o *Geometry) bool {
 	return g.spatialObject.BoundingBox.Intersects(o.spatialObject.BoundingBox)
 }
 
-// Layout returns the geom layout of the given geometry.
-func (g *Geometry) Layout() geom.Layout {
-	// We are currently always 2D.
-	return geom.XY
-}
-
 //
 // Geography
 //
@@ -602,7 +596,7 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	shape, err := geopbShape(t)
+	shape, err := shapeFromGeom(t)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
@@ -624,7 +618,7 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 	}, nil
 }
 
-func geopbShape(t geom.T) (geopb.Shape, error) {
+func shapeFromGeom(t geom.T) (geopb.Shape, error) {
 	switch t := t.(type) {
 	case *geom.Point:
 		return geopb.Shape_Point, nil
