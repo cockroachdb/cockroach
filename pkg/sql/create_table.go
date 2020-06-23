@@ -11,7 +11,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"go/constant"
@@ -761,38 +760,8 @@ func ResolveFK(
 		originColumnIDs[i] = col.ID
 	}
 	var legacyOriginIndexID sqlbase.IndexID
-	// Search for an index on the origin table that matches. If one doesn't exist,
-	// we create one automatically if the table to alter is new or empty. We also
-	// search if an index for the set of columns was created in this transaction.
-	originIdx, err := sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
-	if err == nil {
-		// If there was no error, we found a suitable index.
-		legacyOriginIndexID = originIdx.ID
-	} else {
-		// No existing suitable index was found.
-		if ts == NonEmptyTable {
-			var colNames bytes.Buffer
-			colNames.WriteString(`("`)
-			for i, id := range originColumnIDs {
-				if i != 0 {
-					colNames.WriteString(`", "`)
-				}
-				col, err := tbl.TableDesc().FindColumnByID(id)
-				if err != nil {
-					return err
-				}
-				colNames.WriteString(col.Name)
-			}
-			colNames.WriteString(`")`)
-			return pgerror.Newf(pgcode.ForeignKeyViolation,
-				"foreign key requires an existing index on columns %s", colNames.String())
-		}
-		id, err := addIndexForFK(tbl, originCols, constraintName, ts)
-		if err != nil {
-			return err
-		}
-		legacyOriginIndexID = id
-	}
+
+	// TODO (rohany): Do we need a version gate for the removal of origin indexes?
 
 	referencedIdx, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
 	if err != nil {
@@ -831,56 +800,6 @@ func ResolveFK(
 	}
 
 	return nil
-}
-
-// Adds an index to a table descriptor (that is in the process of being created)
-// that will support using `srcCols` as the referencing (src) side of an FK.
-func addIndexForFK(
-	tbl *sqlbase.MutableTableDescriptor,
-	srcCols []*sqlbase.ColumnDescriptor,
-	constraintName string,
-	ts FKTableState,
-) (sqlbase.IndexID, error) {
-	autoIndexName := sqlbase.GenerateUniqueConstraintName(
-		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
-		func(name string) bool {
-			return tbl.ValidateIndexNameIsUnique(name) != nil
-		},
-	)
-	// No existing index for the referencing columns found, so we add one.
-	idx := sqlbase.IndexDescriptor{
-		Name:             autoIndexName,
-		ColumnNames:      make([]string, len(srcCols)),
-		ColumnDirections: make([]sqlbase.IndexDescriptor_Direction, len(srcCols)),
-	}
-	for i, c := range srcCols {
-		idx.ColumnDirections[i] = sqlbase.IndexDescriptor_ASC
-		idx.ColumnNames[i] = c.Name
-	}
-
-	if ts == NewTable {
-		if err := tbl.AddIndex(idx, false); err != nil {
-			return 0, err
-		}
-		if err := tbl.AllocateIDs(); err != nil {
-			return 0, err
-		}
-		added := tbl.Indexes[len(tbl.Indexes)-1]
-		return added.ID, nil
-	}
-
-	// TODO (lucy): In the EmptyTable case, we add an index mutation, making this
-	// the only case where a foreign key is added to an index being added.
-	// Allowing FKs to be added to other indexes/columns also being added should
-	// be a generalization of this special case.
-	if err := tbl.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
-		return 0, err
-	}
-	if err := tbl.AllocateIDs(); err != nil {
-		return 0, err
-	}
-	id := tbl.Mutations[len(tbl.Mutations)-1].GetIndex().ID
-	return id, nil
 }
 
 func (p *planner) addInterleave(
