@@ -289,7 +289,7 @@ with &1
 build
 DELETE FROM abcde AS foo WHERE a=abcde.b
 ----
-error (42P01): no data source matches prefix: abcde
+error (42P01): no data source matches prefix: abcde in this context
 
 # ORDER BY can only be used with LIMIT.
 build
