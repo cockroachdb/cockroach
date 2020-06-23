@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -69,6 +70,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
+		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, stmt, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
@@ -493,7 +495,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	ex.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
@@ -1117,6 +1118,8 @@ func (ex *connExecutor) runObserverStatement(
 	case *tree.SetTracing:
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
+	case *tree.ShowLastQueryStatistics:
+		return ex.runShowLastQueryStatistics(ctx, res)
 	default:
 		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
 		return nil
@@ -1152,6 +1155,26 @@ func (ex *connExecutor) runShowTransactionState(
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+}
+
+func (ex *connExecutor) runShowLastQueryStatistics(
+	ctx context.Context, res RestrictedCommandResult,
+) error {
+	res.SetColumns(ctx, sqlbase.ShowLastQueryStatisticsColumns)
+
+	phaseTimes := &ex.statsCollector.previousPhaseTimes
+	runLat := phaseTimes.getRunLatency().Seconds()
+	parseLat := phaseTimes.getParsingLatency().Seconds()
+	planLat := phaseTimes.getPlanningLatency().Seconds()
+	svcLat := phaseTimes.getServiceLatency().Seconds()
+
+	return res.AddRow(ctx,
+		tree.Datums{
+			tree.NewDInterval(duration.FromFloat64(parseLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(planLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(runLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(svcLat), types.DefaultIntervalTypeMetadata),
+		})
 }
 
 func (ex *connExecutor) runSetTracing(
