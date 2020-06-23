@@ -953,7 +953,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		item := &aggregations[i]
 		agg := item.Agg
 
-		var filterOrd exec.NodeColumnOrdinal = -1
+		var filterOrd exec.NodeColumnOrdinal = tree.NoColumnIdx
 		if aggFilter, ok := agg.(*memo.AggFilterExpr); ok {
 			filter, ok := aggFilter.Filter.(*memo.VariableExpr)
 			if !ok {
@@ -969,7 +969,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 			agg = aggDistinct.Input
 		}
 
-		name, overload := memo.FindAggregateOverload(agg)
+		name, _ := memo.FindAggregateOverload(agg)
 
 		// Accumulate variable arguments in argCols and constant arguments in
 		// constArgs. Constant arguments must follow variable arguments.
@@ -992,7 +992,6 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 
 		aggInfos[i] = exec.AggInfo{
 			FuncName:   name,
-			Builtin:    overload,
 			Distinct:   distinct,
 			ResultType: item.Agg.DataType(),
 			ArgCols:    argCols,

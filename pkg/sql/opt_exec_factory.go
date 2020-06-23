@@ -466,9 +466,7 @@ func (ef *execFactory) ConstructGroupBy(
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := n.newAggregateFuncHolder(
 			builtins.AnyNotNull,
-			inputCols[col].Typ,
 			[]int{col},
-			builtins.NewAnyNotNullAggregate,
 			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
@@ -485,7 +483,6 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 	inputCols := planColumns(n.plan)
 	for i := range aggregations {
 		agg := &aggregations[i]
-		builtin := agg.Builtin
 		renderIdxs := make([]int, len(agg.ArgCols))
 		params := make([]*types.T, len(agg.ArgCols))
 		for j, col := range agg.ArgCols {
@@ -493,28 +490,17 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			renderIdxs[j] = renderIdx
 			params[j] = inputCols[renderIdx].Typ
 		}
-		aggFn := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-			return builtin.AggregateFunc(params, evalCtx, arguments)
-		}
 
 		f := n.newAggregateFuncHolder(
 			agg.FuncName,
-			agg.ResultType,
 			renderIdxs,
-			aggFn,
 			agg.ConstArgs,
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		if agg.Distinct {
 			f.setDistinct()
 		}
-
-		if agg.Filter == -1 {
-			// A value of -1 means the aggregate had no filter.
-			f.filterRenderIdx = tree.NoColumnIdx
-		} else {
-			f.filterRenderIdx = int(agg.Filter)
-		}
+		f.filterRenderIdx = int(agg.Filter)
 
 		n.funcs = append(n.funcs, f)
 		n.columns = append(n.columns, sqlbase.ResultColumn{
