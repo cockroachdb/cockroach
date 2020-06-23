@@ -77,7 +77,12 @@ func (p *planNodeToRowSource) InitWithOutput(
 		0, /* processorID */
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{},
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+				p.InternalClose()
+				return nil
+			},
+		},
 	)
 }
 
@@ -122,10 +127,9 @@ func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (p *planNodeToRowSource) InternalClose() {
-	if p.ProcessorBase.InternalClose() {
-		p.started = true
-	}
+func (p *planNodeToRowSource) InternalClose() bool {
+	p.started = true
+	return p.ProcessorBase.InternalClose()
 }
 
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
@@ -186,10 +190,6 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 		}
 	}
 	return nil, p.DrainHelper()
-}
-
-func (p *planNodeToRowSource) ConsumerDone() {
-	p.MoveToDraining(nil /* err */)
 }
 
 func (p *planNodeToRowSource) ConsumerClosed() {
