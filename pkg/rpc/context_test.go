@@ -168,8 +168,20 @@ func (*internalServer) Batch(
 	return nil, nil
 }
 
+func (*internalServer) RangeLookup(
+	context.Context, *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	panic("unimplemented")
+}
+
 func (*internalServer) RangeFeed(
-	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
+	*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer,
+) error {
+	panic("unimplemented")
+}
+
+func (*internalServer) GossipSubscription(
+	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
 ) error {
 	panic("unimplemented")
 }
