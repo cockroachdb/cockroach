@@ -149,9 +149,10 @@ func ParseGeometryFromEWKB(ewkb geopb.EWKB) (*Geometry, error) {
 	return NewGeometry(g)
 }
 
-// ParseGeometryFromWKB parses the WKB into a given Geometry.
-func ParseGeometryFromWKB(wkb geopb.WKB, srid geopb.SRID) (*Geometry, error) {
-	g, err := parseWKB(wkb, srid)
+// ParseGeometryFromEWKBAndSRID parses the EWKB into a given Geometry with the given
+// SRID set.
+func ParseGeometryFromEWKBAndSRID(wkb geopb.WKB, srid geopb.SRID) (*Geometry, error) {
+	g, err := parseEWKB(wkb, srid, DefaultSRIDShouldOverwrite)
 	if err != nil {
 		return nil, err
 	}
@@ -355,9 +356,10 @@ func ParseGeographyFromEWKB(ewkb geopb.EWKB) (*Geography, error) {
 	return NewGeography(g)
 }
 
-// ParseGeographyFromWKB parses the WKB into a given Geography.
-func ParseGeographyFromWKB(wkb geopb.WKB, srid geopb.SRID) (*Geography, error) {
-	g, err := parseWKB(wkb, srid)
+// ParseGeographyFromEWKBAndSRID parses the EWKB into a given Geography with the
+// given SRID set.
+func ParseGeographyFromEWKBAndSRID(wkb geopb.WKB, srid geopb.SRID) (*Geography, error) {
+	g, err := parseEWKB(wkb, srid, DefaultSRIDShouldOverwrite)
 	if err != nil {
 		return nil, err
 	}
