@@ -821,10 +821,10 @@ const datumSliceOverhead = int64(unsafe.Sizeof([]tree.Datum(nil)))
 // CreateWindowerSpecFunc creates a WindowerSpec_Func based on the function
 // name or returns an error if unknown function name is provided.
 func CreateWindowerSpecFunc(funcStr string) (execinfrapb.WindowerSpec_Func, error) {
-	if aggBuiltin, ok := execinfrapb.AggregatorSpec_Func_value[funcStr]; ok {
+	if aggBuiltin, err := execinfrapb.GetAggregateFuncIdx(funcStr); err == nil {
 		aggSpec := execinfrapb.AggregatorSpec_Func(aggBuiltin)
 		return execinfrapb.WindowerSpec_Func{AggregateFunc: &aggSpec}, nil
-	} else if winBuiltin, ok := execinfrapb.WindowerSpec_WindowFunc_value[funcStr]; ok {
+	} else if winBuiltin, err := execinfrapb.GetWindowFuncIdx(funcStr); err == nil {
 		winSpec := execinfrapb.WindowerSpec_WindowFunc(winBuiltin)
 		return execinfrapb.WindowerSpec_Func{WindowFunc: &winSpec}, nil
 	} else {

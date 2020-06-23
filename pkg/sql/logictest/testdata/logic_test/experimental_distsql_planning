@@ -72,3 +72,18 @@ SELECT v FROM kv ORDER BY k
 2
 NULL
 3
+
+# Check that non-scalar aggregation is supported.
+query III rowsort
+SELECT v, min(k), max(k) FROM kv GROUP BY v
+----
+1     1  2
+2     3  3
+NULL  4  4
+3     5  5
+
+# Check that scalar aggregation is supported.
+query I
+SELECT min(v) FROM kv
+----
+1

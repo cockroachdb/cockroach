@@ -452,10 +452,15 @@ func (ef *execFactory) ConstructMergeJoin(
 func (ef *execFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo,
 ) (exec.Node, error) {
+	// There are no grouping columns with scalar GroupBy, so we create empty
+	// arguments upfront to be passed into getResultColumnsForGroupBy call
+	// below.
+	var inputCols sqlbase.ResultColumns
+	var groupCols []exec.NodeColumnOrdinal
 	n := &groupNode{
 		plan:     input.(planNode),
 		funcs:    make([]*aggregateFuncHolder, 0, len(aggregations)),
-		columns:  make(sqlbase.ResultColumns, 0, len(aggregations)),
+		columns:  getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
 		isScalar: true,
 	}
 	if err := ef.addAggregations(n, aggregations); err != nil {
@@ -472,20 +477,18 @@ func (ef *execFactory) ConstructGroupBy(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	inputPlan := input.(planNode)
+	inputCols := planColumns(inputPlan)
 	n := &groupNode{
-		plan:             input.(planNode),
+		plan:             inputPlan,
 		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:          make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
-		groupCols:        make([]int, len(groupCols)),
+		columns:          getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		groupCols:        convertOrdinalsToInts(groupCols),
 		groupColOrdering: groupColOrdering,
 		isScalar:         false,
 		reqOrdering:      ReqOrdering(reqOrdering),
 	}
-	inputCols := planColumns(n.plan)
-	for i := range groupCols {
-		col := int(groupCols[i])
-		n.groupCols[i] = col
-
+	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := n.newAggregateFuncHolder(
 			builtins.AnyNotNull,
@@ -494,7 +497,6 @@ func (ef *execFactory) ConstructGroupBy(
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
-		n.columns = append(n.columns, inputCols[col])
 	}
 	if err := ef.addAggregations(n, aggregations); err != nil {
 		return nil, err
@@ -503,16 +505,9 @@ func (ef *execFactory) ConstructGroupBy(
 }
 
 func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo) error {
-	inputCols := planColumns(n.plan)
 	for i := range aggregations {
 		agg := &aggregations[i]
-		renderIdxs := make([]int, len(agg.ArgCols))
-		params := make([]*types.T, len(agg.ArgCols))
-		for j, col := range agg.ArgCols {
-			renderIdx := int(col)
-			renderIdxs[j] = renderIdx
-			params[j] = inputCols[renderIdx].Typ
-		}
+		renderIdxs := convertOrdinalsToInts(agg.ArgCols)
 
 		f := n.newAggregateFuncHolder(
 			agg.FuncName,
@@ -526,10 +521,6 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 		f.filterRenderIdx = int(agg.Filter)
 
 		n.funcs = append(n.funcs, f)
-		n.columns = append(n.columns, sqlbase.ResultColumn{
-			Name: agg.FuncName,
-			Typ:  agg.ResultType,
-		})
 	}
 	return nil
 }
