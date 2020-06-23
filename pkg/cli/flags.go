@@ -581,6 +581,12 @@ func init() {
 	// Decommission command.
 	varFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
+	// Decommission and recommission share --self.
+	for _, cmd := range []*cobra.Command{decommissionNodeCmd, recommissionNodeCmd} {
+		f := cmd.Flags()
+		boolFlag(f, &nodeCtx.nodeDecommissionSelf, cliflags.NodeDecommissionSelf)
+	}
+
 	// Quit and node drain commands.
 	for _, cmd := range []*cobra.Command{quitCmd, drainNodeCmd} {
 		f := cmd.Flags()
