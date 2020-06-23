@@ -669,7 +669,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		defer rts.tearDown()
 
 		// Make marking success fail.
-		rts.successErr = errors.New("resume failed")
+		rts.successErr = errors.New("injected failure at marking as succeeded")
 		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
@@ -690,7 +690,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.check(t, jobs.StatusReverting)
 		rts.failOrCancelCheckCh <- struct{}{}
 		rts.mu.e.OnFailOrCancelExit++
-		rts.failOrCancelCh <- errors.New("reverting failed")
+		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
 		rts.check(t, jobs.StatusFailed)
 	})
 
@@ -722,34 +722,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		// But let it fail.
 		rts.mu.e.OnFailOrCancelExit++
 		rts.failOrCancelCh <- errors.New("resume failed")
-		rts.check(t, jobs.StatusFailed)
-	})
-
-	t.Run("fail 2.0 jobs with no progress", func(t *testing.T) {
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-		job, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rts.job = job
-		rts.mu.e.ResumeStart = true
-		rts.check(t, jobs.StatusRunning)
-		rts.sqlDB.Exec(t, "PAUSE JOB $1", *job.ID())
-		rts.sqlDB.Exec(t, `UPDATE system.jobs SET progress = NULL, status = $2 WHERE id = $1`, *job.ID(), jobs.StatusRunning)
-		testutils.SucceedsSoon(t, func() error {
-			var status jobs.Status
-			var err string
-			rts.sqlDB.QueryRow(t, `SELECT error, status FROM [SHOW JOBS] WHERE job_id = $1`, *job.ID()).Scan(&err, &status)
-			if status != jobs.StatusFailed {
-				return errors.Errorf("unexpected status: %s", status)
-			}
-			if err != "job predates cluster upgrade and must be re-run" {
-				return errors.Errorf("unexpected error: %s", err)
-			}
-			return nil
-		})
 		rts.check(t, jobs.StatusFailed)
 	})
 
