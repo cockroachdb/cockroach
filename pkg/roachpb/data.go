@@ -1724,17 +1724,6 @@ func (l Lease) String() string {
 	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
 }
 
-// BootstrapLease returns the lease to persist for the range of a freshly bootstrapped store. The
-// returned lease is morally "empty" but has a few fields set to non-nil zero values because some
-// used to be non-nullable and we now fuzz their nullability in tests. As a consequence, it's better
-// to always use zero fields here so that the initial stats are constant.
-func BootstrapLease() Lease {
-	return Lease{
-		Expiration:            &hlc.Timestamp{},
-		DeprecatedStartStasis: &hlc.Timestamp{},
-	}
-}
-
 // OwnedBy returns whether the given store is the lease owner.
 func (l Lease) OwnedBy(storeID StoreID) bool {
 	return l.Replica.StoreID == storeID
