@@ -24,17 +24,13 @@ import (
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/kml"
 	"github.com/twpayne/go-geom/encoding/wkb"
+	"github.com/twpayne/go-geom/encoding/wkbcommon"
 	"github.com/twpayne/go-geom/encoding/wkbhex"
 	"github.com/twpayne/go-geom/encoding/wkt"
 )
 
 // EWKBToWKT transforms a given EWKB to WKT.
 func EWKBToWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.WKT, error) {
-	// twpayne/go-geom doesn't seem to handle POINT EMPTY just yet. Add this hack in.
-	// Remove after #49209 is resolved.
-	if bytes.Equal(b, []byte{0x01, 0x01, 0x00, 0x00, 0x00}) {
-		return geopb.WKT("POINT EMPTY"), nil
-	}
 	t, err := ewkb.Unmarshal([]byte(b))
 	if err != nil {
 		return "", err
@@ -45,11 +41,6 @@ func EWKBToWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.WKT, error) {
 
 // EWKBToEWKT transforms a given EWKB to EWKT.
 func EWKBToEWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.EWKT, error) {
-	// twpayne/go-geom doesn't seem to handle POINT EMPTY just yet. Add this hack in.
-	// Remove after #49209 is resolved.
-	if bytes.Equal(b, []byte{0x01, 0x01, 0x00, 0x00, 0x00}) {
-		return geopb.EWKT("POINT EMPTY"), nil
-	}
 	t, err := ewkb.Unmarshal([]byte(b))
 	if err != nil {
 		return "", err
@@ -70,7 +61,7 @@ func EWKBToWKB(b geopb.EWKB, byteOrder binary.ByteOrder) (geopb.WKB, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret, err := wkb.Marshal(t, byteOrder)
+	ret, err := wkb.Marshal(t, byteOrder, wkbcommon.WKBOptionEmptyPointHandling(wkbcommon.EmptyPointHandlingNaN))
 	return geopb.WKB(ret), err
 }
 
