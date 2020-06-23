@@ -168,7 +168,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				t.Fatal(err)
 			}
 			r, _, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(
-				ctx, addr, nil, false)
+				ctx, addr, kvcoord.EvictionToken{}, false)
 			if err != nil {
 				t.Fatal(err)
 			}

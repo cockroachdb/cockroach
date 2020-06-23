@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/biogo/store/llrb"
@@ -101,7 +100,7 @@ var _ kvbase.RangeDescriptorCache = (*RangeDescriptorCache)(nil)
 
 type lookupResult struct {
 	desc       *roachpb.RangeDescriptor
-	evictToken *EvictionToken
+	evictToken EvictionToken
 }
 
 // makeLookupRequestKey constructs a key for the lookupRequest group with the
@@ -221,18 +220,21 @@ type EvictionToken struct {
 	// by Evict(). This is used when the range descriptor lookup that populated
 	// the cache returned an intent in addition to the current descriptor value.
 	nextDesc *roachpb.RangeDescriptor
-
-	evictOnce sync.Once // assures that desc is only evicted once
 }
 
 func (rdc *RangeDescriptorCache) makeEvictionToken(
 	desc *roachpb.RangeDescriptor, nextDesc *roachpb.RangeDescriptor,
-) *EvictionToken {
-	return &EvictionToken{
+) EvictionToken {
+	return EvictionToken{
 		rdc:      rdc,
 		desc:     desc,
 		nextDesc: nextDesc,
 	}
+}
+
+// Empty returns true if the token is not populated.
+func (et EvictionToken) Empty() bool {
+	return et == (EvictionToken{})
 }
 
 // Evict instructs the EvictionToken to evict the RangeDescriptor it was created
@@ -246,20 +248,18 @@ func (et *EvictionToken) Evict(ctx context.Context) {
 // new RangeDescriptors to insert into the cache, all atomically. When called without
 // arguments, EvictAndReplace will behave the same as Evict.
 func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachpb.RangeDescriptor) {
-	et.evictOnce.Do(func() {
-		et.rdc.rangeCache.Lock()
-		defer et.rdc.rangeCache.Unlock()
-		et.rdc.evictCachedRangeDescriptorLocked(ctx, et.desc)
-		if len(newDescs) > 0 {
-			log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
-			et.rdc.insertRangeDescriptorsLocked(ctx, newDescs...)
-		} else if et.nextDesc != nil {
-			log.Eventf(ctx, "evicting cached range descriptor with replacement from token")
-			et.rdc.insertRangeDescriptorsLocked(ctx, *et.nextDesc)
-		} else {
-			log.Eventf(ctx, "evicting cached range descriptor")
-		}
-	})
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+	et.rdc.evictCachedRangeDescriptorLocked(ctx, et.desc)
+	if len(newDescs) > 0 {
+		log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
+		et.rdc.insertRangeDescriptorsLocked(ctx, newDescs...)
+	} else if et.nextDesc != nil {
+		log.Eventf(ctx, "evicting cached range descriptor with replacement from token")
+		et.rdc.insertRangeDescriptorsLocked(ctx, *et.nextDesc)
+	} else {
+		log.Eventf(ctx, "evicting cached range descriptor")
+	}
 }
 
 // LookupRangeDescriptorWithEvictionToken attempts to locate a descriptor for the range
@@ -280,8 +280,8 @@ func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 // the key's data and a token to manage evicting the RangeDescriptor
 // if it is found to be stale, or an error if any occurred.
 func (rdc *RangeDescriptorCache) LookupRangeDescriptorWithEvictionToken(
-	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, EvictionToken, error) {
 	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, useReverseScan)
 }
 
@@ -292,7 +292,7 @@ func (rdc *RangeDescriptorCache) LookupRangeDescriptorWithEvictionToken(
 func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
 	ctx context.Context, key roachpb.RKey,
 ) (*roachpb.RangeDescriptor, error) {
-	rd, _, err := rdc.lookupRangeDescriptorInternal(ctx, key, nil, false)
+	rd, _, err := rdc.lookupRangeDescriptorInternal(ctx, key, EvictionToken{}, false)
 	return rd, err
 }
 
@@ -302,8 +302,8 @@ func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
 // added to the inflight request map (with or without merging) or the
 // function finishes. Used for testing.
 func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
-	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, EvictionToken, error) {
 	// Retry while we're hitting lookupCoalescingErrors.
 	for {
 		desc, newToken, err := rdc.tryLookupRangeDescriptor(ctx, key, evictToken, useReverseScan)
@@ -312,7 +312,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 			continue
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, EvictionToken{}, err
 		}
 		return desc, newToken, nil
 	}
@@ -343,8 +343,8 @@ func newLookupCoalescingError(key roachpb.RKey, wrongDesc *roachpb.RangeDescript
 
 // tryLookupRangeDescriptor can return a lookupCoalescingError.
 func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
-	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (*roachpb.RangeDescriptor, EvictionToken, error) {
 	rdc.rangeCache.RLock()
 	if desc, _ := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); desc != nil {
 		rdc.rangeCache.RUnlock()
@@ -357,7 +357,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	}
 
 	var prevDesc *roachpb.RangeDescriptor
-	if evictToken != nil {
+	if !evictToken.Empty() {
 		prevDesc = evictToken.desc
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
@@ -440,7 +440,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	select {
 	case res = <-resC:
 	case <-ctx.Done():
-		return nil, nil, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
+		return nil, EvictionToken{}, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
 	}
 
 	var s string
@@ -455,7 +455,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 		log.Eventf(ctx, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
-		return nil, nil, res.Err
+		return nil, EvictionToken{}, res.Err
 	}
 
 	// We might get a descriptor that doesn't contain the key we're looking for
@@ -474,7 +474,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 	}
 	if !containsFn(desc, key) {
-		return nil, nil, newLookupCoalescingError(key, desc)
+		return nil, EvictionToken{}, newLookupCoalescingError(key, desc)
 	}
 	return desc, lookupRes.evictToken, nil
 }
