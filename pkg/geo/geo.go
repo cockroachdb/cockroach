@@ -463,11 +463,11 @@ func (g *Geography) BoundingBoxIntersects(o *Geography) bool {
 	return g.spatialObject.BoundingBox.Intersects(o.spatialObject.BoundingBox)
 }
 
-// isLinearRingCCW returns whether a given linear ring is counter clock wise.
+// IsLinearRingCCW returns whether a given linear ring is counter clock wise.
 // See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
 // "Find the lowest vertex (or, if  there is more than one vertex with the same lowest coordinate,
 //  the rightmost of those vertices) and then take the cross product of the edges fore and aft of it."
-func isLinearRingCCW(linearRing *geom.LinearRing) bool {
+func IsLinearRingCCW(linearRing *geom.LinearRing) bool {
 	smallestIdx := 0
 	smallest := linearRing.Coord(0)
 
@@ -541,7 +541,7 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 		for ringIdx := 0; ringIdx < repr.NumLinearRings(); ringIdx++ {
 			linearRing := repr.LinearRing(ringIdx)
 			points := make([]s2.Point, linearRing.NumCoords())
-			isCCW := isLinearRingCCW(linearRing)
+			isCCW := IsLinearRingCCW(linearRing)
 			for pointIdx := 0; pointIdx < linearRing.NumCoords(); pointIdx++ {
 				p := linearRing.Coord(pointIdx)
 				pt := s2.PointFromLatLng(s2.LatLngFromDegrees(p.Y(), p.X()))
