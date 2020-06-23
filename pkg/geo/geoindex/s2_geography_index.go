@@ -14,6 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 )
 
@@ -83,6 +87,55 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 		return nil, err
 	}
 	return intersects(c, i.rc, r), nil
+}
+
+func (i *s2GeographyIndex) DWithin(
+	_ context.Context, g *geo.Geography, distanceMeters float64,
+) (UnionKeySpans, error) {
+	projInfo, ok := geoprojbase.Projection(g.SRID())
+	if !ok {
+		return nil, errors.Errorf("projection not found for SRID: %d", g.SRID())
+	}
+	if projInfo.Spheroid == nil {
+		return nil, errors.Errorf("projection %d does not have spheroid", g.SRID())
+	}
+	r, err := g.AsS2(geo.EmptyBehaviorOmit)
+	if err != nil {
+		return nil, err
+	}
+	// The following approach of constructing the covering and then expanding by
+	// an angle is worse than first expanding the original shape and then
+	// constructing a covering. However the s2 golang library lacks the c++
+	// S2ShapeIndexBufferedRegion, whose GetCellUnionBound() method is what we
+	// desire.
+	//
+	// Construct the cell covering for the shape.
+	gCovering := covering(i.rc, r)
+	// Convert the distanceMeters to an angle, in order to expand the cell covering
+	// on the sphere by the angle.
+	multiplier := 1.0
+	if projInfo.Spheroid.Flattening != 0 {
+		// We are using a sphere to calculate an angle on a spheroid, so adjust by the
+		// error.
+		multiplier += geogfn.SpheroidErrorFraction
+	}
+	angle := s1.Angle(multiplier * distanceMeters / projInfo.Spheroid.SphereRadius)
+	// maxLevelDiff puts a bound on the number of cells used after the expansion.
+	// For example, we do not want expanding a large country by 1km to generate too
+	// many cells.
+	const maxLevelDiff = 2
+	gCovering.ExpandByRadius(angle, maxLevelDiff)
+	// Finally, make the expanded covering obey the configuration of the index, which
+	// is used in the RegionCoverer.
+	var covering s2.CellUnion
+	for _, c := range gCovering {
+		if c.Level() > i.rc.MaxLevel {
+			c = c.Parent(i.rc.MaxLevel)
+		}
+		covering = append(covering, c)
+	}
+	covering.Normalize()
+	return intersectsUsingCovering(covering), nil
 }
 
 func (i *s2GeographyIndex) TestingInnerCovering(g *geo.Geography) s2.CellUnion {
