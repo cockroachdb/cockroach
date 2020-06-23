@@ -28,6 +28,14 @@ CREATE TABLE t_now (
 ----
 
 exec-ddl
+CREATE TABLE t_rand (
+    k_int INT,
+    c_int INT AS ((random()*100)::INT + k_int) STORED,
+    INDEX c_int_index (c_int, k_int)
+)
+----
+
+exec-ddl
 CREATE TABLE t_mult (
     k_int INT,
     k_int_2 INT,
@@ -143,7 +151,7 @@ select
  └── filters
       └── k_float:1 = 5.0 [outer=(1), constraints=(/1: [/5.0 - /5.0]; tight), fd=()-->(1)]
 
-# Don't constrain the index when the computed column has a non-pure function.
+# Don't constrain the index when the computed column has a stable function.
 opt
 SELECT k_interval FROM t_now WHERE k_interval = '3 hours'
 ----
@@ -151,12 +159,21 @@ select
  ├── columns: k_interval:1!null
  ├── fd: ()-->(1)
  ├── scan t_now
- │    ├── columns: k_interval:1
- │    └── computed column expressions
- │         └── c_ts:2
- │              └── k_interval:1 + now()
+ │    └── columns: k_interval:1
  └── filters
       └── k_interval:1 = '03:00:00' [outer=(1), constraints=(/1: [/'03:00:00' - /'03:00:00']; tight), fd=()-->(1)]
+
+# Don't constrain the index when the computed column has a volatile function.
+opt
+SELECT k_int FROM t_rand WHERE k_int = 5.0
+----
+select
+ ├── columns: k_int:1!null
+ ├── fd: ()-->(1)
+ ├── scan t_rand
+ │    └── columns: k_int:1
+ └── filters
+      └── k_int:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
 
 # Verify that a stored NULL value is handled correctly (#44132).
 exec-ddl

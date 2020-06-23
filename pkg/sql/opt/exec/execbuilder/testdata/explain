@@ -119,7 +119,7 @@ drop database  ·             ·
 # below, otherwise the result becomes non-deterministic.
 # Migrations with backfill will affect the number of rows.
 query TTT
-SELECT * FROM [EXPLAIN SHOW JOBS] WHERE field != 'size'
+SELECT * FROM [EXPLAIN SHOW JOBS] WHERE field != 'size' AND field != 'filter'
 ----
 ·                                       distribution  local
 ·                                       vectorized    false
@@ -128,7 +128,6 @@ render                                  ·             ·
       │                                 order         -column18,-started
       └── render                        ·             ·
            └── filter                   ·             ·
-                │                       filter        ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
                 └── render              ·             ·
                      └── virtual table  ·             ·
 ·                                       source        jobs@primary

@@ -334,48 +334,6 @@ scan  ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distribution           local                                ·       ·
-·                 vectorized             true                                 ·       ·
-lookup-join       ·                      ·                                    (a, b)  ·
- │                table                  d@primary                            ·       ·
- │                type                   inner                                ·       ·
- │                equality               (a) = (a)                            ·       ·
- │                equality cols are key  ·                                    ·       ·
- │                parallel               ·                                    ·       ·
- │                pred                   @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                    (a)     ·
-      │           type                   inner                                ·       ·
-      ├── scan    ·                      ·                                    (a)     ·
-      │           table                  d@foo_inv                            ·       ·
-      │           fixedvals              1 column                             ·       ·
-      └── scan    ·                      ·                                    ()      ·
-·                 table                  d@foo_inv                            ·       ·
-·                 fixedvals              1 column                             ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
-----
-·                 distribution           local                                          ·       ·
-·                 vectorized             true                                           ·       ·
-lookup-join       ·                      ·                                              (a, b)  ·
- │                table                  d@primary                                      ·       ·
- │                type                   inner                                          ·       ·
- │                equality               (a) = (a)                                      ·       ·
- │                equality cols are key  ·                                              ·       ·
- │                parallel               ·                                              ·       ·
- │                pred                   @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                              (a)     ·
-      │           type                   inner                                          ·       ·
-      ├── scan    ·                      ·                                              (a)     ·
-      │           table                  d@foo_inv                                      ·       ·
-      │           fixedvals              1 column                                       ·       ·
-      └── scan    ·                      ·                                              ()      ·
-·                 table                  d@foo_inv                                      ·       ·
-·                 fixedvals              1 column                                       ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
-----
 ·                 distribution           local                               ·       ·
 ·                 vectorized             true                                ·       ·
 lookup-join       ·                      ·                                   (a, b)  ·
@@ -384,7 +342,7 @@ lookup-join       ·                      ·                                   (
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
  │                parallel               ·                                   ·       ·
- │                pred                   @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
  └── zigzag-join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
       ├── scan    ·                      ·                                   (a)     ·
@@ -393,6 +351,48 @@ lookup-join       ·                      ·                                   (
       └── scan    ·                      ·                                   ()      ·
 ·                 table                  d@foo_inv                           ·       ·
 ·                 fixedvals              1 column                            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+·                 distribution           local                                         ·       ·
+·                 vectorized             true                                          ·       ·
+lookup-join       ·                      ·                                             (a, b)  ·
+ │                table                  d@primary                                     ·       ·
+ │                type                   inner                                         ·       ·
+ │                equality               (a) = (a)                                     ·       ·
+ │                equality cols are key  ·                                             ·       ·
+ │                parallel               ·                                             ·       ·
+ │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag-join  ·                      ·                                             (a)     ·
+      │           type                   inner                                         ·       ·
+      ├── scan    ·                      ·                                             (a)     ·
+      │           table                  d@foo_inv                                     ·       ·
+      │           fixedvals              1 column                                      ·       ·
+      └── scan    ·                      ·                                             ()      ·
+·                 table                  d@foo_inv                                     ·       ·
+·                 fixedvals              1 column                                      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+·                 distribution           local                              ·       ·
+·                 vectorized             true                               ·       ·
+lookup-join       ·                      ·                                  (a, b)  ·
+ │                table                  d@primary                          ·       ·
+ │                type                   inner                              ·       ·
+ │                equality               (a) = (a)                          ·       ·
+ │                equality cols are key  ·                                  ·       ·
+ │                parallel               ·                                  ·       ·
+ │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag-join  ·                      ·                                  (a)     ·
+      │           type                   inner                              ·       ·
+      ├── scan    ·                      ·                                  (a)     ·
+      │           table                  d@foo_inv                          ·       ·
+      │           fixedvals              1 column                           ·       ·
+      └── scan    ·                      ·                                  ()      ·
+·                 table                  d@foo_inv                          ·       ·
+·                 fixedvals              1 column                           ·       ·
 
 statement ok
 SET enable_zigzag_join = true
@@ -400,48 +400,6 @@ SET enable_zigzag_join = true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distribution           local                                ·       ·
-·                 vectorized             true                                 ·       ·
-lookup-join       ·                      ·                                    (a, b)  ·
- │                table                  d@primary                            ·       ·
- │                type                   inner                                ·       ·
- │                equality               (a) = (a)                            ·       ·
- │                equality cols are key  ·                                    ·       ·
- │                parallel               ·                                    ·       ·
- │                pred                   @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                    (a)     ·
-      │           type                   inner                                ·       ·
-      ├── scan    ·                      ·                                    (a)     ·
-      │           table                  d@foo_inv                            ·       ·
-      │           fixedvals              1 column                             ·       ·
-      └── scan    ·                      ·                                    ()      ·
-·                 table                  d@foo_inv                            ·       ·
-·                 fixedvals              1 column                             ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
-----
-·                 distribution           local                                          ·       ·
-·                 vectorized             true                                           ·       ·
-lookup-join       ·                      ·                                              (a, b)  ·
- │                table                  d@primary                                      ·       ·
- │                type                   inner                                          ·       ·
- │                equality               (a) = (a)                                      ·       ·
- │                equality cols are key  ·                                              ·       ·
- │                parallel               ·                                              ·       ·
- │                pred                   @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                              (a)     ·
-      │           type                   inner                                          ·       ·
-      ├── scan    ·                      ·                                              (a)     ·
-      │           table                  d@foo_inv                                      ·       ·
-      │           fixedvals              1 column                                       ·       ·
-      └── scan    ·                      ·                                              ()      ·
-·                 table                  d@foo_inv                                      ·       ·
-·                 fixedvals              1 column                                       ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
-----
 ·                 distribution           local                               ·       ·
 ·                 vectorized             true                                ·       ·
 lookup-join       ·                      ·                                   (a, b)  ·
@@ -450,7 +408,7 @@ lookup-join       ·                      ·                                   (
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
  │                parallel               ·                                   ·       ·
- │                pred                   @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
  └── zigzag-join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
       ├── scan    ·                      ·                                   (a)     ·
@@ -459,6 +417,48 @@ lookup-join       ·                      ·                                   (
       └── scan    ·                      ·                                   ()      ·
 ·                 table                  d@foo_inv                           ·       ·
 ·                 fixedvals              1 column                            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+·                 distribution           local                                         ·       ·
+·                 vectorized             true                                          ·       ·
+lookup-join       ·                      ·                                             (a, b)  ·
+ │                table                  d@primary                                     ·       ·
+ │                type                   inner                                         ·       ·
+ │                equality               (a) = (a)                                     ·       ·
+ │                equality cols are key  ·                                             ·       ·
+ │                parallel               ·                                             ·       ·
+ │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag-join  ·                      ·                                             (a)     ·
+      │           type                   inner                                         ·       ·
+      ├── scan    ·                      ·                                             (a)     ·
+      │           table                  d@foo_inv                                     ·       ·
+      │           fixedvals              1 column                                      ·       ·
+      └── scan    ·                      ·                                             ()      ·
+·                 table                  d@foo_inv                                     ·       ·
+·                 fixedvals              1 column                                      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+·                 distribution           local                              ·       ·
+·                 vectorized             true                               ·       ·
+lookup-join       ·                      ·                                  (a, b)  ·
+ │                table                  d@primary                          ·       ·
+ │                type                   inner                              ·       ·
+ │                equality               (a) = (a)                          ·       ·
+ │                equality cols are key  ·                                  ·       ·
+ │                parallel               ·                                  ·       ·
+ │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag-join  ·                      ·                                  (a)     ·
+      │           type                   inner                              ·       ·
+      ├── scan    ·                      ·                                  (a)     ·
+      │           table                  d@foo_inv                          ·       ·
+      │           fixedvals              1 column                           ·       ·
+      └── scan    ·                      ·                                  ()      ·
+·                 table                  d@foo_inv                          ·       ·
+·                 fixedvals              1 column                           ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
@@ -540,44 +540,44 @@ scan  ·             ·          (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
-·                 distribution           local             ·       ·
-·                 vectorized             true              ·       ·
-lookup-join       ·                      ·                 (a, b)  ·
- │                table                  e@primary         ·       ·
- │                type                   inner             ·       ·
- │                equality               (a) = (a)         ·       ·
- │                equality cols are key  ·                 ·       ·
- │                parallel               ·                 ·       ·
- │                pred                   @2 @> ARRAY[1,2]  ·       ·
- └── zigzag-join  ·                      ·                 (a)     ·
-      │           type                   inner             ·       ·
-      ├── scan    ·                      ·                 (a)     ·
-      │           table                  e@e_b_idx         ·       ·
-      │           fixedvals              1 column          ·       ·
-      └── scan    ·                      ·                 ()      ·
-·                 table                  e@e_b_idx         ·       ·
-·                 fixedvals              1 column          ·       ·
+·                 distribution           local            ·       ·
+·                 vectorized             true             ·       ·
+lookup-join       ·                      ·                (a, b)  ·
+ │                table                  e@primary        ·       ·
+ │                type                   inner            ·       ·
+ │                equality               (a) = (a)        ·       ·
+ │                equality cols are key  ·                ·       ·
+ │                parallel               ·                ·       ·
+ │                pred                   b @> ARRAY[1,2]  ·       ·
+ └── zigzag-join  ·                      ·                (a)     ·
+      │           type                   inner            ·       ·
+      ├── scan    ·                      ·                (a)     ·
+      │           table                  e@e_b_idx        ·       ·
+      │           fixedvals              1 column         ·       ·
+      └── scan    ·                      ·                ()      ·
+·                 table                  e@e_b_idx        ·       ·
+·                 fixedvals              1 column         ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
-·                 distribution           local                                  ·       ·
-·                 vectorized             true                                   ·       ·
-lookup-join       ·                      ·                                      (a, b)  ·
- │                table                  e@primary                              ·       ·
- │                type                   inner                                  ·       ·
- │                equality               (a) = (a)                              ·       ·
- │                equality cols are key  ·                                      ·       ·
- │                parallel               ·                                      ·       ·
- │                pred                   (@2 @> ARRAY[1]) AND (@2 @> ARRAY[2])  ·       ·
- └── zigzag-join  ·                      ·                                      (a)     ·
-      │           type                   inner                                  ·       ·
-      ├── scan    ·                      ·                                      (a)     ·
-      │           table                  e@e_b_idx                              ·       ·
-      │           fixedvals              1 column                               ·       ·
-      └── scan    ·                      ·                                      ()      ·
-·                 table                  e@e_b_idx                              ·       ·
-·                 fixedvals              1 column                               ·       ·
+·                 distribution           local                                ·       ·
+·                 vectorized             true                                 ·       ·
+lookup-join       ·                      ·                                    (a, b)  ·
+ │                table                  e@primary                            ·       ·
+ │                type                   inner                                ·       ·
+ │                equality               (a) = (a)                            ·       ·
+ │                equality cols are key  ·                                    ·       ·
+ │                parallel               ·                                    ·       ·
+ │                pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
+ └── zigzag-join  ·                      ·                                    (a)     ·
+      │           type                   inner                                ·       ·
+      ├── scan    ·                      ·                                    (a)     ·
+      │           table                  e@e_b_idx                            ·       ·
+      │           fixedvals              1 column                             ·       ·
+      └── scan    ·                      ·                                    ()      ·
+·                 table                  e@e_b_idx                            ·       ·
+·                 fixedvals              1 column                             ·       ·
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.

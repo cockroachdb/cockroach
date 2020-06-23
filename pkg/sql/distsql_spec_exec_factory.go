@@ -40,16 +40,18 @@ type distSQLSpecExecFactory struct {
 		// localPlanCtx stores the local planning context of the gateway.
 		localPlanCtx *PlanningCtx
 	}
-	singleTenant bool
+	singleTenant  bool
+	gatewayNodeID roachpb.NodeID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
 func newDistSQLSpecExecFactory(p *planner) exec.Factory {
 	return &distSQLSpecExecFactory{
-		planner:      p,
-		dsp:          p.extendedEvalCtx.DistSQLPlanner,
-		singleTenant: p.execCfg.Codec.ForSystemTenant(),
+		planner:       p,
+		dsp:           p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
+		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 	}
 }
 
@@ -99,7 +101,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(e.gatewayNodeID)
 	// Although we don't yet recommend distributing plans where soft limits
 	// propagate to scan nodes because we don't have infrastructure to only
 	// plan for a few ranges at a time, the propagation of the soft limits
@@ -129,7 +131,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		physPlan, err := e.dsp.createValuesPlan(
 			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
 		)
-		return planMaybePhysical{physPlan: physPlan, distribution: localPlan}, err
+		return planMaybePhysical{physPlan: physPlan}, err
 	}
 
 	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
@@ -190,13 +192,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.LimitHint = softLimit
 	}
 
-	planCtx := e.getPlanCtx(recommendation)
-	distribution := fullyDistributedPlan
-	if planCtx.isLocal {
-		distribution = localPlan
-	}
 	err = e.dsp.planTableReaders(
-		planCtx,
+		e.getPlanCtx(recommendation),
 		&p,
 		&tableReaderPlanningInfo{
 			spec:                   trSpec,
@@ -213,7 +210,35 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &p, distribution: distribution}, err
+	return planMaybePhysical{physPlan: &p}, err
+}
+
+// checkExprsAndMaybeMergeLastStage is a helper method that returns a
+// recommendation about exprs' distribution. If one of the expressions cannot
+// be distributed, then all expressions cannot be distributed either. In such
+// case if the last stage is distributed, this method takes care of merging the
+// streams on the gateway node.
+func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
+	physPlan *PhysicalPlan, exprs tree.TypedExprs,
+) distRecommendation {
+	// We recommend for exprs' distribution to be the same as the last stage
+	// of processors.
+	recommendation := shouldNotDistribute
+	if physPlan.IsLastStageDistributed() {
+		recommendation = shouldDistribute
+	}
+	for _, expr := range exprs {
+		if err := checkExpr(expr); err != nil {
+			recommendation = cannotDistribute
+			// The filter expression cannot be distributed, so we need to make
+			// sure that there is a single stream on a node. We could do so on
+			// one of the nodes that streams originate from, but for now we
+			// choose the gateway.
+			physPlan.EnsureSingleStreamOnGateway()
+			break
+		}
+	}
+	return recommendation
 }
 
 func (e *distSQLSpecExecFactory) ConstructFilter(
@@ -221,46 +246,37 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 ) (exec.Node, error) {
 	plan := n.(planMaybePhysical)
 	physPlan := plan.physPlan
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
-	// We recommend for filter's distribution to be the same as the last stage
-	// of processors.
-	recommendation := shouldNotDistribute
-	if physPlan.IsLastStageDistributed() {
-		recommendation = shouldDistribute
-	}
-	if err := checkExpr(filter); err != nil {
-		recommendation = cannotDistribute
-		if physPlan.IsLastStageDistributed() {
-			// The last stage has been distributed, but filter expression
-			// cannot be distributed, so we need to merge the streams on a
-			// single node. We could do so on one of the nodes that streams
-			// originate from, but for now we choose the gateway.
-			gatewayNodeID := roachpb.NodeID(e.planner.execCfg.NodeID.SQLInstanceID())
-			physPlan.AddSingleGroupStage(
-				gatewayNodeID,
-				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-				execinfrapb.PostProcessSpec{},
-				physPlan.ResultTypes,
-			)
-		}
-	}
+	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, []tree.TypedExpr{filter})
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
 	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
 		return nil, err
 	}
-	distribution := localPlan
-	if physPlan.IsLastStageDistributed() {
-		distribution = fullyDistributedPlan
-	}
-	plan.distribution = plan.distribution.compose(distribution)
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
 	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	projection := make([]uint32, len(cols))
+	for i := range cols {
+		projection[i] = uint32(cols[i])
+	}
+	physPlan.AddProjection(projection)
+	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.ResultTypes, physPlan.ResultColumns)
+	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
+	if reqOrdering == nil {
+		// When reqOrdering is nil, we're adding a top-level (i.e. "final")
+		// projection. In such scenario we need to be careful to not simply
+		// reset the merge ordering that is currently set on the plan - we do
+		// so by merging the streams on the gateway node.
+		physPlan.EnsureSingleStreamOnGateway()
+	}
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructRender(
@@ -269,7 +285,18 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 	exprs tree.TypedExprs,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	plan := n.(planMaybePhysical)
+	physPlan := plan.physPlan
+	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, exprs)
+	if err := physPlan.AddRendering(
+		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+	); err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = columns
+	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(exprs))
+	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructApplyJoin(

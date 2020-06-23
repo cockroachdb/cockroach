@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -880,8 +881,8 @@ func shouldDistributeGivenRecAndMode(
 	panic(fmt.Sprintf("unhandled distsql mode %v", mode))
 }
 
-// getPlanDistribution returns the planDistribution that plan will have. If
-// plan already has physical representation, then the stored planDistribution
+// getPlanDistribution returns the PlanDistribution that plan will have. If
+// plan already has physical representation, then the stored PlanDistribution
 // is reused, but if plan has logical representation (i.e. it is a planNode
 // tree), then we traverse that tree in order to determine the distribution of
 // the plan.
@@ -890,34 +891,34 @@ func getPlanDistribution(
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
 	plan planMaybePhysical,
-) planDistribution {
+) physicalplan.PlanDistribution {
 	if plan.isPhysicalPlan() {
-		return plan.distribution
+		return plan.physPlan.Distribution
 	}
 
 	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
-		return localPlan
+		return physicalplan.LocalPlan
 	}
 	if distSQLMode == sessiondata.DistSQLOff {
-		return localPlan
+		return physicalplan.LocalPlan
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.planNode.(*zeroNode); ok {
-		return localPlan
+		return physicalplan.LocalPlan
 	}
 
 	rec, err := checkSupportForPlanNode(plan.planNode)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-		return localPlan
+		return physicalplan.LocalPlan
 	}
 
 	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
-		return fullyDistributedPlan
+		return physicalplan.FullyDistributedPlan
 	}
-	return localPlan
+	return physicalplan.LocalPlan
 }
 
 // golangFillQueryArguments transforms Go values into datums.

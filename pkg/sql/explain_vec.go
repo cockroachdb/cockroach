@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -59,7 +59,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
 	)
-	willDistribute := distribution.willDistribute()
+	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.stmtType, n.subqueryPlans, distribution)
 	defer func() {
@@ -75,11 +75,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 
 	distSQLPlanner.FinalizePlan(planCtx, physPlan)
-	nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
-	if err != nil {
-		return err
-	}
-	flows := physPlan.GenerateFlowSpecs(nodeID)
+	flows := physPlan.GenerateFlowSpecs()
 	flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
 	flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
@@ -142,9 +138,9 @@ func newPlanningCtxForExplainPurposes(
 	params runParams,
 	stmtType tree.StatementType,
 	subqueryPlans []subquery,
-	distribution planDistribution,
+	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, distribution.willDistribute())
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, distribution.WillDistribute())
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = stmtType
