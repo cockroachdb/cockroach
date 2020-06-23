@@ -1,0 +1,37 @@
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)'),
+  (3, 'POINT(1.5 1.5)')
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16

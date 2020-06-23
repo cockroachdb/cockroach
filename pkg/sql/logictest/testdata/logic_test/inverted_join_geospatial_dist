@@ -1,0 +1,59 @@
+# LogicTest: 5node-default-configs !5node-metadata
+
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom geometry
+)
+
+statement ok
+INSERT INTO ltable VALUES
+  (1, 'POINT(3.0 3.0)'),
+  (2, 'POINT(4.5 4.5)'),
+  (3, 'POINT(1.5 1.5)')
+
+statement ok
+CREATE TABLE rtable(
+  rk int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO rtable VALUES
+  (11, 'POINT(1.0 1.0)'),
+  (12, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (13, 'POINT(3.0 3.0)'),
+  (14, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (15, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (16, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+statement ok
+ALTER TABLE ltable SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE ltable EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE ltable] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /3       {2}       2
+/3         NULL     {3}       3
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
+ON ST_Intersects(ltable.geom, rtable.geom) ORDER BY (lk, rk)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlF9v2jAUxd_3Kaz7VFSzYAf6J0_ZVialYqSDPmyqUJWRqypriDPbmZgQ331KQgdhxAlC2vqG7Xt87j354RWoHzE4MB2Ohh_uSSZj8nHifyIPwy93o3femJzdeNP76edRh2xK4mdK5HNZFevgW4zk1vfGRBa_3ScUi8coCXFJ_DFR-jFKNEqFc63OyvK3eQnd1BeLDvEnN8MJef-VnJXXd2ZAIREhjoMFKnAegAEFDhRsmFFIpZijUkLmR6ui0AuX4PQoREma6Xx7RmEuJIKzAh3pGMGB-9xxgkGI0uoBhRB1EMXF9amMFoH85ZYtAoVpGiTKIV2Lw2xNQWR6e6_SwROCw9a0vbeX_ESpMbwVUYLSsqv229Rc-dLBi4J8F1FCROIQl-9sD5ep3MvX5ZS4_Q5Q8DPtEJdRl1PXrh2AHzPAVEiN0rqoNu6yc-ra57UW9jEWeTabz3N9-PP8CWckxHOW7kSTB_oXcEUgg0og9Wn0a1vddihkiBLDAxnwPIMDM41FV6QW4xVJXQuDSgusPc2sHc0W71r1AbBj3Pd47r8-nhsG2PB8eQrPDRY7PLOa9-bfAc3b08Rb0mR3W7LU4L3H0uD1sdQwwIalq1NYarDYZanm3_5_HscDvU5QpSJR2OrN6-WvJoZPWL60SmRyjndSzAubcukXumIjRKXLU1YuvKQ8yhvcFTOjmJvF3Ci2zWLbKO5XxGxf3DfP3GA9MKovzOILo_jSLL40iq_M4qtTErs2J9ZrwKQBsibKzJixBs6YGbT9yWfrN78DAAD__5Ui0HY=

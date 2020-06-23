@@ -1,0 +1,48 @@
+# LogicTest: local
+
+# EXPLAIN test cases for using invertedJoiner on an inverted geospatial index.
+
+statement ok
+CREATE TABLE ltable(
+  lk int primary key,
+  geom geometry
+)
+
+statement ok
+CREATE TABLE rtable(
+  rk1 int,
+  geom geometry,
+  rk2 string,
+  PRIMARY KEY (rk1, rk2),
+  INVERTED INDEX geom_index(geom)
+)
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itGcGmmgsV047GkRBMlViEuSA1JlVcYeRSbOrpldo6DI_x3ZTmkSkai5eWbfm_n2eXfoflWocDGZTj4toZEKvsyTr_A4-f4w_RjP4OZzvFguvk1HsJdUawJZB4Os8tmPiuE-iWcg_bdesd08labgLSQzcP6pNJ7Fce7dzSB_10lor--LUYqExhY8yzbsUD1igClhLTZn56x0rV0viIstqjFhaerGd-2UMLfCqHboS18xKlx2c-ecFSy3YyQs2Gdl1Y-tpdxk8kcPIEi4qDPjFLzFtCW0jX-Z6ny2YlRBS6_fHJvfLJ6Le1saltvgePlLMlqe9z874KctDVijQIcH7cm2lpMMdUig70ZImDRegQ5Ih6Qj0u_P3iG85g4d-z688P_h_YOfWrtu6gP0iPRdB3b633vmD0fM0Vna6BraObvaGsdHpOcmj9uUkIsVD-_J2UZyfhCb92uGMul9faNg54fTYChiMxx1gIfm4KI5vGwOL5qjE3PavvkbAAD__zf5Nns=
+
+query TTT
+EXPLAIN SELECT lk, rk1, rk2, rtable.geom
+FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)
+----
+·                             distribution           local
+·                             vectorized             true
+render                        ·                      ·
+ └── lookup-join              ·                      ·
+      │                       table                  rtable@primary
+      │                       type                   inner
+      │                       equality               (rk1, rk2) = (rk1, rk2)
+      │                       equality cols are key  ·
+      │                       parallel               ·
+      │                       pred                   st_intersects(geom, geom)
+      └── render              ·                      ·
+           └── inverted-join  ·                      ·
+                │             table                  rtable@geom_index
+                │             type                   inner
+                │             ·                      st_intersects(@2, @4)
+                │             parallel               ·
+                └── scan      ·                      ·
+·                             table                  ltable@primary
+·                             spans                  FULL SCAN
