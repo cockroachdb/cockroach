@@ -52,6 +52,9 @@ func ParseAndRequireString(t *types.T, s string, ctx ParseTimeContext) (Datum, e
 		return ParseDJSON(s)
 	case types.OidFamily:
 		i, err := ParseDInt(s)
+		if err != nil {
+			return nil, err
+		}
 		return NewDOid(*i), err
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
