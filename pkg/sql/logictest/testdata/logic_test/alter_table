@@ -1338,3 +1338,19 @@ t2  CREATE TABLE t2 (
     UNIQUE INDEX t2_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
+
+# Regression 50069, computed exprs must only refer to columns inside the
+# current table.
+statement ok
+CREATE TABLE t50069_a (x INT);
+CREATE TABLE t50069_b (x INT);
+
+statement error pq: no data source matches prefix: t50069_b in this context
+ALTER TABLE t50069_a ADD COLUMN y INT AS (t50069_b.x + 1) STORED
+
+statement ok
+CREATE DATABASE d;
+CREATE TABLE d.public.t50069_a (x INT);
+
+statement error pq: no data source matches prefix: d.public.t50069_a in this context
+ALTER TABLE t50069_a ADD COLUMN y INT AS (d.public.t50069_a.x + 1) STORED

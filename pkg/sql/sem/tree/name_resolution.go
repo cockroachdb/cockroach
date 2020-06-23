@@ -232,7 +232,7 @@ func (c *ColumnItem) Resolve(
 		}
 	}
 	if res == NoResults {
-		return nil, newSourceNotFoundError("no data source matches prefix: %s", c.TableName)
+		return nil, newSourceNotFoundError("no data source matches prefix: %s in this context", c.TableName)
 	}
 	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
 }

@@ -139,7 +139,12 @@ func (p *planner) addColumnImpl(
 	}
 
 	if d.IsComputed() {
-		computedColValidator := schemaexpr.NewComputedColumnValidator(params.ctx, n.tableDesc, &params.p.semaCtx)
+		computedColValidator := schemaexpr.NewComputedColumnValidator(
+			params.ctx,
+			n.tableDesc,
+			&params.p.semaCtx,
+			tn,
+		)
 		if err := computedColValidator.Validate(d); err != nil {
 			return err
 		}

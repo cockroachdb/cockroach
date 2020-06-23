@@ -386,7 +386,7 @@ error (42703): column "foo" does not exist
 build
 SELECT a FROM t ORDER BY a.b
 ----
-error (42P01): no data source matches prefix: a
+error (42P01): no data source matches prefix: a in this context
 
 build
 SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
@@ -924,7 +924,7 @@ project
 build
 SELECT a FROM abcd AS foo ORDER BY INDEX abcd@abc DESC
 ----
-error (42P01): no data source matches prefix: t.public.abcd
+error (42P01): no data source matches prefix: t.public.abcd in this context
 
 build
 SELECT a FROM abcd AS foo ORDER BY INDEX foo@abc DESC
@@ -985,7 +985,7 @@ sort
 build
 SELECT a FROM (SELECT a FROM abcd) ORDER BY INDEX abcd@bcd
 ----
-error (42P01): no data source matches prefix: t.public.abcd
+error (42P01): no data source matches prefix: t.public.abcd in this context
 
 # Drop previous table with same name, but different schema.
 exec-ddl
