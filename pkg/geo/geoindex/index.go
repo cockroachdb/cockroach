@@ -83,6 +83,12 @@ type GeographyIndex interface {
 	// ST_Intersects(g, x), where x are the indexed geometries.
 	Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error)
 
+	// DWithin returns the index spans to read and union for the relationship
+	// ST_DWithin(g, x, distanceMeters). That is, there exists a part of geometry g
+	// that is within distance units of x, where x is an indexed geometry.
+	// This function assumes a sphere.
+	DWithin(c context.Context, g *geo.Geography, distanceMeters float64) (UnionKeySpans, error)
+
 	// TestingInnerCovering returns an inner covering of g.
 	TestingInnerCovering(g *geo.Geography) s2.CellUnion
 }
@@ -112,6 +118,17 @@ type GeometryIndex interface {
 	// Intersects returns the index spans to read and union for the relationship
 	// ST_Intersects(g, x), where x are the indexed geometries.
 	Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+
+	// DWithin returns the index spans to read and union for the relationship
+	// ST_DWithin(g, x, distance). That is, there exists a part of geometry g
+	// that is within distance units of x, where x is an indexed geometry.
+	DWithin(c context.Context, g *geo.Geometry, distance float64) (UnionKeySpans, error)
+
+	// DFullyWithin returns the index spans to read and union for the
+	// relationship ST_DFullyWithin(g, x, distance). That is, the maximum distance
+	// across every pair of points comprising geometries g and x is within distance
+	// units, where x is an indexed geometry.
+	DFullyWithin(c context.Context, g *geo.Geometry, distance float64) (UnionKeySpans, error)
 
 	// TestingInnerCovering returns an inner covering of g.
 	TestingInnerCovering(g *geo.Geometry) s2.CellUnion
@@ -437,6 +454,10 @@ func covers(c context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpan
 // scans.
 func intersects(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpans {
 	covering := covering(rc, r)
+	return intersectsUsingCovering(covering)
+}
+
+func intersectsUsingCovering(covering s2.CellUnion) UnionKeySpans {
 	querySpans := make([]KeySpan, len(covering))
 	for i, cid := range covering {
 		querySpans[i] = KeySpan{Start: Key(cid.RangeMin()), End: Key(cid.RangeMax())}

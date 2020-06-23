@@ -14,6 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 )
 
@@ -83,6 +86,35 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 		return nil, err
 	}
 	return intersects(c, i.rc, r), nil
+}
+
+func (i *s2GeographyIndex) DWithin(
+	c context.Context, g *geo.Geography, distanceMeters float64,
+) (UnionKeySpans, error) {
+	projInfo, ok := geoprojbase.Projection(g.SRID())
+	if !ok {
+		return nil, errors.Errorf("projection not found for SRID: %d", g.SRID())
+	}
+	if projInfo.Spheroid == nil {
+		return nil, errors.Errorf("projection %d does not have spheroid", g.SRID())
+	}
+	r, err := g.AsS2(geo.EmptyBehaviorOmit)
+	if err != nil {
+		return nil, err
+	}
+	gCovering := covering(i.rc, r)
+	angle := s1.Angle(distanceMeters / projInfo.Spheroid.SphereRadius)
+	const maxLevelDiff = 2
+	gCovering.ExpandByRadius(angle, maxLevelDiff)
+	var covering s2.CellUnion
+	for _, c := range gCovering {
+		if c.Level() > i.rc.MaxLevel {
+			c = c.Parent(i.rc.MaxLevel)
+		}
+		covering = append(covering, c)
+	}
+	covering.Normalize()
+	return intersectsUsingCovering(covering), nil
 }
 
 func (i *s2GeographyIndex) TestingInnerCovering(g *geo.Geography) s2.CellUnion {
