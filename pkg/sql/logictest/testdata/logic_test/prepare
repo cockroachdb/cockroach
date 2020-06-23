@@ -675,7 +675,7 @@ EXECUTE change_loc
 2000-01-01 18:05:10.123 +0000 UTC
 
 statement ok
-SET TIME ZONE 'EST';
+SET TIME ZONE 'EST'
 
 query T
 EXECUTE change_loc
@@ -683,7 +683,36 @@ EXECUTE change_loc
 2000-01-01 18:05:10.123 -0500 EST
 
 statement ok
-SET TIME ZONE 'UTC';
+SET TIME ZONE 'UTC'
+
+# Similar test with a location-dependent operator. Note that the specified
+# timestamps include the timezone offset so they are the same (as shown by the
+# first column); the difference in the second column comes only from the
+# timezone at the time of execution.
+statement ok
+PREPARE loc_dependent_operator AS
+SELECT
+  extract(EPOCH FROM TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00'),
+  extract(EPOCH FROM TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00' + INTERVAL '1 day')
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query RR
+EXECUTE loc_dependent_operator
+----
+1.28910594e+09  1.28919594e+09
+
+statement ok
+SET TIME ZONE 'Europe/Berlin'
+
+query RR
+EXECUTE loc_dependent_operator
+----
+1.28910594e+09  1.28919234e+09
+
+statement ok
+SET TIME ZONE 'UTC'
 
 ## Permissions: Grant and then revoke permission to select from a table. The
 ## prepared plan should be invalidated.

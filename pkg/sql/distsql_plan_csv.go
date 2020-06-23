@@ -195,27 +195,27 @@ func DistIngest(
 
 	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
 
-	var p PhysicalPlan
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+	p := MakePhysicalPlan(gatewayNodeID)
 
 	// Setup a one-stage plan with one proc per input spec.
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(inputSpecs))
-	for i, rcs := range inputSpecs {
-		proc := physicalplan.Processor{
-			Node: nodes[i],
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{ReadImport: rcs},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
+	for i := range inputSpecs {
+		corePlacement[i].NodeID = nodes[i]
+		corePlacement[i].Core.ReadImport = inputSpecs[i]
 	}
+	p.AddNoInputStage(
+		corePlacement,
+		execinfrapb.PostProcessSpec{},
+		// The direct-ingest readers will emit a binary encoded BulkOpSummary.
+		[]*types.T{types.Bytes, types.Bytes},
+		execinfrapb.Ordering{},
+	)
 
-	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []*types.T{types.Bytes, types.Bytes}
 
 	dsp.FinalizePlan(planCtx, &p)
 

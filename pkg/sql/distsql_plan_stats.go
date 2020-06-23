@@ -202,7 +202,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		RowsExpected:     rowsExpected,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
-	node := dsp.nodeDesc.NodeID
+	node := dsp.gatewayNodeID
 	if len(p.ResultRouters) == 1 {
 		node = p.Processors[p.ResultRouters[0]].Node
 	}

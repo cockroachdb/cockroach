@@ -318,9 +318,6 @@ type planMaybePhysical struct {
 	// physPlan (when non-nil) contains the physical plan that has not yet
 	// been finalized.
 	physPlan *PhysicalPlan
-	// distribution (when physPlan is non-nil) is the indicator of the
-	// distribution of the physical plan.
-	distribution planDistribution
 }
 
 func (p planMaybePhysical) isPhysicalPlan() bool {

@@ -175,7 +175,7 @@ func (eh *ExprHelper) Init(
 	if expr.LocalExpr != nil {
 		eh.Expr = expr.LocalExpr
 		// Bind IndexedVars to our eh.Vars.
-		eh.Vars.Rebind(eh.Expr, true /* alsoReset */, false /* normalizeToNonNil */)
+		eh.Vars.Rebind(eh.Expr)
 		return nil
 	}
 	var err error

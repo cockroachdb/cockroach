@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -146,4 +147,33 @@ func constructExplainPlanNode(
 	default:
 		panic(fmt.Sprintf("unsupported explain mode %v", options.Mode))
 	}
+}
+
+// getResultColumnsForSimpleProject populates result columns for a simple
+// projection. It supports two configurations:
+// 1. colNames and resultTypes are non-nil. resultTypes indicates the updated
+//    types (after the projection has been applied)
+// 2. if colNames is nil, then inputCols must be non-nil (which are the result
+//    columns before the projection has been applied).
+func getResultColumnsForSimpleProject(
+	cols []exec.NodeColumnOrdinal,
+	colNames []string,
+	resultTypes []*types.T,
+	inputCols sqlbase.ResultColumns,
+) sqlbase.ResultColumns {
+	resultCols := make(sqlbase.ResultColumns, len(cols))
+	for i, col := range cols {
+		if colNames == nil {
+			resultCols[i] = inputCols[col]
+			// If we have a SimpleProject, we should clear the hidden bit on any
+			// column since it indicates it's been explicitly selected.
+			resultCols[i].Hidden = false
+		} else {
+			resultCols[i] = sqlbase.ResultColumn{
+				Name: colNames[i],
+				Typ:  resultTypes[i],
+			}
+		}
+	}
+	return resultCols
 }

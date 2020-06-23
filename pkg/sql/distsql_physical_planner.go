@@ -70,11 +70,13 @@ type DistSQLPlanner struct {
 	planVersion execinfrapb.DistSQLVersion
 
 	st *cluster.Settings
-	// The node descriptor for the gateway node that initiated this query.
-	nodeDesc     roachpb.NodeDescriptor
-	stopper      *stop.Stopper
-	distSQLSrv   *distsql.ServerImpl
-	spanResolver physicalplan.SpanResolver
+	// The nodeID of the gateway node that initiated this query.
+	// TODO(asubiotto): This usage of NodeID instead of SQLInstanceID is
+	//  temporary: https://github.com/cockroachdb/cockroach/issues/49596
+	gatewayNodeID roachpb.NodeID
+	stopper       *stop.Stopper
+	distSQLSrv    *distsql.ServerImpl
+	spanResolver  physicalplan.SpanResolver
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
 	// processors.
@@ -94,9 +96,9 @@ type DistSQLPlanner struct {
 	// on unhealthy nodes.
 	nodeHealth distSQLNodeHealth
 
-	// distSender is used to construct the spanResolver upon SetNodeDesc.
+	// distSender is used to construct the spanResolver upon SetNodeInfo.
 	distSender *kvcoord.DistSender
-	// rpcCtx is used to construct the spanResolver upon SetNodeDesc.
+	// rpcCtx is used to construct the spanResolver upon SetNodeInfo.
 	rpcCtx *rpc.Context
 }
 
@@ -111,15 +113,17 @@ var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", fals
 
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //
-// nodeDesc is the descriptor of the node on which this planner runs. It is used
-// to favor itself and other close-by nodes when planning. An empty descriptor
-// can be passed to aid bootstrapping, but then SetNodeDesc() needs to be called
+// nodeID is the ID of the node on which this planner runs. It is used to favor
+// itself and other close-by nodes when planning. An invalid nodeID can be
+// passed to aid bootstrapping, but then SetNodeInfo() needs to be called
 // before this planner is used.
+// TODO(asubiotto): This usage of NodeID instead of SQLInstanceID is
+//  temporary: https://github.com/cockroachdb/cockroach/issues/49596
 func NewDistSQLPlanner(
 	ctx context.Context,
 	planVersion execinfrapb.DistSQLVersion,
 	st *cluster.Settings,
-	nodeDesc roachpb.NodeDescriptor,
+	nodeID roachpb.NodeID,
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsql.ServerImpl,
 	distSender *kvcoord.DistSender,
@@ -129,13 +133,13 @@ func NewDistSQLPlanner(
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
-		planVersion: planVersion,
-		st:          st,
-		nodeDesc:    nodeDesc,
-		stopper:     stopper,
-		distSQLSrv:  distSQLSrv,
-		gossip:      gw,
-		nodeDialer:  nodeDialer,
+		planVersion:   planVersion,
+		st:            st,
+		gatewayNodeID: nodeID,
+		stopper:       stopper,
+		distSQLSrv:    distSQLSrv,
+		gossip:        gw,
+		nodeDialer:    nodeDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:     gw,
 			connHealth: nodeDialer.ConnHealth,
@@ -154,10 +158,10 @@ func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
 	return dsp.distSQLSrv.TestingKnobs.MetadataTestLevel >= dsp.metadataTestTolerance
 }
 
-// SetNodeDesc sets the planner's node descriptor.
-// The first call to SetNodeDesc leads to the construction of the SpanResolver.
-func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
-	dsp.nodeDesc = desc
+// SetNodeInfo sets the planner's node descriptor.
+// The first call to SetNodeInfo leads to the construction of the SpanResolver.
+func (dsp *DistSQLPlanner) SetNodeInfo(desc roachpb.NodeDescriptor) {
+	dsp.gatewayNodeID = desc.NodeID
 	if dsp.spanResolver == nil {
 		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.gossip, desc,
 			dsp.rpcCtx, ReplicaOraclePolicy)
@@ -247,55 +251,6 @@ func (a distRecommendation) compose(b distRecommendation) distRecommendation {
 		return shouldDistribute
 	}
 	return canDistribute
-}
-
-type planDistribution int
-
-const (
-	// localPlan indicates that the whole plan is executed on a single node.
-	localPlan planDistribution = iota
-
-	// partiallyDistributedPlan indicates that some parts of the plan are
-	// distributed while other parts are not (due to limitations of DistSQL).
-	// Note that such plans can only be created by distSQLSpecExecFactory.
-	//
-	// An example of such plan is the plan with distributed scans that have a
-	// filter which operates with an OID type (DistSQL currently doesn't
-	// support distributed operations with such type). As a result, we end
-	// up planning a noop processor on a local node that receives all scanned
-	// rows from the remote nodes while performing the filtering locally.
-	partiallyDistributedPlan
-
-	// fullyDistributedPlan indicates the the whole plan is distributed.
-	fullyDistributedPlan
-)
-
-// willDistribute is a small helper that returns whether at least a part of the
-// plan is distributed.
-func (a planDistribution) willDistribute() bool {
-	return a != localPlan
-}
-
-func (a planDistribution) String() string {
-	switch a {
-	case localPlan:
-		return "local"
-	case partiallyDistributedPlan:
-		return "partial"
-	case fullyDistributedPlan:
-		return "full"
-	default:
-		panic(fmt.Sprintf("unsupported planDistribution %d", a))
-	}
-}
-
-// compose returns the distribution indicator of a plan given indicators for
-// two parts of it.
-func (a planDistribution) compose(b planDistribution) planDistribution {
-	if a != b {
-		return partiallyDistributedPlan
-	}
-	return a
 }
 
 type queryNotSupportedError struct {
@@ -644,6 +599,11 @@ type PhysicalPlan struct {
 	PlanToStreamColMap []int
 }
 
+// MakePhysicalPlan returns a new PhysicalPlan.
+func MakePhysicalPlan(gatewayNodeID roachpb.NodeID) PhysicalPlan {
+	return PhysicalPlan{PhysicalPlan: physicalplan.PhysicalPlan{GatewayNodeID: gatewayNodeID}}
+}
+
 // makePlanToStreamColMap initializes a new PhysicalPlan.PlanToStreamColMap. The
 // columns that are present in the result stream(s) should be set in the map.
 func makePlanToStreamColMap(numCols int) []int {
@@ -760,7 +720,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	if planCtx.isLocal {
 		// If we're planning locally, map all spans to the local node.
 		partitions = append(partitions,
-			SpanPartition{dsp.nodeDesc.NodeID, spans})
+			SpanPartition{dsp.gatewayNodeID, spans})
 		return partitions, nil
 	}
 	// nodeMap maps a nodeID to an index inside the partitions array.
@@ -825,7 +785,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				// An empty address indicates an unhealthy host.
 				if status != NodeOK {
 					log.Eventf(ctx, "not planning on node %d: %s", nodeID, status)
-					nodeID = dsp.nodeDesc.NodeID
+					nodeID = dsp.gatewayNodeID
 					partitionIdx, inNodeMap = nodeMap[nodeID]
 				}
 
@@ -1048,7 +1008,7 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 	status := dsp.CheckNodeHealthAndVersion(planCtx, nodeID)
 	if status != NodeOK {
 		log.Eventf(planCtx.ctx, "not planning on node %d: %s", nodeID, status)
-		return dsp.nodeDesc.NodeID, nil
+		return dsp.gatewayNodeID, nil
 	}
 	return nodeID, nil
 }
@@ -1091,7 +1051,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return nil, err
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(dsp.gatewayNodeID)
 	err = dsp.planTableReaders(
 		planCtx,
 		&p,
@@ -1137,7 +1097,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		err            error
 	)
 	if planCtx.isLocal {
-		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, info.spans}}
+		spanPartitions = []SpanPartition{{dsp.gatewayNodeID, info.spans}}
 	} else if info.post.Limit == 0 {
 		// No hard limit - plan all table readers where their data live. Note
 		// that we're ignoring soft limits for now since the TableReader will
@@ -1158,13 +1118,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		spanPartitions = []SpanPartition{{nodeID, info.spans}}
 	}
 
-	stageID := p.NewStageID()
-
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
-	p.Processors = make([]physicalplan.Processor, 0, len(spanPartitions))
-
-	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		var tr *execinfrapb.TableReaderSpec
 		if i == 0 {
@@ -1190,29 +1144,11 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			p.MaxEstimatedRowCount = info.estimatedRowCount
 		}
 
-		proc := physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{TableReader: tr},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].Core.TableReader = tr
 	}
 
-	if len(p.ResultRouters) > 1 && len(info.reqOrdering) > 0 {
-		// Make a note of the fact that we have to maintain a certain ordering
-		// between the parallel streams.
-		//
-		// This information is taken into account by the AddProjection call below:
-		// specifically, it will make sure these columns are kept even if they are
-		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdrinalMap))
-	}
-
+	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
 	var typs []*types.T
 	if returnMutations {
 		typs = make([]*types.T, 0, len(info.desc.Columns)+len(info.desc.MutationColumns()))
@@ -1227,7 +1163,10 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			typs = append(typs, col.Type)
 		}
 	}
-	p.SetLastStagePost(info.post, typs)
+
+	p.AddNoInputStage(
+		corePlacement, info.post, typs, dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdrinalMap),
+	)
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdrinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
@@ -1793,7 +1732,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// No GROUP BY, or we have a single stream. Use a single final aggregator.
 		// If the previous stage was all on a single node, put the final
 		// aggregator there. Otherwise, bring the results back on this node.
-		node := dsp.nodeDesc.NodeID
+		node := dsp.gatewayNodeID
 		if prevStageNode != 0 {
 			node = prevStageNode
 		}
@@ -1814,7 +1753,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 			}
 		}
 
-		stageID := p.NewStageID()
+		// We have multiple streams, so we definitely have a processor planned
+		// on a remote node.
+		stageID := p.NewStage(true /* containsRemoteProcessor */)
 
 		// We have one final stage processor for each result router. This is a
 		// somewhat arbitrary decision; we could have a different number of nodes
@@ -2033,7 +1974,8 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
-	plan = &PhysicalPlan{}
+	p := MakePhysicalPlan(dsp.gatewayNodeID)
+	plan = &p
 
 	tables := make([]sqlbase.TableDescriptor, len(n.sides))
 	indexOrdinals := make([]uint32, len(n.sides))
@@ -2109,15 +2051,6 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		colOffset += len(side.scan.desc.Columns)
 	}
 
-	// Figure out the node where this zigzag joiner goes.
-	//
-	// TODO(itsbilal): Add support for restricting the Zigzag joiner
-	// to a certain set of spans (similar to the InterleavedReaderJoiner)
-	// on one side. Once that's done, we can split this processor across
-	// multiple nodes here. Until then, schedule on the current node.
-	nodeID := dsp.nodeDesc.NodeID
-
-	stageID := plan.NewStageID()
 	// Set the ON condition.
 	if n.onCond != nil {
 		// Note that the ON condition refers to the *internal* columns of the
@@ -2134,24 +2067,19 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 	}
 
-	// Build the PhysicalPlan.
-	proc := physicalplan.Processor{
-		Node: nodeID,
-		Spec: execinfrapb.ProcessorSpec{
-			Core:    execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
-			Post:    post,
-			Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-			StageID: stageID,
-		},
-	}
+	// Figure out the node where this zigzag joiner goes.
+	//
+	// TODO(itsbilal): Add support for restricting the Zigzag joiner
+	// to a certain set of spans (similar to the InterleavedReaderJoiner)
+	// on one side. Once that's done, we can split this processor across
+	// multiple nodes here. Until then, schedule on the current node.
+	corePlacement := []physicalplan.ProcessorCorePlacement{{
+		NodeID: dsp.gatewayNodeID,
+		Core:   execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
+	}}
 
-	plan.Processors = append(plan.Processors, proc)
-
-	// Each result router correspond to each of the processors we appended.
-	plan.ResultRouters = []physicalplan.ProcessorIdx{physicalplan.ProcessorIdx(0)}
-
+	plan.AddNoInputStage(corePlacement, post, types, execinfrapb.Ordering{})
 	plan.PlanToStreamColMap = planToStreamColMap
-	plan.ResultTypes = types
 
 	return plan, nil
 }
@@ -2250,10 +2178,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.PlanToStreamColMap)
 	}
 
-	var p PhysicalPlan
-	var leftRouters, rightRouters []physicalplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = physicalplan.MergePlans(
-		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+	p := MakePhysicalPlan(dsp.gatewayNodeID)
+	leftRouters, rightRouters := physicalplan.MergePlans(
+		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
 	)
 
 	// Set up the output columns.
@@ -2276,7 +2203,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	} else {
 		// Without column equality, we cannot distribute the join. Run a
 		// single processor.
-		nodes = []roachpb.NodeID{dsp.nodeDesc.NodeID}
+		nodes = []roachpb.NodeID{dsp.gatewayNodeID}
 
 		// If either side has a single stream, put the processor on that node. We
 		// prefer the left side because that is processed first by the hash joiner.
@@ -2392,7 +2319,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
 			return nil, err
 		}
-		if err := plan.AddLimit(n.count, n.offset, planCtx, dsp.nodeDesc.NodeID); err != nil {
+		if err := plan.AddLimit(n.count, n.offset, planCtx); err != nil {
 			return nil, err
 		}
 
@@ -2508,7 +2435,8 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
 	nParents := uint32(0)
-	p := &PhysicalPlan{}
+	plan := MakePhysicalPlan(dsp.gatewayNodeID)
+	p := &plan
 	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
 	// modify its parent later to connect its source to the DistSQL-planned
 	// subtree.
@@ -2580,7 +2508,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	}
 	name := nodeName(n)
 	proc := physicalplan.Processor{
-		Node: dsp.nodeDesc.NodeID,
+		Node: dsp.gatewayNodeID,
 		Spec: execinfrapb.ProcessorSpec{
 			Input: input,
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
@@ -2592,7 +2520,8 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
 			}},
-			StageID: p.NewStageID(),
+			// This stage consists of a single processor planned on the gateway.
+			StageID: p.NewStage(false /* containsRemoteProcessor */),
 		},
 	}
 	pIdx := p.AddProcessor(proc)
@@ -2638,7 +2567,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 	plan := physicalplan.PhysicalPlan{
 		Processors: []physicalplan.Processor{{
 			// TODO: find a better node to place processor at
-			Node: dsp.nodeDesc.NodeID,
+			Node: dsp.gatewayNodeID,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:   execinfrapb.ProcessorCoreUnion{Values: &s},
 				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
@@ -2646,6 +2575,8 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 		}},
 		ResultRouters: []physicalplan.ProcessorIdx{0},
 		ResultTypes:   resultTypes,
+		GatewayNodeID: dsp.gatewayNodeID,
+		Distribution:  physicalplan.LocalPlan,
 	}
 
 	return &PhysicalPlan{
@@ -2776,7 +2707,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	plan.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
 
 	// TODO(arjun): We could distribute this final stage by hash.
-	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+	plan.AddSingleGroupStage(dsp.gatewayNodeID, distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
 }
@@ -2798,7 +2729,7 @@ func (dsp *DistSQLPlanner) createPlanForOrdinality(
 
 	// WITH ORDINALITY never gets distributed so that the gateway node can
 	// always number each row in order.
-	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, ordinalitySpec, execinfrapb.PostProcessSpec{}, outputTypes)
+	plan.AddSingleGroupStage(dsp.gatewayNodeID, ordinalitySpec, execinfrapb.PostProcessSpec{}, outputTypes)
 
 	return plan, nil
 }
@@ -2854,7 +2785,7 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	// filtered), we could try to detect these cases and use AddNoGroupingStage
 	// instead.
 	outputTypes := append(plan.ResultTypes, projectSetSpec.GeneratedColumns...)
-	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
+	plan.AddSingleGroupStage(dsp.gatewayNodeID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
 
 	// Add generated columns to PlanToStreamColMap.
 	for i := range projectSetSpec.GeneratedColumns {
@@ -2869,7 +2800,7 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *PhysicalPlan) bool {
 	if len(plan.ResultRouters) == 1 {
 		processorIdx := plan.ResultRouters[0]
-		if plan.Processors[processorIdx].Node == dsp.nodeDesc.NodeID {
+		if plan.Processors[processorIdx].Node == dsp.gatewayNodeID {
 			return true
 		}
 	}
@@ -2983,14 +2914,13 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			if !dsp.isOnlyOnGateway(plan) {
 				// TODO(solon): We could skip this stage if there is a strong key on
 				// the result columns.
-				plan.AddNoGroupingStage(
-					*distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, distinctOrds[side])
+				plan.AddNoGroupingStage(*distinctSpec, execinfrapb.PostProcessSpec{}, plan.ResultTypes, distinctOrds[side])
 				plan.AddProjection(streamCols)
 			}
 		}
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(dsp.gatewayNodeID)
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap
@@ -3012,9 +2942,9 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	var mergeOrdering execinfrapb.Ordering
 
 	// Merge processors, streams, result routers, and stage counter.
-	var leftRouters, rightRouters []physicalplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = physicalplan.MergePlans(
-		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
+	leftRouters, rightRouters := physicalplan.MergePlans(
+		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+	)
 
 	if n.unionType == tree.UnionOp {
 		// We just need to append the left and right streams together, so append
@@ -3031,8 +2961,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			distinctSpec := execinfrapb.ProcessorCoreUnion{
 				Distinct: &execinfrapb.DistinctSpec{DistinctColumns: streamCols},
 			}
-			p.AddSingleGroupStage(
-				dsp.nodeDesc.NodeID, distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes)
+			p.AddSingleGroupStage(dsp.gatewayNodeID, distinctSpec, execinfrapb.PostProcessSpec{}, p.ResultTypes)
 		} else {
 			// With UNION ALL, we can end up with multiple streams on the same node.
 			// We don't want to have unnecessary routers and cross-node streams, so
@@ -3049,12 +2978,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// which would violate an assumption later down the line. Check for this
 			// condition and add a no-op stage if it exists.
 			if err := p.CheckLastStagePost(); err != nil {
-				p.AddSingleGroupStage(
-					dsp.nodeDesc.NodeID,
-					execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-					execinfrapb.PostProcessSpec{},
-					p.ResultTypes,
-				)
+				p.EnsureSingleStreamOnGateway()
 			}
 		}
 	} else {
@@ -3184,7 +3108,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			// No PARTITION BY or we have a single node. Use a single windower.
 			// If the previous stage was all on a single node, put the windower
 			// there. Otherwise, bring the results back on this node.
-			node := dsp.nodeDesc.NodeID
+			node := dsp.gatewayNodeID
 			if len(nodes) == 1 {
 				node = nodes[0]
 			}
@@ -3205,7 +3129,9 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 					HashColumns: partitionIdxs,
 				}
 			}
-			stageID := plan.NewStageID()
+			// We have multiple streams, so we definitely have a processor planned
+			// on a remote node.
+			stageID := plan.NewStage(true /* containsRemoteProcessor */)
 
 			// We put a windower on each node and we connect it
 			// with all hash routers from the previous stage in
@@ -3323,7 +3249,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	}
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeStatuses = make(map[roachpb.NodeID]NodeStatus)
-	planCtx.NodeStatuses[dsp.nodeDesc.NodeID] = NodeOK
+	planCtx.NodeStatuses[dsp.gatewayNodeID] = NodeOK
 	return planCtx
 }
 
@@ -3338,25 +3264,13 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
 		}
 	}
-	thisNodeID := dsp.nodeDesc.NodeID
-	// If we don't already have a single result router on this node, add a final
-	// stage.
-	if len(plan.ResultRouters) != 1 ||
-		plan.Processors[plan.ResultRouters[0]].Node != thisNodeID {
-		plan.AddSingleGroupStage(
-			thisNodeID,
-			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
-			execinfrapb.PostProcessSpec{},
-			plan.ResultTypes,
-		)
-		if len(plan.ResultRouters) != 1 {
-			panic(fmt.Sprintf("%d results after single group stage", len(plan.ResultRouters)))
-		}
-	}
+
+	// Add a final "result" stage if necessary.
+	plan.EnsureSingleStreamOnGateway()
 
 	if len(metadataSenders) > 0 {
 		plan.AddSingleGroupStage(
-			thisNodeID,
+			dsp.gatewayNodeID,
 			execinfrapb.ProcessorCoreUnion{
 				MetadataTestReceiver: &execinfrapb.MetadataTestReceiverSpec{
 					SenderIDs: metadataSenders,

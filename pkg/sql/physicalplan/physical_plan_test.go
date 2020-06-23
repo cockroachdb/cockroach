@@ -314,6 +314,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
 			},
 			ResultRouters: []ProcessorIdx{0, 1},
+			Distribution:  LocalPlan,
 		}
 
 		if tc.ordering != "" {

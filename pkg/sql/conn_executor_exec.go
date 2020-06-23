@@ -759,7 +759,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
 		ctx, planner.execCfg.NodeID, ex.sessionData.DistSQLMode, planner.curPlan.main,
-	).willDistribute()
+	).WillDistribute()
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
@@ -775,7 +775,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		panic(fmt.Sprintf("query %d not in registry", stmt.queryID))
 	}
 	queryMeta.phase = executing
-	// TODO(yuzefovich): introduce ternary planDistribution into queryMeta.
+	// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
 	queryMeta.isDistributed = distributePlan
 	progAtomic := &queryMeta.progressAtomic
 	ex.mu.Unlock()

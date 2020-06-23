@@ -814,12 +814,12 @@ func TestPartitionSpans(t *testing.T) {
 
 			gw := gossip.MakeExposedGossip(mockGossip)
 			dsp := DistSQLPlanner{
-				planVersion:  execinfra.Version,
-				st:           cluster.MakeTestingClusterSettings(),
-				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
-				stopper:      stopper,
-				spanResolver: tsp,
-				gossip:       gw,
+				planVersion:   execinfra.Version,
+				st:            cluster.MakeTestingClusterSettings(),
+				gatewayNodeID: tsp.nodes[tc.gatewayNode-1].NodeID,
+				stopper:       stopper,
+				spanResolver:  tsp,
+				gossip:        gw,
 				nodeHealth: distSQLNodeHealth{
 					gossip: gw,
 					connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
@@ -1001,12 +1001,12 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 
 			gw := gossip.MakeExposedGossip(mockGossip)
 			dsp := DistSQLPlanner{
-				planVersion:  tc.planVersion,
-				st:           cluster.MakeTestingClusterSettings(),
-				nodeDesc:     *tsp.nodes[gatewayNode-1],
-				stopper:      stopper,
-				spanResolver: tsp,
-				gossip:       gw,
+				planVersion:   tc.planVersion,
+				st:            cluster.MakeTestingClusterSettings(),
+				gatewayNodeID: tsp.nodes[gatewayNode-1].NodeID,
+				stopper:       stopper,
+				spanResolver:  tsp,
+				gossip:        gw,
 				nodeHealth: distSQLNodeHealth{
 					gossip: gw,
 					connHealth: func(roachpb.NodeID, rpc.ConnectionClass) error {
@@ -1099,12 +1099,12 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	gw := gossip.MakeExposedGossip(mockGossip)
 	dsp := DistSQLPlanner{
-		planVersion:  execinfra.Version,
-		st:           cluster.MakeTestingClusterSettings(),
-		nodeDesc:     *tsp.nodes[gatewayNode-1],
-		stopper:      stopper,
-		spanResolver: tsp,
-		gossip:       gw,
+		planVersion:   execinfra.Version,
+		st:            cluster.MakeTestingClusterSettings(),
+		gatewayNodeID: tsp.nodes[gatewayNode-1].NodeID,
+		stopper:       stopper,
+		spanResolver:  tsp,
+		gossip:        gw,
 		nodeHealth: distSQLNodeHealth{
 			gossip: gw,
 			connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
