@@ -85,8 +85,55 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 func (e *distSQLSpecExecFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
-	// TODO(yuzefovich): make sure to not distribute when rows == 0.
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	if (len(cols) == 0 && len(rows) == 1) || len(rows) == 0 {
+		physPlan, err := e.dsp.createValuesPlan(
+			getTypesFromResultColumns(cols), len(rows), nil, /* rawBytes */
+		)
+		if err != nil {
+			return nil, err
+		}
+		physPlan.ResultColumns = cols
+		return planMaybePhysical{physPlan: &physicalPlanTop{PhysicalPlan: physPlan}}, nil
+	}
+	recommendation := shouldDistribute
+	for _, exprs := range rows {
+		recommendation = recommendation.compose(
+			e.checkExprsAndMaybeMergeLastStage(exprs, nil /* physPlan */),
+		)
+		if recommendation == cannotDistribute {
+			break
+		}
+	}
+
+	var (
+		physPlan         *PhysicalPlan
+		err              error
+		planNodesToClose []planNode
+	)
+	planCtx := e.getPlanCtx(recommendation)
+	if mustWrapValuesNode(planCtx, true /* specifiedInQuery */) {
+		// The valuesNode must be wrapped into the physical plan, so we cannot
+		// avoid creating it. See mustWrapValuesNode for more details.
+		v := &valuesNode{
+			columns:          cols,
+			tuples:           rows,
+			specifiedInQuery: true,
+		}
+		planNodesToClose = []planNode{v}
+		physPlan, err = e.dsp.wrapPlan(planCtx, v)
+	} else {
+		// We can create a spec for the values processor, so we don't create a
+		// valuesNode.
+		physPlan, err = e.dsp.createPhysPlanForTuples(planCtx, rows, cols)
+	}
+	if err != nil {
+		return nil, err
+	}
+	physPlan.ResultColumns = cols
+	return planMaybePhysical{physPlan: &physicalPlanTop{
+		PhysicalPlan:     physPlan,
+		planNodesToClose: planNodesToClose,
+	}}, nil
 }
 
 // ConstructScan implements exec.Factory interface by combining the logic that
@@ -135,12 +182,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	p.ResultColumns = sqlbase.ResultColumnsFromColDescPtrs(tabDesc.GetID(), cols)
 
 	if indexConstraint != nil && indexConstraint.IsContradiction() {
-		// TODO(yuzefovich): once ConstructValues is implemented, consider
-		// calling it here.
-		physPlan, err := e.dsp.createValuesPlan(
-			getTypesFromResultColumns(p.ResultColumns), 0 /* numRows */, nil, /* rawBytes */
-		)
-		return planMaybePhysical{physPlan: physPlan}, err
+		// Note that empty rows argument is handled by ConstructValues first -
+		// it will always create an appropriate values processor spec, so there
+		// will be no planNodes created (which is what we want in this case).
+		return e.ConstructValues([][]tree.TypedExpr{} /* rows */, p.ResultColumns)
 	}
 
 	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
@@ -224,31 +269,33 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		},
 	)
 
-	return planMaybePhysical{physPlan: &p}, err
+	return planMaybePhysical{physPlan: &physicalPlanTop{PhysicalPlan: &p}}, err
 }
 
 // checkExprsAndMaybeMergeLastStage is a helper method that returns a
 // recommendation about exprs' distribution. If one of the expressions cannot
 // be distributed, then all expressions cannot be distributed either. In such
 // case if the last stage is distributed, this method takes care of merging the
-// streams on the gateway node.
+// streams on the gateway node. physPlan may be nil.
 func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
-	physPlan *PhysicalPlan, exprs tree.TypedExprs,
+	exprs tree.TypedExprs, physPlan *PhysicalPlan,
 ) distRecommendation {
 	// We recommend for exprs' distribution to be the same as the last stage
-	// of processors.
-	recommendation := shouldNotDistribute
-	if physPlan.IsLastStageDistributed() {
-		recommendation = shouldDistribute
+	// of processors (if there is such).
+	recommendation := shouldDistribute
+	if physPlan != nil && !physPlan.IsLastStageDistributed() {
+		recommendation = shouldNotDistribute
 	}
 	for _, expr := range exprs {
 		if err := checkExpr(expr); err != nil {
 			recommendation = cannotDistribute
-			// The filter expression cannot be distributed, so we need to make
-			// sure that there is a single stream on a node. We could do so on
-			// one of the nodes that streams originate from, but for now we
-			// choose the gateway.
-			physPlan.EnsureSingleStreamOnGateway()
+			if physPlan != nil {
+				// The filter expression cannot be distributed, so we need to
+				// make sure that there is a single stream on a node. We could
+				// do so on one of the nodes that streams originate from, but
+				// for now we choose the gateway.
+				physPlan.EnsureSingleStreamOnGateway()
+			}
 			break
 		}
 	}
@@ -259,7 +306,7 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
-	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, []tree.TypedExpr{filter})
+	recommendation := e.checkExprsAndMaybeMergeLastStage([]tree.TypedExpr{filter}, physPlan)
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
 	if err := physPlan.AddFilter(filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
@@ -306,7 +353,7 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
-	recommendation := e.checkExprsAndMaybeMergeLastStage(physPlan, exprs)
+	recommendation := e.checkExprsAndMaybeMergeLastStage(exprs, physPlan)
 	if err := physPlan.AddRendering(
 		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
 	); err != nil {
@@ -822,7 +869,7 @@ func (e *distSQLSpecExecFactory) ConstructExport(
 
 func getPhysPlan(n exec.Node) (*PhysicalPlan, planMaybePhysical) {
 	plan := n.(planMaybePhysical)
-	return plan.physPlan, plan
+	return plan.physPlan.PhysicalPlan, plan
 }
 
 func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
@@ -834,13 +881,13 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	mergeJoinOrdering sqlbase.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	leftPlan, _ := getPhysPlan(left)
-	rightPlan, _ := getPhysPlan(right)
-	resultColumns := getJoinResultColumns(joinType, leftPlan.ResultColumns, rightPlan.ResultColumns)
-	leftMap, rightMap := leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap
+	leftPhysPlan, leftPlan := getPhysPlan(left)
+	rightPhysPlan, rightPlan := getPhysPlan(right)
+	resultColumns := getJoinResultColumns(joinType, leftPhysPlan.ResultColumns, rightPhysPlan.ResultColumns)
+	leftMap, rightMap := leftPhysPlan.PlanToStreamColMap, rightPhysPlan.PlanToStreamColMap
 	helper := &joinPlanningHelper{
-		numLeftCols:             len(leftPlan.ResultColumns),
-		numRightCols:            len(rightPlan.ResultColumns),
+		numLeftCols:             len(leftPhysPlan.ResultColumns),
+		numRightCols:            len(rightPhysPlan.ResultColumns),
 		leftPlanToStreamColMap:  leftMap,
 		rightPlanToStreamColMap: rightMap,
 	}
@@ -855,8 +902,8 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	leftEqColsRemapped := eqCols(leftEqCols, leftMap)
 	rightEqColsRemapped := eqCols(rightEqCols, rightMap)
 	p := e.dsp.planJoiners(&joinPlanningInfo{
-		leftPlan:              leftPlan,
-		rightPlan:             rightPlan,
+		leftPlan:              leftPhysPlan,
+		rightPlan:             rightPhysPlan,
 		joinType:              joinType,
 		joinResultTypes:       getTypesFromResultColumns(resultColumns),
 		onExpr:                onExpr,
@@ -868,9 +915,12 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 		rightEqColsAreKey:     rightEqColsAreKey,
 		leftMergeOrd:          distsqlOrdering(mergeJoinOrdering, leftEqColsRemapped),
 		rightMergeOrd:         distsqlOrdering(mergeJoinOrdering, rightEqColsRemapped),
-		leftPlanDistribution:  leftPlan.Distribution,
-		rightPlanDistribution: rightPlan.Distribution,
+		leftPlanDistribution:  leftPhysPlan.Distribution,
+		rightPlanDistribution: rightPhysPlan.Distribution,
 	}, ReqOrdering(reqOrdering))
 	p.ResultColumns = resultColumns
-	return planMaybePhysical{physPlan: p}, nil
+	return planMaybePhysical{physPlan: &physicalPlanTop{
+		PhysicalPlan:     p,
+		planNodesToClose: append(leftPlan.physPlan.planNodesToClose, rightPlan.physPlan.planNodesToClose...),
+	}}, nil
 }
