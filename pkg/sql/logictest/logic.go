@@ -638,12 +638,14 @@ var (
 		"local",
 		"local-vec-off",
 		"local-vec-auto",
+		"local-spec-planning",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-vec-auto",
 		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
+		"fakedist-spec-planning",
 		"3node-tenant",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
