@@ -216,3 +216,7 @@ ignored = [
 [[constraint]]
   name = "github.com/Azure/azure-sdk-for-go"
   version = "33.0.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/cockroachdb/redact"
