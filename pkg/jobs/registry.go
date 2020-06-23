@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 const defaultLeniencySetting = 60 * time.Second
@@ -232,6 +232,13 @@ func (r *Registry) CurrentlyRunningJobs() []int64 {
 	return jobs
 }
 
+// ID returns a unique during the lifetume of the registry id that is
+// used for keying sqlliveness claims held by the registry.
+func (r *Registry) ID() string {
+	// TODO: prepend sqlpod: in front?
+	return r.nodeID.SQLInstanceID().String()
+}
+
 // lenientNow returns the timestamp after which we should attempt
 // to steal a job from a node whose liveness is failing.  This allows
 // jobs coordinated by a node which is temporarily saturated to continue.
@@ -374,9 +381,35 @@ func (r *Registry) NewJob(record Record) *Job {
 // current node a lease.
 func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
-	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
+	if false { // TODO
+		if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO get epoch and write job in same txn?
+	liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval+5*time.Second)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting live epoch")
+	}
+	jobID := r.makeJobID()
+	//j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
+	payloadBytes, err := protoutil.Marshal(&j.mu.payload)
+	if err != nil {
 		return nil, err
 	}
+	progressBytes, err := protoutil.Marshal(&j.mu.progress)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = j.registry.ex.Exec(ctx, "job-insert", txn, `
+INSERT INTO system.jobs (id, status, payload, progress, sqlliveness_name, sqlliveness_epoch)
+VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, r.ID(), liveEpoch,
+	); err != nil {
+		return nil, err
+	}
+
+	j.id = &jobID
 	return j, nil
 }
 
@@ -506,6 +539,8 @@ func (r *Registry) Start(
 	}
 
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		// TODO run both adoption loops in parallel.
+		return
 		for {
 			select {
 			case <-stopper.ShouldStop():
@@ -518,6 +553,45 @@ func (r *Registry) Start(
 			}
 		}
 	})
+
+	claimAndProcessJobs := func(ctx context.Context) {
+		if r.adoptionDisabled(ctx) {
+			r.cancelAll(ctx)
+			return
+		}
+		liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval+5*time.Second)
+		if err != nil {
+			log.Errorf(ctx, "error getting live epoch: %s", err)
+			return
+		}
+		log.Infof(ctx, "Registry live claim (name: %s, epoch: %d).\n", r.ID(), liveEpoch)
+		liveClaims, err := r.cm.GetLiveClaims(ctx)
+		if err != nil {
+			log.Errorf(ctx, "error getting live claims: %s", err)
+			return
+		}
+		log.Infof(ctx, "Cluster live claims: %+v", liveClaims)
+		if err := r.claimJobs(ctx, liveEpoch, liveClaims); err != nil {
+			log.Errorf(ctx, "error claiming jobs: %s", err)
+		}
+		if err := r.processClaimedJobs(ctx, liveEpoch); err != nil {
+			log.Errorf(ctx, "error processing claimed jobs: %s", err)
+		}
+	}
+
+	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		for {
+			select {
+			case <-stopper.ShouldStop():
+				return
+			case <-r.adoptionCh:
+				claimAndProcessJobs(ctx)
+			case <-time.After(adoptInterval):
+				claimAndProcessJobs(ctx)
+			}
+		}
+	})
+
 	return nil
 }
 
