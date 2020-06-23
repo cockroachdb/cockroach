@@ -126,7 +126,7 @@ func summary(
 
 		for i := 0; i < numGeoms; i++ {
 			g := t.Geom(i)
-			gShape, err := geopbShape(g)
+			gShape, err := shapeFromGeom(g)
 			if err != nil {
 				return "", err
 			}
