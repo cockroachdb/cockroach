@@ -204,9 +204,7 @@ func populateExplain(
 		// There might be an issue making the physical plan, but that should not
 		// cause an error or panic, so swallow the error. See #40677 for example.
 		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
-		// TODO(asubiotto): This cast from SQLInstanceID to NodeID is temporary:
-		//  https://github.com/cockroachdb/cockroach/issues/49596
-		flows := physicalPlan.GenerateFlowSpecs(roachpb.NodeID(params.extendedEvalCtx.NodeID.SQLInstanceID()))
+		flows := physicalPlan.GenerateFlowSpecs()
 		flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
 		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 

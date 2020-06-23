@@ -69,7 +69,7 @@ func (w TenantSQLDeprecatedWrapper) Deprecated(issueNo int) interface{} {
 // is desired.
 //
 // Optional functionality should be used sparingly as it increases the
-// maintenance and testing burden. It is prefererable to use use OptionalErr()
+// maintenance and testing burden. It is preferable to use OptionalErr()
 // (and return the error) where possible.
 func (w TenantSQLDeprecatedWrapper) Optional() (interface{}, bool) {
 	if !w.exposed {

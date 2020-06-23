@@ -53,7 +53,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 		corePlacement[i].Core.TableReader = tr
 	}
 
-	p := MakePhysicalPlan(dsp.nodeDesc.NodeID)
+	p := MakePhysicalPlan(dsp.gatewayNodeID)
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, rowexec.ScrubTypes, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(rowexec.ScrubTypes)))
 

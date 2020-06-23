@@ -1419,7 +1419,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
-		s.sqlServer.execCfg.DistSQLPlanner.SetNodeDesc,
+		s.sqlServer.execCfg.DistSQLPlanner.SetNodeInfo,
 	); err != nil {
 		return err
 	}
