@@ -67,7 +67,7 @@ func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, ignoreIndexes util.FastIntSet, traceKV bool,
 ) error {
 	td.batchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, ignoreIndexes, traceKV)
 }
 
 // deleteAllRows runs the kv operations necessary to delete all sql rows in the

@@ -43,6 +43,9 @@ type deleteRun struct {
 	td         tableDeleter
 	rowsNeeded bool
 
+	// fetchCols are the columns being fetched.
+	fetchCols []sqlbase.ColumnDescriptor
+
 	// rowCount is the number of rows in the current batch.
 	rowCount int
 
@@ -169,10 +172,36 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for deletion and, if
 // result rows are needed, saves it in the result row container
 func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
-	// Queue the deletion in the KV batch.
-	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-	// not delete entries from.
+	// Create a set of index IDs to not delete from. Indexes should not be
+	// deleted from when they are partial indexes and the row does not satisfy
+	// the predicate and therefore do not exist in the partial index. This
+	// set is passed as a argument to tableDeleter.row below.
 	var ignoreIndexes util.FastIntSet
+	partialIndexDelVals := sourceVals[len(d.run.fetchCols):]
+	colIdx := 0
+	indexes := d.run.td.tableDesc().Indexes
+	for i := range indexes {
+		if colIdx >= len(partialIndexDelVals) {
+			break
+		}
+
+		index := indexes[i]
+		if index.IsPartial() {
+			val, err := tree.GetBool(partialIndexDelVals[colIdx])
+			if err != nil {
+				return err
+			}
+			if !val {
+				// If the value of the column for the index predicate expression
+				// is false, the row should not be removed from the partial
+				// index.
+				ignoreIndexes.Add(int(index.ID))
+			}
+			colIdx++
+		}
+	}
+
+	// Queue the deletion in the KV batch.
 	if err := d.run.td.row(params.ctx, sourceVals, ignoreIndexes, d.run.traceKV); err != nil {
 		return err
 	}

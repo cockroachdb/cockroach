@@ -1240,12 +1240,12 @@ insert partial_indexes
  │    ├── column1:4 => a:1
  │    ├── column2:5 => b:2
  │    └── column3:6 => c:3
- ├── partial index pred columns: indexpred1:7 indexpred2:8
+ ├── partial index put columns: partial_index_put1:7 partial_index_put2:8
  └── project
-      ├── columns: indexpred1:7!null indexpred2:8!null column1:4!null column2:5!null column3:6!null
+      ├── columns: partial_index_put1:7!null partial_index_put2:8!null column1:4!null column2:5!null column3:6!null
       ├── values
       │    ├── columns: column1:4!null column2:5!null column3:6!null
       │    └── (2, 1, 'bar')
       └── projections
-           ├── column3:6 = 'foo' [as=indexpred1:7]
-           └── (column1:4 > column2:5) AND (column3:6 = 'bar') [as=indexpred2:8]
+           ├── column3:6 = 'foo' [as=partial_index_put1:7]
+           └── (column1:4 > column2:5) AND (column3:6 = 'bar') [as=partial_index_put2:8]

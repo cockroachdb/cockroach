@@ -178,24 +178,26 @@ DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
 delete xyz
  ├── columns: <none>
  ├── fetch columns: x:4 y:5 z:6
- └── limit
-      ├── columns: x:4!null y:5 z:6 column7:7
-      ├── internal-ordering: -7
-      ├── sort
-      │    ├── columns: x:4!null y:5 z:6 column7:7
-      │    ├── ordering: -7
-      │    ├── limit hint: 2.00
-      │    └── project
-      │         ├── columns: column7:7 x:4!null y:5 z:6
-      │         ├── select
-      │         │    ├── columns: x:4!null y:5 z:6
-      │         │    ├── scan xyz
-      │         │    │    └── columns: x:4!null y:5 z:6
-      │         │    └── filters
-      │         │         └── x:4 = $1
-      │         └── projections
-      │              └── y:5 + $2 [as=column7:7]
-      └── 2
+ └── project
+      ├── columns: x:4!null y:5 z:6
+      └── limit
+           ├── columns: x:4!null y:5 z:6 column7:7
+           ├── internal-ordering: -7
+           ├── sort
+           │    ├── columns: x:4!null y:5 z:6 column7:7
+           │    ├── ordering: -7
+           │    ├── limit hint: 2.00
+           │    └── project
+           │         ├── columns: column7:7 x:4!null y:5 z:6
+           │         ├── select
+           │         │    ├── columns: x:4!null y:5 z:6
+           │         │    ├── scan xyz
+           │         │    │    └── columns: x:4!null y:5 z:6
+           │         │    └── filters
+           │         │         └── x:4 = $1
+           │         └── projections
+           │              └── y:5 + $2 [as=column7:7]
+           └── 2
 
 
 # Use CTE within WHERE clause.
@@ -437,3 +439,35 @@ build
 DELETE FROM mutation ORDER BY p LIMIT 2
 ----
 error (42P10): column "p" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test partial index column values.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX (b),
+    INDEX (b) WHERE c = 'foo',
+    INDEX (c) WHERE a > b AND c = 'bar'
+)
+----
+
+build
+DELETE FROM partial_indexes
+----
+delete partial_indexes
+ ├── columns: <none>
+ ├── fetch columns: a:4 b:5 c:6
+ └── project
+      ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
+      ├── scan partial_indexes
+      │    ├── columns: a:4!null b:5 c:6
+      │    └── partial index predicates
+      │         ├── secondary: c:6 = 'foo'
+      │         └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      └── projections
+           ├── c:6 = 'foo' [as=partial_index_del1:7]
+           └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]
