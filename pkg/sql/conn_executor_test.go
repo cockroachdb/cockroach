@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -809,6 +810,72 @@ func TestTrimFlushedStatements(t *testing.T) {
 		}
 	}
 	require.NoError(t, tx.Commit())
+}
+
+func TestShowLastQueryStatistics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlConn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlConn.Exec("CREATE TABLE t(a INT)"); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS")
+	if err != nil {
+		t.Fatalf("show last query statistics failed: %v", err)
+	}
+	defer rows.Close()
+
+	var parseLatency string
+	var planLatency string
+	var execLatency string
+	var serviceLatency string
+
+	rows.Next()
+	if err := rows.Scan(&parseLatency, &planLatency, &execLatency, &serviceLatency); err != nil {
+		t.Fatalf("unexpected error while reading last query statistics: %v", err)
+	}
+
+	parseInterval, err := tree.ParseDInterval(parseLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planInterval, err := tree.ParseDInterval(planLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execInterval, err := tree.ParseDInterval(execLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceInterval, err := tree.ParseDInterval(serviceLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if parseInterval.AsFloat64() <= 0 || parseInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected parse latency: %v", parseInterval.AsFloat64())
+	}
+
+	if planInterval.AsFloat64() <= 0 || planInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected plan latency: %v", planInterval.AsFloat64())
+	}
+
+	if serviceInterval.AsFloat64() <= 0 || serviceInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected service latency: %v", serviceInterval.AsFloat64())
+	}
+
+	if execInterval.AsFloat64() <= 0 || execInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected execution latency: %v", execInterval.AsFloat64())
+	}
+
+	if rows.Next() {
+		t.Fatalf("unexpected number of rows returned by last query statistics: %v", err)
+	}
 }
 
 // dynamicRequestFilter exposes a filter method which is a
