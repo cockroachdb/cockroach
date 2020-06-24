@@ -951,9 +951,20 @@ func createImportingDescriptors(
 		return nil, nil, nil, nil, err
 	}
 
-	// Assign new IDs to all of the type descriptors in the backup.
-	typDescs := make([]*sqlbase.TypeDescriptor, len(types))
-	for i, typ := range types {
+	// We might be remapping some types to existing types in the cluster. In that
+	// case, we don't want to create namespace and descriptor entries for those
+	// types. So collect only the types that we need to write here.
+	var typesToWrite []sqlbase.TypeDescriptorInterface
+	for i := range types {
+		typ := types[i]
+		if !details.DescriptorRewrites[typ.GetID()].ToExisting {
+			typesToWrite = append(typesToWrite, typ)
+		}
+	}
+
+	// Assign new IDs to all of the type descriptors that need to be written.
+	typDescs := make([]*sqlbase.TypeDescriptor, len(typesToWrite))
+	for i, typ := range typesToWrite {
 		typDescs[i] = typ.TypeDesc()
 	}
 	if err := rewriteTypeDescs(typDescs, details.DescriptorRewrites); err != nil {
@@ -969,7 +980,7 @@ func createImportingDescriptors(
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteDescriptors(ctx, txn, databases, tables, types, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
+			if err := WriteDescriptors(ctx, txn, databases, tables, typesToWrite, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 

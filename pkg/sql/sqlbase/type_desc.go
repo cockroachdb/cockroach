@@ -11,6 +11,7 @@
 package sqlbase
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -275,6 +276,44 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 		return nil
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
+	}
+}
+
+// IsCompatibleWith returns whether the type "desc" is compatible with "other".
+// As of now "compatibility" entails that disk encoded data of "desc" can be
+// interpreted and used by "other".
+func (desc *TypeDescriptor) IsCompatibleWith(other *TypeDescriptor) error {
+	switch desc.Kind {
+	case TypeDescriptor_ENUM:
+		if other.Kind != TypeDescriptor_ENUM {
+			return errors.Newf("%q is not an enum", other.Name)
+		}
+		// Every enum value in desc must be present in other, and all of the
+		// physical representations must be the same.
+		for _, thisMember := range desc.EnumMembers {
+			found := false
+			for _, otherMember := range other.EnumMembers {
+				if thisMember.LogicalRepresentation == otherMember.LogicalRepresentation {
+					// We've found a match. Now the physical representations must be
+					// the same, otherwise the enums are incompatible.
+					if !bytes.Equal(thisMember.PhysicalRepresentation, otherMember.PhysicalRepresentation) {
+						return errors.Newf(
+							"%q has differing physical representation for value %q",
+							other.Name,
+							thisMember.LogicalRepresentation,
+						)
+					}
+					found = true
+				}
+			}
+			if !found {
+				return errors.Newf(
+					"could not find enum value %q in %q", thisMember.LogicalRepresentation, other.Name)
+			}
+		}
+		return nil
+	default:
+		return errors.Newf("compatibility comparison unsupported for type kind %s", desc.Kind.String())
 	}
 }
 
