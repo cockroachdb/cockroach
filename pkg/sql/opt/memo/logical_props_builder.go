@@ -266,6 +266,55 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 	}
 }
 
+func (b *logicalPropsBuilder) buildInvertedFilterProps(
+	invFilter *InvertedFilterExpr, rel *props.Relational,
+) {
+	BuildSharedProps(invFilter, &rel.Shared)
+
+	inputProps := invFilter.Input.Relational()
+
+	// Output Columns
+	// --------------
+	// Inherit output columns from input, but remove the inverted column.
+	rel.OutputCols = inputProps.OutputCols
+	rel.OutputCols.Remove(invFilter.InvertedColumn)
+
+	// Not Null Columns
+	// ----------------
+	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
+	rel.NotNullCols.IntersectionWith(rel.OutputCols)
+
+	// Outer Columns
+	// -------------
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
+	// by input columns.
+	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
+
+	// Functional Dependencies
+	// -----------------------
+	// Start with copy of FuncDepSet from input, add FDs from the outer columns,
+	// modify with any additional not-null columns, then possibly simplify by
+	// calling ProjectCols.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
+	rel.FuncDeps.MakeNotNull(rel.NotNullCols)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Inverted filter can filter any or all rows.
+	rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
+	if rel.FuncDeps.HasMax1Row() {
+		rel.Cardinality = rel.Cardinality.Limit(1)
+	}
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildInvertedFilter(invFilter, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildInnerJoinProps(join *InnerJoinExpr, rel *props.Relational) {
 	b.buildJoinProps(join, rel)
 }

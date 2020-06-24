@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 type distSQLSpecExecFactory struct {
@@ -89,6 +91,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	index cat.Index,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	invertedConstraint invertedexpr.InvertedSpans,
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
@@ -142,6 +145,11 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
+	// TODO(rytaft, sumeerbhola): Add support for inverted constraints.
+	if invertedConstraint != nil {
+		return nil, errors.Errorf("Geospatial constrained scans are not yet supported")
+	}
+
 	isFullTableScan := len(spans) == 1 && spans[0].EqualValue(
 		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
 	)
@@ -254,6 +262,14 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	}
 	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
 	return plan, nil
+}
+
+// ConstructInvertedFilter is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
+	n exec.Node, invFilter *invertedexpr.SpanExpression, invColumn exec.NodeColumnOrdinal,
+) (exec.Node, error) {
+	// TODO(rytaft, sumeerbhola): Fill this in.
+	return nil, errors.Errorf("Inverted filters are not yet supported")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(

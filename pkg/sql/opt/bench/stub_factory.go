@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -36,6 +37,7 @@ func (f *stubFactory) ConstructScan(
 	index cat.Index,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	invertedConstraint invertedexpr.InvertedSpans,
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
@@ -49,6 +51,12 @@ func (f *stubFactory) ConstructScan(
 
 func (f *stubFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
+func (f *stubFactory) ConstructInvertedFilter(
+	n exec.Node, invFilter *invertedexpr.SpanExpression, invColumn exec.NodeColumnOrdinal,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

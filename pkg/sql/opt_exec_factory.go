@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,6 +77,7 @@ func (ef *execFactory) ConstructScan(
 	index cat.Index,
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	invertedConstraint invertedexpr.InvertedSpans,
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
@@ -126,6 +128,11 @@ func (ef *execFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
+	// TODO(rytaft, sumeerbhola): Add support for inverted constraints.
+	if invertedConstraint != nil {
+		return nil, errors.Errorf("Geospatial constrained scans are not yet supported")
+	}
+
 	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
 		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.ID),
 	)
@@ -254,6 +261,14 @@ func (ef *execFactory) ConstructFilter(
 		return spool, nil
 	}
 	return f, nil
+}
+
+// ConstructInvertedFilter is part of the exec.Factory interface.
+func (ef *execFactory) ConstructInvertedFilter(
+	n exec.Node, invFilter *invertedexpr.SpanExpression, invColumn exec.NodeColumnOrdinal,
+) (exec.Node, error) {
+	// TODO(rytaft, sumeerbhola): Fill this in.
+	return nil, errors.Errorf("Inverted filters are not yet supported")
 }
 
 // ConstructSimpleProject is part of the exec.Factory interface.

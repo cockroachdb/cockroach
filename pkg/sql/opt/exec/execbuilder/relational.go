@@ -242,6 +242,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.InsertExpr:
 		ep, err = b.buildInsert(t)
 
+	case *memo.InvertedFilterExpr:
+		ep, err = b.buildInvertedFilter(t)
+
 	case *memo.UpdateExpr:
 		ep, err = b.buildUpdate(t)
 
@@ -489,16 +492,12 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		locking = forUpdateLocking
 	}
 
-	// TODO(rytaft): Add support for inverted constraints.
-	if scan.InvertedConstraint != nil {
-		return execPlan{}, errors.Errorf("Geospatial constrained scans are not yet supported")
-	}
-
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
 		needed,
 		scan.Constraint,
+		scan.InvertedConstraint,
 		hardLimit,
 		softLimit,
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
@@ -529,6 +528,26 @@ func (b *Builder) buildSelect(sel *memo.SelectExpr) (execPlan, error) {
 	res := execPlan{outputCols: input.outputCols}
 	reqOrder := res.reqOrdering(sel)
 	res.root, err = b.factory.ConstructFilter(input.root, filter, reqOrder)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return res, nil
+}
+
+func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execPlan, error) {
+	input, err := b.buildRelational(invFilter.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// The inverted filterer does not return the inverted column.
+	outputCols := input.outputCols.Copy()
+	outputCols.Unset(int(invFilter.InvertedColumn))
+
+	invertedCol := input.getNodeColumnOrdinal(invFilter.InvertedColumn)
+	res := execPlan{outputCols: outputCols}
+	res.root, err = b.factory.ConstructInvertedFilter(
+		input.root, invFilter.InvertedExpression, invertedCol,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
