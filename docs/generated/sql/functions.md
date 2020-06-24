@@ -965,9 +965,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_geogfromtext"></a><code>st_geogfromtext(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation.</p>
 </span></td></tr>
-<tr><td><a name="st_geogfromwkb"></a><code>st_geogfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKB representation with the given SRID set.</p>
+<tr><td><a name="st_geogfromwkb"></a><code>st_geogfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKB (or EWKB) representation with the given SRID set.</p>
 </span></td></tr>
-<tr><td><a name="st_geogfromwkb"></a><code>st_geogfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKB representation.</p>
+<tr><td><a name="st_geogfromwkb"></a><code>st_geogfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKB (or EWKB) representation.</p>
 </span></td></tr>
 <tr><td><a name="st_geographyfromtext"></a><code>st_geographyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
@@ -977,9 +977,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_geomcollfromtext"></a><code>st_geomcollfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not GeometryCollection, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_geomcollfromwkb"></a><code>st_geomcollfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not GeometryCollection, NULL is returned.</p>
+<tr><td><a name="st_geomcollfromwkb"></a><code>st_geomcollfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not GeometryCollection, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_geomcollfromwkb"></a><code>st_geomcollfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not GeometryCollection, NULL is returned.</p>
+<tr><td><a name="st_geomcollfromwkb"></a><code>st_geomcollfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not GeometryCollection, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
@@ -1002,9 +1002,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_geomfromtext"></a><code>st_geomfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation.</p>
 </span></td></tr>
-<tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with the given SRID set.</p>
+<tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with the given SRID set.</p>
 </span></td></tr>
-<tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation.</p>
+<tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation.</p>
 </span></td></tr>
 <tr><td><a name="st_interiorringn"></a><code>st_interiorringn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th (1-indexed) interior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon, or the ring does not exist.</p>
 </span></td></tr>
@@ -1036,9 +1036,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_linefromtext"></a><code>st_linefromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_linefromwkb"></a><code>st_linefromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not LineString, NULL is returned.</p>
+<tr><td><a name="st_linefromwkb"></a><code>st_linefromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_linefromwkb"></a><code>st_linefromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not LineString, NULL is returned.</p>
+<tr><td><a name="st_linefromwkb"></a><code>st_linefromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_lineinterpolatepoint"></a><code>st_lineinterpolatepoint(geometry: geometry, fraction: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a point along the given LineString which is at given fraction of LineString’s total length.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -1055,9 +1055,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_linestringfromtext"></a><code>st_linestringfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not LineString, NULL is returned.</p>
+<tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not LineString, NULL is returned.</p>
+<tr><td><a name="st_linestringfromwkb"></a><code>st_linestringfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not LineString, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_longestline"></a><code>st_longestline(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the LineString corresponds to the max distance across every pair of points comprising the given geometries.</p>
 <p>Note if geometries are the same, it will return the LineString with the maximum distance between the geometry’s vertexes. The function will return the longest line that was discovered first when comparing maximum distances if more than one is found.</p>
@@ -1070,65 +1070,65 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_mlinefromtext"></a><code>st_mlinefromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_mlinefromwkb"></a><code>st_mlinefromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
+<tr><td><a name="st_mlinefromwkb"></a><code>st_mlinefromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_mlinefromwkb"></a><code>st_mlinefromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned.</p>
+<tr><td><a name="st_mlinefromwkb"></a><code>st_mlinefromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_mpointfromtext"></a><code>st_mpointfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiPoint, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_mpointfromtext"></a><code>st_mpointfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiPoint, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_mpointfromwkb"></a><code>st_mpointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiPoint, NULL is returned.</p>
+<tr><td><a name="st_mpointfromwkb"></a><code>st_mpointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiPoint, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_mpointfromwkb"></a><code>st_mpointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiPoint, NULL is returned.</p>
+<tr><td><a name="st_mpointfromwkb"></a><code>st_mpointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPoint, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_mpolyfromtext"></a><code>st_mpolyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_mpolyfromtext"></a><code>st_mpolyfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_mpolyfromwkb"></a><code>st_mpolyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+<tr><td><a name="st_mpolyfromwkb"></a><code>st_mpolyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_mpolyfromwkb"></a><code>st_mpolyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+<tr><td><a name="st_mpolyfromwkb"></a><code>st_mpolyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_multilinefromtext"></a><code>st_multilinefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_multilinefromtext"></a><code>st_multilinefromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multilinefromwkb"></a><code>st_multilinefromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
+<tr><td><a name="st_multilinefromwkb"></a><code>st_multilinefromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multilinefromwkb"></a><code>st_multilinefromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned.</p>
+<tr><td><a name="st_multilinefromwkb"></a><code>st_multilinefromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_multilinestringfromtext"></a><code>st_multilinestringfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_multilinestringfromtext"></a><code>st_multilinestringfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multilinestringfromwkb"></a><code>st_multilinestringfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
+<tr><td><a name="st_multilinestringfromwkb"></a><code>st_multilinestringfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multilinestringfromwkb"></a><code>st_multilinestringfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned.</p>
+<tr><td><a name="st_multilinestringfromwkb"></a><code>st_multilinestringfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_multipointfromtext"></a><code>st_multipointfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiPoint, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_multipointfromtext"></a><code>st_multipointfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiPoint, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multipointfromwkb"></a><code>st_multipointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiPoint, NULL is returned.</p>
+<tr><td><a name="st_multipointfromwkb"></a><code>st_multipointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiPoint, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multipointfromwkb"></a><code>st_multipointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiPoint, NULL is returned.</p>
+<tr><td><a name="st_multipointfromwkb"></a><code>st_multipointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPoint, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_multipolyfromtext"></a><code>st_multipolyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_multipolyfromtext"></a><code>st_multipolyfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multipolyfromwkb"></a><code>st_multipolyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+<tr><td><a name="st_multipolyfromwkb"></a><code>st_multipolyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multipolyfromwkb"></a><code>st_multipolyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+<tr><td><a name="st_multipolyfromwkb"></a><code>st_multipolyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_multipolygonfromtext"></a><code>st_multipolygonfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_multipolygonfromtext"></a><code>st_multipolygonfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multipolygonfromwkb"></a><code>st_multipolygonfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+<tr><td><a name="st_multipolygonfromwkb"></a><code>st_multipolygonfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_multipolygonfromwkb"></a><code>st_multipolygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+<tr><td><a name="st_multipolygonfromwkb"></a><code>st_multipolygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_ndims"></a><code>st_ndims(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of dimensions of a given Geometry.</p>
 </span></td></tr>
@@ -1165,9 +1165,9 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_pointfromtext"></a><code>st_pointfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Point, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_pointfromwkb"></a><code>st_pointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not Point, NULL is returned.</p>
+<tr><td><a name="st_pointfromwkb"></a><code>st_pointfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not Point, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_pointfromwkb"></a><code>st_pointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not Point, NULL is returned.</p>
+<tr><td><a name="st_pointfromwkb"></a><code>st_pointfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not Point, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_pointn"></a><code>st_pointn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th Point of a LineString (1-indexed). Returns NULL if out of bounds or not a LineString.</p>
 </span></td></tr>
@@ -1178,17 +1178,17 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_polyfromtext"></a><code>st_polyfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_polyfromwkb"></a><code>st_polyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not Polygon, NULL is returned.</p>
+<tr><td><a name="st_polyfromwkb"></a><code>st_polyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_polyfromwkb"></a><code>st_polyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
+<tr><td><a name="st_polyfromwkb"></a><code>st_polyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_polygonfromtext"></a><code>st_polygonfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not Polygon, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_polygonfromtext"></a><code>st_polygonfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation. If the shape underneath is not Polygon, NULL is returned.</p>
+<tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
+<tr><td><a name="st_polygonfromwkb"></a><code>st_polygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not Polygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_project"></a><code>st_project(geography: geography, distance: <a href="float.html">float</a>, azimuth: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a point projected from a start point along a geodesic using a given distance and azimuth (bearing).
 This is known as the direct geodesic problem.</p>
@@ -1265,7 +1265,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 <p>This function utilizes the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
-<tr><td><a name="st_wkbtosql"></a><code>st_wkbtosql(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation.</p>
+<tr><td><a name="st_wkbtosql"></a><code>st_wkbtosql(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation.</p>
 </span></td></tr>
 <tr><td><a name="st_wkttosql"></a><code>st_wkttosql(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation.</p>
 </span></td></tr>
