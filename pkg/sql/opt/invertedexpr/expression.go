@@ -111,18 +111,71 @@ type EncInvertedVal []byte
 
 // InvertedSpan is a span of the inverted index. Represents [start, end).
 type InvertedSpan struct {
-	start, end EncInvertedVal
+	Start, End EncInvertedVal
 }
 
 // MakeSingleInvertedValSpan constructs a span equivalent to [val, val].
 func MakeSingleInvertedValSpan(val EncInvertedVal) InvertedSpan {
 	end := EncInvertedVal(roachpb.Key(val).PrefixEnd())
-	return InvertedSpan{start: val, end: end}
+	return InvertedSpan{Start: val, End: end}
 }
 
 // isSingleVal returns true iff the span is equivalent to [val, val].
 func (s InvertedSpan) isSingleVal() bool {
-	return bytes.Equal(roachpb.Key(s.start).PrefixEnd(), s.end)
+	return bytes.Equal(roachpb.Key(s.Start).PrefixEnd(), s.End)
+}
+
+// Equals returns true if this span has the same start and end as the given
+// span.
+func (s InvertedSpan) Equals(other InvertedSpan) bool {
+	if !bytes.Equal(s.Start, other.Start) {
+		return false
+	}
+	return bytes.Equal(s.End, other.End)
+}
+
+// InvertedSpans is a slice of InvertedSpan objects.
+type InvertedSpans []InvertedSpan
+
+// Equals returns true if this InvertedSpans has the same spans as the given
+// InvertedSpans, in the same order.
+func (is InvertedSpans) Equals(other InvertedSpans) bool {
+	if len(is) != len(other) {
+		return false
+	}
+	for i := range is {
+		if !is[i].Equals(other[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// Format pretty-prints the spans.
+func (is InvertedSpans) Format(tp treeprinter.Node, label string) {
+	if len(is) == 0 {
+		tp.Childf("%s: empty", label)
+		return
+	}
+	if len(is) == 1 {
+		tp.Childf("%s: %s", label, formatSpan(is[0]))
+		return
+	}
+	n := tp.Child(label)
+	for i := 0; i < len(is); i++ {
+		n.Child(formatSpan(is[i]))
+	}
+}
+
+func formatSpan(span InvertedSpan) string {
+	end := span.End
+	spanEndOpenOrClosed := ')'
+	if span.isSingleVal() {
+		end = span.Start
+		spanEndOpenOrClosed = ']'
+	}
+	return fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.Start)),
+		strconv.Quote(string(end)), spanEndOpenOrClosed)
 }
 
 // InvertedExpression is the interface representing an expression or sub-expression
@@ -238,7 +291,7 @@ type SpanExpression struct {
 	// is factored into:
 	// [6, 10) \union ([2, 6) \intersection [10, 14))
 	// The root expression has a spanning union of [2, 14).
-	SpansToRead []InvertedSpan
+	SpansToRead InvertedSpans
 
 	// FactoredUnionSpans are the spans to be unioned. These are
 	// non-overlapping and sorted. As mentioned earlier, factoring
@@ -257,7 +310,7 @@ type SpanExpression struct {
 	// intersection with [5, 8) did not add anything to the spans to read. Also
 	// note that, despite factoring, there are overlapping spans in this
 	// expression, specifically [2, 6) and [5, 6).
-	FactoredUnionSpans []InvertedSpan
+	FactoredUnionSpans InvertedSpans
 
 	// Operator is the set operation to apply to Left and Right.
 	// When this is union or intersection, both Left and Right are non-nil,
@@ -282,15 +335,17 @@ func (s *SpanExpression) SetNotTight() {
 func (s *SpanExpression) String() string {
 	tp := treeprinter.New()
 	n := tp.Child("span expression")
-	s.Format(n)
+	s.Format(n, true /* includeSpansToRead */)
 	return tp.String()
 }
 
 // Format pretty-prints the SpanExpression.
-func (s *SpanExpression) Format(tp treeprinter.Node) {
+func (s *SpanExpression) Format(tp treeprinter.Node, includeSpansToRead bool) {
 	tp.Childf("tight: %t", s.Tight)
-	formatSpans(tp, "to read", s.SpansToRead)
-	formatSpans(tp, "union spans", s.FactoredUnionSpans)
+	if includeSpansToRead {
+		s.SpansToRead.Format(tp, "to read")
+	}
+	s.FactoredUnionSpans.Format(tp, "union spans")
 	if s.Operator == None {
 		return
 	}
@@ -300,45 +355,18 @@ func (s *SpanExpression) Format(tp treeprinter.Node) {
 	case SetIntersection:
 		tp = tp.Child("INTERSECTION")
 	}
-	formatExpression(tp, s.Left)
-	formatExpression(tp, s.Right)
+	formatExpression(tp, s.Left, includeSpansToRead)
+	formatExpression(tp, s.Right, includeSpansToRead)
 }
 
-func formatExpression(tp treeprinter.Node, expr InvertedExpression) {
+func formatExpression(tp treeprinter.Node, expr InvertedExpression, includeSpansToRead bool) {
 	switch e := expr.(type) {
 	case *SpanExpression:
 		n := tp.Child("span expression")
-		e.Format(n)
+		e.Format(n, includeSpansToRead)
 	default:
 		tp.Child(fmt.Sprintf("%v", e))
 	}
-}
-
-// formatSpans pretty-prints the spans.
-func formatSpans(tp treeprinter.Node, label string, spans []InvertedSpan) {
-	if len(spans) == 0 {
-		tp.Childf("%s: empty", label)
-		return
-	}
-	if len(spans) == 1 {
-		tp.Childf("%s: %s", label, formatSpan(spans[0]))
-		return
-	}
-	n := tp.Child(label)
-	for i := 0; i < len(spans); i++ {
-		n.Child(formatSpan(spans[i]))
-	}
-}
-
-func formatSpan(span InvertedSpan) string {
-	end := span.end
-	spanEndOpenOrClosed := ')'
-	if span.isSingleVal() {
-		end = span.start
-		spanEndOpenOrClosed = ']'
-	}
-	return fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.start)),
-		strconv.Quote(string(end)), spanEndOpenOrClosed)
 }
 
 // ToProto constructs a SpanExpressionProto for execution. It should
@@ -358,8 +386,8 @@ func getProtoSpans(spans []InvertedSpan) []SpanExpressionProto_Span {
 	out := make([]SpanExpressionProto_Span, 0, len(spans))
 	for i := range spans {
 		out = append(out, SpanExpressionProto_Span{
-			Start: spans[i].start,
-			End:   spans[i].end,
+			Start: spans[i].Start,
+			End:   spans[i].End,
 		})
 	}
 	return out
@@ -602,7 +630,7 @@ func unionSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 	// is coming from the left.
 	// REQUIRES: i < len(left) || j < len(right).
 	makeMergeSpan := func() {
-		if i >= len(left) || (j < len(right) && bytes.Compare(left[i].start, right[j].start) > 0) {
+		if i >= len(left) || (j < len(right) && bytes.Compare(left[i].Start, right[j].Start) > 0) {
 			swapLeftRight()
 		}
 		mergeSpan = left[i]
@@ -658,7 +686,7 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 	// mergeSpan.
 	// REQUIRES: i < len(left) && j < len(right)
 	makeMergeSpan := func() {
-		if bytes.Compare(left[i].start, right[j].start) > 0 {
+		if bytes.Compare(left[i].Start, right[j].Start) > 0 {
 			swapLeftRight()
 		}
 		mergeSpan = left[i]
@@ -672,12 +700,12 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 		cmpEndStart := cmpExcEndWithIncStart(mergeSpan, right[j])
 		if cmpEndStart > 0 {
 			// The intersection of these spans is non-empty.
-			mergeSpan.start = right[j].start
-			mergeSpanEnd := mergeSpan.end
+			mergeSpan.Start = right[j].Start
+			mergeSpanEnd := mergeSpan.End
 			cmpEnds := cmpEnds(mergeSpan, right[j])
 			if cmpEnds > 0 {
 				// The right span constrains the end of the intersection.
-				mergeSpan.end = right[j].end
+				mergeSpan.End = right[j].End
 			}
 			// Else the mergeSpan is not constrained by the right span,
 			// so it is already ready to be appended to the output.
@@ -694,8 +722,8 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 				// have a start <= the next span from the left and it has
 				// something leftover.
 				i++
-				mergeSpan.start = mergeSpan.end
-				mergeSpan.end = right[j].end
+				mergeSpan.Start = mergeSpan.End
+				mergeSpan.End = right[j].End
 				swapLeftRight()
 			} else if cmpEnds == 0 {
 				// Both spans end at the same key, so both are consumed.
@@ -706,8 +734,8 @@ func intersectSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 				// The right span constrained the end of the intersection.
 				// So there is something left of the original mergeSpan.
 				j++
-				mergeSpan.start = mergeSpan.end
-				mergeSpan.end = mergeSpanEnd
+				mergeSpan.Start = mergeSpan.End
+				mergeSpan.End = mergeSpanEnd
 			}
 		} else {
 			// Intersection is empty
@@ -742,12 +770,12 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 		cmpEndStart := cmpExcEndWithIncStart(mergeSpan, right[j])
 		if cmpEndStart > 0 {
 			// mergeSpan will have some part subtracted by the right span.
-			cmpStart := bytes.Compare(mergeSpan.start, right[j].start)
+			cmpStart := bytes.Compare(mergeSpan.Start, right[j].Start)
 			if cmpStart < 0 {
 				// There is some part of mergeSpan before the right span starts. Add it
 				// to the output.
-				out = append(out, InvertedSpan{start: mergeSpan.start, end: right[j].start})
-				mergeSpan.start = right[j].start
+				out = append(out, InvertedSpan{Start: mergeSpan.Start, End: right[j].Start})
+				mergeSpan.Start = right[j].Start
 			}
 			// Else cmpStart == 0, since the right side is a subset of the left.
 
@@ -762,7 +790,7 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 			}
 
 			// Invariant: cmpEnd > 0, since the right side is a subset of the left.
-			mergeSpan.start = right[j].end
+			mergeSpan.Start = right[j].End
 			j++
 		} else {
 			// Right span starts after mergeSpan ends.
@@ -786,7 +814,7 @@ func subtractSpans(left []InvertedSpan, right []InvertedSpan) []InvertedSpan {
 // [a, a\x00), [a, c) == +1
 // [a, c), [d, e) == -1
 func cmpExcEndWithIncStart(left, right InvertedSpan) int {
-	return bytes.Compare(left.end, right.start)
+	return bytes.Compare(left.End, right.Start)
 }
 
 // Extends the left span using the right span. Will return true iff
@@ -795,13 +823,13 @@ func cmpExcEndWithIncStart(left, right InvertedSpan) int {
 func extendSpanEnd(left *InvertedSpan, right InvertedSpan, cmpExcEndIncStart int) bool {
 	if cmpExcEndIncStart == 0 {
 		// Definitely extends.
-		left.end = right.end
+		left.End = right.End
 		return true
 	}
 	// cmpExcEndIncStart > 0, so left covers at least right.start. But may not
 	// cover right.end.
-	if bytes.Compare(left.end, right.end) < 0 {
-		left.end = right.end
+	if bytes.Compare(left.End, right.End) < 0 {
+		left.End = right.End
 		return true
 	}
 	return false
@@ -809,7 +837,7 @@ func extendSpanEnd(left *InvertedSpan, right InvertedSpan, cmpExcEndIncStart int
 
 // Compares the end keys of left and right.
 func cmpEnds(left, right InvertedSpan) int {
-	return bytes.Compare(left.end, right.end)
+	return bytes.Compare(left.End, right.End)
 }
 
 // Representing multi-column constraints

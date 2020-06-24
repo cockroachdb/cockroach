@@ -54,8 +54,8 @@ define ScanPrivate {
     Constraint Constraint
 
     # If set, the scan is a constrained scan of an inverted index; the
-    # SpanExpression contains the spans that need to be scanned.
-    InvertedConstraint SpanExpression
+    # InvertedConstraint contains the spans that need to be scanned.
+    InvertedConstraint InvertedSpans
 
     # HardLimit specifies the maximum number of rows that the scan can return
     # (after applying any constraint), as well as the required scan direction.
@@ -157,6 +157,32 @@ define Project {
     # internalFuncDeps are the functional dependencies between all columns
     # (input or synthesized).
     internalFuncDeps FuncDepSet
+}
+
+# InvertedFilter filters rows from its input result set, based on the
+# InvertedExpression predicate (which is defined in InvertedFilterPrivate).
+# Rows which do not match the filter are discarded. The input should be a
+# constrained scan of an inverted index, possibly wrapped in other operators
+# such as Select.
+[Relational]
+define InvertedFilter {
+    Input RelExpr
+    _ InvertedFilterPrivate
+}
+
+[Private]
+define InvertedFilterPrivate {
+    # InvertedExpression represents the set operations (UNION or INTERSECTION)
+    # that should be executed on the inverted spans retrieved from the input.
+    # The input should already be filtered based on SpansToRead from the
+    # SpanExpression, but this InvertedExpression serves to filter the rows
+    # further by applying set operations on the primary key columns.
+    InvertedExpression SpanExpression
+
+    # The InvertedColumn is the id of the inverted column in the input. It is
+    # used during execution to map rows from the input to their corresponding
+    # spans in the SpanExpression.
+    InvertedColumn ColumnID
 }
 
 # InnerJoin creates a result set that combines columns from its left and right

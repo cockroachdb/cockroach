@@ -169,6 +169,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ProjectOp:
 		cost = c.computeProjectCost(candidate.(*memo.ProjectExpr))
 
+	case opt.InvertedFilterOp:
+		cost = c.computeInvertedFilterCost(candidate.(*memo.InvertedFilterExpr))
+
 	case opt.ValuesOp:
 		cost = c.computeValuesCost(candidate.(*memo.ValuesExpr))
 
@@ -311,7 +314,8 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// will prefer a constrained scan. This is important if our row count
 	// estimate turns out to be smaller than the actual row count.
 	var preferConstrainedScanCost memo.Cost
-	if scan.Constraint == nil || scan.Constraint.IsUnconstrained() {
+	if (scan.Constraint == nil || scan.Constraint.IsUnconstrained()) &&
+		scan.InvertedConstraint == nil {
 		preferConstrainedScanCost = cpuCostFactor
 	}
 	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
@@ -332,6 +336,13 @@ func (c *coster) computeProjectCost(prj *memo.ProjectExpr) memo.Cost {
 
 	// Add the CPU cost of emitting the rows.
 	cost += memo.Cost(rowCount) * cpuCostFactor
+	return cost
+}
+
+func (c *coster) computeInvertedFilterCost(invFilter *memo.InvertedFilterExpr) memo.Cost {
+	// The filter has to be evaluated on each input row.
+	inputRowCount := invFilter.Input.Relational().Stats.RowCount
+	cost := memo.Cost(inputRowCount) * cpuCostFactor
 	return cost
 }
 

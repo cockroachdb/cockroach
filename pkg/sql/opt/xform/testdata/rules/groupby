@@ -1185,7 +1185,7 @@ memo (optimized, ~6KB, required=[presentation: sum:5])
 memo
 SELECT sum(w) FROM kuvw GROUP BY v
 ----
-memo (optimized, ~5KB, required=[presentation: sum:5])
+memo (optimized, ~6KB, required=[presentation: sum:5])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:5]
  │         ├── best: (project G2 G3 sum)
@@ -1210,7 +1210,7 @@ memo (optimized, ~5KB, required=[presentation: sum:5])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY u,w) GROUP BY v
 ----
-memo (optimized, ~5KB, required=[presentation: array_agg:5])
+memo (optimized, ~6KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
@@ -1470,7 +1470,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2]" G3 cols=(2),ordering=+2)
@@ -1492,7 +1492,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (v) u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +3]" G3 cols=(3),ordering=+3)
@@ -1514,7 +1514,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +4]" G3 cols=(4),ordering=+4)
@@ -1536,7 +1536,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, w
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -1859,7 +1859,7 @@ memo (optimized, ~19KB, required=[])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~19KB, required=[])
+memo (optimized, ~20KB, required=[])
  ├── G1: (upsert G2 G3 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 xyz)

@@ -247,7 +247,7 @@ func (sb *statisticsBuilder) colStatFromInput(
 	case *ScanExpr:
 		return sb.colStatTable(t.Table, colSet), sb.makeTableStatistics(t.Table)
 
-	case *SelectExpr:
+	case *SelectExpr, *InvertedFilterExpr:
 		return sb.colStatFromChild(colSet, t, 0 /* childIdx */), sb.statsFromChild(e, 0 /* childIdx */)
 
 	case *LookupJoinExpr:
@@ -353,6 +353,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 
 	case opt.ProjectOp:
 		return sb.colStatProject(colSet, e.(*ProjectExpr))
+
+	case opt.InvertedFilterOp:
+		return sb.colStatInvertedFilter(colSet, e.(*InvertedFilterExpr))
 
 	case opt.ValuesOp:
 		return sb.colStatValues(colSet, e.(*ValuesExpr))
@@ -868,6 +871,63 @@ func (sb *statisticsBuilder) colStatProject(
 			colStat.NullCount = s.RowCount
 		}
 	}
+	if colSet.Intersects(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +-----------------+
+// | Inverted Filter |
+// +-----------------+
+
+func (sb *statisticsBuilder) buildInvertedFilter(
+	invFilter *InvertedFilterExpr, relProps *props.Relational,
+) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(invFilter)
+
+	// Calculate distinct counts and histograms for constrained columns
+	// ----------------------------------------------------------------
+	var constrainedCols, histCols opt.ColSet
+	// TODO(rytaft, mjibson): estimate distinct count and histogram for inverted
+	//  column.
+
+	// Set null counts to 0 for non-nullable columns
+	// -------------------------------------------
+	sb.updateNullCountsFromNotNullCols(invFilter, relProps.NotNullCols, s)
+
+	// Calculate selectivity and row count
+	// -----------------------------------
+	inputStats := &invFilter.Input.Relational().Stats
+	s.RowCount = inputStats.RowCount
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, invFilter, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps, constrainedCols))
+
+	// Adjust the selectivity so we don't double-count the histogram columns.
+	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
+
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatInvertedFilter(
+	colSet opt.ColSet, invFilter *InvertedFilterExpr,
+) *props.ColumnStatistic {
+	relProps := invFilter.Relational()
+	s := &relProps.Stats
+	inputStats := &invFilter.Input.Relational().Stats
+	colStat := sb.copyColStatFromChild(colSet, invFilter, s)
+
+	if s.Selectivity != 1 {
+		colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+	}
+
 	if colSet.Intersects(relProps.NotNullCols) {
 		colStat.NullCount = 0
 	}
