@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -341,6 +342,33 @@ type planMaybePhysical struct {
 
 func (p *planMaybePhysical) isPhysicalPlan() bool {
 	return p.physPlan != nil
+}
+
+func (p *planMaybePhysical) isPartiallyDistributed() bool {
+	if p.isPhysicalPlan() {
+		return p.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
+	}
+	// Even when the whole plan is not physical, we might have EXPLAIN
+	// planNodes that themselves contain a physical plan, so we need to peek
+	// inside of those.
+	switch n := p.planNode.(type) {
+	case *explainPlanNode:
+		if n.plan.main.isPhysicalPlan() {
+			return n.plan.main.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
+		}
+	case *explainDistSQLNode:
+		if n.plan.main.isPhysicalPlan() {
+			return n.plan.main.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
+		}
+	case *explainVecNode:
+		if n.plan.isPhysicalPlan() {
+			return n.plan.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
+		}
+	}
+	// If there are no physical plans inside of the planNodes, then the plan
+	// has been constructed using the old factory which doesn't produce
+	// partially distributed plans.
+	return false
 }
 
 func (p *planMaybePhysical) planColumns() sqlbase.ResultColumns {

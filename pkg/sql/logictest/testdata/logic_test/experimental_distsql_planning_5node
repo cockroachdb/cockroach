@@ -56,7 +56,6 @@ EXPLAIN (DISTSQL) SELECT * FROM kv
 ----
 true  https://cockroachdb.github.io/distsqlplan/decode.html#eJyk0s9O4zAQBvD7PkX0nXZXjvJ_DzktgiJFKm1pekBCOYR4VEWkcbAdBKry7qjOobQqYOjR9nz-zUizhXpqkGJyt5heZDPn91WWr_Lb6R8nn0wnlyvnr3O9nN84j89gaAWnWbkhhfQeARhCMERgiMGQoGDopKhIKSF3JVsTyPgLUp-hbrte764LhkpIQrqFrnVDSLEqHxpaUslJej4YOOmybgzTyXpTytf_poG8K1uVOq4XohgYRK_3fypdrglpMLAP3D3Xt0JyksQPqGI40dlMuKLzkqPC03R4QAf2Iwdfj-yFrhdZDh3ay6GFHLlebClH9nJkIceul1jKsb0cW8iJ-4MFO-EuSXWiVWS1P_5uAYmvadxWJXpZ0UKKyjDjcW5y5oKT0uNrMB6y1jyZBt-Hg0_D_w7C_nE4PEeOzgnH54STb4WL4ddbAAAA__9oS6Od
 
-
 # Note that we want to test DistSQL physical planning and the obvious choice
 # would be to use EXPLAIN (DISTSQL). However, this explain variant doesn't have
 # a textual mode which is easier to verify, so we use EXPLAIN (VEC) instead.
@@ -162,3 +161,21 @@ SELECT kv.k FROM kv, kw WHERE kv.k = kw.k ORDER BY 1
 3
 4
 5
+
+# Disable the partially distributed plans and check that a local plan is
+# produced instead.
+statement ok
+SET CLUSTER SETTING sql.testing.partially_distributed_plans.enabled = false
+
+query TTT
+EXPLAIN SELECT k::REGCLASS FROM kv
+----
+·          distribution  local
+·          vectorized    true
+render     ·             ·
+ └── scan  ·             ·
+·          table         kv@primary
+·          spans         FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.testing.partially_distributed_plans.enabled = true

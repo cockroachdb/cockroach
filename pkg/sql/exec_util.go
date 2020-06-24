@@ -263,6 +263,18 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 	},
 )
 
+// partiallyDistributedPlansEnabled is a cluster setting that can be used to
+// disable partially distributed plans that could be produced by
+// distSQLSpecExecFactory. It should only be changed in tests that verify that
+// the old and the new factories return exactly the same physical plans.
+// TODO(yuzefovich): remove this setting when deleting old sql.execFactory.
+var partiallyDistributedPlansEnabled = settings.RegisterBoolSetting(
+	"sql.testing.partially_distributed_plans.enabled",
+	"enables creation of partially distributed plans (which can only occur with "+
+		"'experimental_distsql_planning' set to 'on' or 'always')",
+	true,
+)
+
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
 const VectorizeClusterSettingName = "sql.defaults.vectorize"

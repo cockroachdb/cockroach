@@ -199,7 +199,17 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// supported (see #47473).
 				return err
 			}
-			// We will fallback to the old path.
+		}
+		// We will fallback to the old path either when we encountered an
+		// error (meaning we don't support some part of the plan in the new
+		// factory) or when we have a partially distributed plan but the
+		// cluster setting prohibits it.
+		fallbackToOldFactory := err != nil
+		if err == nil {
+			m := plan.(*planTop).main
+			fallbackToOldFactory = m.isPartiallyDistributed() && !partiallyDistributedPlansEnabled.Get(&p.execCfg.Settings.SV)
+		}
+		if fallbackToOldFactory {
 			bld = nil
 			// TODO(yuzefovich): make the logging conditional on the verbosity
 			// level once new DistSQL planning is no longer experimental.
