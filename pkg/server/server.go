@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -181,7 +182,7 @@ type Server struct {
 // externalStorageBuilder is a wrapper around the ExternalStorage factory
 // methods. It allows us to separate the creation and initialization of the
 // builder between NewServer() and Start() respectively.
-// TODO(adityamaru): Consider moving this to pkg/storage/cloud at a future
+// TODO(adityamaru): Consider moving this to pkg/storage/cloudimpl at a future
 // stage of the ongoing refactor.
 type externalStorageBuilder struct {
 	conf              base.ExternalIODirConfig
@@ -210,7 +211,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory)
+	return cloudimpl.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -219,7 +220,7 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory)
+	return cloudimpl.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory)
 }
 
 // NewServer creates a Server from a server.Config.

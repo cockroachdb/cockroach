@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -407,7 +408,7 @@ func (b *backupResumer) Resume(
 	}
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URI)
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
@@ -417,7 +418,7 @@ func (b *backupResumer) Resume(
 	}
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
-		conf, err := cloud.ExternalStorageConfFromURI(uri)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
 		if err != nil {
 			return err
 		}
@@ -554,7 +555,7 @@ func (b *backupResumer) deleteCheckpoint(ctx context.Context, cfg *sql.ExecutorC
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
 		// details.URI.
-		conf, err := cloud.ExternalStorageConfFromURI(details.URI)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
 		}

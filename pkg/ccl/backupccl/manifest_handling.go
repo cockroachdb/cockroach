@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -103,7 +104,7 @@ func readBackupManifestFromStore(
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
 	r, err := exportStore.ReadFile(ctx, BackupManifestName)
 	if err != nil {
-		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 			return false, nil
 		}
 		return false, err
@@ -437,7 +438,7 @@ func resolveBackupManifests(
 		// automatically created incremental layers inside the base layer.
 		prev, err := findPriorBackups(ctx, baseStores[0])
 		if err != nil {
-			if errors.Is(err, cloud.ErrListingUnsupported) {
+			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
 				// If we do not support listing, we have to just assume there are none
 				// and restore the specified base.
@@ -677,7 +678,7 @@ func VerifyUsableExportTarget(
 			readable, BackupManifestName)
 	}
 
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err, "%s returned an unexpected error when checking for the existence of %s file", readable, BackupManifestName)
 	}
 
@@ -689,7 +690,7 @@ func VerifyUsableExportTarget(
 			readable, BackupManifestCheckpointName)
 	}
 
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return errors.Wrapf(err, "%s returned an unexpected error when checking for the existence of %s file", readable, BackupManifestCheckpointName)
 	}
 
