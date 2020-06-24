@@ -22,6 +22,8 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>.*)$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
+var supportedSQLAlchemyTag = "rel_1_3_17"
+
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
 
@@ -54,9 +56,7 @@ func registerSQLAlchemy(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest sqlalchemy release is %s.", latestTag)
-
-		// TODO: using the latest version requires the dialect to implement `get_isolation_levels`
-		latestTag = "rel_1_3_14"
+		c.l.Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get",
@@ -142,7 +142,7 @@ func registerSQLAlchemy(r *testRegistry) {
 			c,
 			"https://github.com/sqlalchemy/sqlalchemy.git",
 			"/mnt/data1/sqlalchemy",
-			latestTag,
+			supportedSQLAlchemyTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
