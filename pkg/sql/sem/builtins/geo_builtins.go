@@ -2795,6 +2795,51 @@ The calculations are done on a sphere.`,
 	),
 
 	//
+	// Geography operations
+	//
+	"st_geohash": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				ret, err := geogfn.GeoHash(g.Geography, -1)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Accepts a geographic expression and returns a geohash representation of the geometry with full precision if a point is provided or with variable precision based on the size of the feature",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"precision", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				p := args[1].(*tree.DInt)
+				ret, err := geogfn.GeoHash(g.Geography, int32(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Accepts a geographic expression and returns a geoHash representation of the geometry.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	//
 	// Schema changes
 	//
 	"addgeometrycolumn": makeBuiltin(

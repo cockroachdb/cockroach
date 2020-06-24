@@ -931,6 +931,10 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_geographyfromtext"></a><code>st_geographyfromtext(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation.</p>
 </span></td></tr>
+<tr><td><a name="st_geohash"></a><code>st_geohash(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Accepts a geographic expression and returns a geohash representation of the geometry with full precision if a point is provided or with variable precision based on the size of the feature</p>
+</span></td></tr>
+<tr><td><a name="st_geohash"></a><code>st_geohash(geography: geography, precision: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Accepts a geographic expression and returns a geoHash representation of the geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_geomcollfromtext"></a><code>st_geomcollfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not GeometryCollection, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_geomcollfromtext"></a><code>st_geomcollfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not GeometryCollection, NULL is returned.</p>

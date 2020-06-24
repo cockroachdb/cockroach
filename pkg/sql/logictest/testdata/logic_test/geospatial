@@ -2004,3 +2004,27 @@ SELECT ST_LineInterpolatePoint('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -
 
 statement error st_lineinterpolatepoints\(\): geometry Polygon should be LineString
 SELECT ST_LineInterpolatePoints('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2, false)
+
+query T
+SELECT ST_GEOHASH('POINT(0 0)'::geography,8)
+----
+s0000000
+
+query TTTT
+SELECT
+  a.dsc,
+  ST_GEOHASH(a.geog),
+  ST_GEOHASH(a.geog, 4),
+  ST_ASEWKT(a.geog)
+FROM geog_operators_test a
+----
+Empty GeometryCollection                  ·                     ·     SRID=4326;GEOMETRYCOLLECTION EMPTY
+Empty LineString                          ·                     ·     SRID=4326;LINESTRING EMPTY
+Faraway point                             s0gs3y0zh7w1z0gs3y0z  s0gs  SRID=4326;POINT (5 5)
+Line going through left and right square  ·                     s004  SRID=4326;LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL                  NULL  NULL
+Point middle of Left Square               ebpdue5btnubpm9npc6m  ebpd  SRID=4326;POINT (-0.5 0.5)
+Point middle of Right Square              s006g7h0dyg00twy01mt  s006  SRID=4326;POINT (0.5 0.5)
+Square (left)                             ·                     ebpd  SRID=4326;POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Square (right)                            ·                     s006  SRID=4326;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Square overlapping left and right square  ·                     s006  SRID=4326;POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
