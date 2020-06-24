@@ -29,7 +29,8 @@ import (
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
-	viewName tree.Name
+	// viewName is the fully qualified name of the new view.
+	viewName *tree.TableName
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.
 	viewQuery   string
@@ -53,7 +54,7 @@ func (n *createViewNode) ReadingOwnWrites() {}
 func (n *createViewNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
 
-	viewName := string(n.viewName)
+	viewName := n.viewName.Object()
 	isTemporary := n.temporary
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
@@ -78,7 +79,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	var replacingDesc *sqlbase.MutableTableDescriptor
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, viewName)
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.viewName)
 	if err != nil {
 		switch {
 		case !sqlbase.IsRelationAlreadyExistsError(err):
@@ -108,10 +109,8 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	schemaName := tree.PublicSchemaName
 	if isTemporary {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
-		schemaName = tree.Name(params.p.TemporarySchemaName())
 	}
 
 	// Inherit permissions from the database descriptor.
@@ -210,7 +209,6 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	tn := tree.MakeTableNameWithSchema(tree.Name(n.dbDesc.GetName()), schemaName, n.viewName)
 	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
@@ -222,7 +220,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			ViewQuery string
 			User      string
 		}{
-			ViewName:  tn.FQString(),
+			ViewName:  n.viewName.FQString(),
 			ViewQuery: n.viewQuery,
 			User:      params.SessionData().User,
 		},

@@ -103,11 +103,11 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	return a.Accessor.GetDatabaseDesc(ctx, txn, codec, name, flags)
 }
 
-// IsValidSchema implements the Accessor interface.
-func (a *CachedPhysicalAccessor) IsValidSchema(
-	ctx context.Context, txn *kv.Txn, _ keys.SQLCodec, dbID sqlbase.ID, scName string,
-) (bool, sqlbase.ID, error) {
-	return a.tc.ResolveSchemaID(ctx, txn, dbID, scName)
+// GetSchema implements the Accessor interface.
+func (a *CachedPhysicalAccessor) GetSchema(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
+) (bool, sqlbase.ResolvedSchema, error) {
+	return a.tc.ResolveSchema(ctx, txn, dbID, scName)
 }
 
 // GetObjectDesc implements the Accessor interface.

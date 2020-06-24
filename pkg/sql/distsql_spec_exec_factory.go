@@ -792,7 +792,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateTable(
 
 func (e *distSQLSpecExecFactory) ConstructCreateView(
 	schema cat.Schema,
-	viewName string,
+	viewName *cat.DataSourceName,
 	ifNotExists bool,
 	replace bool,
 	temporary bool,

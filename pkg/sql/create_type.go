@@ -72,15 +72,17 @@ func resolveNewTypeName(
 }
 
 // getCreateTypeParams performs some initial validation on the input new
-// TypeName and returns the key for the new type descriptor, the ID of the
-// new type, the parent database and parent schema id.
+// TypeName and returns the key for the new type descriptor, and the ID of
+// the parent schema.
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db *sqlbase.ImmutableDatabaseDescriptor,
 ) (sqlbase.DescriptorKey, sqlbase.ID, error) {
-	// TODO (rohany): This should be named object key.
-	typeKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), name.Type())
-	// As of now, we can only create types in the public schema.
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
+	// Get the ID of the schema the type is being created in.
+	schemaID, err := params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, db.ID, name.Schema())
+	if err != nil {
+		return nil, 0, err
+	}
+	typeKey := sqlbase.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
 	exists, collided, err := sqlbase.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())
 	if err == nil && exists {
@@ -94,11 +96,7 @@ func getCreateTypeParams(
 	if err != nil {
 		return nil, 0, err
 	}
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
-	if err != nil {
-		return nil, 0, err
-	}
-	return typeKey, id, nil
+	return typeKey, schemaID, nil
 }
 
 // createArrayType performs the implicit array type creation logic of Postgres.
@@ -113,11 +111,11 @@ func (p *planner) createArrayType(
 	typ *tree.TypeName,
 	typDesc *sqlbase.MutableTypeDescriptor,
 	db *sqlbase.ImmutableDatabaseDescriptor,
+	schemaID sqlbase.ID,
 ) (sqlbase.ID, error) {
 	// Postgres starts off trying to create the type as _<typename>. It then
 	// continues adding "_" to the front of the name until it doesn't find
 	// a collision.
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
 	arrayTypeName := "_" + typ.Type()
 	var arrayTypeKey sqlbase.DescriptorKey
 	for {
@@ -135,10 +133,11 @@ func (p *planner) createArrayType(
 		}
 		// If we found an empty spot, then create the namespace key for this entry.
 		if !exists {
-			arrayTypeKey = sqlbase.MakePublicTableNameKey(
+			arrayTypeKey = sqlbase.MakeObjectNameKey(
 				params.ctx,
 				params.ExecCfg().Settings,
 				db.GetID(),
+				schemaID,
 				arrayTypeName,
 			)
 			break
@@ -170,7 +169,7 @@ func (p *planner) createArrayType(
 		Name:           arrayTypeName,
 		ID:             id,
 		ParentID:       db.GetID(),
-		ParentSchemaID: keys.PublicSchemaID,
+		ParentSchemaID: schemaID,
 		Kind:           sqlbase.TypeDescriptor_ALIAS,
 		Alias:          types.MakeArray(elemTyp),
 	})
@@ -221,7 +220,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	n.TypeName.SetAnnotation(&p.semaCtx.Annotations, typeName)
 
 	// Generate a key in the namespace table and a new id for this type.
-	typeKey, id, err := getCreateTypeParams(params, typeName, db)
+	typeKey, schemaID, err := getCreateTypeParams(params, typeName, db)
 	if err != nil {
 		return err
 	}
@@ -235,6 +234,12 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		}
 	}
 
+	// Generate a stable ID for the new type.
+	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+	if err != nil {
+		return err
+	}
+
 	// TODO (rohany): OID's are computed using an offset of
 	//  oidext.CockroachPredefinedOIDMax from the descriptor ID. Once we have
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
@@ -244,13 +249,13 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		Name:           typeName.Type(),
 		ID:             id,
 		ParentID:       db.GetID(),
-		ParentSchemaID: keys.PublicSchemaID,
+		ParentSchemaID: schemaID,
 		Kind:           sqlbase.TypeDescriptor_ENUM,
 		EnumMembers:    members,
 	})
 
 	// Create the implicit array type for this type before finishing the type.
-	arrayTypeID, err := p.createArrayType(params, n, typeName, typeDesc, db)
+	arrayTypeID, err := p.createArrayType(params, n, typeName, typeDesc, db, schemaID)
 	if err != nil {
 		return err
 	}

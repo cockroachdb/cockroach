@@ -41,4 +41,4 @@ GRANT ALL ON * TO TEST
 count
 CREATE ROLE rolea
 ----
-6
+8

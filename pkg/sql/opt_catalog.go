@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -78,29 +79,40 @@ func (oc *optCatalog) reset() {
 	oc.cfg = oc.planner.execCfg.Gossip.DeprecatedSystemConfig(47150)
 }
 
-// optSchema is a wrapper around sqlbase.ImmutableDatabaseDescriptor that
+// optSchema represents the parent database and schema for an object. It
 // implements the cat.Object and cat.Schema interfaces.
 type optSchema struct {
 	planner *planner
-	desc    *sqlbase.ImmutableDatabaseDescriptor
+
+	database *sqlbase.ImmutableDatabaseDescriptor
+	schema   sqlbase.ResolvedSchema
 
 	name cat.SchemaName
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	return cat.StableID(os.desc.GetID())
+	switch os.schema.Kind {
+	case sqlbase.SchemaUserDefined, sqlbase.SchemaTemporary:
+		// User defined schemas and the temporary schema have real ID's, so use
+		// them here.
+		return cat.StableID(os.schema.ID)
+	default:
+		// Virtual schemas and the public schema don't, so just fall back to the
+		// parent database's ID.
+		return cat.StableID(os.database.GetID())
+	}
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSchema) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.GetID())
+	return os.ID()
 }
 
 // Equals is part of the cat.Object interface.
 func (os *optSchema) Equals(other cat.Object) bool {
 	otherSchema, ok := other.(*optSchema)
-	return ok && os.desc.GetID() == otherSchema.desc.GetID()
+	return ok && os.ID() == otherSchema.ID()
 }
 
 // Name is part of the cat.Schema interface.
@@ -115,10 +127,19 @@ func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceNa
 		os.planner.Txn(),
 		os.planner,
 		os.planner.ExecCfg().Codec,
-		os.desc,
+		os.database,
 		os.name.Schema(),
 		true, /* explicitPrefix */
 	)
+}
+
+func (os *optSchema) getDescriptorForPermissionsCheck() sqlbase.DescriptorInterface {
+	// If the schema is backed by a descriptor, then return it.
+	if os.schema.Kind == sqlbase.SchemaUserDefined {
+		return os.schema.Desc
+	}
+	// Otherwise, just return the database descriptor.
+	return os.database
 }
 
 // ResolveSchema is part of the cat.Catalog interface.
@@ -133,7 +154,7 @@ func (oc *optCatalog) ResolveSchema(
 	}
 
 	oc.tn.ObjectNamePrefix = *name
-	found, desc, err := oc.tn.ObjectNamePrefix.Resolve(
+	found, prefixI, err := oc.tn.ObjectNamePrefix.Resolve(
 		ctx,
 		oc.planner,
 		oc.planner.CurrentDatabase(),
@@ -152,10 +173,13 @@ func (oc *optCatalog) ResolveSchema(
 			pgcode.InvalidSchemaName, "target database or schema does not exist",
 		)
 	}
+
+	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
-		planner: oc.planner,
-		desc:    desc.(*sqlbase.ImmutableDatabaseDescriptor),
-		name:    oc.tn.ObjectNamePrefix,
+		planner:  oc.planner,
+		database: prefix.Database,
+		schema:   prefix.Schema,
+		name:     oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil
 }
 
@@ -207,10 +231,10 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	return ds, false, err
 }
 
-func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorInterface, error) {
+func getDescFromCatalogObjectForPermissions(o cat.Object) (sqlbase.DescriptorInterface, error) {
 	switch t := o.(type) {
 	case *optSchema:
-		return t.desc, nil
+		return t.getDescriptorForPermissionsCheck(), nil
 	case *optTable:
 		return t.desc, nil
 	case *optVirtualTable:
@@ -241,7 +265,7 @@ func getDescForDataSource(o cat.DataSource) (*sqlbase.ImmutableTableDescriptor, 
 
 // CheckPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
-	desc, err := getDescForCatalogObject(o)
+	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
 		return err
 	}
@@ -250,7 +274,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
-	desc, err := getDescForCatalogObject(o)
+	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
 		return err
 	}
@@ -1363,11 +1387,11 @@ func newOptVirtualTable(
 	id := cat.StableID(desc.ID)
 	if name.Catalog() != "" {
 		// TODO(radu): it's unfortunate that we have to lookup the schema again.
-		_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+		_, prefixI, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
 		if err != nil {
 			return nil, err
 		}
-		if dbDesc == nil {
+		if prefixI == nil {
 			// The database was not found. This can happen e.g. when
 			// accessing a virtual schema over a non-existent
 			// database. This is a common scenario when the current db
@@ -1380,7 +1404,8 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			id |= cat.StableID(dbDesc.(*sqlbase.ImmutableDatabaseDescriptor).GetID()) << 32
+			prefix := prefixI.(*catalog.ResolvedObjectPrefix)
+			id |= cat.StableID(prefix.Database.GetID()) << 32
 		}
 	}
 

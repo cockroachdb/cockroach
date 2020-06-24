@@ -259,8 +259,6 @@ SELECT * FROM system.namespace WHERE name LIKE '%48233'
 statement error cannot convert a temporary table to a persistent table during renames
 ALTER TABLE reg_48233 RENAME TO public.reg_48233
 
+# Renaming between temp tables is OK.
 statement ok
-CREATE TABLE persistent_48233(a int)
-
-statement error schema cannot be modified: "pg_temp"
 ALTER TABLE reg_48233 RENAME TO pg_temp.pers_48233

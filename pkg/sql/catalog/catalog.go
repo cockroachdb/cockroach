@@ -62,3 +62,15 @@ type TableEntry struct {
 	// IsAdding indicates the descriptor is being created.
 	IsAdding bool
 }
+
+// ResolvedObjectPrefix represents the resolved components of an object name
+// prefix. It contains the parent database and schema.
+type ResolvedObjectPrefix struct {
+	// Database is the parent database descriptor.
+	Database *sqlbase.ImmutableDatabaseDescriptor
+	// Schema is the parent schema.
+	Schema sqlbase.ResolvedSchema
+}
+
+// SchemaMeta implements the SchemaMeta interface.
+func (*ResolvedObjectPrefix) SchemaMeta() {}

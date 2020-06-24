@@ -94,10 +94,11 @@ func (p *planner) ResolveUncachedTableDescriptor(
 func (p *planner) ResolveUncachedDatabase(
 	ctx context.Context, un *tree.UnresolvedObjectName,
 ) (res *UncachedDatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
+	var prefix *catalog.ResolvedObjectPrefix
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		res, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
+		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
-	return res, namePrefix, err
+	return prefix.Database, namePrefix, err
 }
 
 // LookupSchema implements the tree.ObjectNameTargetResolver interface.
@@ -109,11 +110,15 @@ func (p *planner) LookupSchema(
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
-	found, _, err = sc.IsValidSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
+	var resolvedSchema sqlbase.ResolvedSchema
+	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return false, nil, err
 	}
-	return found, dbDesc.(*sqlbase.ImmutableDatabaseDescriptor), nil
+	return found, &catalog.ResolvedObjectPrefix{
+		Database: dbDesc.(*sqlbase.ImmutableDatabaseDescriptor),
+		Schema:   resolvedSchema,
+	}, nil
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
