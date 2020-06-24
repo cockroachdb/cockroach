@@ -23,6 +23,8 @@ artifacts
 # fuzz tests
 work-Fuzz*
 *-fuzz.zip
+# vendoring by `go mod vendor` may produce this file temporarily
+/.vendor.tmp.*
 
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
