@@ -804,7 +804,7 @@ func (ts *TestServer) AdminURL() string {
 
 // GetHTTPClient implements TestServerInterface.
 func (ts *TestServer) GetHTTPClient() (http.Client, error) {
-	return ts.Cfg.GetHTTPClient()
+	return ts.Server.rpcContext.GetHTTPClient()
 }
 
 const authenticatedUserName = "authentic_user"
@@ -865,7 +865,7 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
 			// Create an httpClient and attach the cookie jar to the client.
-			authClient.httpClient, err = ts.Cfg.GetHTTPClient()
+			authClient.httpClient, err = ts.rpcContext.GetHTTPClient()
 			if err != nil {
 				return err
 			}
