@@ -121,6 +121,8 @@ func (p *planner) ShowClusterSetting(
 		dType = types.Float
 	case *settings.DurationSetting:
 		dType = types.Interval
+	case *settings.DurationSettingWithExplicitUnit:
+		dType = types.Interval
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
@@ -148,6 +150,8 @@ func (p *planner) ShowClusterSetting(
 			case *settings.FloatSetting:
 				d = tree.NewDFloat(tree.DFloat(s.Get(&st.SV)))
 			case *settings.DurationSetting:
+				d = &tree.DInterval{Duration: duration.MakeDuration(s.Get(&st.SV).Nanoseconds(), 0, 0)}
+			case *settings.DurationSettingWithExplicitUnit:
 				d = &tree.DInterval{Duration: duration.MakeDuration(s.Get(&st.SV).Nanoseconds(), 0, 0)}
 			case *settings.EnumSetting:
 				d = tree.NewDString(s.String(&st.SV))
