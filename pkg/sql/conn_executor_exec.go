@@ -88,7 +88,13 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
 		if ex.server.cfg.Settings.IsCPUProfiling() {
+			remoteAddr := "internal"
+			if rAddr := ex.sessionData.RemoteAddr ; rAddr!= nil {
+				remoteAddr = rAddr.String()
+			}
 			labels := pprof.Labels(
+				"appname", ex.sessionData.ApplicationName,
+			"addr",	remoteAddr,
 				"stmt.tag", stmt.AST.StatementTag(),
 				"stmt.anonymized", stmt.AnonymizedStr,
 			)
