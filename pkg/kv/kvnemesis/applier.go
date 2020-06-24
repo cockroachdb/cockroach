@@ -124,6 +124,7 @@ type clientI interface {
 	Get(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
 	Scan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	Run(context.Context, *kv.Batch) error
 }
 
@@ -143,7 +144,11 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 		err := db.Put(ctx, o.Key, o.Value)
 		o.Result = resultError(ctx, err)
 	case *ScanOperation:
-		kvs, err := db.Scan(ctx, o.Key, o.EndKey, 0 /* maxRows */)
+		fn := db.Scan
+		if o.ForUpdate {
+			fn = db.ScanForUpdate
+		}
+		kvs, err := fn(ctx, o.Key, o.EndKey, 0 /* maxRows */)
 		if err != nil {
 			o.Result = resultError(ctx, err)
 		} else {
@@ -174,7 +179,11 @@ func applyBatchOp(
 		case *PutOperation:
 			b.Put(subO.Key, subO.Value)
 		case *ScanOperation:
-			b.Scan(subO.Key, subO.EndKey)
+			if subO.ForUpdate {
+				b.ScanForUpdate(subO.Key, subO.EndKey)
+			} else {
+				b.Scan(subO.Key, subO.EndKey)
+			}
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

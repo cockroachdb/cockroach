@@ -23,9 +23,8 @@
 // guarantees.
 //
 // TODO
-// - Validate read only transactions
 // - CPut/InitPut/Increment/Delete
-// - DeleteRange/ClearRange/RevertRange/Scan/ReverseScan
+// - DeleteRange/ClearRange/RevertRange/ReverseScan
 // - TransferLease
 // - ExportRequest
 // - AddSSTable

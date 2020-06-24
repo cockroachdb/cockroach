@@ -110,7 +110,11 @@ func TestRandStep(t *testing.T) {
 					client.PutMissing++
 				}
 			case *ScanOperation:
-				client.Scan++
+				if o.ForUpdate {
+					client.ScanForUpdate++
+				} else {
+					client.Scan++
+				}
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
