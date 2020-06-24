@@ -146,10 +146,10 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 		}
 
 		// 32 bytes are reserved for key ID.
-		keySize := aesSize/8 + 32
-		b := make([]byte, keySize)
+		kSize := aesSize/8 + 32
+		b := make([]byte, kSize)
 		if _, err := rand.Read(b); err != nil {
-			return fmt.Errorf("failed to create key with size %d bytes", keySize)
+			return fmt.Errorf("failed to create key with size %d bytes", kSize)
 		}
 
 		// Write key to the file with owner read/write permission.
