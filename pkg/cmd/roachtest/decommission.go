@@ -437,6 +437,28 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		t.Fatalf("recommission failed: %v", err)
 	}
 
+	// Verify the --self flag works.
+	t.l.Printf("re-decommissioning first node, from itself\n")
+	selfFlagSupported := true
+	if cmdOutput, err := decommission(ctx, 1, nil, "decommission", "--self"); err != nil {
+		// Until 20.2, --self is not supported.
+		// TODO(knz): Remove this alternative when roachtest does not
+		// test any version lower than 20.2.
+		if strings.Contains(cmdOutput, "ERROR: unknown flag: --self") {
+			t.l.Printf("--self not supported; skipping recommission with --self")
+			selfFlagSupported = false
+		} else {
+			t.Fatalf("decommission failed: %v", err)
+		}
+	}
+
+	if selfFlagSupported {
+		t.l.Printf("re-recommissioning first node, from itself\n")
+		if _, err := decommission(ctx, 1, nil, "recommission", "--self"); err != nil {
+			t.Fatalf("recommission failed: %v", err)
+		}
+	}
+
 	t.l.Printf("decommissioning second node from third, using --wait=all\n")
 	{
 		o, err := decommission(ctx, 3, c.Node(2),
@@ -679,6 +701,8 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 		expMatrix := [][]string{
 			{"node_decommissioned", "1"},
 			{"node_recommissioned", "1"},
+			{"node_decommissioned", "1"},
+			{"node_recommissioned", "1"},
 			{"node_decommissioned", "2"},
 			{"node_recommissioned", "2"},
 			{"node_decommissioned", "3"},
@@ -687,7 +711,7 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 		}
 
 		if !reflect.DeepEqual(matrix, expMatrix) {
-			t.Fatalf("unexpected diff(matrix, expMatrix):\n%s", pretty.Diff(matrix, expMatrix))
+			t.Fatalf("unexpected diff(matrix, expMatrix):\n%s\n%s\nvs.\n%s", pretty.Diff(matrix, expMatrix), matrix, expMatrix)
 		}
 		return nil
 	}); err != nil {
