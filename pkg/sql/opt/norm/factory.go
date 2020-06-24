@@ -270,7 +270,10 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 	// the logical properties of the group in question.
 	if rel.Op() != opt.ValuesOp {
 		relational := rel.Relational()
-		if relational.Cardinality.IsZero() && !relational.CanHaveSideEffects {
+		// We can do this if we only contain leak-proof operators. As an example of
+		// an immutable operator that should not be folded: a Limit on top of an
+		// empty input has to error out if the limit turns out to be negative.
+		if relational.Cardinality.IsZero() && relational.VolatilitySet.IsLeakProof() {
 			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
 				values := f.funcs.ConstructEmptyValues(relational.OutputCols)
 				if f.appliedRule != nil {
