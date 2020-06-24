@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -122,11 +123,11 @@ func Load(
 	semaCtx := tree.MakeSemaContext()
 
 	blobClientFactory := blobs.TestBlobServiceClient(writeToDir)
-	conf, err := cloud.ExternalStorageConfFromURI(uri)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
 	}
-	dir, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+	dir, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobClientFactory)
 	if err != nil {
 		return backupccl.BackupManifest{}, errors.Wrap(err, "export storage from URI")

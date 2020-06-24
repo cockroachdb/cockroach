@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -243,7 +243,7 @@ func backupJobDescription(
 	}
 
 	for _, t := range to {
-		sanitizedTo, err := cloud.SanitizeExternalStorageURI(t, nil /* extraParams */)
+		sanitizedTo, err := cloudimpl.SanitizeExternalStorageURI(t, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}
@@ -251,7 +251,7 @@ func backupJobDescription(
 	}
 
 	for _, from := range incrementalFrom {
-		sanitizedFrom, err := cloud.SanitizeExternalStorageURI(from, nil /* extraParams */)
+		sanitizedFrom, err := cloudimpl.SanitizeExternalStorageURI(from, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}

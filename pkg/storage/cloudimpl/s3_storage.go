@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +38,7 @@ type s3Storage struct {
 	settings *cluster.Settings
 }
 
-var _ ExternalStorage = &s3Storage{}
+var _ cloud.ExternalStorage = &s3Storage{}
 
 func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 	q := make(url.Values)
@@ -61,7 +62,7 @@ func makeS3Storage(
 	ioConf base.ExternalIODirConfig,
 	conf *roachpb.ExternalStorage_S3,
 	settings *cluster.Settings,
-) (ExternalStorage, error) {
+) (cloud.ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}

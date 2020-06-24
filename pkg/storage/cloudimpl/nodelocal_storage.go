@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,7 +33,7 @@ type localFileStorage struct {
 	blobClient blobs.BlobClient                      // inter-node file sharing service
 }
 
-var _ ExternalStorage = &localFileStorage{}
+var _ cloud.ExternalStorage = &localFileStorage{}
 
 // MakeLocalStorageURI converts a local path (should always be relative) to a
 // valid nodelocal URI.
@@ -50,7 +51,7 @@ func makeLocalStorage(
 	cfg roachpb.ExternalStorage_LocalFilePath,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
-) (ExternalStorage, error) {
+) (cloud.ExternalStorage, error) {
 	if cfg.Path == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
