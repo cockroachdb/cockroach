@@ -2285,6 +2285,51 @@ Note if geometries are the same, it will return the LineString with the minimum 
 		},
 	),
 
+	//
+	// Geography operations
+	//
+	"st_geohash": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				ret, err := geogfn.GeoHash(g.Geography, geogfn.GeoHashNoPrecision)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Accepts a geographic expression and returns a GeoHash representation of the geometry with full precision if a point is provided, or with variable precision based on the size of the feature",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography", types.Geography},
+				{"precision", types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeography)
+				p := args[1].(*tree.DInt)
+				ret, err := geogfn.GeoHash(g.Geography, int(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Accepts a geographic expression and returns a GeoHash representation of the geometry with the supplied precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	// Topology operations
 	"st_centroid": makeBuiltin(
 		defProps(),
