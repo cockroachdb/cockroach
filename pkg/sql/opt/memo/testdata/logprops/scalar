@@ -200,20 +200,21 @@ group-by
  ├── project
  │    ├── columns: x:1(int!null) div:3(decimal)
  │    ├── stable, side-effects
+ │    ├── fd: (1)-->(3)
  │    ├── prune: (1,3)
  │    ├── interesting orderings: (+1)
  │    └── inner-join (hash)
  │         ├── columns: x:1(int!null) y:2(int) div:3(decimal) u:4(int!null) v:5(int!null)
  │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │         ├── stable, side-effects
- │         ├── fd: (1)-->(2), (1,2)-->(3), (1)==(4), (4)==(1)
+ │         ├── fd: (1)-->(2,3), (1)==(4), (4)==(1)
  │         ├── prune: (2,3,5)
  │         ├── interesting orderings: (+1)
  │         ├── project
  │         │    ├── columns: div:3(decimal) x:1(int!null) y:2(int)
  │         │    ├── immutable, side-effects
  │         │    ├── key: (1)
- │         │    ├── fd: (1)-->(2), (1,2)-->(3)
+ │         │    ├── fd: (1)-->(2,3)
  │         │    ├── prune: (1-3)
  │         │    ├── interesting orderings: (+1)
  │         │    ├── unfiltered-cols: (1,2)
