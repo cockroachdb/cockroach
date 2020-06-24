@@ -156,7 +156,7 @@ VERBOSE :=
 DESTDIR :=
 
 DUPLFLAGS    := -t 100
-GOFLAGS      := -mod=vendor # we always want to build from the vendor directory
+GOFLAGS      :=
 TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
@@ -165,6 +165,10 @@ SUFFIX       := $(GOEXE)
 INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
+
+# We always want to build from the vendor directory.
+# Avoid reusing GOFLAGS as that is overwritten by various release processes.
+GOMODVENDORFLAGS := -mod=vendor
 
 ifeq "$(findstring -j,$(shell ps -o args= $$PPID))" ""
 ifdef NCPUS
@@ -221,6 +225,7 @@ export CFLAGS CXXFLAGS LDFLAGS CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS
 # toolchain.
 override LINKFLAGS = -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILDTYPE) -extldflags "$(LDFLAGS)"
 
+GOMODVENDORFLAGS ?= -mod=vendor
 GOFLAGS ?=
 TAR     ?= tar
 
@@ -965,7 +970,7 @@ SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 # normal and race test builds.
 .PHONY: go-install
 $(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) go-install:
-	 $(xgo) $(build-mode) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	 $(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
 # regenerate SQL diagram BNFs and some other doc pages. Generating these docs
@@ -1011,7 +1016,7 @@ start:
 .PHONY: testbuild
 testbuild:
 	$(xgo) list -tags '$(TAGS)' -f \
-	'$(xgo) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
+	'$(xgo) test -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
 
 testshort: override TESTFLAGS += -short
@@ -1038,13 +1043,13 @@ benchshort: override TESTFLAGS += -benchtime=1ns -short
 .PHONY: check test testshort testrace testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
 check test testshort testrace bench benchshort:
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
 .PHONY: roachprod-stress roachprod-stressrace
 roachprod-stress roachprod-stressrace: bin/roachprod-stress
@@ -1091,7 +1096,7 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: testslow testraceslow
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow:
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: upload-coverage
 upload-coverage: bin/.bootstrap
@@ -1126,7 +1131,7 @@ dupl: bin/.bootstrap
 .PHONY: generate
 generate: ## Regenerate generated code.
 generate: protobuf $(DOCGEN_TARGETS) bin/.execgen_targets $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
-	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
 
@@ -1138,14 +1143,14 @@ lint: bin/returncheck bin/roachvet bin/optfmt
 	@# Run 'go build -i' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
 	@# https://groups.google.com/forum/#!msg/golang-dev/qfa3mHN4ZPA/X2UzjNV1BAAJ.
-	$(xgo) build -i -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
-	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -timeout $(TESTTIMEOUT) -run 'Lint/$(TESTS)'
+	$(xgo) build -i -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -timeout $(TESTTIMEOUT) -run 'Lint/$(TESTS)'
 
 .PHONY: lintshort
 lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
 lintshort: bin/roachvet bin/optfmt
-	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
+	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -timeout $(TESTTIMEOUT) -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
 protobuf: $(PROTOBUF_TARGETS)
@@ -1678,7 +1683,7 @@ clean-execgen-files:
 clean: ## Remove build artifacts.
 clean: clean-c-deps clean-execgen-files
 	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
-	-$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
+	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
 	rm -rf artifacts bin $(ARCHIVE) pkg/sql/parser/gen
@@ -1763,7 +1768,7 @@ $(testbins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
 	@echo go test -c $($*-package)
 	bin/prereqs -bin-name=$* -test $($*-package) > $@.d.tmp
 	mv -f $@.d.tmp $@.d
-	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
+	$(xgo) test $(GOTESTFLAGS) $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $($*-package)
 
 bin/prereqs: ./pkg/cmd/prereqs/*.go | bin/.submodules-initialized
 	@echo go install -v ./pkg/cmd/prereqs
