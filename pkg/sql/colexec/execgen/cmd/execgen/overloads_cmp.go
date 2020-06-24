@@ -331,9 +331,19 @@ func (c intervalCustomizer) getCmpOpCompareFunc() compareFunc {
 	}
 }
 
+// getDatumVecVariableName returns the variable name for a datumVec given
+// leftCol and rightCol (either of which could be "_" - meaning there is no
+// vector in scope for the corresponding side).
+func getDatumVecVariableName(leftCol, rightCol string) string {
+	if leftCol == "_" {
+		return rightCol
+	}
+	return leftCol
+}
+
 func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
-		datumVecVariableName := getDatumVecVariableName(leftCol, rightCol, false /* preferRightSide */)
+		datumVecVariableName := getDatumVecVariableName(leftCol, rightCol)
 		return fmt.Sprintf(`
 			%s = %s.(*coldataext.Datum).CompareDatum(%s, %s)
 		`, targetElem, leftElem, datumVecVariableName, rightElem)

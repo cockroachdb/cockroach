@@ -54,10 +54,11 @@ func newDatumVec(t *types.T, n int, evalCtx *tree.EvalContext) coldata.DatumVec 
 }
 
 // BinFn evaluates the provided binary function between the receiver and other.
-// dVec is the datumVec that stores either d or other (it doesn't matter which
-// one because it is used only to supply the eval context).
-func (d *Datum) BinFn(binFn *tree.BinOp, dVec, other interface{}) (tree.Datum, error) {
-	return binFn.Fn(dVec.(*datumVec).evalCtx, d.Datum, maybeUnwrapDatum(other))
+// other can either be nil, tree.Datum, or *Datum.
+func (d *Datum) BinFn(
+	binFn *tree.BinOp, evalCtx *tree.EvalContext, other interface{},
+) (tree.Datum, error) {
+	return binFn.Fn(evalCtx, d.Datum, maybeUnwrapDatum(other))
 }
 
 // CompareDatum returns the comparison between d and other. The other is
