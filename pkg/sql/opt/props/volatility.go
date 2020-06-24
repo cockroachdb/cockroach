@@ -25,8 +25,58 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // memo if we don't constant fold stable operators, and subsequently fold them
 // each time we try to execute an instance of the query.
 //
-// TODO(radu): transfer the comment for CanHaveSideEffects here clarifying the
-// optimizer policy around volatility and side-effects.
+// The optimizer makes *only* the following side-effect related guarantees:
+//
+//   1. CASE/IF branches are only evaluated if the branch condition is true or
+//      if all operators are LeakProof.  Therefore, the following is guaranteed
+//      to never raise a divide by zero error, regardless of how cleverly the
+//      optimizer rewrites the expression:
+//
+//        CASE WHEN divisor<>0 THEN dividend / divisor ELSE NULL END
+//
+//      While this example is trivial, a more complex example might have
+//      correlated subqueries that cannot be hoisted outside the CASE
+//      expression in the usual way, since that would trigger premature
+//      evaluation.
+//
+//   2. Volatile expressions are never treated as constant expressions, even
+//      though they do not depend on other columns in the query:
+//
+//        SELECT * FROM xy ORDER BY random()
+//
+//      If the random() expression were treated as a constant, then the ORDER
+//      BY could be dropped by the optimizer, since ordering by a constant is
+//      a no-op. Instead, the optimizer treats it like it would an expression
+//      that depends upon a column.
+//
+//   3. A common table expression (CTE) containing Volatile operators will only
+//      be evaluated one time. This will typically prevent inlining of the CTE
+//      into the query body. For example:
+//
+//        WITH a AS (INSERT ... RETURNING ...) SELECT * FROM a, a
+//
+//      Although the "a" CTE is referenced twice, it must be evaluated only
+//      one time (and its results cached to satisfy the second reference).
+//
+// As long as the optimizer provides these guarantees, it is free to rewrite,
+// reorder, duplicate, and eliminate as if no side effects were present. As an
+// example, the optimizer is free to eliminate the unused "nextval" column in
+// this query:
+//
+//   SELECT x FROM (SELECT nextval(seq), x FROM xy)
+//   =>
+//   SELECT x FROM xy
+//
+// It's also allowed to duplicate side-effecting expressions during predicate
+// pushdown:
+//
+//   SELECT * FROM xy INNER JOIN xz ON xy.x=xz.x WHERE xy.x=random()
+//   =>
+//   SELECT *
+//   FROM (SELECT * FROM xy WHERE xy.x=random())
+//   INNER JOIN (SELECT * FROM xz WHERE xz.x=random())
+//   ON xy.x=xz.x
+//
 type VolatilitySet uint8
 
 // Add a volatility to the set.

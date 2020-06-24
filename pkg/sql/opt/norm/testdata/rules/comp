@@ -69,7 +69,7 @@ SELECT * FROM a WHERE random()::int>a.i+a.i
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
- ├── volatile, side-effects
+ ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -77,7 +77,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── random()::INT8 > (i:2 + i:2) [outer=(2), volatile, side-effects]
+      └── random()::INT8 > (i:2 + i:2) [outer=(2), volatile]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst

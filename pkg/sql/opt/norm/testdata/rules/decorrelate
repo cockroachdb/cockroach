@@ -66,7 +66,7 @@ update xy
  │    ├── u:5 => x:1
  │    └── v:6 => y:2
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── left-join (hash)
       ├── columns: x:3!null y:4 u:5 v:6
       ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
@@ -103,7 +103,7 @@ upsert xy
  │    ├── upsert_x:9 => x:1
  │    └── upsert_y:10 => y:2
  ├── cardinality: [2 - 2]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: upsert_x:9 upsert_y:10 column1:3!null column2:4!null x:5 y:6
       ├── cardinality: [2 - 2]
@@ -147,7 +147,7 @@ delete xy
  ├── columns: <none>
  ├── fetch columns: x:3
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── semi-join (hash)
       ├── columns: x:3!null
       ├── key: (3)
@@ -169,17 +169,17 @@ SELECT generate_series(0, 5) FROM xy
 ----
 inner-join (cross)
  ├── columns: generate_series:3
- ├── immutable, side-effects
+ ├── immutable
  ├── scan xy
  ├── project-set
  │    ├── columns: generate_series:3
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── values
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    └── ()
  │    └── zip
- │         └── generate_series(0, 5) [immutable, side-effects]
+ │         └── generate_series(0, 5) [immutable]
  └── filters (true)
 
 norm expect=DecorrelateProjectSet
@@ -187,7 +187,7 @@ SELECT * FROM a WHERE i IN (SELECT generate_series(k, i) FROM xy)
 ----
 semi-join-apply
  ├── columns: k:1!null i:2!null f:3 s:4 j:5
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -197,18 +197,18 @@ semi-join-apply
  ├── inner-join (cross)
  │    ├── columns: generate_series:8
  │    ├── outer: (1,2)
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── scan xy
  │    ├── project-set
  │    │    ├── columns: generate_series:8
  │    │    ├── outer: (1,2)
- │    │    ├── immutable, side-effects
+ │    │    ├── immutable
  │    │    ├── values
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── key: ()
  │    │    │    └── ()
  │    │    └── zip
- │    │         └── generate_series(k:1, i:2) [outer=(1,2), immutable, side-effects]
+ │    │         └── generate_series(k:1, i:2) [outer=(1,2), immutable]
  │    └── filters (true)
  └── filters
       └── i:2 = generate_series:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
@@ -218,39 +218,39 @@ SELECT generate_series(0, (SELECT generate_series(1,0) FROM xy)) FROM uv
 ----
 inner-join (cross)
  ├── columns: generate_series:6
- ├── immutable, side-effects
+ ├── immutable
  ├── scan uv
  ├── project-set
  │    ├── columns: generate_series:6
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── values
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    └── ()
  │    └── zip
- │         └── function: generate_series [immutable, side-effects, subquery]
+ │         └── function: generate_series [immutable, subquery]
  │              ├── 0
  │              └── subquery
  │                   └── max1-row
  │                        ├── columns: generate_series:5
  │                        ├── error: "more than one row returned by a subquery used as an expression"
  │                        ├── cardinality: [0 - 1]
- │                        ├── immutable, side-effects
+ │                        ├── immutable
  │                        ├── key: ()
  │                        ├── fd: ()-->(5)
  │                        └── inner-join (cross)
  │                             ├── columns: generate_series:5
- │                             ├── immutable, side-effects
+ │                             ├── immutable
  │                             ├── scan xy
  │                             ├── project-set
  │                             │    ├── columns: generate_series:5
- │                             │    ├── immutable, side-effects
+ │                             │    ├── immutable
  │                             │    ├── values
  │                             │    │    ├── cardinality: [1 - 1]
  │                             │    │    ├── key: ()
  │                             │    │    └── ()
  │                             │    └── zip
- │                             │         └── generate_series(1, 0) [immutable, side-effects]
+ │                             │         └── generate_series(1, 0) [immutable]
  │                             └── filters (true)
  └── filters (true)
 
@@ -2821,20 +2821,20 @@ SELECT * FROM xy WHERE EXISTS(SELECT generate_series(x, 10), generate_series(y, 
 group-by
  ├── columns: x:1!null y:2
  ├── grouping columns: x:1!null
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── project-set
  │    ├── columns: x:1!null y:2 generate_series:3 generate_series:4
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── fd: (1)-->(2)
  │    ├── scan xy
  │    │    ├── columns: x:1!null y:2
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    └── zip
- │         ├── generate_series(x:1, 10) [outer=(1), immutable, side-effects]
- │         └── generate_series(y:2, 10) [outer=(2), immutable, side-effects]
+ │         ├── generate_series(x:1, 10) [outer=(1), immutable]
+ │         └── generate_series(y:2, 10) [outer=(2), immutable]
  └── aggregations
       └── const-agg [as=y:2, outer=(2)]
            └── y:2
@@ -4876,10 +4876,10 @@ SELECT generate_series(1, (SELECT v FROM uv WHERE u=x)) FROM xy
 ----
 project
  ├── columns: generate_series:5
- ├── immutable, side-effects
+ ├── immutable
  └── project-set
       ├── columns: v:4 generate_series:5
-      ├── immutable, side-effects
+      ├── immutable
       ├── project
       │    ├── columns: v:4
       │    └── left-join (hash)
@@ -4897,7 +4897,7 @@ project
       │         └── filters
       │              └── u:3 = x:1 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── zip
-           └── generate_series(1, v:4) [outer=(4), immutable, side-effects]
+           └── generate_series(1, v:4) [outer=(4), immutable]
 
 # Zip correlation within EXISTS.
 norm expect=(HoistProjectSetSubquery,TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
@@ -4906,12 +4906,12 @@ SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv
 group-by
  ├── columns: x:1!null y:2
  ├── grouping columns: x:1!null
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── project-set
  │    ├── columns: x:1!null y:2 v:4 generate_series:5
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── fd: (1)-->(2,4)
  │    ├── project
  │    │    ├── columns: x:1!null y:2 v:4
@@ -4933,7 +4933,7 @@ group-by
  │    │         └── filters
  │    │              └── u:3 = x:1 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  │    └── zip
- │         └── generate_series(1, v:4) [outer=(4), immutable, side-effects]
+ │         └── generate_series(1, v:4) [outer=(4), immutable]
  └── aggregations
       └── const-agg [as=y:2, outer=(2)]
            └── y:2
@@ -4944,10 +4944,10 @@ SELECT generate_series((select y FROM xy WHERE x=k), (SELECT v FROM uv WHERE u=k
 ----
 project
  ├── columns: generate_series:10
- ├── immutable, side-effects
+ ├── immutable
  └── project-set
       ├── columns: y:7 v:9 generate_series:10
-      ├── immutable, side-effects
+      ├── immutable
       ├── project
       │    ├── columns: y:7 v:9
       │    └── left-join (hash)
@@ -4976,7 +4976,7 @@ project
       │         └── filters
       │              └── u:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       └── zip
-           └── generate_series(y:7, v:9) [outer=(7,9), immutable, side-effects]
+           └── generate_series(y:7, v:9) [outer=(7,9), immutable]
 
 # Multiple functions.
 norm expect=HoistProjectSetSubquery
@@ -4987,10 +4987,10 @@ FROM a
 ----
 project
  ├── columns: generate_series:8 information_schema._pg_expandarray:13
- ├── immutable, side-effects
+ ├── immutable
  ├── project-set
  │    ├── columns: v:7 generate_series:8 xy.x:9 x:11 n:12
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── project
  │    │    ├── columns: v:7 xy.x:9
  │    │    └── left-join (hash)
@@ -5018,8 +5018,8 @@ project
  │    │         └── filters
  │    │              └── xy.x:9 = k:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    └── zip
- │         ├── generate_series(1, v:7) [outer=(7), immutable, side-effects]
- │         └── information_schema._pg_expandarray(ARRAY[xy.x:9]) [outer=(9), immutable, side-effects]
+ │         ├── generate_series(1, v:7) [outer=(7), immutable]
+ │         └── information_schema._pg_expandarray(ARRAY[xy.x:9]) [outer=(9), immutable]
  └── projections
       └── ((x:11, n:12) AS x, n) [as=information_schema._pg_expandarray:13, outer=(11,12)]
 
@@ -5028,11 +5028,11 @@ SELECT a, generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
 ----
 project
  ├── columns: a:1!null generate_series:3
- ├── immutable, side-effects
+ ├── immutable
  ├── fd: ()-->(1)
  └── project-set
       ├── columns: column1:1!null a:2 generate_series:3
-      ├── immutable, side-effects
+      ├── immutable
       ├── fd: ()-->(1,2)
       ├── inner-join-apply
       │    ├── columns: column1:1!null a:2
@@ -5054,18 +5054,18 @@ project
       │    │    └── (column1:1,)
       │    └── filters (true)
       └── zip
-           └── generate_series(1, a:2) [outer=(2), immutable, side-effects]
+           └── generate_series(1, a:2) [outer=(2), immutable]
 
 norm expect=HoistProjectSetSubquery
 SELECT a, generate_series(1, (SELECT a)), generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
 ----
 project
  ├── columns: a:1!null generate_series:3 generate_series:5
- ├── immutable, side-effects
+ ├── immutable
  ├── fd: ()-->(1)
  └── project-set
       ├── columns: column1:1!null a:2 generate_series:3 a:4 generate_series:5
-      ├── immutable, side-effects
+      ├── immutable
       ├── fd: ()-->(1,2,4)
       ├── inner-join-apply
       │    ├── columns: column1:1!null a:2 a:4
@@ -5100,8 +5100,8 @@ project
       │    │    └── (column1:1,)
       │    └── filters (true)
       └── zip
-           ├── generate_series(1, a:2) [outer=(2), immutable, side-effects]
-           └── generate_series(1, a:4) [outer=(4), immutable, side-effects]
+           ├── generate_series(1, a:2) [outer=(2), immutable]
+           └── generate_series(1, a:4) [outer=(4), immutable]
 
 exec-ddl
 CREATE TABLE articles (
@@ -5130,13 +5130,13 @@ limit
  ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9
  ├── internal-ordering: +8
  ├── cardinality: [0 - 10]
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-9)
  ├── ordering: +8
  ├── sort
  │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-9)
  │    ├── ordering: +8
@@ -5144,23 +5144,23 @@ limit
  │    └── group-by
  │         ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9
  │         ├── grouping columns: id:1!null
- │         ├── immutable, side-effects
+ │         ├── immutable
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-9)
  │         ├── select
  │         │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 unnest:10!null
- │         │    ├── immutable, side-effects
+ │         │    ├── immutable
  │         │    ├── fd: ()-->(10), (1)-->(2-9)
  │         │    ├── project-set
  │         │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 unnest:10
- │         │    │    ├── immutable, side-effects
+ │         │    │    ├── immutable
  │         │    │    ├── fd: (1)-->(2-9)
  │         │    │    ├── scan a0
  │         │    │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9
  │         │    │    │    ├── key: (1)
  │         │    │    │    └── fd: (1)-->(2-9)
  │         │    │    └── zip
- │         │    │         └── unnest(tag_list:6) [outer=(6), immutable, side-effects]
+ │         │    │         └── unnest(tag_list:6) [outer=(6), immutable]
  │         │    └── filters
  │         │         └── unnest:10 = 'dragons' [outer=(10), constraints=(/10: [/'dragons' - /'dragons']; tight), fd=()-->(10)]
  │         └── aggregations
@@ -5190,23 +5190,23 @@ SELECT * FROM articles, xy WHERE EXISTS(
 ----
 project
  ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:10!null y:11
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1,10)
  ├── fd: (1)-->(2-9), (1,10)-->(2-9,11)
  └── select
       ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:10!null y:11 true_agg:17!null
-      ├── immutable, side-effects
+      ├── immutable
       ├── key: (1,10)
       ├── fd: (1)-->(2-9), (1,10)-->(2-9,11,17)
       ├── group-by
       │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:10!null y:11 true_agg:17
       │    ├── grouping columns: id:1!null x:10!null
-      │    ├── immutable, side-effects
+      │    ├── immutable
       │    ├── key: (1,10)
       │    ├── fd: (1)-->(2-9), (1,10)-->(2-9,11,17)
       │    ├── inner-join-apply
       │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9 x:10!null y:11 true:16
-      │    │    ├── immutable, side-effects
+      │    │    ├── immutable
       │    │    ├── fd: (1)-->(2-9), (1,10)-->(11)
       │    │    ├── scan articles
       │    │    │    ├── columns: id:1!null body:2 description:3 title:4 slug:5 tag_list:6 user_id:7 created_at:8 updated_at:9
@@ -5215,7 +5215,7 @@ project
       │    │    ├── left-join-apply
       │    │    │    ├── columns: x:10!null y:11 true:16
       │    │    │    ├── outer: (1,4,6)
-      │    │    │    ├── immutable, side-effects
+      │    │    │    ├── immutable
       │    │    │    ├── fd: (10)-->(11)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:10!null y:11
@@ -5224,21 +5224,21 @@ project
       │    │    │    ├── project
       │    │    │    │    ├── columns: true:16!null
       │    │    │    │    ├── outer: (1,4,6,10)
-      │    │    │    │    ├── immutable, side-effects
+      │    │    │    │    ├── immutable
       │    │    │    │    ├── fd: ()-->(16)
       │    │    │    │    ├── project-set
       │    │    │    │    │    ├── columns: generate_series:12 length:13 upper:14 unnest:15
       │    │    │    │    │    ├── outer: (1,4,6,10)
-      │    │    │    │    │    ├── immutable, side-effects
+      │    │    │    │    │    ├── immutable
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── cardinality: [1 - 1]
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    └── ()
       │    │    │    │    │    └── zip
-      │    │    │    │    │         ├── generate_series(x:10, id:1) [outer=(1,10), immutable, side-effects]
+      │    │    │    │    │         ├── generate_series(x:10, id:1) [outer=(1,10), immutable]
       │    │    │    │    │         ├── length(title:4) [outer=(4), immutable]
       │    │    │    │    │         ├── upper(title:4) [outer=(4), immutable]
-      │    │    │    │    │         └── unnest(tag_list:6) [outer=(6), immutable, side-effects]
+      │    │    │    │    │         └── unnest(tag_list:6) [outer=(6), immutable]
       │    │    │    │    └── projections
       │    │    │    │         └── true [as=true:16]
       │    │    │    └── filters (true)
@@ -5275,15 +5275,15 @@ SELECT id FROM articles WHERE title = ANY(
 distinct-on
  ├── columns: id:1!null
  ├── grouping columns: id:1!null
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1)
  └── select
       ├── columns: id:1!null title:4!null tag_list:6 upper:10 unnest:11!null generate_series:12 lower:13
-      ├── immutable, side-effects
+      ├── immutable
       ├── fd: (1)-->(4,6), (4)==(11), (11)==(4)
       ├── project-set
       │    ├── columns: id:1!null title:4 tag_list:6 upper:10 unnest:11 generate_series:12 lower:13
-      │    ├── immutable, side-effects
+      │    ├── immutable
       │    ├── fd: (1)-->(4,6)
       │    ├── scan articles
       │    │    ├── columns: id:1!null title:4 tag_list:6
@@ -5291,8 +5291,8 @@ distinct-on
       │    │    └── fd: (1)-->(4,6)
       │    └── zip
       │         ├── upper(title:4) [outer=(4), immutable]
-      │         ├── unnest(tag_list:6) [outer=(6), immutable, side-effects]
-      │         ├── generate_series(0, 1) [immutable, side-effects]
+      │         ├── unnest(tag_list:6) [outer=(6), immutable]
+      │         ├── generate_series(0, 1) [immutable]
       │         └── 'abc'
       └── filters
            └── title:4 = unnest:11 [outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]

@@ -66,7 +66,6 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// ------------
 	// A Locking option is a side-effect (we don't want to elide this scan).
 	if scan.Locking != nil {
-		rel.CanHaveSideEffects = true
 		rel.VolatilitySet.AddVolatile()
 	}
 
@@ -911,7 +910,6 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 	// ------------
 	// Negative limits can trigger a runtime error.
 	if constLimit < 0 || !haveConstLimit {
-		rel.CanHaveSideEffects = true
 		rel.VolatilitySet.AddImmutable()
 	}
 
@@ -1356,8 +1354,8 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 //
 // Note that shared is an "input-output" argument, and should be assumed
 // to be partially filled in already. Boolean fields such as HasPlaceholder,
-// CanHaveSideEffects and HasCorrelatedSubquery should never be reset to false
-// once set to true.
+// HasCorrelatedSubquery should never be reset to false once set to true;
+// VolatilitySet should never be re-initialized.
 func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 	switch t := e.(type) {
 	case *VariableExpr:
@@ -1387,7 +1385,6 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 			}
 		}
 		if !nonZero {
-			shared.CanHaveSideEffects = true
 			shared.VolatilitySet.AddImmutable()
 		}
 
@@ -1401,10 +1398,6 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 		}
 
 	case *FunctionExpr:
-		if t.Properties.Impure {
-			// Impure functions can return different value on each call.
-			shared.CanHaveSideEffects = true
-		}
 		shared.VolatilitySet.Add(t.Overload.Volatility)
 
 	case *CastExpr:
@@ -1444,7 +1437,6 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 			}
 			shared.VolatilitySet.Add(o.Volatility)
 		} else if opt.IsMutationOp(e) {
-			shared.CanHaveSideEffects = true
 			shared.CanMutate = true
 			shared.VolatilitySet.AddVolatile()
 		}
@@ -1470,9 +1462,6 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 				shared.HasPlaceholder = true
 			}
 			shared.VolatilitySet.UnionWith(cached.VolatilitySet)
-			if cached.CanHaveSideEffects {
-				shared.CanHaveSideEffects = true
-			}
 			if cached.CanMutate {
 				shared.CanMutate = true
 			}
