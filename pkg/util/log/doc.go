@@ -76,15 +76,16 @@
 //    Entries with severity below LEVEL are not written to stderr.
 //    "true" and "false" are also supported (everything / nothing).
 //  --log-dir="..."
-//    Log files will be written to this directory instead of the
-//    default target directory.
+//    Log files will be written to this directory by the main logger
+//    instead of the default target directory.
 //  --log-file-verbosity=LEVEL
 //    Entries with severity below LEVEL are not written to the log file.
 //    "true" and "false" are also supported (everything / nothing).
 //  --log-file-max-size=N
 //    Log files are rotated after reaching that size.
-//  --log-dir-max-size=N
-//    Log files are removed after log directory reaches that size.
+//  --log-group-max-size=N
+//    Log files are removed after the total size of all files generated
+//    by one logger reaches that size.
 //
 // Other flags provide aids to debugging.
 //
