@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -114,7 +114,7 @@ func runBackupProcessor(
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := cloud.ExternalStorageConfFromURI(spec.DefaultURI)
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(spec.DefaultURI)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
@@ -124,7 +124,7 @@ func runBackupProcessor(
 	}
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range spec.URIsByLocalityKV {
-		conf, err := cloud.ExternalStorageConfFromURI(uri)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
 		if err != nil {
 			return err
 		}

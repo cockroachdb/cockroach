@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
@@ -43,11 +44,11 @@ type azureStorage struct {
 	settings  *cluster.Settings
 }
 
-var _ ExternalStorage = &azureStorage{}
+var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
 	conf *roachpb.ExternalStorage_Azure, settings *cluster.Settings,
-) (ExternalStorage, error) {
+) (cloud.ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
