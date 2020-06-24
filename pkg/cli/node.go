@@ -19,13 +19,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -277,12 +278,12 @@ var decommissionNodesColumnHeaders = []string{
 }
 
 var decommissionNodeCmd = &cobra.Command{
-	Use:   "decommission <node id 1> [<node id 2> ...]",
+	Use:   "decommission { --self | <node id 1> [<node id 2> ...] }",
 	Short: "decommissions the node(s)",
 	Long: `
 Marks the nodes with the supplied IDs as decommissioning.
 This will cause leases and replicas to be removed from these nodes.`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	RunE: MaybeDecorateGRPCError(runDecommissionNode),
 }
 
@@ -302,6 +303,10 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if !nodeCtx.nodeDecommissionSelf && len(args) == 0 {
+		return errors.New("no node ID specified; use --self to target the node specified with --host")
+	}
+
 	nodeIDs, err := parseNodeIDs(args)
 	if err != nil {
 		return err
@@ -313,7 +318,14 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 	defer finish()
 
-	if err := expectNodesDecommissioned(ctx, conn, nodeIDs, false /* decommissioned */); err != nil {
+	s := serverpb.NewStatusClient(conn)
+
+	nodeIDs, err = handleNodeDecommissionSelf(ctx, s, nodeIDs, "decommissioning")
+	if err != nil {
+		return err
+	}
+
+	if err := expectNodesDecommissioned(ctx, s, nodeIDs, false /* expDecommissioned */); err != nil {
 		return err
 	}
 
@@ -322,10 +334,31 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
 }
 
+func handleNodeDecommissionSelf(
+	ctx context.Context, s serverpb.StatusClient, nodeIDs []roachpb.NodeID, command string,
+) ([]roachpb.NodeID, error) {
+	if !nodeCtx.nodeDecommissionSelf {
+		// --self not passed; nothing to do.
+		return nodeIDs, nil
+	}
+
+	if len(nodeIDs) > 0 {
+		return nil, errors.Newf("cannot use --%s with an explicit list of node IDs",
+			cliflags.NodeDecommissionSelf.Name)
+	}
+
+	// What's this node's ID?
+	resp, err := s.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
+	if err != nil {
+		return nil, err
+	}
+	log.Infof(ctx, "%s node %d", log.Safe(command), resp.Desc.NodeID)
+	return []roachpb.NodeID{resp.Desc.NodeID}, nil
+}
+
 func expectNodesDecommissioned(
-	ctx context.Context, conn *grpc.ClientConn, nodeIDs []roachpb.NodeID, expDecommissioned bool,
+	ctx context.Context, s serverpb.StatusClient, nodeIDs []roachpb.NodeID, expDecommissioned bool,
 ) error {
-	s := serverpb.NewStatusClient(conn)
 	resp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return err
@@ -443,13 +476,13 @@ func decommissionResponseValueToRows(
 }
 
 var recommissionNodeCmd = &cobra.Command{
-	Use:   "recommission <node id 1> [<node id 2> ...]",
+	Use:   "recommission { --self | <node id 1> [<node id 2> ...] }",
 	Short: "recommissions the node(s)",
 	Long: `
 For the nodes with the supplied IDs, resets the decommissioning states,
 signaling the affected nodes to participate in the cluster again.
 	`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	RunE: MaybeDecorateGRPCError(runRecommissionNode),
 }
 
@@ -462,6 +495,10 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if !nodeCtx.nodeDecommissionSelf && len(args) == 0 {
+		return errors.New("no node ID specified; use --self to target the node specified with --host")
+	}
+
 	nodeIDs, err := parseNodeIDs(args)
 	if err != nil {
 		return err
@@ -473,7 +510,14 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 	defer finish()
 
-	if err := expectNodesDecommissioned(ctx, conn, nodeIDs, true /* decommissioned */); err != nil {
+	s := serverpb.NewStatusClient(conn)
+
+	nodeIDs, err = handleNodeDecommissionSelf(ctx, s, nodeIDs, "recommissioning")
+	if err != nil {
+		return err
+	}
+
+	if err := expectNodesDecommissioned(ctx, s, nodeIDs, true /* expDecommissioned */); err != nil {
 		return err
 	}
 
