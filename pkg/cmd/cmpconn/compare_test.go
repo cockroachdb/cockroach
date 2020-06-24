@@ -13,7 +13,7 @@ package cmpconn
 import (
 	"testing"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 )
 
 func TestCompareVals(t *testing.T) {

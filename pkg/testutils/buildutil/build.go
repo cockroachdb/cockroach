@@ -12,23 +12,12 @@ package buildutil
 
 import (
 	"go/build"
-	"os"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
 )
-
-func init() {
-	// NB: This is a hack to disable the use of go modules with
-	// build.Import. This will probably break with a future version of Go, but
-	// suffices until we move to using go modules. See go/build.Context.importGo
-	// (https://github.com/golang/go/blob/master/src/go/build/build.go#L999) and
-	// the logic to skip using `go list` if the env far "GO111MODULE" is set to
-	// "off".
-	_ = os.Setenv("GO111MODULE", "off")
-}
 
 func short(in string) string {
 	return strings.Replace(in, "github.com/cockroachdb/cockroach/pkg/", "./pkg/", -1)
@@ -61,7 +50,7 @@ func VerifyNoImports(
 
 	var check func(string) error
 	check = func(path string) error {
-		pkg, err := buildContext.Import(path, "", 0)
+		pkg, err := buildContext.Import(path, "", build.FindOnly)
 		if err != nil {
 			t.Fatal(err)
 		}
