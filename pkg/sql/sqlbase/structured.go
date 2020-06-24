@@ -1029,17 +1029,15 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			}
 			numCols := ref.SharedPrefixLen
 			outFK := ForeignKeyConstraint{
-				OriginTableID:         desc.ID,
-				OriginColumnIDs:       idx.ColumnIDs[:numCols],
-				ReferencedTableID:     ref.Table,
-				ReferencedColumnIDs:   referencedIndex.ColumnIDs[:numCols],
-				Name:                  ref.Name,
-				Validity:              ref.Validity,
-				OnDelete:              ref.OnDelete,
-				OnUpdate:              ref.OnUpdate,
-				Match:                 ref.Match,
-				LegacyOriginIndex:     idx.ID,
-				LegacyReferencedIndex: referencedIndex.ID,
+				OriginTableID:       desc.ID,
+				OriginColumnIDs:     idx.ColumnIDs[:numCols],
+				ReferencedTableID:   ref.Table,
+				ReferencedColumnIDs: referencedIndex.ColumnIDs[:numCols],
+				Name:                ref.Name,
+				Validity:            ref.Validity,
+				OnDelete:            ref.OnDelete,
+				OnUpdate:            ref.OnUpdate,
+				Match:               ref.Match,
 			}
 			desc.OutboundFKs = append(desc.OutboundFKs, outFK)
 		}
@@ -1097,34 +1095,30 @@ func maybeUpgradeForeignKeyRepOnIndex(
 						otherTable.ID, ref)
 				}
 				inFK = ForeignKeyConstraint{
-					OriginTableID:         ref.Table,
-					OriginColumnIDs:       forwardFK.OriginColumnIDs,
-					ReferencedTableID:     desc.ID,
-					ReferencedColumnIDs:   forwardFK.ReferencedColumnIDs,
-					Name:                  forwardFK.Name,
-					Validity:              forwardFK.Validity,
-					OnDelete:              forwardFK.OnDelete,
-					OnUpdate:              forwardFK.OnUpdate,
-					Match:                 forwardFK.Match,
-					LegacyOriginIndex:     originIndex.ID,
-					LegacyReferencedIndex: idx.ID,
+					OriginTableID:       ref.Table,
+					OriginColumnIDs:     forwardFK.OriginColumnIDs,
+					ReferencedTableID:   desc.ID,
+					ReferencedColumnIDs: forwardFK.ReferencedColumnIDs,
+					Name:                forwardFK.Name,
+					Validity:            forwardFK.Validity,
+					OnDelete:            forwardFK.OnDelete,
+					OnUpdate:            forwardFK.OnUpdate,
+					Match:               forwardFK.Match,
 				}
 			} else {
 				// We have an old (not upgraded yet) table, with a matching forward
 				// foreign key.
 				numCols := originIndex.ForeignKey.SharedPrefixLen
 				inFK = ForeignKeyConstraint{
-					OriginTableID:         ref.Table,
-					OriginColumnIDs:       originIndex.ColumnIDs[:numCols],
-					ReferencedTableID:     desc.ID,
-					ReferencedColumnIDs:   idx.ColumnIDs[:numCols],
-					Name:                  originIndex.ForeignKey.Name,
-					Validity:              originIndex.ForeignKey.Validity,
-					OnDelete:              originIndex.ForeignKey.OnDelete,
-					OnUpdate:              originIndex.ForeignKey.OnUpdate,
-					Match:                 originIndex.ForeignKey.Match,
-					LegacyOriginIndex:     originIndex.ID,
-					LegacyReferencedIndex: idx.ID,
+					OriginTableID:       ref.Table,
+					OriginColumnIDs:     originIndex.ColumnIDs[:numCols],
+					ReferencedTableID:   desc.ID,
+					ReferencedColumnIDs: idx.ColumnIDs[:numCols],
+					Name:                originIndex.ForeignKey.Name,
+					Validity:            originIndex.ForeignKey.Validity,
+					OnDelete:            originIndex.ForeignKey.OnDelete,
+					OnUpdate:            originIndex.ForeignKey.OnUpdate,
+					Match:               originIndex.ForeignKey.Match,
 				}
 			}
 			desc.InboundFKs = append(desc.InboundFKs, inFK)
