@@ -561,3 +561,43 @@ EXPLAIN (VEC) SELECT _time + _date FROM many_types
 │
 └ Node 1
   └ *rowexec.tableReader
+
+# Regression #50261 (not handling constant datum-backed values on the left
+# correctly).
+statement error pq: cannot AND inet values of different sizes
+SELECT '18b5:7e2:b3b:6f35:c48:eb6a:d607:6c61/108':::INET::INET & broadcast('13.83.69.95/21':::INET::INET)::INET::INET FROM many_types WHERE _bool
+
+query T
+EXPLAIN (VEC) SELECT '[2, "hi", {"b": ["bar", {"c": 4}]}]'::jsonb -> _int FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projJSONFetchValDatumConstInt64Op
+    └ *colexec.colBatchScan
+
+query T rowsort
+SELECT '[2, "hi", {"b": ["bar", {"c": 4}]}]'::jsonb -> _int FROM many_types
+----
+NULL
+NULL
+NULL
+{"b": ["bar", {"c": 4}]}
+
+# Check that the comparison expressions with the constant on the left are
+# handled as well (such expressions are normalized so that the constant ends up
+# on the right side).
+query T
+EXPLAIN (VEC) SELECT B'11' <> _varbit FROM many_types
+----
+│
+└ Node 1
+  └ *colexec.projNEDatumDatumConstOp
+    └ *colexec.colBatchScan
+
+query B rowsort
+SELECT B'11' >= _varbit FROM many_types
+----
+NULL
+true
+true
+false

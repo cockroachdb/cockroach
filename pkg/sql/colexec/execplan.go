@@ -1629,7 +1629,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, overloadHelper{binFn: t.Fn},
+			columnTypes, input, acc, factory, overloadHelper{binFn: t.Fn, evalCtx: evalCtx},
 		)
 	case *tree.IsNullExpr:
 		t.TypedInnerExpr()

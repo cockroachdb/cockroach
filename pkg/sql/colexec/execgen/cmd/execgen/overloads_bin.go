@@ -743,27 +743,20 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 // - leftColdataExtDatum - the variable name of the left datum element that
 // must be of *coldataext.Datum type
 // - rightDatumElem - the variable name of the right datum element which could
-// be *coldataext.Datum, tree.Datum, or nil
-// - leftCol and rightCol - same as corresponding parameters in assignFunc
-// signature
-// - datumVecOnRightSide - indicates whether we have datum-backed vector on the
-// right side (it'll be used only to supply the eval context).
-func executeBinOpOnDatums(
-	prelude, targetElem, leftColdataExtDatum, rightDatumElem, leftCol, rightCol string,
-	datumVecOnRightSide bool,
-) string {
+// be *coldataext.Datum, tree.Datum, or nil.
+func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumElem string) string {
 	vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
 	if err != nil {
 		return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
 	}
 	return fmt.Sprintf(`
 			%s
-			_res, err := %s.BinFn(_overloadHelper.binFn, %s, %s)
+			_res, err := %s.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, %s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
 			%s
-		`, prelude, leftColdataExtDatum, getDatumVecVariableName(leftCol, rightCol, datumVecOnRightSide), rightDatumElem,
+		`, prelude, leftColdataExtDatum, rightDatumElem,
 		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res"),
 	)
 }
@@ -773,7 +766,6 @@ func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 		return executeBinOpOnDatums(
 			"" /* prelude */, targetElem,
 			leftElem+".(*coldataext.Datum)", rightElem,
-			leftCol, rightCol, false, /* datumVecOnRightSide */
 		)
 	}
 }
@@ -825,7 +817,6 @@ func (c datumNonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 		return executeBinOpOnDatums(
 			prelude, targetElem,
 			leftElem+".(*coldataext.Datum)", rightDatumElem,
-			leftCol, rightCol, false, /* datumVecOnRightSide */
 		)
 	}
 }
@@ -843,11 +834,7 @@ func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 			convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem),
 			leftColdataExtDatum, leftDatumElem,
 		)
-		return executeBinOpOnDatums(
-			prelude, targetElem,
-			leftColdataExtDatum, rightElem,
-			leftCol, rightCol, true, /* datumVecOnRightSide */
-		)
+		return executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightElem)
 	}
 }
 

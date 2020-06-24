@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -245,6 +246,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		case tree._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
+			// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
@@ -258,7 +260,20 @@ func GetProjection_CONST_SIDEConstOperator(
 							return &_OP_CONST_NAME{
 								projConstOpBase: projConstOpBase,
 								// {{if _IS_CONST_LEFT}}
+								// {{if eq $leftFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
+								// {{/*
+								//     Binary operations are evaluated using coldataext.Datum.BinFn
+								//     method which requires that we have *coldataext.Datum on the
+								//     left, so we create that at the operator construction time to
+								//     avoid runtime conversion. Note that when the constant is on
+								//     the right side, then the left element necessarily comes from
+								//     the vector and will be of the desired type, so no additional
+								//     work is needed.
+								// */}}
+								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
+								// {{else}}
 								constArg: c.(_L_GO_TYPE),
+								// {{end}}
 								// {{else}}
 								constArg: c.(_R_GO_TYPE),
 								// {{end}}
@@ -279,6 +294,7 @@ func GetProjection_CONST_SIDEConstOperator(
 		case tree._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
+			// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:
 				switch leftType.Width() {
 				// {{range .LeftWidths}}
@@ -292,7 +308,27 @@ func GetProjection_CONST_SIDEConstOperator(
 							return &_OP_CONST_NAME{
 								projConstOpBase: projConstOpBase,
 								// {{if _IS_CONST_LEFT}}
+								// {{if eq $leftFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
+								// {{/*
+								//     Comparison operations are evaluated using
+								//     coldataext.Datum.CompareDatum method which requires that we
+								//     have *coldataext.Datum on the left, so we create that at the
+								//     operator construction time to avoid runtime conversion. Note
+								//     that when the constant is on the right side, then the left
+								//     element necessarily comes from the vector and will be of the
+								//     desired type, so no additional work is needed.
+								//     Note: although it appears as if the comparison expressions
+								//     supported by this template (EQ, NE, LT, GT, LE, GE) are
+								//     normalized so that the constant is on the right side, we
+								//     choose to be safe and perform the conversion here.
+								//     TODO(yuzefovich): this appears to be a dead code, look into
+								//     whether we can skip generation of the code for the case when
+								//     the constant is on the left.
+								// */}}
+								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
+								// {{else}}
 								constArg: c.(_L_GO_TYPE),
+								// {{end}}
 								// {{else}}
 								constArg: c.(_R_GO_TYPE),
 								// {{end}}
