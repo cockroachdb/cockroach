@@ -511,6 +511,19 @@ func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
 func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
     return u.val.([]tree.PartitionedBackup)
 }
+func (u *sqlSymUnion) scheduleOptions() *tree.ScheduleOptions {
+  return u.val.(*tree.ScheduleOptions)
+}
+func (u *sqlSymUnion) backupScheduleOptions() *tree.BackupScheduleOptions {
+  return u.val.(*tree.BackupScheduleOptions)
+}
+func (u *sqlSymUnion) scheduleErrorHandling() tree.ScheduleErrorHandling {
+  return u.val.(tree.ScheduleErrorHandling)
+}
+func (u *sqlSymUnion) scheduleWaitBehavior() tree.ScheduleWaitBehavior {
+  return u.val.(tree.ScheduleWaitBehavior)
+}
+
 func (u *sqlSymUnion) geoFigure() geopb.Shape {
   return u.val.(geopb.Shape)
 }
@@ -546,7 +559,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACTION ADD ADMIN AFTER AGGREGATE
-%token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE APPENDING ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
 %token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BIT
@@ -554,10 +567,10 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> BOOLEAN BOTH BUNDLE BY
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CBRT CHANGEFEED CHAR
-%token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
+%token <str> CHANGES CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATEROLE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTINUE CONVERSION COPY COVERING CREATE CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -566,13 +579,13 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
-%token <str> EXISTS EXECUTE EXPERIMENTAL
+%token <str> ELSE ENCODING END ENUM ESCAPE EVERY EXCEPT EXCLUDE EXCLUDING
+%token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
 
-%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
+%token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
@@ -606,22 +619,22 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
-%token <str> PLAN PLANS POINT POLYGON POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
+%token <str> PLAN PLANS POINT POLYGON POSITION PRECEDING PRECISION PREPARE PRESERVE PREVIOUS PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
+%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
-%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
-%token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
+%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVOKE RIGHT
+%token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCATTER SCHEDULE SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
-%token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
+%token <str> START STARTING STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
@@ -634,7 +647,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIRTUAL
 
-%token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
+%token <str> WAIT WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
 %token <str> YEAR
 
@@ -737,6 +750,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
+%type <tree.Statement> create_schedule_for_backup_stmt
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
@@ -1079,7 +1093,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
 %type <tree.TargetList> targets targets_roles changefeed_targets
-%type <*tree.TargetList> opt_on_targets_roles
+%type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
@@ -1094,6 +1108,12 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <bool> opt_temp
 %type <bool> opt_temp_create_table
 %type <bool> role_or_group_or_user
+
+%type <*tree.ScheduleOptions> schedule_options
+%type <*tree.BackupScheduleOptions> backup_schedule_options
+%type <tree.ScheduleErrorHandling> schedule_error_handling
+%type <tree.ScheduleWaitBehavior> schedule_wait_behavior
+%type <str> opt_description
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -2028,6 +2048,192 @@ backup_stmt:
   }
 | BACKUP error // SHOW HELP: BACKUP
 
+// %Help: CREATE SCHEDULE - backup data periodically
+// %Category: CCL
+// %Text:
+// CREATE SCHEDULE [<description>] FOR BACKUP [OF <targets>] TO  <location...>
+//      [WITH <backup_option> = [<value>] [, ...]]
+//      [STARTING <time_expr>] [RECURRING <crontab>]
+//      [ON EXECUTION FAILURE <PAUSE|RETRY|CONTINUE>]
+//      [APPENDING CHANGES EVERY INTERVAL <interval>]
+//      [ON PREVIOUS RUNNING (START|SKIP|WAIT)]
+//
+// Description:
+//   Optional description for this schedule
+//
+// Targets:
+//   empty targets: Backup entire cluster
+//   OF CLUSTER: Same as above:
+//   OF DATABASE <pattern> [, ...]: comma separated list of databases to backup.
+//   OF TABLE <pattern> [, ...]: comma separated list of tables to backup.
+//
+// Location:
+//   "[scheme]://[host]/[path prefix to backup]?[parameters]"
+//   Backup schedule will create subdirectories under this location to store
+//   full and periodic backups.
+//
+// RECURRING <crontab>:
+//   Schedule specified as a string in crontab format.
+//   All times in UTC.
+//     "5 0 * * *": run schedule 5 minutes past midnight.
+//     "@daily": run daily, at midnight
+//   See https://en.wikipedia.org/wiki/Cron
+//
+// Start Time Expression:
+//   Time expression when this schedule should execute for the first time.
+//   Default: the next run time as defined by crontab expression.
+//
+// APPENDING CHANGES EVERY <interval>:
+//   How often should the the delta backups be taken: '1 hour'
+//
+// ON EXECUTION FAILURE <error_handling>:
+//   If an error occurs while executing the backup, handle the error as specified:
+//     RETRY:    retry running soon
+//     CONTINUE: retry based on specified recurrence (Default)
+//     PAUSE:    pause running this schedule; Requires manual intervention to resume.
+//
+// ON PREVIOUS RUNNING <run handling>:
+//   If the job started by this schedule has not completed yet, handle this as:
+//    START: start new job anyway
+//    SKIP: skip this run altogether; attempt again based on this schedule
+//    WAIT: wait for the previous run to complete before starting the next one.
+//
+// APENDING CHANGES EVERY <interval>:
+//   Produce incremental/delta backup every "duration" period: INTERVAL '30 minutes'
+//
+// Options:
+//   See BACKUP Options.
+// %SeeAlso: BACKUP
+create_schedule_for_backup_stmt:
+  CREATE SCHEDULE opt_description FOR BACKUP opt_backup_targets TO partitioned_backup opt_with_options backup_schedule_options
+  {
+    opts := $10.backupScheduleOptions()
+    opts.ScheduleName = $3
+    opts.ExecutorType = tree.ScheduledBackupExecutorTypeName
+
+    backup := &tree.Backup{
+      To:      $8.partitionedBackup(),
+      Options: $9.kvOptions(),
+    }
+
+    if targets := $6.targetListPtr(); targets != nil {
+      backup.DescriptorCoverage = tree.RequestedDescriptors
+      backup.Targets = *targets
+    }
+
+    $$.val = &tree.ScheduledBackup{
+      BackupScheduleOptions: opts,
+      Backup:                backup,
+    }
+  }
+| CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE
+
+opt_description:
+  SCONST
+| /* EMPTY */
+  {
+     $$ = ""
+  }
+
+backup_schedule_options:
+  schedule_options
+  {
+    $$.val = &tree.BackupScheduleOptions{ScheduleOptions: *($1.scheduleOptions())}
+  }
+| backup_schedule_options APPENDING CHANGES EVERY interval_value
+  {
+    opts := $1.backupScheduleOptions()
+    if opts.ChangeCapturePeriod != nil {
+      return setErr(sqllex,  errors.New("APPENDING CHANGES EVERY option specified multiple times"))
+    }
+    opts.ChangeCapturePeriod = $5.expr()
+  }
+
+schedule_options:
+/* EMPTY -- initialize schedule options struct*/
+  {
+    $$.val = &tree.ScheduleOptions{}
+  }
+| schedule_options STARTING a_expr
+  {
+    opts := $1.scheduleOptions()
+    if opts.FirstRun != nil {
+      return setErr(sqllex,  errors.New("STARTING option specified multiple times"))
+    }
+    opts.FirstRun = $3.expr()
+  }
+| schedule_options RECURRING SCONST
+ {
+    opts := $1.scheduleOptions()
+    if opts.Recurrence != nil {
+      return setErr(sqllex,  errors.New("RECURRING option specified multiple times"))
+    }
+    r := $3
+    opts.Recurrence = &r
+ }
+| schedule_options ON EXECUTION FAILURE schedule_error_handling
+  {
+    opts := $1.scheduleOptions()
+    if opts.OnError != tree.ScheduleFailureDefault {
+      return setErr(sqllex,  errors.New("ON EXECUTION FAILURE option specified multiple times"))
+    }
+    opts.OnError = $5.scheduleErrorHandling()
+  }
+| schedule_options ON PREVIOUS RUNNING schedule_wait_behavior
+  {
+  opts := $1.scheduleOptions()
+  if opts.WaitBehavior != tree.ScheduleWaitDefault {
+    return setErr(sqllex,  errors.New("ON PREVIOUS RUNNING option specified multiple times"))
+  }
+  opts.WaitBehavior = $5.scheduleWaitBehavior()
+}
+
+schedule_error_handling:
+  RETRY
+  {
+    $$.val = tree.ScheduleFailureRetrySoon
+  }
+| PAUSE
+  {
+    $$.val =  tree.ScheduleFailurePause
+  }
+| CONTINUE
+  {
+    $$.val =  tree.ScheduleFailureRetry
+  }
+
+schedule_wait_behavior:
+  START
+  {
+    $$.val = tree.ScheduleDoNotWait
+  }
+| SKIP
+  {
+    $$.val = tree.ScheduleSkipRun
+  }
+| WAIT
+  {
+    $$.val = tree.ScheduleWait
+  }
+
+opt_backup_targets:
+  /* EMPTY -- full cluster */
+  {
+    $$.val = (*tree.TargetList)(nil)
+  }
+| OF CLUSTER
+  {
+    $$.val = (*tree.TargetList)(nil)
+  }
+| OF TABLE table_pattern_list
+  {
+    $$.val = &tree.TargetList{Tables: $3.tablePatterns()}
+  }
+| OF DATABASE name_list
+  {
+     $$.val = &tree.TargetList{Databases: $3.nameList()}
+  }
+
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
 // %Text:
@@ -2416,6 +2622,7 @@ create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
+| create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
@@ -10239,6 +10446,7 @@ unreserved_keyword:
 | AGGREGATE
 | ALTER
 | ALWAYS
+| APPENDING
 | AT
 | ATTRIBUTE
 | AUTOMATIC
@@ -10252,6 +10460,7 @@ unreserved_keyword:
 | CACHE
 | CANCEL
 | CASCADE
+| CHANGES
 | CHANGEFEED
 | CLOSE
 | CLUSTER
@@ -10267,6 +10476,7 @@ unreserved_keyword:
 | CONFIGURATIONS
 | CONFIGURE
 | CONSTRAINTS
+| CONTINUE
 | CONVERSION
 | COPY
 | COVERING
@@ -10290,9 +10500,11 @@ unreserved_keyword:
 | ENCODING
 | ENUM
 | ESCAPE
+| EVERY
 | EXCLUDE
 | EXCLUDING
 | EXECUTE
+| EXECUTION
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
 | EXPERIMENTAL_FINGERPRINTS
@@ -10302,6 +10514,7 @@ unreserved_keyword:
 | EXPLAIN
 | EXPORT
 | EXTENSION
+| FAILURE
 | FILES
 | FILTER
 | FIRST
@@ -10395,6 +10608,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRESERVE
+| PREVIOUS
 | PRIORITY
 | PUBLIC
 | PUBLICATION
@@ -10403,6 +10617,7 @@ unreserved_keyword:
 | RANGE
 | RANGES
 | READ
+| RECURRING
 | RECURSIVE
 | REF
 | REINDEX
@@ -10414,6 +10629,7 @@ unreserved_keyword:
 | RESTORE
 | RESTRICT
 | RESUME
+| RETRY
 | REVOKE
 | ROLE
 | ROLES
@@ -10421,6 +10637,8 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | RULE
+| RUNNING
+| SCHEDULE
 | SETTING
 | SETTINGS
 | STATUS
@@ -10485,6 +10703,7 @@ unreserved_keyword:
 | VALUE
 | VARYING
 | VIEW
+| WAIT
 | WITHIN
 | WITHOUT
 | WRITE

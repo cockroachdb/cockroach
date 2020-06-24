@@ -116,6 +116,7 @@ create_stmt ::=
 	create_role_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
+	| create_schedule_for_backup_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -358,6 +359,9 @@ create_ddl_stmt ::=
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
+
+create_schedule_for_backup_stmt ::=
+	'CREATE' 'SCHEDULE' opt_description 'FOR' 'BACKUP' opt_backup_targets 'TO' partitioned_backup opt_with_options backup_schedule_options
 
 opt_with_clause ::=
 	with_clause
@@ -631,6 +635,7 @@ unreserved_keyword ::=
 	| 'AGGREGATE'
 	| 'ALTER'
 	| 'ALWAYS'
+	| 'APPENDING'
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
@@ -644,6 +649,7 @@ unreserved_keyword ::=
 	| 'CACHE'
 	| 'CANCEL'
 	| 'CASCADE'
+	| 'CHANGES'
 	| 'CHANGEFEED'
 	| 'CLOSE'
 	| 'CLUSTER'
@@ -659,6 +665,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONSTRAINTS'
+	| 'CONTINUE'
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
@@ -682,9 +689,11 @@ unreserved_keyword ::=
 	| 'ENCODING'
 	| 'ENUM'
 	| 'ESCAPE'
+	| 'EVERY'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
 	| 'EXECUTE'
+	| 'EXECUTION'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
 	| 'EXPERIMENTAL_FINGERPRINTS'
@@ -694,6 +703,7 @@ unreserved_keyword ::=
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
+	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
 	| 'FIRST'
@@ -787,6 +797,7 @@ unreserved_keyword ::=
 	| 'PRECEDING'
 	| 'PREPARE'
 	| 'PRESERVE'
+	| 'PREVIOUS'
 	| 'PRIORITY'
 	| 'PUBLIC'
 	| 'PUBLICATION'
@@ -795,6 +806,7 @@ unreserved_keyword ::=
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
+	| 'RECURRING'
 	| 'RECURSIVE'
 	| 'REF'
 	| 'REINDEX'
@@ -806,6 +818,7 @@ unreserved_keyword ::=
 	| 'RESTORE'
 	| 'RESTRICT'
 	| 'RESUME'
+	| 'RETRY'
 	| 'REVOKE'
 	| 'ROLE'
 	| 'ROLES'
@@ -813,6 +826,8 @@ unreserved_keyword ::=
 	| 'ROLLUP'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUNNING'
+	| 'SCHEDULE'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -877,6 +892,7 @@ unreserved_keyword ::=
 	| 'VALUE'
 	| 'VARYING'
 	| 'VIEW'
+	| 'WAIT'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -1075,6 +1091,18 @@ create_stats_target ::=
 opt_create_stats_options ::=
 	as_of_clause
 	| 
+
+opt_description ::=
+	'SCONST'
+	| 
+
+opt_backup_targets ::=
+	'OF' 'CLUSTER'
+	| 'OF' 'TABLE' table_pattern_list
+	| 'OF' 'DATABASE' name_list
+
+backup_schedule_options ::=
+	( schedule_options ) ( ( 'APPENDING' 'CHANGES' 'EVERY' interval_value ) )*
 
 with_clause ::=
 	'WITH' cte_list
@@ -1495,6 +1523,13 @@ opt_sequence_option_list ::=
 	sequence_option_list
 	| 
 
+schedule_options ::=
+	(  ) ( ( 'STARTING' a_expr | 'RECURRING' 'SCONST' | 'ON' 'EXECUTION' 'FAILURE' schedule_error_handling | 'ON' 'PREVIOUS' 'RUNNING' schedule_wait_behavior ) )*
+
+interval_value ::=
+	'INTERVAL' 'SCONST' opt_interval_qualifier
+	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
+
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
@@ -1838,6 +1873,23 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
+schedule_error_handling ::=
+	'RETRY'
+	| 'PAUSE'
+	| 'CONTINUE'
+
+schedule_wait_behavior ::=
+	'START'
+	| 'SKIP'
+	| 'WAIT'
+
+opt_interval_qualifier ::=
+	interval_qualifier
+	| 
+
+iconst32 ::=
+	'ICONST'
+
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
 	| table_alias_name opt_column_list 'AS' materialize_clause '(' preparable_stmt ')'
@@ -1890,10 +1942,6 @@ typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'
 	| const_typename 'SCONST'
 
-interval_value ::=
-	'INTERVAL' 'SCONST' opt_interval_qualifier
-	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
-
 column_path_with_star ::=
 	column_path
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
@@ -1933,9 +1981,6 @@ case_default ::=
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
-
-iconst32 ::=
-	'ICONST'
 
 complex_type_name ::=
 	general_type_name '.' unrestricted_name
@@ -2138,6 +2183,21 @@ create_as_col_qual_list ::=
 create_as_constraint_def ::=
 	create_as_constraint_elem
 
+interval_qualifier ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
+
 materialize_clause ::=
 	'MATERIALIZED'
 	| 'NOT' 'MATERIALIZED'
@@ -2170,10 +2230,6 @@ reference_actions ::=
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra
 	| prefixed_column_path
-
-opt_interval_qualifier ::=
-	interval_qualifier
-	| 
 
 func_application ::=
 	func_name '(' ')'
@@ -2293,21 +2349,6 @@ character_base ::=
 	| 'VARCHAR'
 	| 'STRING'
 
-interval_qualifier ::=
-	'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| interval_second
-	| 'YEAR' 'TO' 'MONTH'
-	| 'DAY' 'TO' 'HOUR'
-	| 'DAY' 'TO' 'MINUTE'
-	| 'DAY' 'TO' interval_second
-	| 'HOUR' 'TO' 'MINUTE'
-	| 'HOUR' 'TO' interval_second
-	| 'MINUTE' 'TO' interval_second
-
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
 
@@ -2390,6 +2431,10 @@ create_as_col_qualification ::=
 
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')'
+
+interval_second ::=
+	'SECOND'
+	| 'SECOND' '(' iconst32 ')'
 
 col_qualification_elem ::=
 	'NOT' 'NULL'
@@ -2484,10 +2529,6 @@ signed_iconst ::=
 char_aliases ::=
 	'CHAR'
 	| 'CHARACTER'
-
-interval_second ::=
-	'SECOND'
-	| 'SECOND' '(' iconst32 ')'
 
 window_definition ::=
 	window_name 'AS' window_specification
