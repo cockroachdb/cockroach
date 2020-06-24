@@ -165,8 +165,8 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
-		testAllocator, types.Float, types.Float, types.Float,
-		binOp, input, colIdx, constArg, outputIdx, nil,
+		testAllocator, types.Float, types.Float, types.Float, binOp, input,
+		colIdx, constArg, outputIdx, nil /* binFn */, nil, /* evalCtx */
 	)
 	if err != nil {
 		t.Error(err)
@@ -194,8 +194,8 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
-		testAllocator, types.Int, types.Int2, types.Int,
-		binOp, input, colIdx, constArg, outputIdx, nil,
+		testAllocator, types.Int, types.Int2, types.Int, binOp, input, colIdx,
+		constArg, outputIdx, nil /* binFn */, nil, /* evalCtx */
 	)
 	if err != nil {
 		t.Error(err)
@@ -319,8 +319,8 @@ func TestGetProjectionOperator(t *testing.T) {
 	col2Idx := 7
 	outputIdx := 9
 	op, err := GetProjectionOperator(
-		testAllocator, typ, typ, types.Int2,
-		binOp, input, col1Idx, col2Idx, outputIdx, nil,
+		testAllocator, typ, typ, types.Int2, binOp, input, col1Idx, col2Idx,
+		outputIdx, nil /* binFn */, nil, /* evalCtx */
 	)
 	if err != nil {
 		t.Error(err)
