@@ -2131,25 +2131,6 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	// Outline of the planning process for joins:
-	//
-	//  - We create PhysicalPlans for the left and right side. Each plan has a set
-	//    of output routers with result that will serve as input for the join.
-	//
-	//  - We merge the list of processors and streams into a single plan. We keep
-	//    track of the output routers for the left and right results.
-	//
-	//  - We add a set of joiner processors (say K of them).
-	//
-	//  - We configure the left and right output routers to send results to
-	//    these joiners, distributing rows by hash (on the join equality columns).
-	//    We are thus breaking up all input rows into K buckets such that rows
-	//    that match on the equality columns end up in the same bucket. If there
-	//    are no equality columns, we cannot distribute rows so we use a single
-	//    joiner.
-	//
-	//  - The routers of the joiner processors are the result routers of the plan.
-
 	leftPlan, err := dsp.createPhysPlanForPlanNode(planCtx, n.left.plan)
 	if err != nil {
 		return nil, err
@@ -2172,32 +2153,71 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		return nil, err
 	}
 
-	// Nodes where we will run the join processors.
-	var nodes []roachpb.NodeID
-
 	// We initialize these properties of the joiner. They will then be used to
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
-	var leftEqCols, rightEqCols []uint32
-	var leftMergeOrd, rightMergeOrd execinfrapb.Ordering
-	joinType := n.joinType
+	// Set up the equality columns and the merge ordering.
+	leftEqCols := eqCols(n.pred.leftEqualityIndices, leftMap)
+	rightEqCols := eqCols(n.pred.rightEqualityIndices, rightMap)
+	leftMergeOrd := distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
+	rightMergeOrd := distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
 
-	// Figure out the left and right types.
-	leftTypes := leftPlan.ResultTypes
-	rightTypes := rightPlan.ResultTypes
-
-	// Set up the equality columns.
-	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
-		leftEqCols = eqCols(n.pred.leftEqualityIndices, leftMap)
-		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightMap)
+	joinResultTypes, err := getTypesForPlanResult(n, joinToStreamColMap)
+	if err != nil {
+		return nil, err
 	}
+
+	return dsp.planJoiners(&joinPlanningInfo{
+		leftPlan:           leftPlan,
+		rightPlan:          rightPlan,
+		joinType:           n.joinType,
+		joinResultTypes:    joinResultTypes,
+		onExpr:             onExpr,
+		post:               post,
+		joinToStreamColMap: joinToStreamColMap,
+		leftEqCols:         leftEqCols,
+		rightEqCols:        rightEqCols,
+		leftEqColsAreKey:   n.pred.leftEqKey,
+		rightEqColsAreKey:  n.pred.rightEqKey,
+		leftMergeOrd:       leftMergeOrd,
+		rightMergeOrd:      rightMergeOrd,
+		// In the old execFactory we can only have either local or fully
+		// distributed plans, so checking the last stage is sufficient to get
+		// the distribution of the whole plans.
+		leftPlanDistribution:  leftPlan.GetLastStageDistribution(),
+		rightPlanDistribution: rightPlan.GetLastStageDistribution(),
+	}, n.reqOrdering), nil
+}
+
+func (dsp *DistSQLPlanner) planJoiners(
+	info *joinPlanningInfo, reqOrdering ReqOrdering,
+) *PhysicalPlan {
+	// Outline of the planning process for joins when given PhysicalPlans for
+	// the left and right side (with each plan having a set of output routers
+	// with result that will serve as input for the join).
+	//
+	//  - We merge the list of processors and streams into a single plan. We keep
+	//    track of the output routers for the left and right results.
+	//
+	//  - We add a set of joiner processors (say K of them).
+	//
+	//  - We configure the left and right output routers to send results to
+	//    these joiners, distributing rows by hash (on the join equality columns).
+	//    We are thus breaking up all input rows into K buckets such that rows
+	//    that match on the equality columns end up in the same bucket. If there
+	//    are no equality columns, we cannot distribute rows so we use a single
+	//    joiner.
+	//
+	//  - The routers of the joiner processors are the result routers of the plan.
 
 	p := MakePhysicalPlan(dsp.gatewayNodeID)
 	leftRouters, rightRouters := physicalplan.MergePlans(
-		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+		&p.PhysicalPlan, &info.leftPlan.PhysicalPlan, &info.rightPlan.PhysicalPlan,
+		info.leftPlanDistribution, info.rightPlanDistribution,
 	)
 
-	// Set up the output columns.
-	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
+	// Nodes where we will run the join processors.
+	var nodes []roachpb.NodeID
+	if numEq := len(info.leftEqCols); numEq != 0 {
 		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
 	} else {
 		// Without column equality, we cannot distribute the join. Run a
@@ -2213,48 +2233,21 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	// Create the Core spec.
-	var core execinfrapb.ProcessorCoreUnion
-	if len(n.mergeJoinOrdering) == 0 {
-		core.HashJoiner = &execinfrapb.HashJoinerSpec{
-			LeftEqColumns:        leftEqCols,
-			RightEqColumns:       rightEqCols,
-			OnExpr:               onExpr,
-			Type:                 joinType,
-			LeftEqColumnsAreKey:  n.pred.leftEqKey,
-			RightEqColumnsAreKey: n.pred.rightEqKey,
-		}
-	} else {
-		leftMergeOrd = distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
-		rightMergeOrd = distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
-		core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
-			LeftOrdering:         leftMergeOrd,
-			RightOrdering:        rightMergeOrd,
-			OnExpr:               onExpr,
-			Type:                 joinType,
-			LeftEqColumnsAreKey:  n.pred.leftEqKey,
-			RightEqColumnsAreKey: n.pred.rightEqKey,
-		}
-	}
-
 	p.AddJoinStage(
-		nodes, core, post, leftEqCols, rightEqCols, leftTypes, rightTypes,
-		leftMergeOrd, rightMergeOrd, leftRouters, rightRouters,
+		nodes, info.makeCoreSpec(), info.post,
+		info.leftEqCols, info.rightEqCols,
+		info.leftPlan.ResultTypes, info.rightPlan.ResultTypes,
+		info.leftMergeOrd, info.rightMergeOrd,
+		leftRouters, rightRouters,
 	)
 
-	p.PlanToStreamColMap = joinToStreamColMap
-	p.ResultTypes, err = getTypesForPlanResult(n, joinToStreamColMap)
-	if err != nil {
-		return nil, err
-	}
+	p.PlanToStreamColMap = info.joinToStreamColMap
+	p.ResultTypes = info.joinResultTypes
 
 	// Joiners may guarantee an ordering to outputs, so we ensure that
 	// ordering is propagated through the input synchronizer of the next stage.
-	// We can propagate the ordering from either side, we use the left side here.
-	// Note that n.props only has a non-empty ordering for inner joins, where it
-	// uses the mergeJoinOrdering.
-	p.SetMergeOrdering(dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap))
-	return &p, nil
+	p.SetMergeOrdering(dsp.convertOrdering(reqOrdering, p.PlanToStreamColMap))
+	return &p
 }
 
 func (dsp *DistSQLPlanner) createPhysPlan(
@@ -2938,6 +2931,11 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	// Merge processors, streams, result routers, and stage counter.
 	leftRouters, rightRouters := physicalplan.MergePlans(
 		&p.PhysicalPlan, &leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+		// In the old execFactory we can only have either local or fully
+		// distributed plans, so checking the last stage is sufficient to get
+		// the distribution of the whole plans.
+		leftPlan.GetLastStageDistribution(),
+		rightPlan.GetLastStageDistribution(),
 	)
 
 	if n.unionType == tree.UnionOp {
@@ -2992,13 +2990,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		copy(post.OutputColumns, streamCols)
 
 		// Create the Core spec.
-		//
-		// TODO(radu): we currently only use merge joins when we have an ordering on
-		// all equality columns. We should relax this by either:
-		//  - implementing a hybrid hash/merge processor which implements merge
-		//    logic on the columns we have an ordering on, and within each merge
-		//    group uses a hashmap on the remaining columns
-		//  - or: adding a sort processor to complete the order
 		var core execinfrapb.ProcessorCoreUnion
 		if len(mergeOrdering.Columns) < len(streamCols) {
 			core.HashJoiner = &execinfrapb.HashJoinerSpec{
