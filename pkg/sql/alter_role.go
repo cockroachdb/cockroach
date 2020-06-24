@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -64,6 +65,12 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
+	// Check that the requested combination of password options is
+	// compatible with the user's own CREATELOGIN privilege.
+	if err := p.checkPasswordOptionConstraints(ctx, roleOptions, false /* newUser */); err != nil {
+		return nil, err
+	}
+
 	ua, err := p.getUserAuthInfo(ctx, nameE, opName)
 	if err != nil {
 		return nil, err
@@ -75,6 +82,35 @@ func (p *planner) AlterRoleNode(
 		isRole:       isRole,
 		roleOptions:  roleOptions,
 	}, nil
+}
+
+func (p *planner) checkPasswordOptionConstraints(
+	ctx context.Context, roleOptions roleoption.List, newUser bool,
+) error {
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.VersionCreateLoginPrivilege) {
+		// TODO(knz): Remove this condition in 21.1.
+		if roleOptions.Contains(roleoption.CREATELOGIN) || roleOptions.Contains(roleoption.NOCREATELOGIN) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`granting CREATELOGIN or NOCREATELOGIN requires all nodes to be upgraded to %s`,
+				clusterversion.VersionByKey(clusterversion.VersionCreateLoginPrivilege))
+		}
+	}
+
+	if roleOptions.Contains(roleoption.CREATELOGIN) ||
+		roleOptions.Contains(roleoption.NOCREATELOGIN) ||
+		roleOptions.Contains(roleoption.LOGIN) ||
+		(roleOptions.Contains(roleoption.NOLOGIN) && !newUser) || // CREATE ROLE NOLOGIN is valid without CREATELOGIN.
+		roleOptions.Contains(roleoption.PASSWORD) ||
+		roleOptions.Contains(roleoption.VALIDUNTIL) {
+		// Only a role who has CREATELOGIN itself can grant CREATELOGIN or
+		// NOCREATELOGIN to another role, or set up a password for
+		// authentication, or set up password validity, or enable/disable
+		// LOGIN privilege; even if they have CREATEROLE privilege.
+		if err := p.HasRoleOption(ctx, roleoption.CREATELOGIN); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (n *alterRoleNode) startExec(params runParams) error {

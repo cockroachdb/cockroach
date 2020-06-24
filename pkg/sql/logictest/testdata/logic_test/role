@@ -27,11 +27,11 @@ CREATE ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-myrole    NOLOGIN     {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATELOGIN, CREATEROLE  {}
+myrole    NOLOGIN                  {}
+root      CREATELOGIN, CREATEROLE  {admin}
+testuser  ·                        {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -57,11 +57,11 @@ DROP ROLE admin, myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-myrole    NOLOGIN     {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATELOGIN, CREATEROLE  {}
+myrole    NOLOGIN                  {}
+root      CREATELOGIN, CREATEROLE  {admin}
+testuser  ·                        {}
 
 statement ok
 DROP ROLE myrole
@@ -69,10 +69,10 @@ DROP ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATELOGIN, CREATEROLE  {}
+root      CREATELOGIN, CREATEROLE  {admin}
+testuser  ·                        {}
 
 statement error pq: role/user myrole does not exist
 DROP ROLE myrole
@@ -104,10 +104,10 @@ DROP ROLE rolea, roleb
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATELOGIN, CREATEROLE  {}
+root      CREATELOGIN, CREATEROLE  {admin}
+testuser  ·                        {}
 
 statement ok
 CREATE USER testuser2
@@ -449,13 +449,13 @@ roled  testuser false
 query TTT
 SHOW ROLES
 ----
-admin      CREATEROLE  {}
-roleb      NOLOGIN     {}
-roled      NOLOGIN     {}
-rolee      NOLOGIN     {}
-root       CREATEROLE  {admin}
-testuser   ·           {roled}
-testuser2  ·           {}
+admin      CREATELOGIN, CREATEROLE  {}
+roleb      NOLOGIN                  {}
+roled      NOLOGIN                  {}
+rolee      NOLOGIN                  {}
+root       CREATELOGIN, CREATEROLE  {admin}
+testuser   ·                        {roled}
+testuser2  ·                        {}
 
 statement ok
 DROP ROLE roleb
@@ -813,9 +813,6 @@ statement ok
 CREATE ROLE rolef
 
 statement ok
-ALTER ROLE rolef LOGIN
-
-statement ok
 DROP ROLE rolef
 
 # Testing invalid CREATEROLE combinations
@@ -1016,8 +1013,10 @@ CREATE ROLE rolewithlogin LOGIN
 query TTT
 SELECT * FROM system.role_options
 ----
-admin  CREATEROLE  NULL
-root   CREATEROLE  NULL
+admin  CREATELOGIN  NULL
+admin  CREATEROLE   NULL
+root   CREATELOGIN  NULL
+root   CREATEROLE   NULL
 
 statement ok
 CREATE ROLE rolewithnologin NOLOGIN
@@ -1025,9 +1024,11 @@ CREATE ROLE rolewithnologin NOLOGIN
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATEROLE  NULL
-rolewithnologin  NOLOGIN     NULL
-root             CREATEROLE  NULL
+admin            CREATELOGIN  NULL
+admin            CREATEROLE   NULL
+rolewithnologin  NOLOGIN      NULL
+root             CREATELOGIN  NULL
+root             CREATEROLE   NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
@@ -1035,9 +1036,11 @@ ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 query TTT
 SELECT * FROM system.role_options
 ----
+admin            CREATELOGIN  NULL
 admin            CREATEROLE   NULL
 rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
 rolewithnologin  NOLOGIN      NULL
+root             CREATELOGIN  NULL
 root             CREATEROLE   NULL
 
 statement ok
@@ -1046,9 +1049,11 @@ ALTER ROLE rolewithlogin VALID UNTIL NULL
 query TTT
 SELECT * FROM system.role_options
 ----
+admin            CREATELOGIN  NULL
 admin            CREATEROLE   NULL
 rolewithlogin    VALID UNTIL  NULL
 rolewithnologin  NOLOGIN      NULL
+root             CREATELOGIN  NULL
 root             CREATEROLE   NULL
 
 statement ok
@@ -1057,9 +1062,11 @@ DROP ROLE rolewithlogin
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATEROLE  NULL
-rolewithnologin  NOLOGIN     NULL
-root             CREATEROLE  NULL
+admin            CREATELOGIN  NULL
+admin            CREATEROLE   NULL
+rolewithnologin  NOLOGIN      NULL
+root             CREATELOGIN  NULL
+root             CREATEROLE   NULL
 
 statement error pq: conflicting role options
 CREATE ROLE thisshouldntwork LOGIN NOLOGIN
@@ -1200,3 +1207,171 @@ INSERT INTO publicdb.publictable VALUES (1)
 query TTT
 SHOW TABLES FROM publicdb
 ----
+
+subtest createlogin_privilege
+
+user root
+
+statement ok
+CREATE ROLE pseudo_admin;
+  ALTER ROLE pseudo_admin CREATEROLE;
+  DROP USER testuser2;
+  DROP USER testuser3;
+  GRANT pseudo_admin TO testuser
+
+user testuser
+
+# By default, a new role does not have privilege CREATELOGIN.
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser3 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser3 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE testrole3 LOGIN
+
+# However it's possible to create a user/role with NOLOGIN.
+statement ok
+CREATE USER testuser4 NOLOGIN
+
+statement ok
+CREATE USER testuser2
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 VALID UNTIL '2021-01-01'
+
+statement ok
+CREATE ROLE otherrole
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole2 CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole2 NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole2 LOGIN
+
+user root
+
+statement ok
+ALTER ROLE pseudo_admin CREATELOGIN
+
+user testuser
+
+statement ok
+CREATE USER testuser3 WITH PASSWORD 'abc'
+
+statement ok
+ALTER USER testuser3 WITH PASSWORD 'xyz'
+
+statement ok
+ALTER USER testuser3 VALID UNTIL '2021-01-01'
+
+statement ok
+ALTER USER testuser3 LOGIN
+
+statement ok
+ALTER USER testuser3 NOLOGIN
+
+statement ok
+ALTER USER testuser3 CREATELOGIN
+
+statement ok
+ALTER USER testuser3 NOCREATELOGIN
+
+statement ok
+ALTER ROLE otherrole CREATELOGIN
+
+statement ok
+ALTER ROLE otherrole NOCREATELOGIN
+
+
+statement ok
+ALTER ROLE otherrole LOGIN
+
+statement ok
+ALTER ROLE otherrole NOLOGIN
+
+statement ok
+CREATE ROLE otherrole2 CREATELOGIN
+
+statement ok
+CREATE ROLE otherrole3 NOCREATELOGIN
+
+statement ok
+CREATE ROLE otherrole4 LOGIN
+
+# If CREATELOGIN is revoked, the changes are prevented again.
+
+user root
+
+statement ok
+ALTER ROLE pseudo_admin NOCREATELOGIN
+
+user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER testuser4 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 VALID UNTIL '2021-01-01'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole LOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER ROLE otherrole NOLOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole4 CREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole4 NOCREATELOGIN
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE ROLE otherrole4 LOGIN

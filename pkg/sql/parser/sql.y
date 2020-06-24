@@ -563,7 +563,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATEROLE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATELOGIN CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -605,7 +605,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
+%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCREATELOGIN NOCREATEROLE NOLOGIN NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -624,7 +624,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
 %token <str> SAVEPOINT SCATTER SCHEDULE SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET  SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
@@ -5828,17 +5828,25 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOCREATEROLE
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | LOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | NOLOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| CREATELOGIN
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOCREATELOGIN
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | password_clause
 | valid_until_clause
 
@@ -10525,6 +10533,7 @@ unreserved_keyword:
 | CONVERSION
 | COPY
 | COVERING
+| CREATELOGIN
 | CREATEROLE
 | CUBE
 | CURRENT
@@ -10625,6 +10634,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| NOCREATELOGIN
 | NOCREATEROLE
 | NOLOGIN
 | NOWAIT

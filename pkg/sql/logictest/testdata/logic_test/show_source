@@ -338,10 +338,10 @@ v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
 query TTT colnames
 SELECT * FROM [SHOW USERS] ORDER BY 1
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATELOGIN, CREATEROLE  {}
+root      CREATELOGIN, CREATEROLE  {admin}
+testuser  ·                        {}
 
 
 query TTTI colnames

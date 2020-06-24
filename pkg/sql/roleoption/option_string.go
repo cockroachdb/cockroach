@@ -14,11 +14,13 @@ func _() {
 	_ = x[LOGIN-4]
 	_ = x[NOLOGIN-5]
 	_ = x[VALIDUNTIL-6]
+	_ = x[CREATELOGIN-7]
+	_ = x[NOCREATELOGIN-8]
 }
 
-const _Option_name = "CREATEROLENOCREATEROLEPASSWORDLOGINNOLOGINVALIDUNTIL"
+const _Option_name = "CREATEROLENOCREATEROLEPASSWORDLOGINNOLOGINVALIDUNTILCREATELOGINNOCREATELOGIN"
 
-var _Option_index = [...]uint8{0, 10, 22, 30, 35, 42, 52}
+var _Option_index = [...]uint8{0, 10, 22, 30, 35, 42, 52, 63, 76}
 
 func (i Option) String() string {
 	i -= 1

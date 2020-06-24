@@ -41,16 +41,20 @@ const (
 	LOGIN
 	NOLOGIN
 	VALIDUNTIL
+	CREATELOGIN
+	NOCREATELOGIN
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{
-	CREATEROLE:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
-	NOCREATEROLE: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
-	LOGIN:        `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
-	NOLOGIN:      `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
-	VALIDUNTIL:   `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
+	CREATEROLE:    `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
+	NOCREATEROLE:  `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
+	LOGIN:         `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
+	NOLOGIN:       `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
+	CREATELOGIN:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATELOGIN')`,
+	NOCREATELOGIN: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATELOGIN'`,
+	VALIDUNTIL:    `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -60,12 +64,14 @@ func (o Option) Mask() uint32 {
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Option{
-	"CREATEROLE":   CREATEROLE,
-	"NOCREATEROLE": NOCREATEROLE,
-	"PASSWORD":     PASSWORD,
-	"LOGIN":        LOGIN,
-	"NOLOGIN":      NOLOGIN,
-	"VALID_UNTIL":  VALIDUNTIL,
+	"CREATEROLE":    CREATEROLE,
+	"NOCREATEROLE":  NOCREATEROLE,
+	"PASSWORD":      PASSWORD,
+	"LOGIN":         LOGIN,
+	"NOLOGIN":       NOLOGIN,
+	"CREATELOGIN":   CREATELOGIN,
+	"NOCREATELOGIN": NOCREATELOGIN,
+	"VALID_UNTIL":   VALIDUNTIL,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -151,10 +157,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		return err
 	}
 
-	if (roleOptionBits&CREATEROLE.Mask() != 0 &&
-		roleOptionBits&NOCREATEROLE.Mask() != 0) ||
-		(roleOptionBits&LOGIN.Mask() != 0 &&
-			roleOptionBits&NOLOGIN.Mask() != 0) {
+	if (roleOptionBits&CREATEROLE.Mask() != 0 && roleOptionBits&NOCREATEROLE.Mask() != 0) ||
+		(roleOptionBits&CREATELOGIN.Mask() != 0 && roleOptionBits&NOCREATELOGIN.Mask() != 0) ||
+		(roleOptionBits&LOGIN.Mask() != 0 && roleOptionBits&NOLOGIN.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil

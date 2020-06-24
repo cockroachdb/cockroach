@@ -674,6 +674,7 @@ unreserved_keyword ::=
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
+	| 'CREATELOGIN'
 	| 'CREATEROLE'
 	| 'CUBE'
 	| 'CURRENT'
@@ -774,6 +775,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NOCREATELOGIN'
 	| 'NOCREATEROLE'
 	| 'NOLOGIN'
 	| 'NOWAIT'
@@ -1859,6 +1861,8 @@ role_option ::=
 	| 'NOCREATEROLE'
 	| 'LOGIN'
 	| 'NOLOGIN'
+	| 'CREATELOGIN'
+	| 'NOCREATELOGIN'
 	| password_clause
 	| valid_until_clause
 
