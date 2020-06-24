@@ -61,7 +61,9 @@ with &1 (foo)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(2)
-      └── prune: (2)
+      ├── prune: (2)
+      └── cte-uses
+           └── &1: count=1 used-columns=(1)
 
 # Side effects should be propagated up to the top-level from the Input side of
 # a With.
