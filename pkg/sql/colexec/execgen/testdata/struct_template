@@ -1,0 +1,155 @@
+template
+package main
+
+// execgen:template<T>
+// execgen:instantiate<int>
+// execgen:instantiate<bool>
+type Foo struct {
+    foo int
+    bar T
+}
+
+func (f Foo) templated(a T, f bool) T {
+    var T hello
+    return f.bar
+}
+
+func (f *Foo) templatedPtr(a T, f bool) T {
+    var T hello
+    return f.bar
+}
+
+func (f Foo) templatedWithoutTemplateParam() T {
+    var T hello
+    blah(T)
+    return f.bar
+}
+
+// execgen:template<T>
+// execgen:instantiate<int>
+// execgen:instantiate<bool>
+func blah(T interface{}) {
+    var foo T
+}
+
+----
+----
+package main
+
+type Foo_int struct {
+	foo int
+	bar int
+}
+
+type Foo_bool struct {
+	foo int
+	bar bool
+}
+
+func (f Foo_int) templated(a int, f bool) int {
+	var int hello
+	return f.bar
+}
+
+func (f Foo_bool) templated(a bool, f bool) bool {
+	var bool hello
+	return f.bar
+}
+
+func (f *Foo_int) templatedPtr(a int, f bool) int {
+	var int hello
+	return f.bar
+}
+
+func (f *Foo_bool) templatedPtr(a bool, f bool) bool {
+	var bool hello
+	return f.bar
+}
+
+func (f Foo_int) templatedWithoutTemplateParam() int {
+	var int hello
+	blah_int()
+	return f.bar
+}
+
+func (f Foo_bool) templatedWithoutTemplateParam() bool {
+	var bool hello
+	blah_bool()
+	return f.bar
+}
+
+const _ = "template_blah"
+
+func blah_bool() {
+	var foo bool
+}
+
+func blah_int() {
+	var foo int
+}
+----
+----
+template
+package main
+
+// execgen:template<T, U>
+// execgen:instantiate<int, int>
+// execgen:instantiate<bool, []int>
+type Foo struct {
+    foo int
+    bar T
+    _ int
+    baz U
+    _ int
+}
+
+func (f Foo) a(a U) T {
+var foo U
+var bar T
+
+}
+
+func (f Foo) b() U {
+
+}
+----
+----
+package main
+
+type Foo_int_int struct {
+	foo int
+	bar int
+	_   int
+	baz int
+	_   int
+}
+
+type Foo_bool_SLICEint struct {
+	foo int
+	bar bool
+	_   int
+	baz []int
+	_   int
+}
+
+func (f Foo_int_int) a(a int) int {
+	var foo int
+	var bar int
+
+}
+
+func (f Foo_bool_SLICEint) a(a []int) bool {
+	var foo []int
+	var bar bool
+
+}
+
+func (f Foo_int_int) b() int {
+
+}
+
+func (f Foo_bool_SLICEint) b() []int {
+
+}
+----
+----

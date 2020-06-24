@@ -30,7 +30,7 @@ func TestExecgen(t *testing.T) {
 			case "inline":
 				inlineFuncs(f)
 			case "template":
-				expandTemplates(f)
+				expandTemplates(f, false)
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 				return ""

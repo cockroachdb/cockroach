@@ -210,3 +210,37 @@ func a() {
 const _ = "inlined_b"
 ----
 ----
+
+# Test that chains of inlined functions out of order
+# are processed properly
+inline
+package main
+
+// execgen:inline
+func inlined() {
+  fmt.Println("Hi")
+}
+
+// execgen:inline
+func middle() {
+  inlined()
+}
+
+// execgen:inline
+func outer() {
+  middle()
+}
+----
+----
+package main
+
+// execgen:inline
+const _ = "inlined_inlined"
+
+// execgen:inline
+const _ = "inlined_middle"
+
+// execgen:inline
+const _ = "inlined_outer"
+----
+----

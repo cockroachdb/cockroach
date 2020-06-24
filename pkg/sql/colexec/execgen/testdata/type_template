@@ -1,0 +1,89 @@
+template
+package main
+
+
+func main() {
+  a_int(3, 4)
+  a_float(3.3, 4)
+  a_bool(true, 4)
+}
+
+// execgen:template<T>
+// execgen:instantiate<int>
+// execgen:instantiate<float>
+// execgen:instantiate<bool>
+func a (a T, b int, T interface{}) {
+  fmt.Println(a)
+  b(T)
+}
+
+// execgen:template<T>
+// execgen:instantiate<int>
+// execgen:instantiate<float>
+func b (T interface{}) {
+  fmt.Println("staticly invoked with number")
+}
+
+// execgen:template<T>
+// execgen:instantiate<bool>
+func b (T interface{}) {
+  fmt.Println("staticly invoked with boolean")
+}
+
+// execgen:template<T, U>
+// execgen:instantiate<int, bool>
+func c(T interface{}, U interface{}) {
+    var foo T
+    var bar U
+}
+----
+----
+package main
+
+func main() {
+	a_int(3, 4)
+	a_float(3.3, 4)
+	a_bool(true, 4)
+}
+
+const _ = "template_a"
+
+func a_bool(a bool, b int) {
+	fmt.Println(a)
+	b_bool()
+}
+
+func a_float(a float, b int) {
+	fmt.Println(a)
+	b_float()
+}
+
+func a_int(a int, b int) {
+	fmt.Println(a)
+	b_int()
+}
+
+const _ = "template_b"
+
+func b_float() {
+	fmt.Println("staticly invoked with number")
+}
+
+func b_int() {
+	fmt.Println("staticly invoked with number")
+}
+
+const _ = "template_b"
+
+func b_bool() {
+	fmt.Println("staticly invoked with boolean")
+}
+
+const _ = "template_c"
+
+func c_int_bool() {
+	var foo int
+	var bar bool
+}
+----
+----

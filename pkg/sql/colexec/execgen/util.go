@@ -52,3 +52,16 @@ func prettyPrintExprs(exprs ...dst.Expr) string {
 	}
 	return prettyPrintStmts(stmts...)
 }
+
+func prettyPrintDecls(decls ...dst.Decl) string {
+	f := &dst.File{
+		Name:  dst.NewIdent("main"),
+		Decls: decls,
+	}
+	prelude := `package main
+`
+	var ret strings.Builder
+	_ = decorator.Fprint(&ret, f)
+	s := ret.String()
+	return strings.TrimSpace(s[len(prelude):])
+}

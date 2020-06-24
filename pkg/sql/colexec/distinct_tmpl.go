@@ -108,6 +108,8 @@ const _TYPE_WIDTH = 0
 
 // */}}
 
+var _ bool
+
 func newSingleDistinct(
 	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
 ) (colexecbase.Operator, error) {
@@ -117,7 +119,7 @@ func newSingleDistinct(
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return &distinct_TYPEOp{
+			return &distinctOp__Type{
 				OneInputNode:   NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
@@ -162,13 +164,21 @@ func newPartitioner(t *types.T) (partitioner, error) {
 	return nil, errors.Errorf("unsupported partition type %s", t)
 }
 
-// {{range .}}
-// {{range .WidthOverloads}}
-
-// distinct_TYPEOp runs a distinct on the column in distinctColIdx, writing
+// distinctOp runs a distinct on the column in distinctColIdx, writing
 // true to the resultant bool column for every value that differs from the
 // previous one.
-type distinct_TYPEOp struct {
+// execgen:template<T, TSlice>
+// execgen:instantiate<bool, []bool>
+// execgen:instantiate<int16, []int16>
+// execgen:instantiate<int32, []int32>
+// execgen:instantiate<int64, []int64>
+// execgen:instantiate<float32, []float32>
+// execgen:instantiate<time.Time, []time.Time>
+// execgen:instantiate<apd.Decimal, []apd.Decimal>
+// execgen:instantiate<[]byte, *coldata.Bytes>
+// execgen:instantiate<duration.Duration, []duration.Duration>
+// execgen:instantiate<tree.Datum, coldata.DatumVec>
+type distinctOp struct {
 	OneInputNode
 
 	// distinctColIdx is the index of the column to distinct upon.
@@ -184,17 +194,17 @@ type distinct_TYPEOp struct {
 
 	// lastVal is the last value seen by the operator, so that the distincting
 	// still works across batch boundaries.
-	lastVal     _GOTYPE
+	lastVal     T
 	lastValNull bool
 }
 
 var _ resettableOperator = &distinct_TYPEOp{}
 
-func (p *distinct_TYPEOp) Init() {
+func (p *distinctOp) Init() {
 	p.input.Init()
 }
 
-func (p *distinct_TYPEOp) reset(ctx context.Context) {
+func (p *distinctOp) reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
 	if resetter, ok := p.input.(resetter); ok {
@@ -202,7 +212,7 @@ func (p *distinct_TYPEOp) reset(ctx context.Context) {
 	}
 }
 
-func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
+func (p *distinctOp) Next(ctx context.Context) coldata.Batch {
 	batch := p.input.Next(ctx)
 	if batch.Length() == 0 {
 		return batch
@@ -216,7 +226,8 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	col := vec.TemplateType()
 
 	// We always output the first row.
-	lastVal := p.lastVal
+	var lastVal T
+	lastVal = p.lastVal
 	lastValNull := p.lastValNull
 	sel := batch.Selection()
 	firstIdx := 0
@@ -239,11 +250,11 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		sel = sel[:n]
 		if nulls != nil {
 			for _, idx := range sel {
-				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
+				lastVal, lastValNull = checkDistinctWithNulls(T, TSlice, idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
 			for _, idx := range sel {
-				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
+				lastVal = checkDistinct(T, TSlice, idx, idx, lastVal, col, outputCol)
 			}
 		}
 	} else {
@@ -252,11 +263,11 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		_ = outputCol[n-1]
 		if nulls != nil {
 			for execgen.RANGE(idx, col, 0, n) {
-				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
+				lastVal, lastValNull = checkDistinctWithNulls(T, TSlice, idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
 			for execgen.RANGE(idx, col, 0, n) {
-				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
+				lastVal = checkDistinct(T, TSlice, idx, idx, lastVal, col, outputCol)
 			}
 		}
 	}
@@ -267,15 +278,24 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-// partitioner_TYPE partitions an arbitrary-length colVec by running a distinct
+// partitioner partitions an arbitrary-length colVec by running a distinct
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitioner_TYPE struct{}
+// execgen:template<T, TSlice>
+// execgen:instantiate<bool, []bool>
+// execgen:instantiate<int16, []int16>
+// execgen:instantiate<int32, []int32>
+// execgen:instantiate<int64, []int64>
+// execgen:instantiate<float32, []float32>
+// execgen:instantiate<time.Time, []time.Time>
+// execgen:instantiate<apd.Decimal, []apd.Decimal>
+// execgen:instantiate<[]byte, *coldata.Bytes>
+// execgen:instantiate<duration.Duration, []duration.Duration>
+// execgen:instantiate<tree.Datum, coldata.DatumVec>
+type partitioner struct{}
 
-func (p partitioner_TYPE) partitionWithOrder(
-	colVec coldata.Vec, order []int, outputCol []bool, n int,
-) {
+func (p partitioner) partitionWithOrder(colVec coldata.Vec, order []int, outputCol []bool, n int) {
 	var lastVal _GOTYPE
 	var lastValNull bool
 	var nulls *coldata.Nulls
@@ -289,18 +309,19 @@ func (p partitioner_TYPE) partitionWithOrder(
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
-			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol)
+			lastVal, lastValNull = checkDistinctWithNulls(T, TSlice, checkIdx, outputIdx, lastVal, nulls, lastValNull, col,
+				outputCol)
 		}
 	} else {
 		for outputIdx, checkIdx := range order {
-			lastVal = checkDistinct(checkIdx, outputIdx, lastVal, col, outputCol)
+			lastVal = checkDistinct(T, TSlice, checkIdx, outputIdx, lastVal, col, outputCol)
 		}
 	}
 }
 
-func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int) {
+func (p partitioner) partition(colVec coldata.Vec, outputCol []bool, n int) {
 	var (
-		lastVal     _GOTYPE
+		lastVal     T
 		lastValNull bool
 		nulls       *coldata.Nulls
 	)
@@ -314,27 +335,63 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	outputCol[0] = true
 	if nulls != nil {
 		for execgen.RANGE(idx, col, 0, n) {
-			lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
+			lastVal, lastValNull = checkDistinctWithNulls(T, TSlice, idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 		}
 	} else {
 		for execgen.RANGE(idx, col, 0, n) {
-			lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
+			lastVal = checkDistinct(T, TSlice, idx, idx, lastVal, col, outputCol)
 		}
 	}
 }
 
-// {{end}}
-// {{end}}
+// execgen:template<T, TSlice>
+// execgen:instantiate<bool, []bool>
+// execgen:instantiate<int16, []int16>
+// execgen:instantiate<int32, []int32>
+// execgen:instantiate<int64, []int64>
+// execgen:instantiate<float32, []float32>
+// execgen:instantiate<time.Time, []time.Time>
+// execgen:instantiate<apd.Decimal, []apd.Decimal>
+// execgen:instantiate<duration.Duration, []duration.Duration>
+// execgen:inline
+func unsafeGet(T interface{}, TSlice interface{}, col TSlice, idx int) T {
+	return col[idx]
+}
+
+// execgen:template<T, TSlice>
+// execgen:instantiate<[]byte, *coldata.Bytes>
+// execgen:instantiate<tree.Datum, coldata.DatumVec>
+// execgen:inline
+func unsafeGet(T interface{}, TSlice interface{}, col TSlice, idx int) T {
+	return col.Get(idx)
+}
 
 // checkDistinct retrieves the value at the ith index of col, compares it
 // to the passed in lastVal, and sets the ith value of outputCol to true if the
 // compared values were distinct. It presumes that the current batch has no null
 // values.
+// execgen:template<T, TSlice>
+// execgen:instantiate<bool, []bool>
+// execgen:instantiate<int16, []int16>
+// execgen:instantiate<int32, []int32>
+// execgen:instantiate<int64, []int64>
+// execgen:instantiate<float32, []float32>
+// execgen:instantiate<time.Time, []time.Time>
+// execgen:instantiate<apd.Decimal, []apd.Decimal>
+// execgen:instantiate<duration.Duration, []duration.Duration>
+// execgen:instantiate<[]byte, *coldata.Bytes>
+// execgen:instantiate<tree.Datum, coldata.DatumVec>
 // execgen:inline
 func checkDistinct(
-	checkIdx int, outputIdx int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool,
-) _GOTYPE {
-	v := execgen.UNSAFEGET(col, checkIdx)
+	T interface{},
+	TSlice interface{},
+	checkIdx int,
+	outputIdx int,
+	lastVal T,
+	col TSlice,
+	outputCol []bool,
+) T {
+	v := unsafeGet(T, TSlice, col, checkIdx)
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal, _, col, _)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
@@ -346,15 +403,28 @@ func checkDistinct(
 // considers whether the previous and current values are null. It assumes that
 // `nulls` is non-nil.
 // execgen:inline
+// execgen:template<T, TSlice>
+// execgen:instantiate<bool, []bool>
+// execgen:instantiate<int16, []int16>
+// execgen:instantiate<int32, []int32>
+// execgen:instantiate<int64, []int64>
+// execgen:instantiate<float32, []float32>
+// execgen:instantiate<time.Time, []time.Time>
+// execgen:instantiate<apd.Decimal, []apd.Decimal>
+// execgen:instantiate<duration.Duration, []duration.Duration>
+// execgen:instantiate<[]byte, *coldata.Bytes>
+// execgen:instantiate<tree.Datum, coldata.DatumVec>
 func checkDistinctWithNulls(
+	T interface{},
+	TSlice interface{},
 	checkIdx int,
 	outputIdx int,
-	lastVal _GOTYPE,
+	lastVal T,
 	nulls *coldata.Nulls,
 	lastValNull bool,
-	col []_GOTYPE,
+	col TSlice,
 	outputCol []bool,
-) (lastVal _GOTYPE, lastValNull bool) {
+) (lastVal T, lastValNull bool) {
 	null := nulls.NullAt(checkIdx)
 	if null {
 		if !lastValNull {
@@ -362,7 +432,7 @@ func checkDistinctWithNulls(
 			outputCol[outputIdx] = true
 		}
 	} else {
-		v := execgen.UNSAFEGET(col, checkIdx)
+		v := unsafeGet(T, TSlice, col, checkIdx)
 		if lastValNull {
 			// The previous value was null while the current is not.
 			outputCol[outputIdx] = true

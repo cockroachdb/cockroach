@@ -26,10 +26,15 @@ func inlineFuncs(f *dst.File) {
 	// with execgen:inline.
 	inlineFuncMap := extractInlineFuncDecls(f)
 
+	printFile(f, "extracting inline func decls")
+	inlineFunc(inlineFuncMap, f)
+}
+
+func inlineFunc(inlineFuncMap map[string]funcInfo, n dst.Node) dst.Node {
 	// Do a second pass over the AST, this time replacing calls to the inlined
 	// functions with the inlined function itself.
 	var funcIdx int
-	dstutil.Apply(f, func(cursor *dstutil.Cursor) bool {
+	return dstutil.Apply(n, func(cursor *dstutil.Cursor) bool {
 		cursor.Index()
 		n := cursor.Node()
 		// There are two cases. AssignStmt, which are like:
@@ -50,6 +55,10 @@ func inlineFuncs(f *dst.File) {
 			if funcInfo == nil {
 				return true
 			}
+			// We want to recurse here because funcInfo itself might have calls to
+			// inlined functions.
+			funcInfo.decl = inlineFunc(inlineFuncMap, funcInfo.decl).(*dst.FuncDecl)
+
 			if len(n.Rhs) > 1 {
 				panic("can't do template replacement with more than a single RHS to a CallExpr")
 			}
@@ -159,6 +168,7 @@ func inlineFuncs(f *dst.File) {
 			if funcInfo == nil {
 				return true
 			}
+			funcInfo.decl = inlineFunc(inlineFuncMap, funcInfo.decl).(*dst.FuncDecl)
 			decl := funcInfo.decl
 
 			reassignments := getFormalParamReassignments(decl, callExpr)
