@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -209,7 +210,7 @@ func initMemProfile(ctx context.Context, dir string) {
 	}()
 }
 
-func initCPUProfile(ctx context.Context, dir string) {
+func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 	const cpuprof = "cpuprof."
 	gcProfiles(dir, cpuprof, maxSizePerProfile)
 
@@ -240,33 +241,31 @@ func initCPUProfile(ctx context.Context, dir string) {
 		}()
 
 		for {
-			func() {
+			// Grab a profile.
+			if err := debug.CPUProfileDo(st, cluster.CPUProfileDefault, func() error {
 				const format = "2006-01-02T15_04_05.999"
-				suffix := timeutil.Now().Add(cpuProfileInterval).Format(format)
-				f, err := os.Create(filepath.Join(dir, cpuprof+suffix))
-				if err != nil {
-					log.Warningf(ctx, "error creating go cpu file %s", err)
-					return
+
+				var buf bytes.Buffer
+				// Start the new profile. Write to a buffer so we can name the file only
+				// when we know the time at end of profile.
+				if err := pprof.StartCPUProfile(&buf); err != nil {
+					return err
 				}
 
-				// Stop the current profile if it exists.
-				if currentProfile != nil {
-					pprof.StopCPUProfile()
-					currentProfile.Close()
-					currentProfile = nil
-					gcProfiles(dir, cpuprof, maxSizePerProfile)
-				}
+				<-t.C
 
-				// Start the new profile.
-				if err := pprof.StartCPUProfile(f); err != nil {
-					log.Warningf(ctx, "unable to start cpu profile: %v", err)
-					f.Close()
-					return
-				}
-				currentProfile = f
-			}()
+				pprof.StopCPUProfile()
 
-			<-t.C
+				suffix := timeutil.Now().Format(format)
+				if err := ioutil.WriteFile(filepath.Join(dir, cpuprof+suffix), buf.Bytes(), 0644); err != nil {
+					return err
+				}
+				gcProfiles(dir, cpuprof, maxSizePerProfile)
+				return nil
+			}); err != nil {
+				// Log errors, but continue. There's always next time.
+				log.Infof(ctx, "error during CPU profile: %s", err)
+			}
 		}
 	}()
 }
@@ -1296,7 +1295,7 @@ func setupAndInitializeLoggingAndProfiling(
 	log.Infof(ctx, "%s", info.Short())
 
 	initMemProfile(ctx, outputDirectory)
-	initCPUProfile(ctx, outputDirectory)
+	initCPUProfile(ctx, outputDirectory, serverCfg.Settings)
 	initBlockProfile()
 	initMutexProfile()
 

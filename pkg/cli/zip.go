@@ -493,6 +493,25 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				return err
 			}
 
+			const cpuProfDurationSec = 5
+			cpuProfTimeout := timeout + cpuProfDurationSec*time.Second
+			var cpuProfileData []byte
+			err = runZipRequestWithTimeout(baseCtx, "requesting cpu profile for node "+id, cpuProfTimeout,
+				func(ctx context.Context) error {
+					heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
+						NodeId:  id,
+						Type:    serverpb.ProfileRequest_CPU,
+						Seconds: cpuProfDurationSec,
+					})
+					if err == nil {
+						cpuProfileData = heap.Data
+					}
+					return err
+				})
+			if err := z.createRawOrError(prefix+"/cpu.pprof", cpuProfileData, err); err != nil {
+				return err
+			}
+
 			var heapData []byte
 			err = runZipRequestWithTimeout(baseCtx, "requesting heap profile for node "+id, timeout,
 				func(ctx context.Context) error {
@@ -686,6 +705,14 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				}
 			}
 		}
+	}
+
+	// Add a little helper script to draw attention to the existence of tags in
+	// the profiles.
+	{
+		z.createRaw(base+"/pprof-summary.sh", []byte(`#!/bin/sh
+find . -name cpu.pprof | xargs go tool pprof -tags
+`))
 	}
 
 	return nil

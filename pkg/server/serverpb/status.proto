@@ -407,9 +407,14 @@ message ProfileRequest {
   // forwarding is necessary.
   string node_id = 1;
 
-  enum Type { HEAP = 0; }
+  enum Type {
+      HEAP = 0;
+      CPU = 1; // with labels on
+  }
   // The type of profile to retrieve.
   Type type = 5;
+
+  int32 seconds = 6; // applies only to Type=CPU, defaults to 30
 }
 
 message MetricsRequest {
