@@ -637,7 +637,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			continue
 		}
 
-		if !item.scalar.CanHaveSideEffects {
+		if !item.scalar.VolatilitySet.HasVolatile() {
 			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
 
 			// We want to set up the FD: from --> colID.
@@ -647,7 +647,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			//
 			// We only add the FD if composite types are not involved.
 			//
-			// TODO(radu): add a allowlist of expressions/operators that are ok, like
+			// TODO(radu): add an allowlist of expressions/operators that are ok, like
 			// arithmetic.
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
