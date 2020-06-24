@@ -7699,13 +7699,21 @@ const_geo:
   {
     $$.val = types.MakeGeography($3.geoFigure(), 0)
   }
-| GEOMETRY '(' geo_shape ',' iconst32 ')'
+| GEOMETRY '(' geo_shape ',' signed_iconst ')'
   {
-    $$.val = types.MakeGeometry($3.geoFigure(), geopb.SRID($5.int32()))
+    val, err := $5.numVal().AsInt32()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = types.MakeGeometry($3.geoFigure(), geopb.SRID(val))
   }
-| GEOGRAPHY '(' geo_shape ',' iconst32 ')'
+| GEOGRAPHY '(' geo_shape ',' signed_iconst ')'
   {
-    $$.val = types.MakeGeography($3.geoFigure(), geopb.SRID($5.int32()))
+    val, err := $5.numVal().AsInt32()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = types.MakeGeography($3.geoFigure(), geopb.SRID(val))
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types

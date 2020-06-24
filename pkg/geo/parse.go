@@ -65,8 +65,7 @@ func parseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.SpatialObject, erro
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	// TODO(otan): check SRID is valid against spatial_ref_sys.
-	if defaultSRID != 0 && t.SRID() == 0 {
+	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeom(t)
@@ -81,8 +80,7 @@ func parseEWKB(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	// TODO(otan): check SRID is valid against spatial_ref_sys.
-	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) {
+	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeom(t)
@@ -162,9 +160,9 @@ func parseEWKT(
 				if err != nil {
 					return geopb.SpatialObject{}, err
 				}
-				// Only use the parsed SRID if the parsed SRID is not zero and it was not
+				// Only use the parsed SRID if the parsed SRID is > 0 and it was not
 				// to be overwritten by the DefaultSRID parameter.
-				if sridInt64 != 0 {
+				if sridInt64 > 0 {
 					srid = geopb.SRID(sridInt64)
 				}
 			}
