@@ -178,6 +178,12 @@ var enumsEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var userDefinedSchemasClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_user_defined_schemas.enabled",
+	"default value for experimental_enable_user_defined_schemas; allows for creation of user defined schemas",
+	false,
+)
+
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
@@ -2008,6 +2014,10 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 
 func (m *sessionDataMutator) SetEnumsEnabled(val bool) {
 	m.data.EnumsEnabled = val
+}
+
+func (m *sessionDataMutator) SetUserDefinedSchemasEnabled(val bool) {
+	m.data.UserDefinedSchemasEnabled = val
 }
 
 func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
