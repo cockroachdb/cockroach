@@ -65,6 +65,11 @@ var (
 		time.Hour*24*14)
 )
 
+type adoptedJob struct {
+	epoch  int64
+	cancel context.CancelFunc
+}
+
 // Registry creates Jobs and manages their leases and cancelation.
 //
 // Job information is stored in the `system.jobs` table.  Each node will
@@ -142,7 +147,8 @@ type Registry struct {
 		// are normally canceled on any node by the CANCEL JOB statement, which is
 		// propagated to jobs via the .Progressed call. This function should not be
 		// used to cancel a job in that way.
-		jobs map[int64]context.CancelFunc
+		jobs        map[int64]context.CancelFunc
+		adoptedJobs map[int64]*adoptedJob
 	}
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
@@ -198,6 +204,7 @@ func MakeRegistry(
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
+	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
 }
@@ -388,7 +395,8 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 	}
 
 	// TODO get epoch and write job in same txn?
-	liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval+5*time.Second)
+	// TODO the interval should be a tad longer than the adoption cycle.
+	liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live epoch")
 	}
@@ -443,9 +451,25 @@ func (r *Registry) CreateStartableJobWithTxn(
 		return nil, err
 	}
 	resumerCtx, cancel := r.makeCtx()
-	if err := r.register(*j.ID(), cancel); err != nil {
+
+	if false { // TODO check if cluster is fully upgraded instead.
+		if err := r.register(*j.ID(), cancel); err != nil {
+			return nil, err
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
+		// TODO think about this invariant
+		panic("old job!")
+	}
+	// TODO the interval should be a tad longer than the adoption cycle.
+	liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval)
+	if err != nil {
 		return nil, err
 	}
+	r.mu.adoptedJobs[*j.ID()] = &adoptedJob{epoch: liveEpoch, cancel: cancel}
 	return &StartableJob{
 		Job:        j,
 		txn:        txn,
@@ -556,10 +580,12 @@ func (r *Registry) Start(
 
 	claimAndProcessJobs := func(ctx context.Context) {
 		if r.adoptionDisabled(ctx) {
-			r.cancelAll(ctx)
+			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
+			r.cancelAllAdoptedJobs()
 			return
 		}
-		liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval+5*time.Second)
+		// TODO the interval should be a tad longer than the adoption cycle.
+		liveEpoch, err := r.cm.GetLiveEpoch(ctx, r.ID(), DefaultAdoptInterval)
 		if err != nil {
 			log.Errorf(ctx, "error getting live epoch: %s", err)
 			return
@@ -600,10 +626,13 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNode
 	select {
 	case <-r.stopper.ShouldQuiesce():
 		r.cancelAll(ctx)
+		log.Warningf(ctx, "canceling all adopted jobs due to stopper quiescing")
+		r.cancelAllAdoptedJobs()
 		return
 	default:
 	}
 
+	// TODO fix
 	nl, ok := nlw.Optional(47892)
 	if !ok {
 		// At most one container is running on behalf of a SQL tenant, so it must be
@@ -1317,6 +1346,15 @@ func (r *Registry) cancelAll(ctx context.Context) {
 	r.cancelAllLocked(ctx)
 }
 
+func (r *Registry) cancelAllAdoptedJobs() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, aj := range r.mu.adoptedJobs {
+		aj.cancel()
+	}
+	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
+}
+
 func (r *Registry) cancelAllLocked(ctx context.Context) {
 	r.mu.AssertHeld()
 	for jobID, cancel := range r.mu.jobs {
@@ -1350,6 +1388,14 @@ func (r *Registry) unregister(jobID int64) {
 	if ok {
 		cancel()
 		delete(r.mu.jobs, jobID)
+	}
+	aj, ok := r.mu.adoptedJobs[jobID]
+	// It is possible for a job to be double unregistered. unregister is always
+	// called at the end of resume. But it can also be called during cancelAll
+	// and in the adopt loop under certain circumstances.
+	if ok {
+		aj.cancel()
+		delete(r.mu.adoptedJobs, jobID)
 	}
 }
 

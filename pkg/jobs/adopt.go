@@ -76,15 +76,18 @@ WHERE (status = $1 OR status = $2) AND (sqlliveness_name = $3 AND sqlliveness_ep
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for id, cancel := range r.mu.jobs {
-		if _, ok := claimedToResume[id]; ok {
-			// job id is already resumed, nothing to do.
-			delete(claimedToResume, id)
-			continue
+	for id, aj := range r.mu.adoptedJobs {
+		if aj.epoch < epoch {
+			log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
+			aj.cancel()
+			delete(r.mu.adoptedJobs, id)
+		} else {
+			if _, ok := claimedToResume[id]; ok {
+				// job id is already running, nothing to do.
+				delete(claimedToResume, id)
+				continue
+			}
 		}
-		log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
-		cancel()
-		delete(r.mu.jobs, id)
 	}
 
 	for id := range claimedToResume {
@@ -134,7 +137,7 @@ func (r *Registry) runJob(ctx context.Context, jobID, epoch int64) error {
 	if err != nil {
 		return err
 	}
-	r.mu.jobs[jobID] = cancel
+	r.mu.adoptedJobs[jobID] = &adoptedJob{epoch: epoch, cancel: cancel}
 	go func() {
 		// Drain and ignore results.
 		for range resultsCh {
