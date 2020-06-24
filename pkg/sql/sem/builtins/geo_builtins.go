@@ -371,6 +371,72 @@ func fitMaxDecimalDigitsToBounds(maxDecimalDigits int) int {
 
 var geoBuiltins = map[string]builtinDefinition{
 	//
+	// Meta builtins.
+	//
+	"postgis_addbbox": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				return g, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"postgis_dropbbox": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				return g, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"postgis_hasbbox": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				if g.Geometry.Empty() {
+					return tree.DBoolFalse, nil
+				}
+				if g.Geometry.Shape() == geopb.Shape_Point {
+					return tree.DBoolFalse, nil
+				}
+				return tree.DBoolTrue, nil
+			},
+			types.Bool,
+			infoBuilder{
+				info: "Returns whether a given Geometry has a bounding box. False for points and empty geometries; always true otherwise.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"postgis_extensions_upgrade": returnCompatibilityFixedStringBuiltin(
+		"Upgrade completed, run SELECT postgis_full_version(); for details",
+	),
+	"postgis_full_version": returnCompatibilityFixedStringBuiltin(
+		`POSTGIS="3.0.1 ec2a9aa" [EXTENSION] PGSQL="120" GEOS="3.8.1-CAPI-1.13.3" PROJ="4.9.3" LIBXML="2.9.10" LIBJSON="0.13.1" LIBPROTOBUF="1.4.2" WAGYU="0.4.3 (Internal)"`,
+	),
+	"postgis_geos_version":       returnCompatibilityFixedStringBuiltin("3.8.1-CAPI-1.13.3"),
+	"postgis_libxml_version":     returnCompatibilityFixedStringBuiltin("2.9.10"),
+	"postgis_lib_build_date":     returnCompatibilityFixedStringBuiltin("2020-03-06 18:23:24"),
+	"postgis_lib_version":        returnCompatibilityFixedStringBuiltin("3.0.1"),
+	"postgis_liblwgeom_version":  returnCompatibilityFixedStringBuiltin("3.0.1 ec2a9aa"),
+	"postgis_proj_version":       returnCompatibilityFixedStringBuiltin("4.9.3"),
+	"postgis_scripts_build_date": returnCompatibilityFixedStringBuiltin("2020-02-24 13:54:19"),
+	"postgis_scripts_installed":  returnCompatibilityFixedStringBuiltin("3.0.1 ec2a9aa"),
+	"postgis_scripts_released":   returnCompatibilityFixedStringBuiltin("3.0.1 ec2a9aa"),
+	"postgis_version":            returnCompatibilityFixedStringBuiltin("3.0 USE_GEOS=1 USE_PROJ=1 USE_STATS=1"),
+	"postgis_wagyu_version":      returnCompatibilityFixedStringBuiltin("0.4.3 (Internal)"),
+
+	//
 	// Input (Geometry)
 	//
 
@@ -1685,6 +1751,20 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"geometrytype": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				return tree.NewDString(g.Shape().String()), nil
+			},
+			types.String,
+			infoBuilder{
+				info:         "Returns the type of geometry as a string.",
+				libraryUsage: usesGEOS,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_geometrytype": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -1693,7 +1773,7 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 			},
 			types.String,
 			infoBuilder{
-				info:         "Returns the type of geometry as a string.",
+				info:         "Returns the type of geometry as a string prefixed with `ST_`.",
 				libraryUsage: usesGEOS,
 			},
 			tree.VolatilityImmutable,
@@ -3061,6 +3141,26 @@ The calculations are done on a sphere.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+}
+
+// returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
+// and returns the given fixed string.
+// It is assumed to be fully immutable.
+func returnCompatibilityFixedStringBuiltin(ret string) builtinDefinition {
+	return makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(ret), nil
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf("Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits."),
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	)
 }
 
 // geometryOverload1 hides the boilerplate for builtins operating on one geometry.

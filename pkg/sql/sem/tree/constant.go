@@ -537,6 +537,11 @@ func (expr *StrVal) ResolveAsType(
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
+			// bpchar types truncate trailing whitespace.
+			if typ.Oid() == oid.T_bpchar {
+				expr.resString = DString(strings.TrimRight(expr.s, " "))
+				return &expr.resString, nil
+			}
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
@@ -549,6 +554,11 @@ func (expr *StrVal) ResolveAsType(
 		if typ.Oid() == oid.T_name {
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
+		}
+		// bpchar types truncate trailing whitespace.
+		if typ.Oid() == oid.T_bpchar {
+			expr.resString = DString(strings.TrimRight(expr.s, " "))
+			return &expr.resString, nil
 		}
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil

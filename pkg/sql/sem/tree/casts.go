@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -110,6 +111,8 @@ var validCasts = []castInfo{
 
 	// Casts to GeographyFamily.
 	{from: types.UnknownFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
 	{from: types.GeographyFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
@@ -117,6 +120,8 @@ var validCasts = []castInfo{
 
 	// Casts to GeometryFamily.
 	{from: types.UnknownFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.BytesFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.GeographyFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
@@ -193,6 +198,8 @@ var validCasts = []castInfo{
 	{from: types.CollatedStringFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
 	{from: types.BytesFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
 	{from: types.UuidFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
+	{from: types.GeographyFamily, to: types.BytesFamily, volatility: VolatilityImmutable},
 
 	// Casts to DateFamily.
 	{from: types.UnknownFamily, to: types.DateFamily, volatility: VolatilityImmutable},
@@ -277,6 +284,8 @@ var validCasts = []castInfo{
 	{from: types.UnknownFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
 	{from: types.JsonFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
+	{from: types.GeographyFamily, to: types.JsonFamily, volatility: VolatilityImmutable},
 
 	// Casts to EnumFamily.
 	{from: types.UnknownFamily, to: types.EnumFamily, volatility: VolatilityImmutable},
@@ -625,6 +634,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return NewDName(s), nil
 			}
 
+			// bpchar types truncate trailing whitespace.
+			if t.Oid() == oid.T_bpchar {
+				s = strings.TrimRight(s, " ")
+			}
+
 			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
@@ -633,6 +647,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			return NewDString(s), nil
 		case types.CollatedStringFamily:
+			// bpchar types truncate trailing whitespace.
+			if t.Oid() == oid.T_bpchar {
+				s = strings.TrimRight(s, " ")
+			}
 			// Ditto truncation like for TString.
 			if t.Width() > 0 {
 				s = util.TruncateString(s, int(t.Width()))
@@ -650,6 +668,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return NewDBytes(DBytes(t.GetBytes())), nil
 		case *DBytes:
 			return d, nil
+		case *DGeography:
+			return NewDBytes(DBytes(t.Geography.EWKB())), nil
+		case *DGeometry:
+			return NewDBytes(DBytes(t.Geometry.EWKB())), nil
 		}
 
 	case types.UuidFamily:
@@ -702,6 +724,22 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return nil, err
 			}
 			return &DGeography{g}, nil
+		case *DJSON:
+			t, err := d.AsText()
+			if err != nil {
+				return nil, err
+			}
+			g, err := geo.ParseGeographyFromGeoJSON([]byte(*t))
+			if err != nil {
+				return nil, err
+			}
+			return &DGeography{g}, nil
+		case *DBytes:
+			g, err := geo.ParseGeographyFromEWKB(geopb.EWKB(*d))
+			if err != nil {
+				return nil, err
+			}
+			return &DGeography{g}, nil
 		}
 	case types.GeometryFamily:
 		switch d := d.(type) {
@@ -727,6 +765,22 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return nil, err
 			}
 			g, err := d.AsGeometry()
+			if err != nil {
+				return nil, err
+			}
+			return &DGeometry{g}, nil
+		case *DJSON:
+			t, err := d.AsText()
+			if err != nil {
+				return nil, err
+			}
+			g, err := geo.ParseGeometryFromGeoJSON([]byte(*t))
+			if err != nil {
+				return nil, err
+			}
+			return &DGeometry{g}, nil
+		case *DBytes:
+			g, err := geo.ParseGeometryFromEWKB(geopb.EWKB(*d))
 			if err != nil {
 				return nil, err
 			}
@@ -886,6 +940,18 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDJSON(string(*v))
 		case *DJSON:
 			return v, nil
+		case *DGeography:
+			j, err := geo.EWKBToGeoJSON(v.Geography.EWKB(), -1, geo.EWKBToGeoJSONFlagZero)
+			if err != nil {
+				return nil, err
+			}
+			return ParseDJSON(string(j))
+		case *DGeometry:
+			j, err := geo.EWKBToGeoJSON(v.Geometry.EWKB(), -1, geo.EWKBToGeoJSONFlagZero)
+			if err != nil {
+				return nil, err
+			}
+			return ParseDJSON(string(j))
 		}
 	case types.ArrayFamily:
 		switch v := d.(type) {

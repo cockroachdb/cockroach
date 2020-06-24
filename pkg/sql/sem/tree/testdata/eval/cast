@@ -1111,3 +1111,24 @@ eval
 ('{he' || ',a🐛b🏠}')::VARCHAR(2)[]
 ----
 ARRAY['he',e'a\U0001F41B']
+
+# Chars should truncate trailing space characters.
+eval
+'hello '::char(100)
+----
+'hello'
+
+eval
+'hello t'::char(100)
+----
+'hello t'
+
+eval
+'hello '::string::char(100)
+----
+'hello'
+
+eval
+'hello t'::string::char(100)
+----
+'hello t'
