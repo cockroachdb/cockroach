@@ -968,20 +968,22 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	// Iterate over all inverted indexes.
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonInvertedIndexes)
 	for iter.Next() {
-		var invertedConstraint *invertedexpr.SpanExpression
+		var spanExpr *invertedexpr.SpanExpression
+		var spansToRead invertedexpr.InvertedSpans
 		var constraint *constraint.Constraint
 		var remaining memo.FiltersExpr
 		var geoOk, nonGeoOk bool
 
 		// Check whether the filter can constrain the index.
-		// TODO(rytaft): Unify these two cases so both return an invertedConstraint.
-		invertedConstraint, geoOk = tryConstrainGeoIndex(
+		// TODO(rytaft): Unify these two cases so both return a spanExpr.
+		spanExpr, geoOk = tryConstrainGeoIndex(
 			c.e.evalCtx.Context, filters, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
 			// Geo index scans can never be tight, so remaining filters is always the
 			// same as filters.
 			remaining = filters
+			spansToRead = spanExpr.SpansToRead
 		} else {
 			constraint, remaining, nonGeoOk = c.tryConstrainIndex(
 				filters,
@@ -995,16 +997,23 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			}
 		}
 
+		invertedCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
+
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.IndexOrdinal()
 		newScanPrivate.Constraint = constraint
-		newScanPrivate.InvertedConstraint = invertedConstraint
+		newScanPrivate.InvertedConstraint = spansToRead
 
-		// Though the index is marked as containing the JSONB column being
-		// indexed, it doesn't actually, and it's only valid to extract the
-		// primary key columns from it.
-		newScanPrivate.Cols = sb.primaryKeyCols()
+		// Though the index is marked as containing the column being indexed, it
+		// doesn't actually, and it's only valid to extract the primary key columns
+		// from it. However, the inverted key column is still needed if there is an
+		// inverted filter.
+		pkCols := sb.primaryKeyCols()
+		newScanPrivate.Cols = pkCols.Copy()
+		if spanExpr != nil {
+			newScanPrivate.Cols.Add(invertedCol)
+		}
 
 		// The Scan operator always goes in a new group, since it's always nested
 		// underneath the IndexJoin. The IndexJoin may also go into its own group,
@@ -1013,10 +1022,13 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// correct columns, but it's difficult to tell at this point.
 		sb.setScan(&newScanPrivate)
 
+		// Add an inverted filter if it exists.
+		sb.addInvertedFilter(spanExpr, invertedCol)
+
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remaining = sb.addSelectAfterSplit(remaining, newScanPrivate.Cols)
-		sb.addIndexJoin(scanPrivate.Cols)
+		remaining = sb.addSelectAfterSplit(remaining, pkCols)
+		sb.addIndexJoin(pkCols)
 		sb.addSelect(remaining)
 
 		sb.build(grp)
