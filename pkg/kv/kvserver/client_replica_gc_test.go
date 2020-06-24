@@ -14,15 +14,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,26 +33,6 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	mtc := &multiTestContext{}
 	const numStores = 3
 	rangeID := roachpb.RangeID(1)
-
-	// Use actual engines (not in memory) because the in-mem ones don't write
-	// to disk. The test would still pass if we didn't do this except it
-	// would probably look at an empty sideloaded directory and fail.
-	tempDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	cache := storage.NewRocksDBCache(1 << 20)
-	defer cache.Release()
-	for i := 0; i < 3; i++ {
-		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
-				Dir: filepath.Join(tempDir, strconv.Itoa(i)),
-			},
-		}, cache)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer eng.Close()
-		mtc.engines = append(mtc.engines, eng)
-	}
 
 	// In this test, the Replica on the second Node is removed, and the test
 	// verifies that that Node adds this Replica to its RangeGCQueue. However,
