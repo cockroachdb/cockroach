@@ -368,3 +368,37 @@ CREATE TABLE t46570(c0 BOOL, c1 STRING COLLATE en);
 CREATE INDEX ON t46570(rowid, c1 DESC);
 INSERT INTO t46570(c1, rowid) VALUES('' COLLATE en, 0);
 UPSERT INTO t46570(rowid) VALUES (0), (1)
+
+# Test trailing spaces are truncated for char types.
+subtest regression_50015
+
+query T
+SELECT
+	t
+FROM
+	(
+		VALUES
+			('hello '::CHAR(100) COLLATE en_US),
+			('hello t'::CHAR(100) COLLATE en_US),
+			('hello '::STRING::CHAR(100) COLLATE en_US),
+			('hello t'::STRING::CHAR(100) COLLATE en_US)
+	) g(t)
+----
+hello
+hello t
+hello
+hello t
+
+statement ok
+CREATE TABLE t50015(id int PRIMARY KEY, a char(100), b char(100) COLLATE en);
+INSERT INTO t50015 VALUES
+  (1, 'hello', 'hello' COLLATE en),
+  (2, 'hello ', 'hello ' COLLATE en),
+  (3, repeat('hello ', 2), repeat('hello ', 2) COLLATE en)
+
+query ITITI
+SELECT id, a, length(a), b, length(b::string) FROM t50015 ORDER BY id ASC
+----
+1  hello                                                                                                 5   hello        5
+2  hello                                                                                                 5   hello        5
+3  hello hello                                                                                           11  hello hello  11

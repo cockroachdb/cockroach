@@ -625,6 +625,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return NewDName(s), nil
 			}
 
+			// bpchar types truncate trailing whitespace.
+			if t.Oid() == oid.T_bpchar {
+				s = strings.TrimRight(s, " ")
+			}
+
 			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
@@ -633,6 +638,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			return NewDString(s), nil
 		case types.CollatedStringFamily:
+			// bpchar types truncate trailing whitespace.
+			if t.Oid() == oid.T_bpchar {
+				s = strings.TrimRight(s, " ")
+			}
 			// Ditto truncation like for TString.
 			if t.Width() > 0 {
 				s = util.TruncateString(s, int(t.Width()))
