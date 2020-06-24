@@ -2383,6 +2383,41 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
+			name: "write too old with multi-range locking read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
+				return err
+			},
+			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with multi-range locking read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "b", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
+				return err
+			},
+			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with multi-range batch of locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForUpdate("a", "a\x00")
+				b.ScanForUpdate("b", "b\x00")
+				return txn.Run(ctx, b)
+			},
+			txnCoordRetry: true,
+		},
+		{
 			// This test sends a 1PC batch with Put+EndTxn.
 			// The Put gets a write too old error but, since there's no refresh spans,
 			// the commit succeeds.
