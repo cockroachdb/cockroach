@@ -624,8 +624,6 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			}
 			vectorizeMode := "off"
 			if vectorize {
-				// TODO(yuzefovich): once #50299 is resolved, unskip this.
-				t.Skip("#50299")
 				vectorizeMode = "on"
 			}
 
