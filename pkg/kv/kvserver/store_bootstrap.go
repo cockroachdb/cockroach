@@ -215,7 +215,7 @@ func WriteInitialClusterData(
 		}
 
 		truncStateType := stateloader.TruncatedStateUnreplicated
-		lease := roachpb.BootstrapLease()
+		lease := roachpb.Lease{}
 		_, err := stateloader.WriteInitialState(
 			ctx, batch,
 			enginepb.MVCCStats{},
