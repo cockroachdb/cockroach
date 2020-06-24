@@ -29,154 +29,27 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// serverCfg is used as the client-side copy of default server
-// parameters for CLI utilities.
-//
-// NB: `cockroach start` further annotates serverCfg for the newly created
-// server.
-var serverCfg = func() server.Config {
-	st := cluster.MakeClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
-
-	s := server.MakeConfig(context.Background(), st)
-	s.AuditLogDirName = &sqlAuditLogDir
-	return s
-}()
-
-var sqlAuditLogDir log.DirName
-
-// GetServerCfgStores provides direct public access to the StoreSpecList inside
-// serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-func GetServerCfgStores() base.StoreSpecList {
-	return serverCfg.Stores
-}
-
-var baseCfg = serverCfg.Config
-
 // initCLIDefaults serves as the single point of truth for
 // configuration defaults. It is suitable for calling between tests of
 // the CLI utilities inside a single testing process.
 func initCLIDefaults() {
+	setServerContextDefaults()
 	// We don't reset the pointers (because they are tied into the
 	// flags), but instead overwrite the existing structs' values.
 	baseCfg.InitDefaults()
-
-	// isInteractive is only set to `true` by `cockroach sql` -- all
-	// other client commands are non-interactive, regardless of whether
-	// the standard input is a terminal.
-	cliCtx.isInteractive = false
-	// See also setCLIDefaultForTests() in cli_test.go.
-	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
-	cliCtx.tableDisplayFormat = tableDisplayTSV
-	if cliCtx.terminalOutput {
-		// See also setCLIDefaultForTests() in cli_test.go.
-		cliCtx.tableDisplayFormat = tableDisplayTable
-	}
-	cliCtx.cmdTimeout = 0 // no timeout
-	cliCtx.clientConnHost = ""
-	cliCtx.clientConnPort = base.DefaultPort
-	cliCtx.certPrincipalMap = nil
-	cliCtx.sqlConnURL = ""
-	cliCtx.sqlConnUser = ""
-	cliCtx.sqlConnPasswd = ""
-	cliCtx.sqlConnDBName = ""
-	cliCtx.extraConnURLOptions = nil
-
-	sqlCtx.setStmts = nil
-	sqlCtx.execStmts = nil
-	sqlCtx.repeatDelay = 0
-	sqlCtx.safeUpdates = false
-	sqlCtx.showTimes = false
-	sqlCtx.debugMode = false
-	sqlCtx.echo = false
-
-	zipCtx.nodes = nodeSelection{}
-	zipCtx.redactLogs = false
-
-	dumpCtx.dumpMode = dumpBoth
-	dumpCtx.asOf = ""
-	dumpCtx.dumpAll = false
-
-	debugCtx.startKey = storage.NilKey
-	debugCtx.endKey = storage.MVCCKeyMax
-	debugCtx.values = false
-	debugCtx.sizes = false
-	debugCtx.replicated = false
-	debugCtx.inputFile = ""
-	debugCtx.printSystemConfig = false
-	debugCtx.maxResults = 0
-	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
-
-	serverCfg.KVConfig.GoroutineDumpDirName = ""
-	serverCfg.KVConfig.HeapProfileDirName = ""
-	serverCfg.KVConfig.ReadyFn = nil
-	serverCfg.KVConfig.DelayedBootstrapFn = nil
-	serverCfg.SQLConfig.SocketFile = ""
-	serverCfg.KVConfig.JoinList = nil
-	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
-	serverCfg.KVConfig.JoinPreferSRVRecords = false
-	serverCfg.BaseConfig.DefaultZoneConfig = zonepb.DefaultZoneConfig()
-	serverCfg.KVConfig.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
-	// Attempt to default serverCfg.MemoryPoolSize to 25% if possible.
-	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
-		serverCfg.SQLConfig.MemoryPoolSize = bytes
-	}
-
-	startCtx.serverInsecure = baseCfg.Insecure
-	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
-	startCtx.serverCertPrincipalMap = nil
-	startCtx.serverListenAddr = ""
-	startCtx.unencryptedLocalhostHTTP = false
-	startCtx.tempDir = ""
-	startCtx.externalIODir = ""
-	startCtx.listeningURLFile = ""
-	startCtx.pidFile = ""
-	startCtx.inBackground = false
-	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
-
-	quitCtx.drainWait = 10 * time.Minute
-
-	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
-	nodeCtx.statusShowRanges = false
-	nodeCtx.statusShowStats = false
-	nodeCtx.statusShowAll = false
-	nodeCtx.statusShowDecommission = false
-
-	cfg := tree.DefaultPrettyCfg()
-	sqlfmtCtx.len = cfg.LineWidth
-	sqlfmtCtx.useSpaces = !cfg.UseTabs
-	sqlfmtCtx.tabWidth = cfg.TabWidth
-	sqlfmtCtx.noSimplify = !cfg.Simplify
-	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
-	sqlfmtCtx.execStmts = nil
-
-	systemBenchCtx.concurrency = 1
-	systemBenchCtx.duration = 60 * time.Second
-	systemBenchCtx.tempDir = "."
-	systemBenchCtx.writeSize = 32 << 10
-	systemBenchCtx.syncInterval = 512 << 10
-
-	networkBenchCtx.server = true
-	networkBenchCtx.port = 8081
-	networkBenchCtx.addresses = []string{"localhost:8081"}
-
-	demoCtx.nodes = 1
-	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.useEmptyDatabase = false
-	demoCtx.simulateLatency = false
-	demoCtx.runWorkload = false
-	demoCtx.localities = nil
-	demoCtx.geoPartitionedReplicas = false
-	demoCtx.disableTelemetry = false
-	demoCtx.disableLicenseAcquisition = false
-	demoCtx.transientCluster = nil
-	demoCtx.insecure = false
-	demoCtx.geoLibsDir = "/usr/local/lib/cockroach"
-
-	authCtx.validityPeriod = 1 * time.Hour
+	setCliContextDefaults()
+	setSQLContextDefaults()
+	setZipContextDefaults()
+	setDumpContextDefaults()
+	setDebugContextDefaults()
+	setStartContextDefaults()
+	setQuitContextDefaults()
+	setNodeContextDefaults()
+	setSystemBenchContextDefaults()
+	setNetworkBenchContextDefaults()
+	setSqlfmtContextDefaults()
+	setDemoContextDefaults()
+	setAuthContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -191,7 +64,53 @@ func clearFlagChanges(cmd *cobra.Command) {
 	}
 }
 
-// cliContext captures the command-line parameters of most CLI commands.
+// serverCfg is used as the client-side copy of default server
+// parameters for CLI utilities.
+//
+// NB: `cockroach start` further initializes serverCfg for the newly
+// created server.
+//
+// See below for defaults.
+var serverCfg = func() server.Config {
+	st := cluster.MakeClusterSettings()
+	settings.SetCanonicalValuesContainer(&st.SV)
+
+	s := server.MakeConfig(context.Background(), st)
+	s.AuditLogDirName = &sqlAuditLogDir
+	return s
+}()
+
+// setServerContextDefaults set the default values in serverCfg.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setServerContextDefaults() {
+	serverCfg.BaseConfig.DefaultZoneConfig = zonepb.DefaultZoneConfig()
+
+	serverCfg.ClockDevicePath = ""
+	serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
+
+	serverCfg.KVConfig.GoroutineDumpDirName = ""
+	serverCfg.KVConfig.HeapProfileDirName = ""
+	serverCfg.KVConfig.ReadyFn = nil
+	serverCfg.KVConfig.DelayedBootstrapFn = nil
+	serverCfg.KVConfig.JoinList = nil
+	serverCfg.KVConfig.JoinPreferSRVRecords = false
+	serverCfg.KVConfig.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
+
+	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
+
+	serverCfg.SQLConfig.SocketFile = ""
+	// Attempt to default serverCfg.MemoryPoolSize to 25% if possible.
+	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
+		serverCfg.SQLConfig.MemoryPoolSize = bytes
+	}
+}
+
+// baseCfg points to the base.Config inside serverCfg.
+var baseCfg = serverCfg.Config
+
+// cliContext captures the command-line parameters shared by most CLI
+// commands. See below for defaults.
 type cliContext struct {
 	// Embed the base context.
 	*base.Config
@@ -236,11 +155,37 @@ type cliContext struct {
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var cliCtx = cliContext{Config: baseCfg}
 
+// setCliContextDefaults set the default values in cliCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setCliContextDefaults() {
+	// isInteractive is only set to `true` by `cockroach sql` -- all
+	// other client commands are non-interactive, regardless of whether
+	// the standard input is a terminal.
+	cliCtx.isInteractive = false
+	// See also setCLIDefaultForTests() in cli_test.go.
+	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
+	cliCtx.tableDisplayFormat = tableDisplayTSV
+	if cliCtx.terminalOutput {
+		// See also setCLIDefaultForTests() in cli_test.go.
+		cliCtx.tableDisplayFormat = tableDisplayTable
+	}
+	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.clientConnHost = ""
+	cliCtx.clientConnPort = base.DefaultPort
+	cliCtx.certPrincipalMap = nil
+	cliCtx.sqlConnURL = ""
+	cliCtx.sqlConnUser = ""
+	cliCtx.sqlConnPasswd = ""
+	cliCtx.sqlConnDBName = ""
+	cliCtx.extraConnURLOptions = nil
+}
+
 // sqlCtx captures the command-line parameters of the `sql` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var sqlCtx = struct {
 	*cliContext
 
@@ -272,8 +217,21 @@ var sqlCtx = struct {
 	debugMode bool
 }{cliContext: &cliCtx}
 
+// setSQLContextDefaults set the default values in sqlCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setSQLContextDefaults() {
+	sqlCtx.setStmts = nil
+	sqlCtx.execStmts = nil
+	sqlCtx.repeatDelay = 0
+	sqlCtx.safeUpdates = false
+	sqlCtx.showTimes = false
+	sqlCtx.debugMode = false
+	sqlCtx.echo = false
+}
+
 // zipCtx captures the command-line parameters of the `zip` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var zipCtx struct {
 	nodes nodeSelection
 
@@ -282,8 +240,16 @@ var zipCtx struct {
 	redactLogs bool
 }
 
+// setZipContextDefaults set the default values in zipCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setZipContextDefaults() {
+	zipCtx.nodes = nodeSelection{}
+	zipCtx.redactLogs = false
+}
+
 // dumpCtx captures the command-line parameters of the `dump` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
 	dumpMode dumpMode
@@ -295,15 +261,32 @@ var dumpCtx struct {
 	dumpAll bool
 }
 
+// setDumpContextDefaults set the default values in dumpCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setDumpContextDefaults() {
+	dumpCtx.dumpMode = dumpBoth
+	dumpCtx.asOf = ""
+	dumpCtx.dumpAll = false
+}
+
 // authCtx captures the command-line parameters of the `auth-session`
-// command.
+// command. See below for defaults.
 var authCtx struct {
 	onlyCookie     bool
 	validityPeriod time.Duration
 }
 
+// setAuthContextDefaults set the default values in authCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setAuthContextDefaults() {
+	authCtx.onlyCookie = false
+	authCtx.validityPeriod = 1 * time.Hour
+}
+
 // debugCtx captures the command-line parameters of the `debug` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var debugCtx struct {
 	startKey, endKey  storage.MVCCKey
 	values            bool
@@ -315,8 +298,23 @@ var debugCtx struct {
 	maxResults        int
 }
 
+// setDebugContextDefaults set the default values in debugCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setDebugContextDefaults() {
+	debugCtx.startKey = storage.NilKey
+	debugCtx.endKey = storage.MVCCKeyMax
+	debugCtx.values = false
+	debugCtx.sizes = false
+	debugCtx.replicated = false
+	debugCtx.inputFile = ""
+	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
+	debugCtx.maxResults = 0
+	debugCtx.printSystemConfig = false
+}
+
 // startCtx captures the command-line arguments for the `start` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure         bool
@@ -354,27 +352,63 @@ var startCtx struct {
 	geoLibsDir string
 }
 
+// setStartContextDefaults set the default values in startCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setStartContextDefaults() {
+	startCtx.serverInsecure = baseCfg.Insecure
+	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+	startCtx.serverCertPrincipalMap = nil
+	startCtx.serverListenAddr = ""
+	startCtx.unencryptedLocalhostHTTP = false
+	startCtx.tempDir = ""
+	startCtx.externalIODir = ""
+	startCtx.listeningURLFile = ""
+	startCtx.pidFile = ""
+	startCtx.inBackground = false
+	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+}
+
 // quitCtx captures the command-line parameters of the `quit` and
 // `node drain` commands.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var quitCtx struct {
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
 }
 
+// setQuitContextDefaults set the default values in quitCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setQuitContextDefaults() {
+	quitCtx.drainWait = 10 * time.Minute
+}
+
 // nodeCtx captures the command-line parameters of the `node` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var nodeCtx struct {
 	nodeDecommissionWait   nodeDecommissionWaitType
+	nodeDecommissionSelf   bool
 	statusShowRanges       bool
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
 }
 
+// setNodeContextDefaults set the default values in nodeCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setNodeContextDefaults() {
+	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.statusShowRanges = false
+	nodeCtx.statusShowStats = false
+	nodeCtx.statusShowAll = false
+	nodeCtx.statusShowDecommission = false
+}
+
 // systemBenchCtx captures the command-line parameters of the `systembench` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var systemBenchCtx struct {
 	concurrency  int
 	duration     time.Duration
@@ -383,6 +417,19 @@ var systemBenchCtx struct {
 	syncInterval int64
 }
 
+// setSystemBenchContextDefaults set the default values in
+// systemBenchCtx. This function is called by initCLIDefaults() and
+// thus re-called in every test that exercises command-line parsing.
+func setSystemBenchContextDefaults() {
+	systemBenchCtx.concurrency = 1
+	systemBenchCtx.duration = 60 * time.Second
+	systemBenchCtx.tempDir = "."
+	systemBenchCtx.writeSize = 32 << 10
+	systemBenchCtx.syncInterval = 512 << 10
+}
+
+// systemBenchCtx captures the command-line parameters of the
+// `networkbench` command. See below for defaults.
 var networkBenchCtx struct {
 	server    bool
 	port      int
@@ -390,8 +437,18 @@ var networkBenchCtx struct {
 	latency   bool
 }
 
+// setNetworkBenchContextDefaults set the default values in
+// networkBenchCtx. This function is called by initCLIDefaults() and
+// thus re-called in every test that exercises command-line parsing.
+func setNetworkBenchContextDefaults() {
+	networkBenchCtx.server = true
+	networkBenchCtx.port = 8081
+	networkBenchCtx.addresses = []string{"localhost:8081"}
+	networkBenchCtx.latency = false
+}
+
 // sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var sqlfmtCtx struct {
 	len        int
 	useSpaces  bool
@@ -401,8 +458,21 @@ var sqlfmtCtx struct {
 	execStmts  statementsValue
 }
 
+// setSqlfmtContextDefaults set the default values in sqlfmtCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setSqlfmtContextDefaults() {
+	cfg := tree.DefaultPrettyCfg()
+	sqlfmtCtx.len = cfg.LineWidth
+	sqlfmtCtx.useSpaces = !cfg.UseTabs
+	sqlfmtCtx.tabWidth = cfg.TabWidth
+	sqlfmtCtx.noSimplify = !cfg.Simplify
+	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
+	sqlfmtCtx.execStmts = nil
+}
+
 // demoCtx captures the command-line parameters of the `demo` command.
-// Defaults set by InitCLIDefaults() above.
+// See below for defaults.
 var demoCtx struct {
 	nodes                     int
 	sqlPoolMemorySize         int64
@@ -416,5 +486,32 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
-	geoLibsDir                string
+}
+
+// setDemoContextDefaults set the default values in demoCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setDemoContextDefaults() {
+	demoCtx.nodes = 1
+	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.useEmptyDatabase = false
+	demoCtx.simulateLatency = false
+	demoCtx.runWorkload = false
+	demoCtx.localities = nil
+	demoCtx.geoPartitionedReplicas = false
+	demoCtx.disableTelemetry = false
+	demoCtx.disableLicenseAcquisition = false
+	demoCtx.transientCluster = nil
+	demoCtx.insecure = false
+}
+
+// GetServerCfgStores provides direct public access to the StoreSpecList inside
+// serverCfg. This is used by CCL code to populate some fields.
+//
+// WARNING: consider very carefully whether you should be using this.
+// If you are not writing CCL code that performs command-line flag
+// parsing, you probably should not be using this.
+func GetServerCfgStores() base.StoreSpecList {
+	return serverCfg.Stores
 }

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 	"text/tabwriter"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -187,6 +188,10 @@ type Flags struct {
 
 	// CascadeLevels limits the depth of recursive cascades for build-cascades.
 	CascadeLevels int
+
+	// NoStableFolds controls whether constant folding for normalization includes
+	// stable operators.
+	NoStableFolds bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -200,9 +205,14 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	// To allow opttester tests to use now(), we hardcode a preset transaction
+	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.
+	ot.evalCtx.TxnTimestamp = time.Date(2017, 05, 10, 13, 0, 0, 0, time.UTC)
 
 	// Set any OptTester-wide session flags here.
 
+	ot.evalCtx.SessionData.User = "opttester"
+	ot.evalCtx.SessionData.Database = "defaultdb"
 	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
 	ot.evalCtx.SessionData.OptimizerUseHistograms = true
 	ot.evalCtx.SessionData.OptimizerUseMultiColStats = true
@@ -306,6 +316,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //      (show|hide)-(all|miscprops|constraints|scalars|types|...)
 //    See formatFlags for all flags. Multiple flags can be specified; each flag
 //    modifies the existing set of the flags.
+//
+//  - no-stable-folds: disallows constant folding for stable operators; only
+//                     used with "norm".
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
 //
@@ -653,6 +666,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		// Hiding qualifications defeats the purpose.
 		f.ExprFormat &= ^memo.ExprFmtHideQualifications
 
+	case "no-stable-folds":
+		f.NoStableFolds = true
+
 	case "disable":
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("disable requires arguments")
@@ -798,6 +814,9 @@ func (ot *OptTester) OptNorm() (opt.Expr, error) {
 		ot.seenRules.Add(int(ruleName))
 		return true
 	})
+	if !ot.Flags.NoStableFolds {
+		o.Factory().FoldingControl().AllowStableFolds()
+	}
 	return ot.optimizeExpr(o)
 }
 
@@ -813,6 +832,7 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 		ot.seenRules.Add(int(ruleName))
 		return true
 	})
+	o.Factory().FoldingControl().AllowStableFolds()
 	return ot.optimizeExpr(o)
 }
 

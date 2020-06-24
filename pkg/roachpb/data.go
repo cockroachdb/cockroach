@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -38,10 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
@@ -1722,17 +1722,6 @@ func (l Lease) String() string {
 		return fmt.Sprintf("repl=%s seq=%s start=%s exp=%s%s", l.Replica, l.Sequence, l.Start, l.Expiration, proposedSuffix)
 	}
 	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
-}
-
-// BootstrapLease returns the lease to persist for the range of a freshly bootstrapped store. The
-// returned lease is morally "empty" but has a few fields set to non-nil zero values because some
-// used to be non-nullable and we now fuzz their nullability in tests. As a consequence, it's better
-// to always use zero fields here so that the initial stats are constant.
-func BootstrapLease() Lease {
-	return Lease{
-		Expiration:            &hlc.Timestamp{},
-		DeprecatedStartStasis: &hlc.Timestamp{},
-	}
 }
 
 // OwnedBy returns whether the given store is the lease owner.

@@ -2564,3 +2564,24 @@ UPDATE pg_catalog.pg_tables SET a = 'abc'
 statement error pg_tables is a system catalog
 TRUNCATE TABLE pg_catalog.pg_tables
 
+# Regression for #47285.
+statement ok
+CREATE TABLE t47285 (x STRING DEFAULT 'hello');
+ALTER TABLE t47285 ALTER COLUMN x SET DEFAULT 'howdy'
+
+query T
+SELECT
+  pg_get_expr(d.adbin, d.adrelid)
+FROM
+  pg_attribute AS a
+  LEFT JOIN pg_attrdef AS d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+  LEFT JOIN pg_type AS t ON a.atttypid = t.oid
+  LEFT JOIN pg_collation AS c ON
+    a.attcollation = c.oid AND a.attcollation != t.typcollation
+WHERE
+  a.attrelid = 't47285'::REGCLASS
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+  AND attname = 'x'
+----
+'howdy'::STRING

@@ -106,7 +106,7 @@ func TestPredicateImplication(t *testing.T) {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
 
-			remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred)
+			remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, &f)
 			if !ok {
 				return "false"
 			}
@@ -128,6 +128,130 @@ func TestPredicateImplication(t *testing.T) {
 	})
 }
 
+func BenchmarkPredicateImplication(b *testing.B) {
+	type testCase struct {
+		name, varTypes, filters, pred string
+	}
+	testCases := []testCase{
+		{
+			name:     "single-exact-match",
+			varTypes: "int",
+			filters:  "@1 >= 10",
+			pred:     "@1 >= 10",
+		},
+		{
+			name:     "range-exact-match",
+			varTypes: "int, int",
+			filters:  "@1 >= 10 AND @1 <= 100",
+			pred:     "@1 >= 10 AND @1 <= 100",
+		},
+		{
+			name:     "range-exact-match-reverse",
+			varTypes: "int, int",
+			filters:  "@1 >= 10 AND @1 <= 100",
+			pred:     "@1 >= 10 AND @1 <= 100",
+		},
+		{
+			name:     "single-exact-match-extra-filters",
+			varTypes: "int, int, int, int, int",
+			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 5",
+			pred:     "@3 >= 10",
+		},
+		{
+			name:     "single-exact-match-extra-filters-with-range",
+			varTypes: "int, int, int, int, int",
+			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @3 <= 100 AND @4 = 4 AND @5 = 5",
+			pred:     "@3 >= 10",
+		},
+		{
+			name:     "range-exact-match-extra-filters",
+			varTypes: "int, int, int, int, int",
+			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @3 <= 100 AND @4 = 4 AND @5 = 5",
+			pred:     "@3 >= 10 AND @3 <= 100",
+		},
+		{
+			name:     "multi-column-exact-match",
+			varTypes: "int, string",
+			filters:  "@1 >= 10 AND @2 = 'foo'",
+			pred:     "@1 >= 10 AND @2 = 'foo'",
+		},
+		{
+			name:     "multi-column-exact-match-reverse",
+			varTypes: "int, string",
+			filters:  "@1 >= 10 AND @2 = 'foo'",
+			pred:     "@2 = 'foo' AND @1 >= 10",
+		},
+		{
+			name:     "multi-column-exact-match-extra-filters",
+			varTypes: "int, int, int, int, string",
+			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
+			pred:     "@2 > 0 AND @5 = 'foo'",
+		},
+		{
+			name:     "filters-do-not-imply-pred",
+			varTypes: "int, int, int, int, string",
+			filters:  "@1 < 0 AND @2 > 10 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
+			pred:     "@2 > 0 AND @5 = 'foo'",
+		},
+	}
+	// Generate a few test cases with many columns to show how performance
+	// scales with respect to the number of columns.
+	for _, n := range []int{10, 100} {
+		var tc testCase
+		tc.name = fmt.Sprintf("many-columns-%d", n)
+		for i := 1; i <= n; i++ {
+			if i > 1 {
+				tc.varTypes += ", "
+				tc.filters += " AND "
+				tc.pred += " AND "
+			}
+			tc.varTypes += "int"
+			tc.filters += fmt.Sprintf("@%d=%d", i, i)
+			tc.pred += fmt.Sprintf("@%d=%d", i, i)
+		}
+		testCases = append(testCases, tc)
+	}
+
+	semaCtx := tree.MakeSemaContext()
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			var f norm.Factory
+			f.Init(&evalCtx, nil /* catalog */)
+			md := f.Metadata()
+
+			// Parse the variable types.
+			varTypes, err := exprgen.ParseTypes(strings.Split(tc.varTypes, ", "))
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// Add the variables to the metadata.
+			for i, typ := range varTypes {
+				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+			}
+
+			// Build the filters.
+			filters, err := makeFiltersExpr(tc.filters, &semaCtx, &evalCtx, &f)
+			if err != nil {
+				b.Fatalf("unexpected error while building filters: %v\n", err)
+			}
+
+			// Build the predicate.
+			pred, err := makeScalarExpr(tc.pred, &semaCtx, &evalCtx, &f)
+			if err != nil {
+				b.Fatalf("unexpected error while building predicate: %v\n", err)
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _ = partialidx.FiltersImplyPredicate(filters, pred, &f)
+			}
+		})
+	}
+}
+
 // makeFiltersExpr returns a FiltersExpr generated from the input string.
 func makeFiltersExpr(
 	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
@@ -142,7 +266,12 @@ func makeFiltersExpr(
 	// Run SimplifyFilters so that adjacent top-level AND expressions are
 	// flattened into individual FiltersItems, like they would be during
 	// normalization of a SELECT query.
-	return f.CustomFuncs().SimplifyFilters(filters), nil
+	filters = f.CustomFuncs().SimplifyFilters(filters)
+
+	// Run ConsolidateFilters so that adjacent top-level FiltersItems that
+	// constrain a single variable are combined into a RangeExpr, like they
+	// would be during normalization of a SELECT query.
+	return f.CustomFuncs().ConsolidateFilters(filters), nil
 }
 
 // makeScalarExpr returns a ScalarExpr generated from the input string.

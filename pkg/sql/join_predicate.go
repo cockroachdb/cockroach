@@ -69,9 +69,7 @@ type joinPredicate struct {
 
 // makePredicate constructs a joinPredicate object for joins. The equality
 // columns / on condition must be initialized separately.
-func makePredicate(
-	joinType sqlbase.JoinType, left, right sqlbase.ResultColumns,
-) (*joinPredicate, error) {
+func makePredicate(joinType sqlbase.JoinType, left, right sqlbase.ResultColumns) *joinPredicate {
 	// For anti and semi joins, the right columns are omitted from the output (but
 	// they must be available internally for the ON condition evaluation).
 	omitRightColumns := joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin
@@ -100,7 +98,7 @@ func makePredicate(
 	pred.curRow = make(tree.Datums, len(left)+len(right))
 	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(pred.curRow))
 
-	return pred, nil
+	return pred
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.

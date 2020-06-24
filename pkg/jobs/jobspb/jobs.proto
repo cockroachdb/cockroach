@@ -353,6 +353,9 @@ message CreateStatsDetails {
 
     // Indicates whether this column stat should include a histogram.
     bool has_histogram = 2;
+
+    // Indicates whether this column stat is over an inverted index.
+    bool inverted = 3;
   }
   string name = 1;
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];

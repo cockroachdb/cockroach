@@ -23,7 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -102,14 +102,18 @@ func TestDumpData(t *testing.T) {
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, err := getDumpMetadata(conn, dbName, []string{tName}, "")
+	clusterTS, err := getAsOf(conn, "" /* asOf */)
+	if err != nil {
+		return err
+	}
+	mds, err := getDumpMetadata(conn, dbName, []string{tName}, clusterTS)
 	if err != nil {
 		return err
 	}
 	if err := dumpCreateTable(w, mds[0]); err != nil {
 		return err
 	}
-	return dumpTableData(w, conn, mds[0])
+	return dumpTableData(w, conn, nil /* typContext */, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {

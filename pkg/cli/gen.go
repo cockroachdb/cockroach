@@ -146,10 +146,10 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 		}
 
 		// 32 bytes are reserved for key ID.
-		keySize := aesSize/8 + 32
-		b := make([]byte, keySize)
+		kSize := aesSize/8 + 32
+		b := make([]byte, kSize)
 		if _, err := rand.Read(b); err != nil {
-			return fmt.Errorf("failed to create key with size %d bytes", keySize)
+			return fmt.Errorf("failed to create key with size %d bytes", kSize)
 		}
 
 		// Write key to the file with owner read/write permission.
@@ -265,7 +265,7 @@ func init() {
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
-	VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
+	varFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
 	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
 	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,

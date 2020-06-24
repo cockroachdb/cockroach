@@ -126,6 +126,10 @@ export const statementDetailsPropsFixture: StatementDetailsProps = {
       "numerator": 0,
       "denominator": 36958,
     },
+    "vec": {
+      "numerator": 36958,
+      "denominator": 36958,
+    },
     "opt": {
       "numerator": 36958,
       "denominator": 36958,

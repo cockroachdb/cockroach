@@ -760,15 +760,12 @@ func ResolveFK(
 	for i, col := range originCols {
 		originColumnIDs[i] = col.ID
 	}
-	var legacyOriginIndexID sqlbase.IndexID
 	// Search for an index on the origin table that matches. If one doesn't exist,
 	// we create one automatically if the table to alter is new or empty. We also
 	// search if an index for the set of columns was created in this transaction.
-	originIdx, err := sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
-	if err == nil {
-		// If there was no error, we found a suitable index.
-		legacyOriginIndexID = originIdx.ID
-	} else {
+	_, err = sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
+	// If there was no error, we found a suitable index.
+	if err != nil {
 		// No existing suitable index was found.
 		if ts == NonEmptyTable {
 			var colNames bytes.Buffer
@@ -787,18 +784,16 @@ func ResolveFK(
 			return pgerror.Newf(pgcode.ForeignKeyViolation,
 				"foreign key requires an existing index on columns %s", colNames.String())
 		}
-		id, err := addIndexForFK(tbl, originCols, constraintName, ts)
+		_, err := addIndexForFK(tbl, originCols, constraintName, ts)
 		if err != nil {
 			return err
 		}
-		legacyOriginIndexID = id
 	}
 
-	referencedIdx, err := sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
+	_, err = sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
 	if err != nil {
 		return err
 	}
-	legacyReferencedIndexID := referencedIdx.ID
 
 	var validity sqlbase.ConstraintValidity
 	if ts != NewTable {
@@ -810,17 +805,15 @@ func ResolveFK(
 	}
 
 	ref := sqlbase.ForeignKeyConstraint{
-		OriginTableID:         tbl.ID,
-		OriginColumnIDs:       originColumnIDs,
-		ReferencedColumnIDs:   targetColIDs,
-		ReferencedTableID:     target.ID,
-		Name:                  constraintName,
-		Validity:              validity,
-		OnDelete:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:              sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:                 sqlbase.CompositeKeyMatchMethodValue[d.Match],
-		LegacyOriginIndex:     legacyOriginIndexID,
-		LegacyReferencedIndex: legacyReferencedIndexID,
+		OriginTableID:       tbl.ID,
+		OriginColumnIDs:     originColumnIDs,
+		ReferencedColumnIDs: targetColIDs,
+		ReferencedTableID:   target.ID,
+		Name:                constraintName,
+		Validity:            validity,
+		OnDelete:            sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:            sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:               sqlbase.CompositeKeyMatchMethodValue[d.Match],
 	}
 
 	if ts == NewTable {

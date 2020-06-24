@@ -124,8 +124,29 @@ func TestGenerateTenantCerts(t *testing.T) {
 	certsDir, cleanup := tempDir(t)
 	defer cleanup()
 
+	{
+		caKeyFile := filepath.Join(certsDir, "irrelevant.key")
+		require.NoError(t, security.CreateTenantServerCAPair(
+			certsDir,
+			caKeyFile,
+			testKeySize,
+			48*time.Hour,
+			false, // allowKeyReuse
+			false, // overwrite
+		))
+
+		require.NoError(t, security.CreateTenantServerPair(
+			certsDir,
+			caKeyFile,
+			testKeySize,
+			time.Hour,
+			false, // overwrite
+			[]string{"127.0.0.1"},
+		))
+	}
+
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
-	require.NoError(t, security.CreateTenantCAPair(
+	require.NoError(t, security.CreateTenantClientCAPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
@@ -139,7 +160,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 		caKeyFile,
 		testKeySize,
 		time.Hour,
-		"tenant999",
+		"999",
 	)
 	require.NoError(t, err)
 	require.NoError(t, security.WriteTenantClientPair(certsDir, cp, false))
@@ -150,10 +171,34 @@ func TestGenerateTenantCerts(t *testing.T) {
 	for _, info := range infos {
 		require.NoError(t, info.Error)
 	}
-	require.Len(t, infos, 2)
-	require.Equal(t, security.TenantCAPem, infos[0].FileUsage)
-	require.Equal(t, security.TenantClientPem, infos[1].FileUsage)
-	require.Equal(t, "tenant999", infos[1].Name)
+
+	for i := range infos {
+		// Scrub the struct to retain only tested fields.
+		*infos[i] = security.CertInfo{
+			FileUsage: infos[i].FileUsage,
+			Filename:  infos[i].Filename,
+			Name:      infos[i].Name,
+		}
+	}
+	require.Equal(t, []*security.CertInfo{
+		{
+			FileUsage: security.TenantClientCAPem,
+			Filename:  "ca-client-tenant.crt",
+		},
+		{
+			FileUsage: security.TenantServerCAPem,
+			Filename:  "ca-server-tenant.crt",
+		},
+		{
+			FileUsage: security.TenantClientPem,
+			Filename:  "client-tenant.999.crt",
+			Name:      "999",
+		},
+		{
+			FileUsage: security.TenantServerPem,
+			Filename:  "server-tenant.crt",
+		},
+	}, infos)
 }
 
 func TestGenerateNodeCerts(t *testing.T) {

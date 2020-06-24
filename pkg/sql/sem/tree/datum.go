@@ -24,7 +24,7 @@ import (
 	"unicode"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -2980,6 +2980,8 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 		return json.FromString(string(*t)), nil
 	case *DCollatedString:
 		return json.FromString(t.Contents), nil
+	case *DEnum:
+		return json.FromString(t.LogicalRep), nil
 	case *DJSON:
 		return t.JSON, nil
 	case *DArray:

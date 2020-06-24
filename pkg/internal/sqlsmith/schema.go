@@ -137,7 +137,7 @@ func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, colRe
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
-	database_name, schema_name, descriptor_name, descriptor_id, enum_members
+	schema_name, descriptor_name, descriptor_id, enum_members
 FROM
 	crdb_internal.create_type_statements
 `)
@@ -147,14 +147,14 @@ FROM
 	defer rows.Close()
 
 	evalCtx := tree.EvalContext{}
-	udtMapping := make(map[string]*types.T)
+	udtMapping := make(map[types.UserDefinedTypeName]*types.T)
 
 	for rows.Next() {
 		// For each row, collect columns.
-		var dbName, scName, name string
+		var scName, name string
 		var id int
 		var membersRaw []byte
-		if err := rows.Scan(&dbName, &scName, &name, &id, &membersRaw); err != nil {
+		if err := rows.Scan(&scName, &name, &id, &membersRaw); err != nil {
 			return nil, err
 		}
 		// If enum members were provided, parse the result into a string array.
@@ -174,9 +174,8 @@ FROM
 			typ := types.MakeEnum(uint32(id), 0 /* arrayTypeID */)
 			typ.TypeMeta = types.UserDefinedTypeMetadata{
 				Name: &types.UserDefinedTypeName{
-					Catalog: dbName,
-					Schema:  scName,
-					Name:    name,
+					Schema: scName,
+					Name:   name,
 				},
 				EnumData: &types.EnumMetadata{
 					LogicalRepresentations: members,
@@ -186,7 +185,7 @@ FROM
 					PhysicalRepresentations: make([][]byte, len(members)),
 				},
 			}
-			udtMapping[name] = typ
+			udtMapping[*typ.TypeMeta.Name] = typ
 		default:
 			return nil, errors.New("unsupported SQLSmith type kind")
 		}

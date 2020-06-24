@@ -116,7 +116,7 @@ func (dsp *DistSQLPlanner) initRunners() {
 // It will first attempt to set up all remote flows using the dsp workers if
 // available or sequentially if not, and then finally set up the gateway flow,
 // whose output is the DistSQLReceiver provided. This flow is then returned to
-// be run.
+// be run. It also returns a boolean indicating whether the flow is vectorized.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -126,7 +126,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localState distsql.LocalState,
 	vectorizeThresholdMet bool,
 ) (context.Context, flowinfra.Flow, error) {
-	thisNodeID := dsp.nodeDesc.NodeID
+	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("missing gateway flow")
@@ -320,8 +320,8 @@ func (dsp *DistSQLPlanner) Run(
 		leafInputState = &tis
 	}
 
-	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
-	if _, ok := flows[dsp.nodeDesc.NodeID]; !ok {
+	flows := plan.GenerateFlowSpecs()
+	if _, ok := flows[dsp.gatewayNodeID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
 		return func() {}
 	}
@@ -390,6 +390,10 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
+	}
+
+	if planCtx.planner != nil && flow.IsVectorized() {
+		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
 	}
 
 	// Check that flows that were forced to be planned locally also have no concurrency.
@@ -879,7 +883,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if maybeDistribute {
 		distributeSubquery = getPlanDistribution(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
-		).willDistribute()
+		).WillDistribute()
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributeSubquery)
 	subqueryPlanCtx.planner = planner
@@ -1183,7 +1187,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if maybeDistribute {
 		distributePostquery = getPlanDistribution(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
-		).willDistribute()
+		).WillDistribute()
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributePostquery)
 	postqueryPlanCtx.planner = planner

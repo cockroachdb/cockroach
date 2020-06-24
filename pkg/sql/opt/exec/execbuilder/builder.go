@@ -24,13 +24,12 @@ import (
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
 type Builder struct {
-	factory            exec.Factory
-	mem                *memo.Memo
-	catalog            cat.Catalog
-	e                  opt.Expr
-	disableTelemetry   bool
-	evalCtx            *tree.EvalContext
-	fastIsConstVisitor fastIsConstVisitor
+	factory          exec.Factory
+	mem              *memo.Memo
+	catalog          cat.Catalog
+	e                opt.Expr
+	disableTelemetry bool
+	evalCtx          *tree.EvalContext
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery

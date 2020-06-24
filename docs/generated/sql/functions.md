@@ -718,11 +718,11 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_asewkt"></a><code>st_asewkt(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geography. A default of 15 decimal digits is used.</p>
 </span></td></tr>
-<tr><td><a name="st_asewkt"></a><code>st_asewkt(geography: geography, maximum_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geography. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as possible.</p>
+<tr><td><a name="st_asewkt"></a><code>st_asewkt(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 </span></td></tr>
 <tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geometry. A maximum of 15 decimal digits is used.</p>
 </span></td></tr>
-<tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry, maximum_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as possible.</p>
+<tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 </span></td></tr>
 <tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of 9 decimal digits.</p>
 </span></td></tr>
@@ -770,11 +770,11 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. A default of 15 decimal digits is used.</p>
 </span></td></tr>
-<tr><td><a name="st_astext"></a><code>st_astext(geography: geography, maximum_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as possible.</p>
+<tr><td><a name="st_astext"></a><code>st_astext(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. A maximum of 15 decimal digits is used.</p>
 </span></td></tr>
-<tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry, maximum_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The maximum_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as possible.</p>
+<tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 </span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
@@ -841,6 +841,13 @@ given Geometry.</p>
 given Geometry.</p>
 <p>This variant approximates the circle into quad_seg segments per line (the default is 8).</p>
 <p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_centroid"></a><code>st_centroid(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the centroid of given geography. Uses a spheroid to perform the operation.</p>
+<p>This function utilizes the GeographicLib library for spheroid calculations.</p>
+</span></td></tr>
+<tr><td><a name="st_centroid"></a><code>st_centroid(geography: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the centroid of given geography.</p>
+<p>This function utilizes the S2 library for spherical calculations.</p>
+<p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
 <tr><td><a name="st_centroid"></a><code>st_centroid(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the centroid of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>

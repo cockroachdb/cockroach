@@ -2280,8 +2280,8 @@ const_geo ::=
 	| 'GEOMETRY'
 	| 'GEOMETRY' '(' geo_shape ')'
 	| 'GEOGRAPHY' '(' geo_shape ')'
-	| 'GEOMETRY' '(' geo_shape ',' iconst32 ')'
-	| 'GEOGRAPHY' '(' geo_shape ',' iconst32 ')'
+	| 'GEOMETRY' '(' geo_shape ',' signed_iconst ')'
+	| 'GEOGRAPHY' '(' geo_shape ',' signed_iconst ')'
 
 opt_varying ::=
 	'VARYING'
@@ -2477,6 +2477,10 @@ geo_shape ::=
 	| 'MULTIPOINT'
 	| 'GEOMETRY'
 
+signed_iconst ::=
+	'ICONST'
+	| only_signed_iconst
+
 char_aliases ::=
 	'CHAR'
 	| 'CHARACTER'
@@ -2494,10 +2498,6 @@ join_outer ::=
 
 rowsfrom_item ::=
 	func_expr_windowless
-
-signed_iconst ::=
-	'ICONST'
-	| only_signed_iconst
 
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY'

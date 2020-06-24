@@ -127,30 +127,23 @@ func distChangefeedFlow(
 		}
 	}
 
-	changeAggregatorProcs := make([]physicalplan.Processor, 0, len(spanPartitions))
-	for _, sp := range spanPartitions {
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	for i, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
 		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
-		for i, nodeSpan := range sp.Spans {
-			watches[i] = execinfrapb.ChangeAggregatorSpec_Watch{
+		for watchIdx, nodeSpan := range sp.Spans {
+			watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
 				Span:            nodeSpan,
 				InitialResolved: initialHighWater,
 			}
 		}
 
-		changeAggregatorProcs = append(changeAggregatorProcs, physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core: execinfrapb.ProcessorCoreUnion{
-					ChangeAggregator: &execinfrapb.ChangeAggregatorSpec{
-						Watches: watches,
-						Feed:    details,
-					},
-				},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-			},
-		})
+		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].Core.ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
+			Watches: watches,
+			Feed:    details,
+		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
 	// static. Currently there is no way for them to change after the changefeed
@@ -162,16 +155,8 @@ func distChangefeedFlow(
 		JobID:        jobID,
 	}
 
-	var p sql.PhysicalPlan
-
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(changeAggregatorProcs))
-	for i, proc := range changeAggregatorProcs {
-		proc.Spec.StageID = stageID
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
-	}
-
+	p := sql.MakePhysicalPlan(gatewayNodeID)
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
@@ -179,7 +164,6 @@ func distChangefeedFlow(
 		changefeedResultTypes,
 	)
 
-	p.ResultTypes = changefeedResultTypes
 	p.PlanToStreamColMap = []int{1, 2, 3}
 	dsp.FinalizePlan(planCtx, &p)
 

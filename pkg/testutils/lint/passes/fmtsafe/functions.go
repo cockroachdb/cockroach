@@ -155,11 +155,11 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/errors.NewAssertionErrorWithWrappedErrf": true,
 	"github.com/cockroachdb/errors.WithSafeDetails":                  true,
 
-	"github.com/cockroachdb/cockroach/pkg/util/redact.Sprintf":              true,
-	"github.com/cockroachdb/cockroach/pkg/util/redact.Fprintf":              true,
-	"(github.com/cockroachdb/cockroach/pkg/util/redact.SafePrinter).Printf": true,
-	"(github.com/cockroachdb/cockroach/pkg/util/redact.SafeWriter).Printf":  true,
-	"(*github.com/cockroachdb/cockroach/pkg/util/redact.printer).Printf":    true,
+	"github.com/cockroachdb/redact.Sprintf":              true,
+	"github.com/cockroachdb/redact.Fprintf":              true,
+	"(github.com/cockroachdb/redact.SafePrinter).Printf": true,
+	"(github.com/cockroachdb/redact.SafeWriter).Printf":  true,
+	"(*github.com/cockroachdb/redact.printer).Printf":    true,
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb.NewErrorf": true,
 

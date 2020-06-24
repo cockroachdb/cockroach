@@ -1398,3 +1398,92 @@ WHERE
 	require.Truef(t, isRetryableErr(err), "drop index error: %v", err)
 	require.NoError(t, txn.Rollback())
 }
+
+// TestDropDatabaseWithForeignKeys tests that databases containing tables with
+// foreign key relationships can be dropped and GC'ed. This is a regression test
+// for #50344, which is a bug ultimately caused by the fact that when we remove
+// foreign keys as part of DROP DATABASE CASCADE, we create schema change jobs
+// as part of updating the referenced tables. Those jobs, when running, will
+// detect that the table is in a dropped state and queue an extraneous GC job.
+// We test that those GC jobs don't interfere with the main GC job for the
+// entire database.
+func TestDropDatabaseWithForeignKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	_, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.parent(k INT PRIMARY KEY);
+CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
+`)
+	require.NoError(t, err)
+
+	dbNameKey := sqlbase.NewDatabaseKey("t").Key(keys.SystemSQLCodec)
+	r, err := kvDB.Get(ctx, dbNameKey)
+	require.NoError(t, err)
+	require.True(t, r.Exists())
+	dbID := sqlbase.ID(r.ValueInt())
+
+	parentNameKey := sqlbase.NewPublicTableKey(dbID, "parent").Key(keys.SystemSQLCodec)
+	r, err = kvDB.Get(ctx, parentNameKey)
+	require.NoError(t, err)
+	require.True(t, r.Exists())
+	parentID := sqlbase.ID(r.ValueInt())
+
+	parentDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, parentID)
+	desc := &sqlbase.Descriptor{}
+	ts, err := kvDB.GetProtoTs(ctx, parentDescKey, desc)
+	require.NoError(t, err)
+	parentDesc := desc.Table(ts)
+
+	childNameKey := sqlbase.NewPublicTableKey(dbID, "child").Key(keys.SystemSQLCodec)
+	r, err = kvDB.Get(ctx, childNameKey)
+	require.NoError(t, err)
+	require.True(t, r.Exists())
+	childID := sqlbase.ID(r.ValueInt())
+
+	childDescKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, childID)
+	desc = &sqlbase.Descriptor{}
+	ts, err = kvDB.GetProtoTs(ctx, childDescKey, desc)
+	require.NoError(t, err)
+	childDesc := desc.Table(ts)
+
+	_, err = sqlDB.Exec(`DROP DATABASE t CASCADE;`)
+	require.NoError(t, err)
+
+	// Push a new zone config for the table with TTL=0 so the data is
+	// deleted immediately.
+	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, dbID)
+	require.NoError(t, err)
+
+	// Ensure the main GC job for the whole database succeeds.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description = 'GC for DROP DATABASE t CASCADE' AND status = 'succeeded'`).Scan(&count)
+		if count != 1 {
+			return errors.Newf("expected 1 result, got %d", count)
+		}
+		return nil
+	})
+	// Ensure the extra GC job that also gets queued succeeds. Currently this job
+	// has a nonsensical description due to the fact that the original job queued
+	// for updating the referenced table has an empty description.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		sqlRun.QueryRow(t, `SELECT count(*) FROM [SHOW JOBS] WHERE description = 'GC for ' AND status = 'succeeded'`).Scan(&count)
+		if count != 1 {
+			return errors.Newf("expected 1 result, got %d", count)
+		}
+		return nil
+	})
+
+	// Check that the data was cleaned up.
+	tests.CheckKeyCount(t, kvDB, parentDesc.TableSpan(keys.SystemSQLCodec), 0)
+	tests.CheckKeyCount(t, kvDB, childDesc.TableSpan(keys.SystemSQLCodec), 0)
+}

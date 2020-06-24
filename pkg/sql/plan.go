@@ -318,9 +318,6 @@ type planMaybePhysical struct {
 	// physPlan (when non-nil) contains the physical plan that has not yet
 	// been finalized.
 	physPlan *PhysicalPlan
-	// distribution (when physPlan is non-nil) is the indicator of the
-	// distribution of the physical plan.
-	distribution planDistribution
 }
 
 func (p planMaybePhysical) isPhysicalPlan() bool {
@@ -527,6 +524,10 @@ const (
 
 	// planFlagIsDDL marks that the plan contains DDL.
 	planFlagIsDDL
+
+	// planFlagVectorized is set if the plan is executed via the vectorized
+	// engine.
+	planFlagVectorized
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
@@ -561,6 +562,7 @@ func (pi *planInstrumentation) savePlanInfo(ctx context.Context, curPlan *planTo
 	if pi.appStats != nil && pi.appStats.shouldSaveLogicalPlanDescription(
 		curPlan.stmt,
 		curPlan.flags.IsSet(planFlagDistributed),
+		curPlan.flags.IsSet(planFlagVectorized),
 		curPlan.flags.IsSet(planFlagImplicitTxn),
 		curPlan.execErr,
 	) {

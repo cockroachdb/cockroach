@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -638,6 +638,7 @@ func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	// TODO(someone): perform authorization based on the requesting user's
 	// SELECT privilege over the requested table.
 	userName, err := s.requireAdminUser(ctx)
@@ -663,6 +664,7 @@ func (s *adminServer) TableStats(
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -1240,12 +1242,7 @@ func (s *adminServer) Settings(
 		keys = settings.Keys()
 	}
 
-	sessionUser, err := userFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	isAdmin, err := s.hasAdminRole(ctx, sessionUser)
+	_, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1902,6 +1899,9 @@ func (s *adminServer) DataDistribution(
 func (s *adminServer) EnqueueRange(
 	ctx context.Context, req *serverpb.EnqueueRangeRequest,
 ) (*serverpb.EnqueueRangeResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.server.AnnotateCtx(ctx)
+
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -1909,9 +1909,6 @@ func (s *adminServer) EnqueueRange(
 	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
 		return nil, remoteDebuggingErr
 	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.server.AnnotateCtx(ctx)
 
 	if req.NodeID < 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)

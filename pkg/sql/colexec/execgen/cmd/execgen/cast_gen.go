@@ -37,6 +37,9 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Left", s)
 
+	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
+	s = replaceManipulationFuncsAmbiguous(".Right", s)
+
 	s = strings.ReplaceAll(s, "_R_SET", "execgen.SET")
 	s = replaceManipulationFuncsAmbiguous(".Right", s)
 

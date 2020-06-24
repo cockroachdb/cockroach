@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 

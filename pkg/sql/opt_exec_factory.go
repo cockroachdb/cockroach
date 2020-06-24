@@ -229,7 +229,7 @@ func (ef *execFactory) ConstructFilter(
 	// Push the filter into the scanNode. We cannot do this if the scanNode has a
 	// limit (it would make the limit apply AFTER the filter).
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
-		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+		s.filter = s.filterVars.Rebind(filter)
 		// Note: if the filter statically evaluates to true, s.filter stays nil.
 		s.reqOrdering = ReqOrdering(reqOrdering)
 		return s, nil
@@ -240,7 +240,7 @@ func (ef *execFactory) ConstructFilter(
 		source: src,
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.columns))
-	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	f.filter = f.ivarHelper.Rebind(filter)
 	if f.filter == nil {
 		// Filter statically evaluates to true. Just return the input plan.
 		return n, nil
@@ -288,22 +288,18 @@ func (ef *execFactory) ConstructSimpleProject(
 	rb.init(n, reqOrdering)
 
 	exprs := make(tree.TypedExprs, len(cols))
-	resultCols := make(sqlbase.ResultColumns, len(cols))
 	for i, col := range cols {
-		v := rb.r.ivarHelper.IndexedVar(int(col))
-		if colNames == nil {
-			resultCols[i] = inputCols[col]
-			// If we have a SimpleProject, we should clear the hidden bit on any
-			// column since it indicates it's been explicitly selected.
-			resultCols[i].Hidden = false
-		} else {
-			resultCols[i] = sqlbase.ResultColumn{
-				Name: colNames[i],
-				Typ:  v.ResolvedType(),
-			}
-		}
-		exprs[i] = v
+		exprs[i] = rb.r.ivarHelper.IndexedVar(int(col))
 	}
+	var resultTypes []*types.T
+	if colNames != nil {
+		// We will need updated result types.
+		resultTypes = make([]*types.T, len(cols))
+		for i := range exprs {
+			resultTypes[i] = exprs[i].ResolvedType()
+		}
+	}
+	resultCols := getResultColumnsForSimpleProject(cols, colNames, resultTypes, inputCols)
 	rb.setOutput(exprs, resultCols)
 	return rb.res, nil
 }
@@ -330,8 +326,7 @@ func (ef *execFactory) ConstructRender(
 	var rb renderBuilder
 	rb.init(n, reqOrdering)
 	for i, expr := range exprs {
-		expr = rb.r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		exprs[i] = expr
+		exprs[i] = rb.r.ivarHelper.Rebind(expr)
 	}
 	rb.setOutput(exprs, columns)
 	return rb.res, nil
@@ -357,10 +352,7 @@ func (ef *execFactory) ConstructHashJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
-	if err != nil {
-		return nil, err
-	}
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 
 	numEqCols := len(leftEqCols)
 	// Save some allocations by putting both sides in the same slice.
@@ -380,9 +372,7 @@ func (ef *execFactory) ConstructHashJoin(
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	pred.onCond = pred.iVarHelper.Rebind(
-		extraOnCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred.onCond = pred.iVarHelper.Rebind(extraOnCond)
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
 }
@@ -396,13 +386,8 @@ func (ef *execFactory) ConstructApplyJoin(
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
 	leftSrc := asDataSource(left)
-	pred, err := makePredicate(joinType, leftSrc.columns, rightColumns)
-	if err != nil {
-		return nil, err
-	}
-	pred.onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred := makePredicate(joinType, leftSrc.columns, rightColumns)
+	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
 }
 
@@ -418,13 +403,8 @@ func (ef *execFactory) ConstructMergeJoin(
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
-	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
-	if err != nil {
-		return nil, err
-	}
-	pred.onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
+	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
@@ -688,22 +668,16 @@ func (ef *execFactory) ConstructLookupJoin(
 		eqColsAreKey: eqColsAreKey,
 		reqOrdering:  ReqOrdering(reqOrdering),
 	}
-	if onCond != nil && onCond != tree.DBoolTrue {
-		n.onCond = onCond
-	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
 		n.eqCols[i] = int(c)
 	}
-	// Build the result columns.
-	inputCols := planColumns(input.(planNode))
-	var scanCols sqlbase.ResultColumns
-	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
-		scanCols = planColumns(tableScan)
+	pred := makePredicate(joinType, planColumns(input.(planNode)), planColumns(tableScan))
+	if onCond != nil && onCond != tree.DBoolTrue {
+		n.onCond = pred.iVarHelper.Rebind(onCond)
 	}
-	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
-	n.columns = append(n.columns, inputCols...)
-	n.columns = append(n.columns, scanCols...)
+	n.columns = pred.cols
+
 	return n, nil
 }
 
@@ -751,13 +725,8 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	outputCols = append(outputCols, inputCols...)
 	outputCols = append(outputCols, projectedVtableCols...)
 	// joinType is either INNER or LEFT_OUTER.
-	pred, err := makePredicate(joinType, inputCols, projectedVtableCols)
-	if err != nil {
-		return nil, err
-	}
-	pred.onCond = pred.iVarHelper.Rebind(
-		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
-	)
+	pred := makePredicate(joinType, inputCols, projectedVtableCols)
+	pred.onCond = pred.iVarHelper.Rebind(onCond)
 	n := &vTableLookupJoinNode{
 		input:             input.(planNode),
 		joinType:          joinType,

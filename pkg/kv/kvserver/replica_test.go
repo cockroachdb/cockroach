@@ -291,7 +291,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
-				roachpb.BootstrapLease(),
+				roachpb.Lease{},
 				hlc.Timestamp{},
 				stateloader.TruncatedStateUnreplicated,
 			); err != nil {
@@ -6036,7 +6036,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// The initial stats contain no lease, but there will be an initial
 	// nontrivial lease requested with the first write below.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 24,
+		SysBytes: 28,
 	})
 
 	// Our clock might not be set to zero.

@@ -653,7 +653,7 @@ SELECT generation_expression FROM information_schema.columns
 WHERE table_name = 'x' and column_name = 'b'
 ----
 generation_expression
-a * 2:::INT8
+a * 2
 
 query I
 SELECT count(*) FROM information_schema.columns

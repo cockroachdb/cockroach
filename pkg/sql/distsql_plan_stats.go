@@ -35,6 +35,7 @@ type requestedStat struct {
 	histogram           bool
 	histogramMaxBuckets int
 	name                string
+	inverted            bool
 }
 
 const histogramSamples = 10000
@@ -103,9 +104,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	sketchSpecs := make([]execinfrapb.SketchSpec, len(reqStats))
+	var sketchSpecs, invSketchSpecs []execinfrapb.SketchSpec
 	sampledColumnIDs := make([]sqlbase.ColumnID, len(scan.cols))
-	for i, s := range reqStats {
+	for _, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
 			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
@@ -118,16 +119,22 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			if !ok {
 				panic("necessary column not scanned")
 			}
-			streamColIdx := p.PlanToStreamColMap[colIdx]
-			spec.Columns[i] = uint32(streamColIdx)
+			streamColIdx := uint32(p.PlanToStreamColMap[colIdx])
+			spec.Columns[i] = streamColIdx
 			sampledColumnIDs[streamColIdx] = colID
 		}
-
-		sketchSpecs[i] = spec
+		if s.inverted {
+			invSketchSpecs = append(invSketchSpecs, spec)
+		} else {
+			sketchSpecs = append(sketchSpecs, spec)
+		}
 	}
 
 	// Set up the samplers.
-	sampler := &execinfrapb.SamplerSpec{Sketches: sketchSpecs}
+	sampler := &execinfrapb.SamplerSpec{
+		Sketches:         sketchSpecs,
+		InvertedSketches: invSketchSpecs,
+	}
 	for _, s := range reqStats {
 		sampler.MaxFractionIdle = details.MaxFractionIdle
 		if s.histogram {
@@ -135,7 +142,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	// The sampler outputs the original columns plus a rank column and four sketch columns.
+	// The sampler outputs the original columns plus a rank column, four
+	// sketch columns, and two inverted histogram columns.
 	outTypes := make([]*types.T, 0, len(p.ResultTypes)+5)
 	outTypes = append(outTypes, p.ResultTypes...)
 	// An INT column for the rank of each row.
@@ -148,6 +156,10 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// column.
 	outTypes = append(outTypes, types.Int)
 	// A BYTES column with the sketch data.
+	outTypes = append(outTypes, types.Bytes)
+	// An INT column indicating the inverted sketch index.
+	outTypes = append(outTypes, types.Int)
+	// A BYTES column with the inverted index key datum.
 	outTypes = append(outTypes, types.Bytes)
 
 	p.AddNoGroupingStage(
@@ -182,6 +194,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Set up the final SampleAggregator stage.
 	agg := &execinfrapb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
+		InvertedSketches: invSketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.ID,
@@ -189,7 +202,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		RowsExpected:     rowsExpected,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
-	node := dsp.nodeDesc.NodeID
+	node := dsp.gatewayNodeID
 	if len(p.ResultRouters) == 1 {
 		node = p.Processors[p.ResultRouters[0]].Node
 	}
@@ -216,6 +229,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 			histogram:           histogram,
 			histogramMaxBuckets: histogramBuckets,
 			name:                details.Name,
+			inverted:            details.ColumnStats[i].Inverted,
 		}
 	}
 

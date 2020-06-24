@@ -1776,7 +1776,7 @@ func (ds *DistSender) sendToReplicas(
 		} else {
 			// If the reply contains a timestamp, update the local HLC with it.
 			if br.Error != nil {
-				log.VErrEventf(ctx, 2, "%v", err)
+				log.VErrEventf(ctx, 2, "%v", br.Error)
 				if br.Error.Now != (hlc.Timestamp{}) {
 					ds.clock.Update(br.Error.Now)
 				}

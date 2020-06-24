@@ -554,7 +554,7 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: tree.VolatilityImmutable,
 		},
 	)
 }

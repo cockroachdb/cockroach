@@ -37,6 +37,7 @@ func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 6))
 
+	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Left", s)
 	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
 	s = strings.ReplaceAll(s, "_R_SLICE", "execgen.SLICE")
