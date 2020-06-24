@@ -202,6 +202,7 @@ type WritableSetting interface {
 	Encoded(sv *Values) string
 	EncodedDefault() string
 	SetOnChange(sv *Values, fn func())
+	ErrorHint() (bool, string)
 }
 
 type extendedSetting interface {
@@ -282,6 +283,10 @@ func (i common) Visibility() Visibility {
 
 func (i common) isReportable() bool {
 	return !i.nonReportable
+}
+
+func (i *common) ErrorHint() (bool, string) {
+	return false, ""
 }
 
 // SetReportable indicates whether a setting's value can show up in SHOW ALL

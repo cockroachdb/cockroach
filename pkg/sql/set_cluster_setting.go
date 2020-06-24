@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/hintdetail"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -85,6 +86,8 @@ func (p *planner) SetClusterSetting(
 			expr = unresolvedNameToStrVal(expr)
 
 			var requiredType *types.T
+			var dummyHelper tree.IndexedVarHelper
+
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
 				requiredType = types.String
@@ -98,14 +101,32 @@ func (p *planner) SetClusterSetting(
 				requiredType = types.Any
 			case *settings.DurationSetting:
 				requiredType = types.Interval
+			case *settings.DurationSettingWithExplicitUnit:
+				requiredType = types.Interval
+				// Ensure that the expression contains a unit (i.e can't be a float)
+				_, err := p.analyzeExpr(
+					ctx, expr, nil, dummyHelper, types.Float, false, "SET CLUSTER SETTING "+name,
+				)
+				// An interval with a unit (valid) will return an
+				// "InvalidTextRepresentation" error when trying to parse it as a float.
+				// If we don't get an error => No unit was present. Values that can't be
+				// parsed as intervals will continue to be caught below using
+				// requiredType.
+				if err == nil {
+					_, hint := setting.ErrorHint()
+					return nil, hintdetail.WithHint(errors.New("invalid cluster setting argument type"), hint)
+				}
 			default:
 				return nil, errors.Errorf("unsupported setting type %T", setting)
 			}
 
-			var dummyHelper tree.IndexedVarHelper
 			typed, err := p.analyzeExpr(
 				ctx, expr, nil, dummyHelper, requiredType, true, "SET CLUSTER SETTING "+name)
 			if err != nil {
+				hasHint, hint := setting.ErrorHint()
+				if hasHint {
+					return nil, hintdetail.WithHint(err, hint)
+				}
 				return nil, err
 			}
 
@@ -365,6 +386,18 @@ func toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
 	case *settings.DurationSetting:
+		if f, ok := d.(*tree.DInterval); ok {
+			if f.Duration.Months > 0 || f.Duration.Days > 0 {
+				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
+			}
+			d := time.Duration(f.Duration.Nanos()) * time.Nanosecond
+			if err := setting.Validate(d); err != nil {
+				return "", err
+			}
+			return settings.EncodeDuration(d), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
+	case *settings.DurationSettingWithExplicitUnit:
 		if f, ok := d.(*tree.DInterval); ok {
 			if f.Duration.Months > 0 || f.Duration.Days > 0 {
 				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
