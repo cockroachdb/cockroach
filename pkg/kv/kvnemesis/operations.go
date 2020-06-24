@@ -179,12 +179,16 @@ func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
+	methodName := `Scan`
+	if op.ForUpdate {
+		methodName = `ScanForUpdate`
+	}
 	// NB: DB.Scan has a maxRows parameter that Batch.Scan does not have.
 	maxRowsArg := `, 0`
 	if fctx.receiver == `b` {
 		maxRowsArg = ``
 	}
-	fmt.Fprintf(w, `%s.Scan(ctx, %s, %s%s)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), maxRowsArg)
+	fmt.Fprintf(w, `%s.%s(ctx, %s, %s%s)`, fctx.receiver, methodName, roachpb.Key(op.Key), roachpb.Key(op.EndKey), maxRowsArg)
 	switch op.Result.Type {
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *op.Result.Err)

@@ -267,7 +267,20 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
 		}
 	case *ScanOperation:
-		v.failIfError(op, t.Result)
+		if resultIsError(t.Result, `WriteTooOldError`) && t.ForUpdate {
+			// Non-transactional ScanForUpdate operations can currently hit a
+			// WriteTooOld error. This is surprising, because we would expect
+			// the error to be refreshed away on the server. Unfortunately, we
+			// only retry one per batch, and this is not enough to eliminate all
+			// WriteTooOld opportunities.
+			//
+			// TODO(nvanbenschoten): fix this by making FailOnMoreRecent
+			// guarantee that the resulting WriteTooOld error reflects the
+			// largest confling write in the scan span instead of bailing
+			// eagerly on the first write above the scan timestamp.
+		} else {
+			v.failIfError(op, t.Result)
+		}
 		if txnID == nil {
 			v.checkAtomic(`scan`, t.Result, op)
 		} else {
