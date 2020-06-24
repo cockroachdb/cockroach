@@ -21,7 +21,7 @@ import (
 	"math/big"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/errors"
 )
 

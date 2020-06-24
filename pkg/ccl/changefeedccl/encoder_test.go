@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
-	"github.com/linkedin/goavro"
+	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/require"
 )
 
