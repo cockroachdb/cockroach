@@ -854,13 +854,13 @@ ORDER BY
 ----
 sort
  ├── columns: o_year:61 mkt_share:66!null
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (61)
  ├── fd: (61)-->(66)
  ├── ordering: +61
  └── project
       ├── columns: mkt_share:66!null o_year:61
-      ├── immutable, side-effects
+      ├── immutable
       ├── key: (61)
       ├── fd: (61)-->(66)
       ├── group-by
@@ -974,7 +974,7 @@ sort
       │         └── sum [as=sum:65, outer=(62)]
       │              └── volume:62
       └── projections
-           └── sum:64 / sum:65 [as=mkt_share:66, outer=(64,65), immutable, side-effects]
+           └── sum:64 / sum:65 [as=mkt_share:66, outer=(64,65), immutable]
 
 # --------------------------------------------------
 # Q9
@@ -1531,7 +1531,7 @@ WHERE
 project
  ├── columns: promo_revenue:30
  ├── cardinality: [1 - 1]
- ├── immutable, side-effects
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(30)
  ├── scalar-group-by
@@ -1568,7 +1568,7 @@ project
  │         └── sum [as=sum:29, outer=(28)]
  │              └── column28:28
  └── projections
-      └── (sum:27 * 100.0) / sum:29 [as=promo_revenue:30, outer=(27,29), immutable, side-effects]
+      └── (sum:27 * 100.0) / sum:29 [as=promo_revenue:30, outer=(27,29), immutable]
 
 # --------------------------------------------------
 # Q15

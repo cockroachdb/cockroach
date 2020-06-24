@@ -193,26 +193,26 @@ GROUP BY div
 group-by
  ├── columns: sum:7(decimal!null) div:3(decimal)
  ├── grouping columns: div:3(decimal)
- ├── stable, side-effects
+ ├── stable
  ├── key: (3)
  ├── fd: (3)-->(7)
  ├── prune: (7)
  ├── project
  │    ├── columns: x:1(int!null) div:3(decimal)
- │    ├── stable, side-effects
+ │    ├── stable
  │    ├── fd: (1)-->(3)
  │    ├── prune: (1,3)
  │    ├── interesting orderings: (+1)
  │    └── inner-join (hash)
  │         ├── columns: x:1(int!null) y:2(int) div:3(decimal) u:4(int!null) v:5(int!null)
  │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- │         ├── stable, side-effects
+ │         ├── stable
  │         ├── fd: (1)-->(2,3), (1)==(4), (4)==(1)
  │         ├── prune: (2,3,5)
  │         ├── interesting orderings: (+1)
  │         ├── project
  │         │    ├── columns: div:3(decimal) x:1(int!null) y:2(int)
- │         │    ├── immutable, side-effects
+ │         │    ├── immutable
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2,3)
  │         │    ├── prune: (1-3)
@@ -226,16 +226,16 @@ group-by
  │         │    │    ├── interesting orderings: (+1)
  │         │    │    └── unfiltered-cols: (1,2)
  │         │    └── projections
- │         │         └── div [as=div:3, type=decimal, outer=(1,2), immutable, side-effects]
+ │         │         └── div [as=div:3, type=decimal, outer=(1,2), immutable]
  │         │              ├── variable: x:1 [type=int]
  │         │              └── variable: y:2 [type=int]
  │         ├── project
  │         │    ├── columns: u:4(int) v:5(int!null)
- │         │    ├── stable, side-effects
+ │         │    ├── stable
  │         │    ├── prune: (4,5)
  │         │    └── select
  │         │         ├── columns: u:4(int) v:5(int!null) rowid:6(int!null)
- │         │         ├── stable, side-effects
+ │         │         ├── stable
  │         │         ├── key: (6)
  │         │         ├── fd: (6)-->(4,5)
  │         │         ├── prune: (4-6)
@@ -247,7 +247,7 @@ group-by
  │         │         │    ├── prune: (4-6)
  │         │         │    └── interesting orderings: (+6)
  │         │         └── filters
- │         │              └── gt [type=bool, stable, side-effects]
+ │         │              └── gt [type=bool, stable]
  │         │                   ├── function: now [type=timestamptz]
  │         │                   └── cast: TIMESTAMPTZ [type=timestamptz]
  │         │                        └── const: '2018-01-01' [type=string]

@@ -28,7 +28,7 @@ update abcde
  │    ├── column15:15 => d:4
  │    └── column14:14 => e:6
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: column15:15(int!null) a:7(int!null) b:8(int) c:9(int!null) d:10(int) rowid:11(int!null) e:12(int) b_new:13(int!null) column14:14(int!null)
       ├── immutable
@@ -88,7 +88,7 @@ UPDATE abcde SET b=10 WHERE a=1 RETURNING *
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── fd: ()-->(1,2), (3)-->(4)
  ├── prune: (1-4)
  └── update abcde
@@ -98,7 +98,7 @@ project
       │    ├── b_new:13 => b:2
       │    ├── column15:15 => d:4
       │    └── column14:14 => e:6
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (5)
       ├── fd: ()-->(1,2), (5)-->(3,4), (3)-->(4)
       └── project
@@ -161,7 +161,7 @@ UPDATE abcde SET b=10 WHERE rowid=1 RETURNING *
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── cardinality: [0 - 1]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1-4)
@@ -173,7 +173,7 @@ project
       │    ├── column15:15 => d:4
       │    └── column14:14 => e:6
       ├── cardinality: [0 - 1]
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-5)
       └── project
@@ -239,7 +239,7 @@ UPDATE abcde SET a=1 WHERE b=c RETURNING *;
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── fd: ()-->(1), (2)==(3), (3)==(2), (2)-->(4)
  ├── prune: (1-4)
  └── update abcde
@@ -249,7 +249,7 @@ project
       │    ├── a_new:13 => a:1
       │    ├── column15:15 => d:4
       │    └── column14:14 => e:6
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (5)
       ├── fd: ()-->(1), (2)==(3), (3)==(2), (5)-->(2-4), (2)-->(4)
       └── project

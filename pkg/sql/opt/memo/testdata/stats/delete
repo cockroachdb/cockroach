@@ -40,14 +40,14 @@ WHERE x > 'foo'
 ----
 with &1
  ├── columns: x:7(string!null) y:8(int!null) z:9(float!null)
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
  ├── key: (7)
  ├── fd: ()-->(9), (7)-->(8)
  ├── delete xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
  │    ├── fetch columns: xyz.x:4(string) xyz.y:5(int) xyz.z:6(float)
- │    ├── volatile, side-effects, mutations
+ │    ├── volatile, mutations
  │    ├── stats: [rows=10]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
@@ -88,7 +88,7 @@ delete xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── fetch columns: x:4(string) y:5(int) z:6(float)
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── stats: [rows=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)

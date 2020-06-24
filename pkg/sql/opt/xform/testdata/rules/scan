@@ -492,7 +492,7 @@ SELECT s, i, f FROM a ORDER BY s FOR UPDATE
 scan a@s_idx
  ├── columns: s:4 i:2 f:3
  ├── locking: for-update
- ├── volatile, side-effects
+ ├── volatile
  └── ordering: +4
 
 # Collated strings are treated properly.
