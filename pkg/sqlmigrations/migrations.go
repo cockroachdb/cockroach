@@ -361,6 +361,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              alterSystemScheduledJobsFixTableSchema,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionUpdateScheduledJobsSchema),
 	},
+	{
+		// Introduced in v20.2.
+		name:   "add CREATELOGIN privilege to roles with CREATEROLE",
+		workFn: extendCreateRoleWithCreateLogin,
+	},
 }
 
 func staticIDs(
@@ -1069,6 +1074,19 @@ func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
 		"add role options table and upsert admin with CREATEROLE",
 		upsertCreateRoleStmt,
 		security.RootUser)
+}
+
+func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
+	// Add the CREATELOGIN option to roles that already have CREATEROLE.
+	const upsertCreateRoleStmt = `
+     UPSERT INTO system.role_options (username, option, value)
+        SELECT username, 'CREATELOGIN', NULL
+          FROM system.role_options
+         WHERE option = 'CREATEROLE'
+     `
+	return r.execAsRootWithRetry(ctx,
+		"add CREATELOGIN where a role already has CREATEROLE",
+		upsertCreateRoleStmt)
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {
