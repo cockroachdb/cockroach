@@ -1736,6 +1736,7 @@ experimental_distsql_planning                  off                 NULL      NUL
 experimental_enable_enums                      on                  NULL      NULL        NULL        string
 experimental_enable_hash_sharded_indexes       off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                off                 NULL      NULL        NULL        string
+experimental_enable_user_defined_schemas       off                 NULL      NULL        NULL        string
 experimental_partial_indexes                   off                 NULL      NULL        NULL        string
 extra_float_digits                             0                   NULL      NULL        NULL        string
 force_savepoint_restart                        off                 NULL      NULL        NULL        string
@@ -1802,6 +1803,7 @@ experimental_distsql_planning                  off                 NULL  user   
 experimental_enable_enums                      on                  NULL  user     NULL      off                 off
 experimental_enable_hash_sharded_indexes       off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                off                 NULL  user     NULL      off                 off
+experimental_enable_user_defined_schemas       off                 NULL  user     NULL      off                 off
 experimental_partial_indexes                   off                 NULL  user     NULL      off                 off
 extra_float_digits                             0                   NULL  user     NULL      0                   2
 force_savepoint_restart                        off                 NULL  user     NULL      off                 off
@@ -1864,6 +1866,7 @@ experimental_distsql_planning                  NULL    NULL     NULL     NULL   
 experimental_enable_enums                      NULL    NULL     NULL     NULL        NULL
 experimental_enable_hash_sharded_indexes       NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables                NULL    NULL     NULL     NULL        NULL
+experimental_enable_user_defined_schemas       NULL    NULL     NULL     NULL        NULL
 experimental_partial_indexes                   NULL    NULL     NULL     NULL        NULL
 extra_float_digits                             NULL    NULL     NULL     NULL        NULL
 force_savepoint_restart                        NULL    NULL     NULL     NULL        NULL

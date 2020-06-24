@@ -47,22 +47,21 @@ func NewImmutableSchemaDescriptor(desc SchemaDescriptor) *ImmutableSchemaDescrip
 	}
 }
 
+func makeImmutableSchemaDescriptor(desc SchemaDescriptor) ImmutableSchemaDescriptor {
+	return ImmutableSchemaDescriptor{SchemaDescriptor: desc}
+}
+
 // Reference these functions to defeat the linter.
 var (
 	_ = NewImmutableSchemaDescriptor
-	_ = NewInitialSchemaDescriptor
 )
 
-// NewInitialSchemaDescriptor constructs a new SchemaDescriptor for an
-// initial version from an id and name.
-func NewInitialSchemaDescriptor(id ID, name string) *ImmutableSchemaDescriptor {
-	return &ImmutableSchemaDescriptor{
-		SchemaDescriptor: SchemaDescriptor{
-			ID:         id,
-			Name:       name,
-			Version:    1,
-			Privileges: NewDefaultPrivilegeDescriptor(),
-		},
+// NewMutableCreatedSchemaDescriptor returns a MutableSchemaDescriptor from the
+// given SchemaDescriptor with the cluster version being the zero schema. This
+// is for a schema that is created within the current transaction.
+func NewMutableCreatedSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDescriptor {
+	return &MutableSchemaDescriptor{
+		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(desc),
 	}
 }
 
