@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 )
@@ -29,9 +30,9 @@ type workloadStorage struct {
 	table workload.Table
 }
 
-var _ ExternalStorage = &workloadStorage{}
+var _ cloud.ExternalStorage = &workloadStorage{}
 
-func makeWorkloadStorage(conf *roachpb.ExternalStorage_Workload) (ExternalStorage, error) {
+func makeWorkloadStorage(conf *roachpb.ExternalStorage_Workload) (cloud.ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("workload upload requested but info missing")
 	}

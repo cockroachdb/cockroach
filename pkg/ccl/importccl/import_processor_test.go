@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -857,7 +858,7 @@ func externalStorageFactory(
 	if err != nil {
 		return nil, err
 	}
-	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+	return cloudimpl.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 		nil, blobs.TestBlobServiceClient(workdir))
 }
 
@@ -902,7 +903,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 	}
 
 	for id, path := range inputs {
-		spec.inputs[int32(id)] = cloud.MakeLocalStorageURI(path)
+		spec.inputs[int32(id)] = cloudimpl.MakeLocalStorageURI(path)
 	}
 
 	return spec

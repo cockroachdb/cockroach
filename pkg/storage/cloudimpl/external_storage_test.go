@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"bytes"
@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -57,7 +58,7 @@ func init() {
 
 func storeFromURI(
 	ctx context.Context, t *testing.T, uri string, clientFactory blobs.BlobClientFactory,
-) ExternalStorage {
+) cloud.ExternalStorage {
 	conf, err := ExternalStorageConfFromURI(uri)
 	if err != nil {
 		t.Fatal(err)

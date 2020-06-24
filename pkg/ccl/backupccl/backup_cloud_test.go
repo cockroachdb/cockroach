@@ -16,7 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,8 +53,8 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
 	values := uri.Query()
-	values.Add(cloud.S3AccessKeyParam, creds.AccessKeyID)
-	values.Add(cloud.S3SecretParam, creds.SecretAccessKey)
+	values.Add(cloudimpl.S3AccessKeyParam, creds.AccessKeyID)
+	values.Add(cloudimpl.S3SecretParam, creds.SecretAccessKey)
 	uri.RawQuery = values.Encode()
 
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
@@ -104,8 +104,8 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
 	values := uri.Query()
-	values.Add(cloud.AzureAccountNameParam, accountName)
-	values.Add(cloud.AzureAccountKeyParam, accountKey)
+	values.Add(cloudimpl.AzureAccountNameParam, accountName)
+	values.Add(cloudimpl.AzureAccountKeyParam, accountKey)
 	uri.RawQuery = values.Encode()
 
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)

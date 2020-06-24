@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -53,7 +54,7 @@ type gcsStorage struct {
 	settings *cluster.Settings
 }
 
-var _ ExternalStorage = &gcsStorage{}
+var _ cloud.ExternalStorage = &gcsStorage{}
 
 func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
@@ -67,7 +68,7 @@ func makeGCSStorage(
 	ioConf base.ExternalIODirConfig,
 	conf *roachpb.ExternalStorage_GCS,
 	settings *cluster.Settings,
-) (ExternalStorage, error) {
+) (cloud.ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
 	}

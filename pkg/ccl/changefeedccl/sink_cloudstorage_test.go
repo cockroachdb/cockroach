@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -98,7 +99,7 @@ func TestCloudStorageSink(t *testing.T) {
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings, clientFactory)
+		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings, clientFactory)
 	}
 
 	t.Run(`golden`, func(t *testing.T) {

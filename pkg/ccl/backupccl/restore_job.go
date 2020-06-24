@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -189,7 +190,7 @@ func makeImportSpans(
 		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
 			storesByLocalityKV = make(map[string]roachpb.ExternalStorage)
 			for kv, uri := range backupLocalityInfo[i].URIsByOriginalLocalityKV {
-				conf, err := cloud.ExternalStorageConfFromURI(uri)
+				conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
 				if err != nil {
 					return nil, hlc.Timestamp{}, err
 				}
@@ -1047,7 +1048,7 @@ func (r *restoreResumer) Resume(
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex])
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URIs[lastBackupIndex])
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}
