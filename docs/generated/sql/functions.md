@@ -691,6 +691,41 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="addgeometrycolumn"></a><code>addgeometrycolumn(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>, srid: <a href="int.html">int</a>, type: <a href="string.html">string</a>, dimension: <a href="int.html">int</a>, use_typmod: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Adds a new geometry column to an existing table and returns metadata about the column created.</p>
 </span></td></tr>
+<tr><td><a name="geometrytype"></a><code>geometrytype(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of geometry as a string.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="postgis_addbbox"></a><code>postgis_addbbox(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.</p>
+</span></td></tr>
+<tr><td><a name="postgis_dropbbox"></a><code>postgis_dropbbox(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.</p>
+</span></td></tr>
+<tr><td><a name="postgis_extensions_upgrade"></a><code>postgis_extensions_upgrade() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_full_version"></a><code>postgis_full_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_geos_version"></a><code>postgis_geos_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_hasbbox"></a><code>postgis_hasbbox(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether a given Geometry has a bounding box. False for points and empty geometries; always true otherwise.</p>
+</span></td></tr>
+<tr><td><a name="postgis_lib_build_date"></a><code>postgis_lib_build_date() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_lib_version"></a><code>postgis_lib_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_liblwgeom_version"></a><code>postgis_liblwgeom_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_libxml_version"></a><code>postgis_libxml_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_proj_version"></a><code>postgis_proj_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_scripts_build_date"></a><code>postgis_scripts_build_date() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_scripts_installed"></a><code>postgis_scripts_installed() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_scripts_released"></a><code>postgis_scripts_released() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_version"></a><code>postgis_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
+<tr><td><a name="postgis_wagyu_version"></a><code>postgis_wagyu_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
+</span></td></tr>
 <tr><td><a name="st_area"></a><code>st_area(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geography in meters^2. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td></tr>
@@ -945,7 +980,7 @@ given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_geometryn"></a><code>st_geometryn(geometry: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the n-th Geometry (1-indexed). Returns NULL if out of bounds.</p>
 </span></td></tr>
-<tr><td><a name="st_geometrytype"></a><code>st_geometrytype(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of geometry as a string.</p>
+<tr><td><a name="st_geometrytype"></a><code>st_geometrytype(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of geometry as a string prefixed with <code>ST_</code>.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_geomfromewkb"></a><code>st_geomfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an EWKB representation.</p>

@@ -29,6 +29,17 @@ SELECT 'SRID=404;POINT(1.0 2.0)'::geography
 statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
 SELECT 'SRID=3857;POINT(1.0 2.0)'::geography
 
+query BTT
+SELECT
+  PostGIS_HasBBox(geom),
+  PostGIS_AddBBox(geom),
+  PostGIS_DropBBox(geom)
+FROM geo_table
+ORDER BY id ASC
+----
+false  010100000000000000000000400000000000000040  010100000000000000000000400000000000000040
+false  0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F
+
 query ITTT rowsort
 SELECT * FROM geo_table
 ----
@@ -1462,30 +1473,49 @@ Square overlapping left and right square  Square (right)                        
 Square overlapping left and right square  Square overlapping left and right square  2FFF1FFF2  false
 
 # basic metadata
-query TTIIITTT
+query TTTIII
 SELECT
   a.dsc,
+  GeometryType(a.geom),
   ST_GeometryType(a.geom),
   ST_NDims(a.geom),
   ST_NPoints(a.geom),
-  ST_NumGeometries(a.geom),
-  ST_GeometryN(a.geom, 0),
-  ST_GeometryN(a.geom, 1),
-  ST_GeometryN(a.geom, 2)
+  ST_NumGeometries(a.geom)
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  ST_GeometryCollection  0     0     0     NULL  NULL                                                                                                                                                                                        NULL
-Empty LineString                          ST_LineString          2     0     0     NULL  010200000000000000                                                                                                                                                                          NULL
-Empty Point                               ST_Point               2     0     0     NULL  0101000000000000000000F87F000000000000F87F                                                                                                                                                  NULL
-Faraway point                             ST_Point               2     1     1     NULL  010100000000000000000014400000000000001440                                                                                                                                                  NULL
-Line going through left and right square  ST_LineString          2     2     1     NULL  010200000002000000000000000000E0BF000000000000E03F000000000000E03F000000000000E03F                                                                                                          NULL
-NULL                                      NULL                   NULL  NULL  NULL  NULL  NULL                                                                                                                                                                                        NULL
-Point middle of Left Square               ST_Point               2     1     1     NULL  0101000000000000000000E0BF000000000000E03F                                                                                                                                                  NULL
-Point middle of Right Square              ST_Point               2     1     1     NULL  0101000000000000000000E03F000000000000E03F                                                                                                                                                  NULL
-Square (left)                             ST_Polygon             2     5     1     NULL  01030000000100000005000000000000000000F0BF0000000000000000000000000000000000000000000000000000000000000000000000000000F03F000000000000F0BF000000000000F03F000000000000F0BF0000000000000000  NULL
-Square (right)                            ST_Polygon             2     5     1     NULL  0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000  NULL
-Square overlapping left and right square  ST_Polygon             2     5     1     NULL  010300000001000000050000009A9999999999B9BF0000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F9A9999999999B9BF000000000000F03F9A9999999999B9BF0000000000000000  NULL
+Empty GeometryCollection                  GeometryCollection  ST_GeometryCollection  0     0     0
+Empty LineString                          LineString          ST_LineString          2     0     0
+Empty Point                               Point               ST_Point               2     0     0
+Faraway point                             Point               ST_Point               2     1     1
+Line going through left and right square  LineString          ST_LineString          2     2     1
+NULL                                      NULL                NULL                   NULL  NULL  NULL
+Point middle of Left Square               Point               ST_Point               2     1     1
+Point middle of Right Square              Point               ST_Point               2     1     1
+Square (left)                             Polygon             ST_Polygon             2     5     1
+Square (right)                            Polygon             ST_Polygon             2     5     1
+Square overlapping left and right square  Polygon             ST_Polygon             2     5     1
+
+query TTTT
+SELECT
+  a.dsc,
+  ST_AsEWKT(ST_GeometryN(a.geom, 0)),
+  ST_AsEWKT(ST_GeometryN(a.geom, 1)),
+  ST_AsEWKT(ST_GeometryN(a.geom, 2))
+FROM geom_operators_test a
+ORDER BY a.dsc
+----
+Empty GeometryCollection                  NULL  NULL                                          NULL
+Empty LineString                          NULL  LINESTRING EMPTY                              NULL
+Empty Point                               NULL  POINT EMPTY                                   NULL
+Faraway point                             NULL  POINT (5 5)                                   NULL
+Line going through left and right square  NULL  LINESTRING (-0.5 0.5, 0.5 0.5)                NULL
+NULL                                      NULL  NULL                                          NULL
+Point middle of Left Square               NULL  POINT (-0.5 0.5)                              NULL
+Point middle of Right Square              NULL  POINT (0.5 0.5)                               NULL
+Square (left)                             NULL  POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))        NULL
+Square (right)                            NULL  POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))           NULL
+Square overlapping left and right square  NULL  POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))  NULL
 
 # Point specific operations
 query RR

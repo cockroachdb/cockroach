@@ -1,0 +1,66 @@
+# meta statements (e.g. version numbers) tests go here
+
+query T
+SELECT PostGIS_Extensions_Upgrade()
+----
+Upgrade completed, run SELECT postgis_full_version(); for details
+
+query T
+SELECT PostGIS_Full_Version()
+----
+POSTGIS="3.0.1 ec2a9aa" [EXTENSION] PGSQL="120" GEOS="3.8.1-CAPI-1.13.3" PROJ="4.9.3" LIBXML="2.9.10" LIBJSON="0.13.1" LIBPROTOBUF="1.4.2" WAGYU="0.4.3 (Internal)"
+
+query T
+SELECT PostGIS_GEOS_Version()
+----
+3.8.1-CAPI-1.13.3
+
+query T
+SELECT PostGIS_LibXML_Version()
+----
+2.9.10
+
+query T
+SELECT PostGIS_Lib_Build_Date()
+----
+2020-03-06 18:23:24
+
+query T
+SELECT PostGIS_Lib_Version()
+----
+3.0.1
+
+query T
+SELECT PostGIS_Liblwgeom_Version()
+----
+3.0.1 ec2a9aa
+
+query T
+SELECT PostGIS_PROJ_Version()
+----
+4.9.3
+
+query T
+SELECT PostGIS_Scripts_Build_Date()
+----
+2020-02-24 13:54:19
+
+query T
+SELECT PostGIS_Scripts_Installed()
+----
+3.0.1 ec2a9aa
+
+query T
+SELECT PostGIS_Scripts_Released()
+----
+3.0.1 ec2a9aa
+
+query T
+SELECT PostGIS_Version()
+----
+3.0 USE_GEOS=1 USE_PROJ=1 USE_STATS=1
+
+query T
+SELECT PostGIS_Wagyu_Version()
+----
+0.4.3 (Internal)
