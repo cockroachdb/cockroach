@@ -71,6 +71,9 @@ message RestoreDetails {
       (gogoproto.customname) = "ParentID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
+    // ToExisting represents whether this descriptor is being remapped to a
+    // descriptor that already exists in the cluster.
+    bool to_existing = 3;
   }
   message BackupLocalityInfo {
     map<string, string> uris_by_original_locality_kv = 1 [(gogoproto.customname) = "URIsByOriginalLocalityKV"];

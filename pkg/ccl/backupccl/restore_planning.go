@@ -352,7 +352,13 @@ func allocateDescriptorRewrites(
 			}
 		}
 
+		// Iterate through typesByID to construct a remapping entry for each type.
 		for _, typ := range typesByID {
+			// If a descriptor has already been assigned a rewrite, then move on.
+			if _, ok := descriptorRewrites[typ.ID]; ok {
+				continue
+			}
+
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
@@ -368,6 +374,13 @@ func allocateDescriptorRewrites(
 			if _, ok := restoreDBNames[targetDB]; ok {
 				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], typ.ID)
 			} else {
+				// The remapping logic for a type will perform the remapping for a type's
+				// array type, so don't perform this logic for the array type itself.
+				if typ.Kind == sqlbase.TypeDescriptor_ALIAS {
+					continue
+				}
+
+				// Look up the parent database's ID.
 				found, parentID, err := sqlbase.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, targetDB)
 				if err != nil {
 					return err
@@ -376,28 +389,75 @@ func allocateDescriptorRewrites(
 					return errors.Errorf("a database named %q needs to exist to restore type %q",
 						targetDB, typ.Name)
 				}
-
-				// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
-				//  support user defined schemas.
-				if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, typ.Name); err != nil {
-					return err
-				}
-
-				// TODO (rohany): Check that the type name is not in use -- or rather,
-				//  here is maybe where we check equivalence classes for the types that
-				//  were requested to be remapped.
-
 				// Check privileges on the parent DB.
 				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, p.ExecCfg().Codec, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
 				}
-				if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+
+				// See if there is an existing type with the same name.
+				found, id, err := sqlbase.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, typ.Name)
+				if err != nil {
 					return err
 				}
+				if !found {
+					// If we didn't find a type with the same name, then mark that we
+					// need to create the type.
 
-				descriptorRewrites[typ.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
+					// Ensure that the user has the correct privilege to create types.
+					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+						return err
+					}
+
+					// Create a rewrite entry for the type.
+					descriptorRewrites[typ.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
+
+					// Ensure that there isn't a collision with the array type name.
+					arrTyp := typesByID[typ.ArrayTypeID]
+					if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, arrTyp.Name); err != nil {
+						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
+					}
+					// Create the rewrite entry for the array type as well.
+					descriptorRewrites[arrTyp.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
+				} else {
+					// If there was a name collision, we'll try to see if we can remap
+					// this type to the type existing in the cluster.
+
+					// See what kind of object we collided with.
+					desc, err := catalogkv.GetDescriptorByID(ctx, txn, p.ExecCfg().Codec, id)
+					if err != nil {
+						return err
+					}
+					// If the collided object isn't a type, then error out.
+					existingType := desc.TypeDesc()
+					if existingType == nil {
+						return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
+					}
+
+					// Check if the collided type is compatible to be remapped to.
+					if err := typ.IsCompatibleWith(existingType); err != nil {
+						return errors.Wrapf(
+							err,
+							"%q is not compatible with type %q existing in cluster",
+							existingType.Name,
+							existingType.Name,
+						)
+					}
+
+					// Remap both the type and its array type since they are compatible
+					// with the type existing in the cluster.
+					descriptorRewrites[typ.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
+						ParentID:   existingType.ParentID,
+						ID:         existingType.ID,
+						ToExisting: true,
+					}
+					descriptorRewrites[typ.ArrayTypeID] = &jobspb.RestoreDetails_DescriptorRewrite{
+						ParentID:   existingType.ParentID,
+						ID:         existingType.ArrayTypeID,
+						ToExisting: true,
+					}
+				}
 			}
 		}
 
@@ -462,7 +522,11 @@ func allocateDescriptorRewrites(
 			// The type doesn't need to be remapped.
 			descriptorRewrites[typ.ID].ID = typ.ID
 		} else {
-			descriptorsToRemap = append(descriptorsToRemap, typ)
+			// If the type is marked to be remapped to an existing type in the
+			// cluster, then we don't want to generate an ID for it.
+			if !descriptorRewrites[typ.ID].ToExisting {
+				descriptorsToRemap = append(descriptorsToRemap, typ)
+			}
 		}
 	}
 
@@ -934,7 +998,16 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	descriptorRewrites, err := allocateDescriptorRewrites(ctx, p, databasesByID, filteredTablesByID, typesByID, restoreDBs, restoreStmt.DescriptorCoverage, opts)
+	descriptorRewrites, err := allocateDescriptorRewrites(
+		ctx,
+		p,
+		databasesByID,
+		filteredTablesByID,
+		typesByID,
+		restoreDBs,
+		restoreStmt.DescriptorCoverage,
+		opts,
+	)
 	if err != nil {
 		return err
 	}
