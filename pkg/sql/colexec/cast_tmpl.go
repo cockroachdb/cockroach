@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -62,6 +61,11 @@ func _CAST(to, from, fromCol interface{}) {
 
 // This will be replaced with execgen.UNSAFEGET.
 func _L_UNSAFEGET(to, from interface{}) interface{} {
+	colexecerror.InternalError("")
+}
+
+// This will be replaced with execgen.UNSAFEGET.
+func _R_UNSAFEGET(to, from interface{}) interface{} {
 	colexecerror.InternalError("")
 }
 
@@ -109,8 +113,11 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 							}
 						} else {
+							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = _L_SLICE(inputCol, 0, n)
-							for execgen.RANGE(i, inputCol, 0, n) {
+							_ = _L_UNSAFEGET(inputCol, n-1)
+							_ = _R_UNSAFEGET(outputCol, n-1)
+							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
@@ -131,8 +138,11 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								_R_SET(outputCol, i, r)
 							}
 						} else {
+							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = _L_SLICE(inputCol, 0, n)
-							for execgen.RANGE(i, inputCol, 0, n) {
+							_ = _L_UNSAFEGET(inputCol, n-1)
+							_ = _R_UNSAFEGET(outputCol, n-1)
+							for i := 0; i < n; i++ {
 								v := _L_UNSAFEGET(inputCol, i)
 								var r _R_GO_TYPE
 								_CAST(r, v, inputCol)

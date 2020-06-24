@@ -26,7 +26,6 @@ var (
 	_ = APPENDVAL
 	_ = LEN
 	_ = ZERO
-	_ = RANGE
 	_ = WINDOW
 )
 
@@ -93,12 +92,6 @@ func LEN(target interface{}) interface{} {
 // ZERO is a template function.
 func ZERO(target interface{}) {
 	colexecerror.InternalError(nonTemplatePanic)
-}
-
-// RANGE is a template function.
-func RANGE(loopVariableIdent, target, start, end interface{}) bool {
-	colexecerror.InternalError(nonTemplatePanic)
-	return false
 }
 
 // WINDOW is a template function.
