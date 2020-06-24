@@ -570,8 +570,10 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("woo", "waa"),
 		}},
 		{"SHOW USERS", []preparedQueryTest{
-			baseTest.Results("abc", "", "{}").Results("admin", "CREATEROLE", "{}").
-				Results("root", "CREATEROLE", "{admin}").Results("woo", "", "{}"),
+			baseTest.Results("abc", "", "{}").
+				Results("admin", "CREATEROLE, SETPASSWORD", "{}").
+				Results("root", "CREATEROLE, SETPASSWORD", "{admin}").
+				Results("woo", "", "{}"),
 		}},
 		{"DROP USER $1", []preparedQueryTest{
 			baseTest.SetArgs("abc"),

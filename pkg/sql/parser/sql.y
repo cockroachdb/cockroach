@@ -600,7 +600,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
-%token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NONE NORMAL NOSETPASSWORD NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
@@ -618,7 +618,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
 %token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETPASSWORD SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
@@ -5573,17 +5573,25 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOCREATEROLE
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | LOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | NOLOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| SETPASSWORD
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOSETPASSWORD
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | password_clause
 | valid_until_clause
 
@@ -10368,6 +10376,7 @@ unreserved_keyword:
 | NO_INDEX_JOIN
 | NOCREATEROLE
 | NOLOGIN
+| NOSETPASSWORD
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -10421,6 +10430,7 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | RULE
+| SETPASSWORD
 | SETTING
 | SETTINGS
 | STATUS
