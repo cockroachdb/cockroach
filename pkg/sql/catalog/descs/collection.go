@@ -15,7 +15,6 @@ package descs
 import (
 	"context"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -137,15 +136,6 @@ type Collection struct {
 	settings *cluster.Settings
 }
 
-// isSupportedSchemaName returns whether this schema name is supported.
-// TODO(sqlexec): this should be deleted when we use custom schemas.
-// However, this introduces an extra lookup for cases where `<database>.<table>`
-// is looked up.
-// See #44733.
-func isSupportedSchemaName(n tree.Name) bool {
-	return n == tree.PublicSchemaName || strings.HasPrefix(string(n), "pg_temp")
-}
-
 // GetMutableTableDescriptor returns a mutable table descriptor.
 //
 // If flags.required is false, GetMutableTableDescriptor() will gracefully
@@ -172,10 +162,6 @@ func (tc *Collection) getMutableObjectDescriptor(
 		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
 	}
 
-	if !isSupportedSchemaName(tree.Name(name.Schema())) {
-		return nil, nil
-	}
-
 	refuseFurtherLookup, dbID, err := tc.GetUncommittedDatabaseID(name.Catalog(), flags.Required)
 	if refuseFurtherLookup || err != nil {
 		return nil, err
@@ -194,14 +180,14 @@ func (tc *Collection) getMutableObjectDescriptor(
 	// The following checks only work if the dbID is not invalid.
 	if dbID != sqlbase.InvalidID {
 		// Resolve the schema to the ID of the schema.
-		foundSchema, schemaID, err := tc.ResolveSchemaID(ctx, txn, dbID, name.Schema())
+		foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
 		if err != nil || !foundSchema {
 			return nil, err
 		}
 
 		if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 			dbID,
-			schemaID,
+			resolvedSchema.ID,
 			name.Object(),
 			flags.Required,
 		); refuseFurtherLookup || err != nil {
@@ -233,14 +219,14 @@ func (tc *Collection) getMutableObjectDescriptor(
 	return mutDesc, nil
 }
 
-// ResolveSchemaID attempts to lookup the schema from the schemaCache if it exists,
+// ResolveSchema attempts to lookup the schema from the schemaCache if it exists,
 // otherwise falling back to a database lookup.
-func (tc *Collection) ResolveSchemaID(
+func (tc *Collection) ResolveSchema(
 	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, schemaName string,
-) (bool, sqlbase.ID, error) {
+) (bool, sqlbase.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
+		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
 	}
 
 	type schemaCacheKey struct {
@@ -250,17 +236,19 @@ func (tc *Collection) ResolveSchemaID(
 
 	key := schemaCacheKey{dbID: dbID, schemaName: schemaName}
 	// First lookup the cache.
+	// TODO (SQLSchema): This should look into the lease manager.
 	if val, ok := tc.schemaCache.Load(key); ok {
-		return true, val.(sqlbase.ID), nil
+		return true, val.(sqlbase.ResolvedSchema), nil
 	}
 
 	// Next, try lookup the result from KV, storing and returning the value.
-	exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, tc.codec(), dbID, schemaName)
+	exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
-		return exists, schemaID, err
+		return exists, sqlbase.ResolvedSchema{}, err
 	}
-	tc.schemaCache.Store(key, schemaID)
-	return exists, schemaID, err
+
+	tc.schemaCache.Store(key, resolved)
+	return exists, resolved, err
 }
 
 // GetTableVersion returns a table descriptor with a version suitable for
@@ -298,10 +286,6 @@ func (tc *Collection) getObjectVersion(
 		log.Infof(ctx, "planner acquiring lease on descriptor '%s'", name)
 	}
 
-	if !isSupportedSchemaName(tree.Name(name.Schema())) {
-		return nil, nil
-	}
-
 	readObjectFromStore := func() (catalog.Descriptor, error) {
 		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
 		return phyAccessor.GetObjectDesc(
@@ -337,10 +321,11 @@ func (tc *Collection) getObjectVersion(
 	}
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, schemaID, err := tc.ResolveSchemaID(ctx, txn, dbID, name.Schema())
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
 	if err != nil || !foundSchema {
 		return nil, err
 	}
+	schemaID := resolvedSchema.ID
 
 	// TODO(vivek): Ideally we'd avoid caching for only the
 	// system.descriptor and system.lease tables, because they are
