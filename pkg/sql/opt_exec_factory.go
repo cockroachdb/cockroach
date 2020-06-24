@@ -1611,7 +1611,7 @@ func (ef *execFactory) ConstructDeleteRange(
 func (ef *execFactory) ConstructCreateTable(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
-	nd := &createTableNode{n: ct, dbDesc: schema.(*optSchema).desc}
+	nd := &createTableNode{n: ct, dbDesc: schema.(*optSchema).database}
 	if input != nil {
 		nd.sourcePlan = input.(planNode)
 	}
@@ -1621,7 +1621,7 @@ func (ef *execFactory) ConstructCreateTable(
 // ConstructCreateView is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateView(
 	schema cat.Schema,
-	viewName string,
+	viewName *cat.DataSourceName,
 	ifNotExists bool,
 	replace bool,
 	temporary bool,
@@ -1654,12 +1654,12 @@ func (ef *execFactory) ConstructCreateView(
 	}
 
 	return &createViewNode{
-		viewName:    tree.Name(viewName),
+		viewName:    viewName,
 		ifNotExists: ifNotExists,
 		replace:     replace,
 		temporary:   temporary,
 		viewQuery:   viewQuery,
-		dbDesc:      schema.(*optSchema).desc,
+		dbDesc:      schema.(*optSchema).database,
 		columns:     columns,
 		planDeps:    planDeps,
 	}, nil

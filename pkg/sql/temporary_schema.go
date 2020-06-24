@@ -83,20 +83,30 @@ var (
 	}
 )
 
-func createTempSchema(params runParams, sKey sqlbase.DescriptorKey) (sqlbase.ID, error) {
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+func (p *planner) getOrCreateTemporarySchema(
+	ctx context.Context, dbID sqlbase.ID,
+) (sqlbase.ID, error) {
+	tempSchemaName := p.TemporarySchemaName()
+	sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
+	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
 	if err != nil {
-		return sqlbase.InvalidID, err
+		return 0, err
+	} else if schemaID == sqlbase.InvalidID {
+		// The temporary schema has not been created yet.
+		id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return sqlbase.InvalidID, err
+		}
+		if err := p.createSchemaNamespaceEntry(ctx, sKey.Key(p.ExecCfg().Codec), id); err != nil {
+			return sqlbase.InvalidID, err
+		}
+		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
+		return id, nil
 	}
-	if err := params.p.createSchemaWithID(params.ctx, sKey.Key(params.ExecCfg().Codec), id); err != nil {
-		return sqlbase.InvalidID, err
-	}
-
-	params.p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
-	return id, nil
+	return schemaID, nil
 }
 
-func (p *planner) createSchemaWithID(
+func (p *planner) createSchemaNamespaceEntry(
 	ctx context.Context, schemaNameKey roachpb.Key, schemaID sqlbase.ID,
 ) error {
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {

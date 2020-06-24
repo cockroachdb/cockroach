@@ -151,16 +151,39 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool
 // and expects to see its own writes.
 func (n *createTableNode) ReadingOwnWrites() {}
 
+// getSchemaIDForCreate returns the ID of the schema to create an object within.
+// Note that it does not handle the temporary schema -- if the requested schema
+// is temporary, the caller needs to use (*planner).getOrCreateTemporarySchema.
+func (p *planner) getSchemaIDForCreate(
+	ctx context.Context, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
+) (sqlbase.ID, error) {
+	exists, res, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, codec, dbID, scName)
+	if err != nil {
+		return 0, err
+	}
+	if !exists {
+		return 0, pgerror.Newf(
+			pgcode.InvalidSchemaName, "target schema does not exist",
+		)
+	}
+	switch res.Kind {
+	case sqlbase.SchemaPublic, sqlbase.SchemaUserDefined:
+		return res.ID, nil
+	case sqlbase.SchemaVirtual:
+		return 0, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
+	default:
+		return 0, errors.AssertionFailedf("invalid schema kind for getSchemaIDForCreate: %d", res.Kind)
+	}
+}
+
 // getTableCreateParams returns the table key needed for the new table,
 // as well as the schema id. It returns valid data in the case that
 // the desired object exists.
 func getTableCreateParams(
-	params runParams, dbID sqlbase.ID, isTemporary bool, tableName string,
+	params runParams, dbID sqlbase.ID, isTemporary bool, tableName *tree.TableName,
 ) (sqlbase.DescriptorKey, sqlbase.ID, error) {
-	// By default, all tables are created in the `public` schema.
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
-	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
-		params.ExecCfg().Settings, dbID, tableName)
+	var schemaID sqlbase.ID
+	var tKey sqlbase.DescriptorKey
 	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
 			return nil, 0, errors.WithTelemetry(
@@ -178,24 +201,25 @@ func getTableCreateParams(
 			)
 		}
 
-		tempSchemaName := params.p.TemporarySchemaName()
-		sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
+		// If the table is temporary, get the temporary schema ID.
 		var err error
-		schemaID, err = catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, sKey)
+		schemaID, err = params.p.getOrCreateTemporarySchema(params.ctx, dbID)
 		if err != nil {
 			return nil, 0, err
-		} else if schemaID == sqlbase.InvalidID {
-			// The temporary schema has not been created yet.
-			if schemaID, err = createTempSchema(params, sKey); err != nil {
-				return nil, 0, err
-			}
 		}
-
-		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName)
+		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName.Table())
+	} else {
+		// Otherwise, find the ID of the schema to create the table within.
+		var err error
+		schemaID, err = params.p.getSchemaIDForCreate(params.ctx, params.ExecCfg().Codec, dbID, tableName.Schema())
+		if err != nil {
+			return nil, 0, err
+		}
+		tKey = sqlbase.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, dbID, schemaID, tableName.Table())
 	}
 
 	exists, id, err := sqlbase.LookupObjectID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName)
+		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, id)
@@ -203,7 +227,7 @@ func getTableCreateParams(
 			return nil, 0, sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
 		// Still return data in this case.
-		return tKey, schemaID, sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName)
+		return tKey, schemaID, sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.Table())
 	} else if err != nil {
 		return nil, 0, err
 	}
@@ -214,7 +238,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 	isTemporary := n.n.Temporary
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.n.Table.Table())
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, &n.n.Table)
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
