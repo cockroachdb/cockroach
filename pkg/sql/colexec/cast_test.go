@@ -184,7 +184,7 @@ func BenchmarkCastOp(b *testing.B) {
 						}
 						selectivity := selectivity
 						if !useSel {
-							selectivity = 1.0
+							selectivity = 0
 						}
 						typs := []*types.T{typePair[0]}
 						batch := coldatatestutils.RandomBatchWithSel(

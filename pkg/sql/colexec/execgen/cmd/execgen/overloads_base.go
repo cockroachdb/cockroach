@@ -605,15 +605,6 @@ func (b *argWidthOverloadBase) Len(target string) string {
 	return fmt.Sprintf("len(%s)", target)
 }
 
-// Range is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Range(loopVariableIdent, target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf("%[1]s := %[2]s; %[1]s < %[3]s; %[1]s++", loopVariableIdent, start, end)
-	}
-	return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
-}
-
 // Window is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Window(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
@@ -642,7 +633,6 @@ var (
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
 	_    = awob.Len
-	_    = awob.Range
 	_    = awob.Window
 )
 

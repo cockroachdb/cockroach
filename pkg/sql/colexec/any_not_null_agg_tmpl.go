@@ -126,28 +126,39 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
+			// Capture col to force bounds check to work. See
+			// https://github.com/golang/go/issues/39756
+			col := col
+			_ = execgen.UNSAFEGET(col, inputLen-1)
+			// {{if eq "_AGGKIND" "Ordered"}}
+			groups := a.groups
+			// {{end}}
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
 					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, nulls, i, true)
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
-						_FIND_ANY_NOT_NULL(a, nulls, i, true)
+					// {{if eq "_AGGKIND" "Ordered"}}
+					_ = groups[inputLen-1]
+					// {{end}}
+					for i := 0; i < inputLen; i++ {
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
 					}
 				}
 			} else {
 				if sel != nil {
 					sel = sel[:inputLen]
 					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, nulls, i, false)
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
-						_FIND_ANY_NOT_NULL(a, nulls, i, false)
+					// {{if eq "_AGGKIND" "Ordered"}}
+					_ = groups[inputLen-1]
+					// {{end}}
+					for i := 0; i < inputLen; i++ {
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 					}
 				}
 			}
@@ -197,12 +208,12 @@ func (a *anyNotNull_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
 func _FIND_ANY_NOT_NULL(
-	a *anyNotNull_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool,
+	a *anyNotNull_TYPE_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, i int, _HAS_NULLS bool,
 ) { // */}}
 	// {{define "findAnyNotNull" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[i] {
+	if groups[i] {
 		// If this is a new group, check if any non-nulls have been found for the
 		// current group.
 		if !a.foundNonNullForCurrentGroup {
