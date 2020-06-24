@@ -327,6 +327,12 @@ func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	// distSQLSpecExecFactory still constructs some of the planNodes (for
+	// example, some variants of EXPLAIN), and we need to be able to add a
+	// simple projection on top of them.
+	if p, ok := n.(planNode); ok {
+		return constructSimpleProjectForPlanNode(p, cols, colNames, reqOrdering)
+	}
 	physPlan, plan := getPhysPlan(n)
 	projection := make([]uint32, len(cols))
 	for i := range cols {
