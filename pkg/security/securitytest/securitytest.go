@@ -19,9 +19,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/errors"
 )
 
-//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md test_certs
+//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs test_certs/mt
 //go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go
 
@@ -45,7 +46,8 @@ func RestrictedCopy(t testing.TB, path, tempdir, name string) string {
 }
 
 // AssetReadDir mimics ioutil.ReadDir, returning a list of []os.FileInfo for
-// the specified directory.
+// the specified directory. Contrary to ioutil.ReadDir however, it skips sub-
+// directories.
 func AssetReadDir(name string) ([]os.FileInfo, error) {
 	names, err := AssetDir(name)
 	if err != nil {
@@ -54,16 +56,20 @@ func AssetReadDir(name string) ([]os.FileInfo, error) {
 		}
 		return nil, err
 	}
-	infos := make([]os.FileInfo, len(names))
-	for i, n := range names {
-		info, err := AssetInfo(filepath.Join(name, n))
+	infos := make([]os.FileInfo, 0, len(names))
+	for _, n := range names {
+		joined := filepath.Join(name, n)
+		info, err := AssetInfo(joined)
 		if err != nil {
-			return nil, err
+			if _, dirErr := AssetDir(joined); dirErr != nil {
+				return nil, errors.Wrapf(err, "missing directory (%s)", dirErr)
+			}
+			continue // skip subdirectory
 		}
 		// Convert back to bindataFileInfo and strip directory from filename.
 		binInfo := info.(bindataFileInfo)
 		binInfo.name = filepath.Base(binInfo.name)
-		infos[i] = binInfo
+		infos = append(infos, binInfo)
 	}
 	return infos, nil
 }

@@ -23,7 +23,7 @@ func TestClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const clientCertNotFound = "problem with client cert for user .*: not found"
-	const certDirNotFound = "problem loading certs directory"
+	const certDirNotFound = "no certificates found"
 
 	testCases := []struct {
 		// args
@@ -44,30 +44,36 @@ func TestClientSSLSettings(t *testing.T) {
 		{false, true, "bad-user", "https", clientCertNotFound, false, false},
 	}
 
-	for tcNum, tc := range testCases {
-		cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
-		if tc.hasCerts {
-			testutils.FillCerts(cfg)
-		}
-		if cfg.HTTPRequestScheme() != tc.requestScheme {
-			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
-		}
-		tlsConfig, err := cfg.GetClientTLSConfig()
-		if !testutils.IsError(err, tc.configErr) {
-			t.Fatalf("#%d: expected err=%s, got err=%v", tcNum, tc.configErr, err)
-		}
-		if err != nil {
-			continue
-		}
-		if (tlsConfig == nil) != tc.nilConfig {
-			t.Fatalf("#%d: expected nil config=%t, got: %+v", tcNum, tc.nilConfig, tlsConfig)
-		}
-		if tlsConfig == nil {
-			continue
-		}
-		if (tlsConfig.RootCAs == nil) != tc.noCAs {
-			t.Fatalf("#%d: expected nil RootCAs: %t, got: %+v", tcNum, tc.noCAs, tlsConfig.RootCAs)
-		}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
+			if tc.hasCerts {
+				testutils.FillCerts(cfg)
+			} else {
+				// We can't leave this empty because otherwise it refers to the cwd which
+				// always exists.
+				cfg.SSLCertsDir = "i-do-not-exist"
+			}
+			if cfg.HTTPRequestScheme() != tc.requestScheme {
+				t.Fatalf("expected HTTPRequestScheme=%s, got: %s", tc.requestScheme, cfg.HTTPRequestScheme())
+			}
+			tlsConfig, err := cfg.GetClientTLSConfig()
+			if !testutils.IsError(err, tc.configErr) {
+				t.Fatalf("expected err=%s, got err=%v", tc.configErr, err)
+			}
+			if err != nil {
+				return
+			}
+			if (tlsConfig == nil) != tc.nilConfig {
+				t.Fatalf("expected nil config=%t, got: %+v", tc.nilConfig, tlsConfig)
+			}
+			if tlsConfig == nil {
+				return
+			}
+			if (tlsConfig.RootCAs == nil) != tc.noCAs {
+				t.Fatalf("expected nil RootCAs: %t, got: %+v", tc.noCAs, tlsConfig.RootCAs)
+			}
+		})
 	}
 }
 
