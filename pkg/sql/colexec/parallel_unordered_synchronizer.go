@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -183,7 +184,18 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 // affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	s.setState(parallelUnorderedSynchronizerStateRunning)
-	ctx, s.cancelFn = contextutil.WithCancel(ctx)
+	var (
+		cancelFn context.CancelFunc
+		// internalCancellation is an atomic that will be set to 1 if cancelFn is
+		// called (i.e. this is an internal cancellation), so that input goroutines
+		// know not propagate this cancellation.
+		internalCancellation int32
+	)
+	ctx, cancelFn = contextutil.WithCancel(ctx)
+	s.cancelFn = func() {
+		atomic.StoreInt32(&internalCancellation, 1)
+		cancelFn()
+	}
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
@@ -204,6 +216,10 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				s.externalWaitGroup.Done()
 			}()
 			sendErr := func(err error) {
+				if strings.Contains(err.Error(), context.Canceled.Error()) && atomic.LoadInt32(&internalCancellation) == 1 {
+					// Don't propagate an internal cancellation error.
+					return
+				}
 				select {
 				// Non-blocking write to errCh, if an error is present the main
 				// goroutine will use that and cancel all inputs.
