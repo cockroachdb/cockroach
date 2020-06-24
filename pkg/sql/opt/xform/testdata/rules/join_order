@@ -317,7 +317,7 @@ inner-join (cross)
 memo join-limit=1
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
 ----
-memo (optimized, ~12KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])
+memo (optimized, ~13KB, required=[presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: b:1,x:2,c:3,y:4,d:5,z:6,a:7,b:8,c:9,d:10]
  │         ├── best: (inner-join G3 G2 G4)

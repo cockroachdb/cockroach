@@ -235,6 +235,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"MaterializeClause":   {fullName: "tree.MaterializeClause", passByVal: true},
 		"GeoRelationshipType": {fullName: "geoindex.RelationshipType", passByVal: true},
 		"SpanExpression":      {fullName: "invertedexpr.SpanExpression", isPointer: true, usePointerIntern: true},
+		"InvertedSpans":       {fullName: "invertedexpr.InvertedSpans", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.

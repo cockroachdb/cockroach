@@ -386,7 +386,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal)))
 			}
 			n := tp.Childf("inverted constraint: %s", b.String())
-			ic.Format(n)
+			ic.Format(n, "spans")
 		}
 		if t.HardLimit.IsSet() {
 			tp.Childf("limit: %s", t.HardLimit)
@@ -434,6 +434,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			tp.Childf("locking: %s%s", strength, wait)
 		}
+
+	case *InvertedFilterExpr:
+		var b strings.Builder
+		b.WriteRune('/')
+		b.WriteString(fmt.Sprintf("%d", t.InvertedColumn))
+		n := tp.Childf("inverted expression: %s", b.String())
+		t.InvertedExpression.Format(n, false /* includeSpansToRead */)
 
 	case *LookupJoinExpr:
 		if !t.Flags.Empty() {

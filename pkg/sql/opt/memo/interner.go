@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -565,6 +566,14 @@ func (h *hasher) HashGeoRelationshipType(val geoindex.RelationshipType) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashInvertedSpans(val invertedexpr.InvertedSpans) {
+	for i := range val {
+		span := &val[i]
+		h.HashBytes(span.Start)
+		h.HashBytes(span.End)
+	}
+}
+
 func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -908,6 +917,10 @@ func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
 
 func (h *hasher) IsGeoRelationshipTypeEqual(l, r geoindex.RelationshipType) bool {
 	return l == r
+}
+
+func (h *hasher) IsInvertedSpansEqual(l, r invertedexpr.InvertedSpans) bool {
+	return l.Equals(r)
 }
 
 func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {

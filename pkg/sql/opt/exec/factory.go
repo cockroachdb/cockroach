@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -56,8 +57,9 @@ type Factory interface {
 	// ConstructScan returns a node that represents a scan of the given index on
 	// the given table.
 	//   - Only the given set of needed columns are part of the result.
-	//   - If indexConstraint is not nil, the scan is restricted to the spans in
-	//     in the constraint.
+	//   - If indexConstraint or invertedConstraint are not nil, the scan is
+	//     restricted to the spans in in the constraint. Only one of the two may
+	//     be non-nil.
 	//   - If hardLimit > 0, then the scan returns only up to hardLimit rows.
 	//   - If softLimit > 0, then the scan may be required to return up to all
 	//     of its rows (or up to the hardLimit if it is set), but can be optimized
@@ -71,6 +73,7 @@ type Factory interface {
 		index cat.Index,
 		needed TableColumnOrdinalSet,
 		indexConstraint *constraint.Constraint,
+		invertedConstraint invertedexpr.InvertedSpans,
 		hardLimit int64,
 		softLimit int64,
 		reverse bool,
@@ -83,6 +86,15 @@ type Factory interface {
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.
 	ConstructFilter(n Node, filter tree.TypedExpr, reqOrdering OutputOrdering) (Node, error)
+
+	// ConstructInvertedFilter returns a node that applies a span expression on
+	// the results of the given input node.
+	ConstructInvertedFilter(
+		n Node,
+		invFilter *invertedexpr.SpanExpression,
+		invColumn NodeColumnOrdinal,
+		reqOrdering OutputOrdering,
+	) (Node, error)
 
 	// ConstructSimpleProject returns a node that applies a "simple" projection on the
 	// results of the given input node. A simple projection is one that does not

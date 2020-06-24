@@ -268,7 +268,7 @@ memo (optimized, ~5KB, required=[presentation: x:1])
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized, ~4KB, required=[presentation: x:7,y:8])
+memo (optimized, ~5KB, required=[presentation: x:7,y:8])
  ├── G1: (union G2 G3)
  │    └── [presentation: x:7,y:8]
  │         ├── best: (union G2 G3)
