@@ -41,6 +41,9 @@ apt-get install --yes \
 # Installing gnome-keyring prevents the error described in
 # https://github.com/moby/moby/issues/34048
 
+# Add a user for the TeamCity agent if it doesn't exist already.
+id -u agent &>/dev/null 2>&1 || adduser agent --disabled-password
+
 # Give the user for the TeamCity agent Docker rights.
 usermod -a -G docker agent
 

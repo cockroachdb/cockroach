@@ -127,14 +127,14 @@ var geomFromWKTOverload = stringOverload1(
 // geomFromWKBOverload converts a WKB bytea to its Geometry form.
 var geomFromWKBOverload = bytesOverload1(
 	func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-		g, err := geo.ParseGeometryFromWKB([]byte(s), geopb.DefaultGeometrySRID)
+		g, err := geo.ParseGeometryFromEWKB([]byte(s))
 		if err != nil {
 			return nil, err
 		}
 		return tree.NewDGeometry(g), nil
 	},
 	types.Geometry,
-	infoBuilder{info: "Returns the Geometry from a WKB representation."}.String(),
+	infoBuilder{info: "Returns the Geometry from a WKB (or EWKB) representation."}.String(),
 	tree.VolatilityImmutable,
 )
 
@@ -194,7 +194,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeometryFromWKB(geopb.WKB(s), geopb.DefaultGeometrySRID)
+				g, err := geo.ParseGeometryFromEWKB(geopb.EWKB(s))
 				if err != nil {
 					return nil, err
 				}
@@ -206,7 +206,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 			types.Geometry,
 			infoBuilder{
 				info: fmt.Sprintf(
-					"Returns the Geometry from a WKB representation. If the shape underneath is not %s, NULL is returned.",
+					"Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not %s, NULL is returned.",
 					shape.String(),
 				),
 			}.String(),
@@ -218,7 +218,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseGeometryFromWKB(geopb.WKB(s), srid)
+				g, err := geo.ParseGeometryFromEWKBAndSRID(geopb.EWKB(s), srid)
 				if err != nil {
 					return nil, err
 				}
@@ -229,7 +229,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 			},
 			Info: infoBuilder{
 				info: fmt.Sprintf(
-					`Returns the Geometry from a WKB representation with an SRID. If the shape underneath is not %s, NULL is returned.`,
+					`Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not %s, NULL is returned.`,
 					shape.String(),
 				),
 			}.String(),
@@ -468,14 +468,14 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseGeometryFromWKB(geopb.WKB(b), srid)
+				g, err := geo.ParseGeometryFromEWKBAndSRID(geopb.EWKB(b), srid)
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDGeometry(g), nil
 			},
 			Info: infoBuilder{
-				info: `Returns the Geometry from a WKB representation with the given SRID set.`,
+				info: `Returns the Geometry from a WKB (or EWKB) representation with the given SRID set.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -585,14 +585,14 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeographyFromWKB([]byte(s), geopb.DefaultGeographySRID)
+				g, err := geo.ParseGeographyFromEWKB([]byte(s))
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDGeography(g), nil
 			},
 			types.Geography,
-			infoBuilder{info: "Returns the Geography from a WKB representation."}.String(),
+			infoBuilder{info: "Returns the Geography from a WKB (or EWKB) representation."}.String(),
 			tree.VolatilityImmutable,
 		),
 		tree.Overload{
@@ -601,14 +601,14 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseGeographyFromWKB(geopb.WKB(b), srid)
+				g, err := geo.ParseGeographyFromEWKBAndSRID(geopb.EWKB(b), srid)
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDGeography(g), nil
 			},
 			Info: infoBuilder{
-				info: `Returns the Geography from a WKB representation with the given SRID set.`,
+				info: `Returns the Geography from a WKB (or EWKB) representation with the given SRID set.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
