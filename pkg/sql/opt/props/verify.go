@@ -22,7 +22,7 @@ import (
 //
 //   1. The properties must have been built.
 //   2. If HasCorrelatedSubquery is true, then HasSubquery must be true as well.
-//   3. If Mutate is true, then CanHaveSideEffects must also be true.
+//   3. If Mutate is true, then VolatilitySet must contain Volatile.
 //
 func (s *Shared) Verify() {
 	if !s.Populated {
@@ -31,8 +31,8 @@ func (s *Shared) Verify() {
 	if s.HasCorrelatedSubquery && !s.HasSubquery {
 		panic(errors.AssertionFailedf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
 	}
-	if s.CanMutate && !s.CanHaveSideEffects {
-		panic(errors.AssertionFailedf("CanHaveSideEffects cannot be false if CanMutate is true"))
+	if s.CanMutate && !s.VolatilitySet.HasVolatile() {
+		panic(errors.AssertionFailedf("HasVolatile cannot be false if CanMutate is true"))
 	}
 }
 
@@ -85,7 +85,7 @@ func (r *Relational) VerifyAgainst(other *Relational) {
 	}
 
 	// NotNullCols, FuncDeps are best effort, so they might differ.
-	// OuterCols, CanHaveSideEffects, and HasPlaceholder might differ if a
+	// OuterCols, VolatilitySet, and HasPlaceholder might differ if a
 	// subexpression containing them was elided.
 }
 

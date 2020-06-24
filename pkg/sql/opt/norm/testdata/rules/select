@@ -1445,7 +1445,7 @@ SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE k = 1
 ----
 project-set
  ├── columns: k:1!null g:6
- ├── immutable, side-effects
+ ├── immutable
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: k:1!null
@@ -1458,7 +1458,7 @@ project-set
  │    └── filters
  │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  └── zip
-      └── generate_series(0, k:1, 10) [outer=(1), immutable, side-effects]
+      └── generate_series(0, k:1, 10) [outer=(1), immutable]
 
 # Make sure that filters aren't pushed down when not bound by the input, so PushSelectIntoProjectSet is not triggered.
 norm expect-not=PushSelectIntoProjectSet
@@ -1466,15 +1466,15 @@ SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1
 ----
 select
  ├── columns: k:1!null g:6!null
- ├── immutable, side-effects
+ ├── immutable
  ├── project-set
  │    ├── columns: k:1!null generate_series:6
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── scan a
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
  │    └── zip
- │         └── generate_series(0, k:1, 10) [outer=(1), immutable, side-effects]
+ │         └── generate_series(0, k:1, 10) [outer=(1), immutable]
  └── filters
       └── generate_series:6 > 1 [outer=(6), constraints=(/6: [/2 - ]; tight)]
 
@@ -1484,11 +1484,11 @@ SELECT k, g FROM a, generate_series(0, a.k, 10) AS g WHERE g > 1 AND k = 1
 ----
 select
  ├── columns: k:1!null g:6!null
- ├── immutable, side-effects
+ ├── immutable
  ├── fd: ()-->(1)
  ├── project-set
  │    ├── columns: k:1!null generate_series:6
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── fd: ()-->(1)
  │    ├── select
  │    │    ├── columns: k:1!null
@@ -1501,7 +1501,7 @@ select
  │    │    └── filters
  │    │         └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  │    └── zip
- │         └── generate_series(0, k:1, 10) [outer=(1), immutable, side-effects]
+ │         └── generate_series(0, k:1, 10) [outer=(1), immutable]
  └── filters
       └── generate_series:6 > 1 [outer=(6), constraints=(/6: [/2 - ]; tight)]
 
@@ -1691,27 +1691,27 @@ union
  ├── columns: k:11!null
  ├── left columns: b.k:1
  ├── right columns: a.i:7
- ├── volatile, side-effects
+ ├── volatile
  ├── key: (11)
  ├── select
  │    ├── columns: b.k:1!null
  │    ├── cardinality: [0 - 8]
- │    ├── volatile, side-effects
+ │    ├── volatile
  │    ├── key: (1)
  │    ├── scan b
  │    │    ├── columns: b.k:1!null
  │    │    └── key: (1)
  │    └── filters
  │         ├── (b.k:1 < 10) AND (b.k:1 > 1) [outer=(1), constraints=(/1: [/2 - /9]; tight)]
- │         └── random() < 0.5 [volatile, side-effects]
+ │         └── random() < 0.5 [volatile]
  └── select
       ├── columns: a.i:7!null
-      ├── volatile, side-effects
+      ├── volatile
       ├── scan a
       │    └── columns: a.i:7
       └── filters
            ├── (a.i:7 < 10) AND (a.i:7 > 1) [outer=(7), constraints=(/7: [/2 - /9]; tight)]
-           └── random() < 0.5 [volatile, side-effects]
+           └── random() < 0.5 [volatile]
 
 norm expect=PushFilterIntoSetOp
 SELECT * FROM
@@ -1776,15 +1776,15 @@ union-all
  ├── columns: k:23!null
  ├── left columns: k:11
  ├── right columns: k:22
- ├── volatile, side-effects
+ ├── volatile
  ├── union-all
  │    ├── columns: k:11!null
  │    ├── left columns: b.k:1
  │    ├── right columns: b.k:6
- │    ├── volatile, side-effects
+ │    ├── volatile
  │    ├── select
  │    │    ├── columns: b.k:1!null
- │    │    ├── volatile, side-effects
+ │    │    ├── volatile
  │    │    ├── key: (1)
  │    │    ├── scan b
  │    │    │    ├── columns: b.k:1!null
@@ -1802,10 +1802,10 @@ union-all
  │    │         │         │    └── fd: (24)-->(25-28)
  │    │         │         └── filters
  │    │         │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
- │    │         └── random() < 0.5 [volatile, side-effects]
+ │    │         └── random() < 0.5 [volatile]
  │    └── select
  │         ├── columns: b.k:6!null
- │         ├── volatile, side-effects
+ │         ├── volatile
  │         ├── key: (6)
  │         ├── scan b
  │         │    ├── columns: b.k:6!null
@@ -1823,15 +1823,15 @@ union-all
  │              │         │    └── fd: (24)-->(25-28)
  │              │         └── filters
  │              │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
- │              └── random() < 0.5 [volatile, side-effects]
+ │              └── random() < 0.5 [volatile]
  └── union-all
       ├── columns: k:22!null
       ├── left columns: b.k:12
       ├── right columns: b.k:17
-      ├── volatile, side-effects
+      ├── volatile
       ├── select
       │    ├── columns: b.k:12!null
-      │    ├── volatile, side-effects
+      │    ├── volatile
       │    ├── key: (12)
       │    ├── scan b
       │    │    ├── columns: b.k:12!null
@@ -1849,10 +1849,10 @@ union-all
       │         │         │    └── fd: (24)-->(25-28)
       │         │         └── filters
       │         │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
-      │         └── random() < 0.5 [volatile, side-effects]
+      │         └── random() < 0.5 [volatile]
       └── select
            ├── columns: b.k:17!null
-           ├── volatile, side-effects
+           ├── volatile
            ├── key: (17)
            ├── scan b
            │    ├── columns: b.k:17!null
@@ -1870,7 +1870,7 @@ union-all
                 │         │    └── fd: (24)-->(25-28)
                 │         └── filters
                 │              └── a.k:24 = 1 [outer=(24), constraints=(/24: [/1 - /1]; tight), fd=()-->(24)]
-                └── random() < 0.5 [volatile, side-effects]
+                └── random() < 0.5 [volatile]
 
 # No-op case because the filter references outer columns.
 norm expect-not=PushFilterIntoSetOp
@@ -1926,7 +1926,7 @@ except
  ├── left columns: column1:1!null column2:2!null
  ├── right columns: column1:3 column2:4
  ├── cardinality: [0 - 1]
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1,2)
  ├── values
  │    ├── columns: column1:1!null column2:2!null
@@ -1937,7 +1937,7 @@ except
  └── select
       ├── columns: column1:3!null column2:4!null
       ├── cardinality: [0 - 1]
-      ├── immutable, side-effects
+      ├── immutable
       ├── key: ()
       ├── fd: ()-->(3,4)
       ├── values
@@ -1947,7 +1947,7 @@ except
       │    ├── fd: ()-->(3,4)
       │    └── (0, 1)
       └── filters
-           └── (1 / 0) > 0 [immutable, side-effects]
+           └── (1 / 0) > 0 [immutable]
 
 norm
 SELECT * FROM ((values (1.0::decimal)) EXCEPT (values (1.00::decimal))) WHERE column1::string != '1.00';

@@ -75,7 +75,7 @@ SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 project
  ├── columns: case:6!null
  ├── cardinality: [0 - 0]
- ├── immutable, side-effects
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── values
@@ -84,4 +84,4 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── projections
-      └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:6, outer=(1), immutable, side-effects]
+      └── CASE WHEN k:1 < 0 THEN 3 / 0 ELSE 3 END [as=case:6, outer=(1), immutable]

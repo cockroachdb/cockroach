@@ -34,7 +34,7 @@ project
  ├── save-table-name: q14_project_1
  ├── columns: promo_revenue:30(float)
  ├── cardinality: [1 - 1]
- ├── immutable, side-effects
+ ├── immutable
  ├── stats: [rows=1, distinct(30)=1, null(30)=0]
  ├── key: ()
  ├── fd: ()-->(30)
@@ -93,7 +93,7 @@ project
  │         └── sum [as=sum:29, type=float, outer=(28)]
  │              └── column28:28 [type=float]
  └── projections
-      └── (sum:27 * 100.0) / sum:29 [as=promo_revenue:30, type=float, outer=(27,29), immutable, side-effects]
+      └── (sum:27 * 100.0) / sum:29 [as=promo_revenue:30, type=float, outer=(27,29), immutable]
 
 stats table=q14_project_1
 ----

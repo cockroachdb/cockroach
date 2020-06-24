@@ -1617,18 +1617,18 @@ SELECT a, b, generate_series(c, 10) FROM abcde
 ----
 project
  ├── columns: a:1!null b:2 generate_series:6
- ├── immutable, side-effects
+ ├── immutable
  ├── fd: (1)-->(2)
  └── project-set
       ├── columns: a:1!null b:2 c:3 generate_series:6
-      ├── immutable, side-effects
+      ├── immutable
       ├── fd: (1)-->(2,3), (2,3)~~>(1)
       ├── scan abcde
       │    ├── columns: a:1!null b:2 c:3
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (2,3)~~>(1)
       └── zip
-           └── generate_series(c:3, 10) [outer=(3), immutable, side-effects]
+           └── generate_series(c:3, 10) [outer=(3), immutable]
 
 norm expect=PruneProjectSetCols
 SELECT k FROM a WHERE EXISTS(SELECT * FROM ROWS FROM (generate_series(i, k), length(s)))
@@ -1636,18 +1636,18 @@ SELECT k FROM a WHERE EXISTS(SELECT * FROM ROWS FROM (generate_series(i, k), len
 distinct-on
  ├── columns: k:1!null
  ├── grouping columns: k:1!null
- ├── immutable, side-effects
+ ├── immutable
  ├── key: (1)
  └── project-set
       ├── columns: k:1!null i:2 s:4 generate_series:5 length:6
-      ├── immutable, side-effects
+      ├── immutable
       ├── fd: (1)-->(2,4)
       ├── scan a
       │    ├── columns: k:1!null i:2 s:4
       │    ├── key: (1)
       │    └── fd: (1)-->(2,4)
       └── zip
-           ├── generate_series(i:2, k:1) [outer=(1,2), immutable, side-effects]
+           ├── generate_series(i:2, k:1) [outer=(1,2), immutable]
            └── length(s:4) [outer=(4), immutable]
 
 # --------------------------------------------------
@@ -1834,7 +1834,7 @@ delete a
  ├── columns: <none>
  ├── fetch columns: k:5
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── scan a
       ├── columns: k:5!null
       └── key: (5)
@@ -1847,7 +1847,7 @@ delete a
  ├── columns: <none>
  ├── fetch columns: k:5
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── limit
       ├── columns: k:5!null column9:9!null
       ├── internal-ordering: +9
@@ -1889,7 +1889,7 @@ delete abcde
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── select
       ├── columns: a:6!null b:7 c:8
       ├── key: (6)
@@ -1909,7 +1909,7 @@ delete mutation
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 d:9 e:10
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── scan mutation
       ├── columns: a:6!null b:7 d:9 e:10
       ├── key: (6)
@@ -1921,7 +1921,7 @@ DELETE FROM a RETURNING k, s
 delete a
  ├── columns: k:1!null s:4
  ├── fetch columns: k:5 s:8
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: (1)
  ├── fd: (1)-->(4)
  └── scan a
@@ -1939,7 +1939,7 @@ update "family"
  ├── update-mapping:
  │    └── c:8 => b:2
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── select
       ├── columns: a:6!null b:7 c:8
       ├── key: (6)
@@ -1961,7 +1961,7 @@ update "family"
  ├── update-mapping:
  │    └── a_new:11 => a:1
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: a_new:11!null a:6!null b:7 c:8 d:9 e:10
       ├── immutable
@@ -1986,13 +1986,13 @@ UPDATE family SET c=c+1 RETURNING b
 ----
 project
  ├── columns: b:2
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── update "family"
       ├── columns: a:1!null b:2
       ├── fetch columns: a:6 b:7 c:8 d:9
       ├── update-mapping:
       │    └── c_new:11 => c:3
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── project
@@ -2023,7 +2023,7 @@ upsert a
  ├── update-mapping:
  │    └── upsert_i:15 => i:2
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: upsert_i:15 column1:5!null column2:6!null column7:7 column8:8 k:9 i:10 f:11 s:12
       ├── cardinality: [1 - 1]
@@ -2079,7 +2079,7 @@ upsert a
  │    ├── upsert_f:16 => f:3
  │    └── upsert_s:17 => s:4
  ├── cardinality: [1 - 1]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(1-4)
  └── project
@@ -2135,7 +2135,7 @@ upsert "family"
  ├── update-mapping:
  │    └── column2:7 => b:2
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10
       ├── cardinality: [1 - 1]
@@ -2167,7 +2167,7 @@ INSERT INTO family VALUES (1, 2, 3, 4, 5) ON CONFLICT (a) DO UPDATE SET c = 10 R
 project
  ├── columns: e:5
  ├── cardinality: [1 - 1]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(5)
  └── upsert "family"
@@ -2186,7 +2186,7 @@ project
       │    ├── upsert_a:17 => a:1
       │    └── upsert_e:21 => e:5
       ├── cardinality: [1 - 1]
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1,5)
       └── project
@@ -2241,7 +2241,7 @@ upsert "family"
  ├── update-mapping:
  │    └── upsert_d:20 => d:4
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: upsert_d:20!null column1:6!null column2:7!null column3:8!null column4:9!null column10:10 a:11 c:13 d:14
       ├── cardinality: [1 - 1]
@@ -2291,7 +2291,7 @@ upsert mutation
  │    ├── upsert_b:17 => b:2
  │    └── column9:9 => d:4
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: upsert_b:17!null column1:6!null column2:7!null column3:8!null column9:9 a:10 b:11 c:12 d:13 e:14
       ├── cardinality: [1 - 1]
@@ -2352,13 +2352,13 @@ UPDATE returning_test SET a = a + 1 RETURNING *
 ----
 project
  ├── columns: a:1 b:2 c:3 d:4 e:5 f:6 g:7
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── update returning_test
       ├── columns: a:1 b:2 c:3 d:4 e:5 f:6 g:7 rowid:8!null
       ├── fetch columns: a:9 b:10 c:11 d:12 e:13 f:14 g:15 rowid:16
       ├── update-mapping:
       │    └── a_new:17 => a:1
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1-7)
       └── project
@@ -2380,7 +2380,7 @@ UPDATE returning_test SET d = a + d RETURNING a, d
 ----
 project
  ├── columns: a:1 d:4
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── lax-key: (1,4)
  ├── fd: (1)~~>(4)
  └── update returning_test
@@ -2388,7 +2388,7 @@ project
       ├── fetch columns: a:9 d:12 e:13 f:14 g:15 rowid:16
       ├── update-mapping:
       │    └── d_new:17 => d:4
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1,4), (1)~~>(4,8)
       └── project
@@ -2409,13 +2409,13 @@ UPDATE returning_test SET a = a + d RETURNING a
 ----
 project
  ├── columns: a:1
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── update returning_test
       ├── columns: a:1 rowid:8!null
       ├── fetch columns: a:9 rowid:16
       ├── update-mapping:
       │    └── a_new:17 => a:1
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1)
       └── project
@@ -2436,7 +2436,7 @@ UPDATE returning_test SET (b, a) = (a, a + b) RETURNING a, b, c
 ----
 project
  ├── columns: a:1 b:2 c:3
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── lax-key: (1-3)
  ├── fd: (2)~~>(1,3)
  └── update returning_test
@@ -2445,7 +2445,7 @@ project
       ├── update-mapping:
       │    ├── a_new:17 => a:1
       │    └── a:9 => b:2
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1-3), (2)~~>(1,3,8)
       └── project
@@ -2469,16 +2469,16 @@ SELECT a FROM [SELECT a, b FROM [UPDATE returning_test SET a = a + 1 RETURNING a
 ----
 with &1
  ├── columns: a:21
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── project
  │    ├── columns: returning_test.a:1 returning_test.b:2 returning_test.c:3
- │    ├── volatile, side-effects, mutations
+ │    ├── volatile, mutations
  │    └── update returning_test
  │         ├── columns: returning_test.a:1 returning_test.b:2 returning_test.c:3 rowid:8!null
  │         ├── fetch columns: returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16
  │         ├── update-mapping:
  │         │    └── a_new:17 => returning_test.a:1
- │         ├── volatile, side-effects, mutations
+ │         ├── volatile, mutations
  │         ├── key: (8)
  │         ├── fd: (8)-->(1-3)
  │         └── project
@@ -2510,16 +2510,16 @@ SELECT a FROM [SELECT a, b FROM [UPDATE returning_test SET a = a + 1 RETURNING a
 ----
 with &1
  ├── columns: a:21!null
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── project
  │    ├── columns: returning_test.a:1 returning_test.b:2 returning_test.c:3
- │    ├── volatile, side-effects, mutations
+ │    ├── volatile, mutations
  │    └── update returning_test
  │         ├── columns: returning_test.a:1 returning_test.b:2 returning_test.c:3 rowid:8!null
  │         ├── fetch columns: returning_test.a:9 returning_test.b:10 returning_test.c:11 rowid:16
  │         ├── update-mapping:
  │         │    └── a_new:17 => returning_test.a:1
- │         ├── volatile, side-effects, mutations
+ │         ├── volatile, mutations
  │         ├── key: (8)
  │         ├── fd: (8)-->(1-3)
  │         └── project
@@ -2556,17 +2556,17 @@ FROM
 ----
 with &2
  ├── columns: a:9 b:10 a:31!null b:32
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── fd: (9)~~>(10)
  ├── project
  │    ├── columns: returning_test.a:11 returning_test.b:12 returning_test.c:13
- │    ├── volatile, side-effects, mutations
+ │    ├── volatile, mutations
  │    └── update returning_test
  │         ├── columns: returning_test.a:11 returning_test.b:12 returning_test.c:13 rowid:18!null
  │         ├── fetch columns: returning_test.a:19 returning_test.b:20 returning_test.c:21 rowid:26
  │         ├── update-mapping:
  │         │    └── a_new:27 => returning_test.a:11
- │         ├── volatile, side-effects, mutations
+ │         ├── volatile, mutations
  │         ├── key: (18)
  │         ├── fd: (18)-->(11-13)
  │         └── project
@@ -2617,7 +2617,7 @@ INSERT INTO returning_test VALUES (1, 2, 'c') ON CONFLICT (a) DO UPDATE SET a = 
 project
  ├── columns: a:1 b:2 c:3
  ├── cardinality: [1 - 1]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(1-3)
  └── upsert returning_test
@@ -2641,26 +2641,26 @@ project
       │    ├── upsert_c:25 => c:3
       │    └── upsert_rowid:30 => rowid:8
       ├── cardinality: [1 - 1]
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-3,8)
       └── project
            ├── columns: upsert_a:23 upsert_b:24 upsert_c:25 upsert_rowid:30 column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 rowid:21
            ├── cardinality: [1 - 1]
-           ├── volatile, side-effects
+           ├── volatile
            ├── key: ()
            ├── fd: ()-->(9-16,21,23-25,30)
            ├── left-join (cross)
            │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 rowid:21
            │    ├── cardinality: [1 - 1]
            │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
-           │    ├── volatile, side-effects
+           │    ├── volatile
            │    ├── key: ()
            │    ├── fd: ()-->(9-16,21)
            │    ├── values
            │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
            │    │    ├── cardinality: [1 - 1]
-           │    │    ├── volatile, side-effects
+           │    │    ├── volatile
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(9-13)
            │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
@@ -2687,13 +2687,13 @@ DELETE FROM returning_test WHERE a < b + d RETURNING a, b, d
 ----
 project
  ├── columns: a:1!null b:2 d:4
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: (1)
  ├── fd: (1)-->(2,4)
  └── delete returning_test
       ├── columns: a:1!null b:2 d:4 rowid:8!null
       ├── fetch columns: a:9 b:10 d:12 rowid:16
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1,2,4), (1)-->(2,4,8)
       └── select
@@ -2714,7 +2714,7 @@ UPSERT INTO returning_test (a, b, c) VALUES (1, 2, 'c') RETURNING a, b, c, d
 project
  ├── columns: a:1!null b:2!null c:3!null d:4
  ├── cardinality: [1 - 1]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: ()
  ├── fd: ()-->(1-4)
  └── upsert returning_test
@@ -2741,20 +2741,20 @@ project
       │    ├── upsert_d:22 => d:4
       │    └── upsert_rowid:26 => rowid:8
       ├── cardinality: [1 - 1]
-      ├── volatile, side-effects, mutations
+      ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-4,8)
       └── project
            ├── columns: upsert_d:22 upsert_rowid:26 column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 d:17 rowid:21
            ├── cardinality: [1 - 1]
-           ├── volatile, side-effects
+           ├── volatile
            ├── key: ()
            ├── fd: ()-->(9-17,21,22,26)
            ├── left-join (hash)
            │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13 a:14 b:15 c:16 d:17 rowid:21
            │    ├── cardinality: [1 - 1]
            │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-           │    ├── volatile, side-effects
+           │    ├── volatile
            │    ├── key: ()
            │    ├── fd: ()-->(9-17,21)
            │    ├── ensure-upsert-distinct-on
@@ -2762,13 +2762,13 @@ project
            │    │    ├── grouping columns: column13:13
            │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
            │    │    ├── cardinality: [1 - 1]
-           │    │    ├── volatile, side-effects
+           │    │    ├── volatile
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(9-13)
            │    │    ├── values
            │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12 column13:13
            │    │    │    ├── cardinality: [1 - 1]
-           │    │    │    ├── volatile, side-effects
+           │    │    │    ├── volatile
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(9-13)
            │    │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
@@ -2809,7 +2809,7 @@ update abcde
  ├── update-mapping:
  │    ├── "family".b:12 => abcde.b:2
  │    └── "family".c:13 => abcde.c:3
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── key: (1)
  ├── fd: (1)-->(12,13)
  └── inner-join (hash)

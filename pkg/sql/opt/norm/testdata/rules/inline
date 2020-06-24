@@ -172,7 +172,7 @@ update computed
  │    ├── b_new:8 => b:2
  │    └── column9:9 => c:3
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: column9:9!null a_new:7!null b_new:8!null a:4!null b:5 c:6
       ├── key: (4)
