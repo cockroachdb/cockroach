@@ -9,3 +9,13 @@
 // licenses/APL.txt.
 
 package sqlbase
+
+// TODO (rohany): this could be renamed? Or possibly just moved out of this file.
+type ObjectPrefix struct {
+	// TODO (rohany): Should this be an ImmutableDatabaseDescriptor?
+	Database DatabaseDescriptorInterface
+	Schema   ResolvedSchema
+}
+
+// SchemaMeta implements the SchemaMeta interface.
+func (*ObjectPrefix) SchemaMeta() {}

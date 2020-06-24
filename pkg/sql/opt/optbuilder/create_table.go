@@ -101,6 +101,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 	}
 
 	outScope = b.allocScope()
+	// TODO (rohany): This should pass the schema and database to create table.
 	outScope.expr = b.factory.ConstructCreateTable(
 		input,
 		&memo.CreateTablePrivate{

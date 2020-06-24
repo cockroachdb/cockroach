@@ -19,8 +19,9 @@ import (
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	sch, _ := b.resolveSchemaForCreate(&cv.Name)
+	sch, resName := b.resolveSchemaForCreate(&cv.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
+	cv.Name.ObjectNamePrefix = resName
 
 	// We build the select statement to:
 	//  - check the statement semantically,
@@ -57,10 +58,11 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	}
 
 	outScope = b.allocScope()
+	// TODO (rohany): This should pass the schema and database to create view.
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
 			Schema:      schID,
-			ViewName:    cv.Name.Table(),
+			ViewName:    &cv.Name,
 			IfNotExists: cv.IfNotExists,
 			Replace:     cv.Replace,
 			Temporary:   cv.Temporary,

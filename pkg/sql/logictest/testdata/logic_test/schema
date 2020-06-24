@@ -1,5 +1,7 @@
 statement ok
-SET experimental_enable_user_defined_schemas = true
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+SET experimental_enable_temp_tables = true;
 
 statement ok
 CREATE SCHEMA IF NOT EXISTS public
@@ -33,3 +35,68 @@ CREATE SCHEMA pg_catalog
 
 statement error schema .* already exists
 CREATE SCHEMA information_schema
+
+# Create some tables and types in a user defined schema, and resolve them.
+statement ok
+CREATE SCHEMA myschema;
+CREATE TABLE myschema.tb (x INT);
+CREATE TYPE myschema.typ AS ENUM ('user', 'defined', 'schema');
+CREATE VIEW myschema.v AS SELECT x FROM myschema.tb;
+CREATE SEQUENCE myschema.s
+
+query I
+SELECT * FROM myschema.tb
+----
+
+query I
+SELECT * FROM myschema.v
+----
+
+query I
+SELECT last_value FROM myschema.s
+----
+0
+
+query TT
+SELECT 'user'::myschema.typ, ARRAY['defined']::myschema._typ
+----
+user {defined}
+
+# Set the search path to have myschema at the front.
+statement ok
+SET search_path TO myschema,public
+
+# Now we should be able to resolve tb and typ without qualification.
+query I
+SELECT * FROM tb
+----
+
+query TT
+SELECT 'user'::typ, ARRAY['defined']::_typ
+----
+user {defined}
+
+# New objects should be created into tb2 by default.
+statement ok
+CREATE TABLE tb2 (x typ)
+
+query T
+SELECT * FROM tb2
+----
+
+query T
+SELECT * FROM myschema.tb2
+----
+
+# Reset the search path.
+statement ok
+SET search_path TO public
+
+# Try to create a temp table in a user defined schema.
+statement error pq: cannot create temporary relation in non-temporary schema
+CREATE TEMP TABLE myschema.tmp (x int)
+
+# We should error out trying to modify any virtual schemas.
+statement error pq: schema cannot be modified: "pg_catalog"
+CREATE TABLE pg_catalog.bad (x int)
+
