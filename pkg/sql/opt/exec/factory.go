@@ -494,7 +494,7 @@ type Factory interface {
 	// statement.
 	ConstructCreateView(
 		schema cat.Schema,
-		viewName string,
+		viewName *cat.DataSourceName,
 		ifNotExists bool,
 		replace bool,
 		temporary bool,

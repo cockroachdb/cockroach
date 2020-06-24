@@ -243,6 +243,7 @@ func (c *ColumnItem) Resolve(
 // TODO(ajwerner): figure out what scMeta is supposed to be. Currently it's
 // the database but with User-defined schemas, should it be the schema?
 // Should it be both?
+// TODO (rohany): comment
 type ObjectNameTargetResolver interface {
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
 }

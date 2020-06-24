@@ -20,6 +20,27 @@ type SchemaDescriptorInterface interface {
 var _ SchemaDescriptorInterface = (*ImmutableSchemaDescriptor)(nil)
 var _ SchemaDescriptorInterface = (*MutableSchemaDescriptor)(nil)
 
+type ResolvedSchemaKind int
+
+// TODO (rohany): Generate a string for this?
+const (
+	SchemaPublic ResolvedSchemaKind = iota
+	SchemaVirtual
+	SchemaUserDefined
+)
+
+// TODO (rohany): Should this live here?
+// TODO (rohany): I want it to be clear at what level of resolution a user
+//  can expect different kinds of schemas. It seems like logical and above
+//  you can get anything, and below that you can get user defined or public.
+type ResolvedSchema struct {
+	ID   ID
+	Kind ResolvedSchemaKind
+
+	// can be nil
+	Desc SchemaDescriptorInterface
+}
+
 // ImmutableSchemaDescriptor wraps a Schema descriptor and provides methods
 // on it.
 type ImmutableSchemaDescriptor struct {

@@ -82,25 +82,38 @@ func (oc *optCatalog) reset() {
 // implements the cat.Object and cat.Schema interfaces.
 type optSchema struct {
 	planner *planner
-	desc    *sqlbase.ImmutableDatabaseDescriptor
+
+	// TODO (rohany): This might need to be separated into two structs if permissions
+	//  checking requires it.
+	database *sqlbase.ImmutableDatabaseDescriptor
+	schema   sqlbase.ResolvedSchema
 
 	name cat.SchemaName
 }
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
-	return cat.StableID(os.desc.GetID())
+	id := cat.StableID(os.database.GetID())
+	if os.schema.Kind == sqlbase.SchemaVirtual {
+		// TODO (rohany): What ID do we give to virtual schemas? Perhaps an index
+		//  based on their entry in the virtual schemas array?
+	} else {
+		// TODO (rohany): Comment this rationale for stable ID in the comment on the
+		//  stableId type.
+		id |= cat.StableID(os.schema.ID) << 32
+	}
+	return id
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
 func (os *optSchema) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.GetID())
+	return os.ID()
 }
 
 // Equals is part of the cat.Object interface.
 func (os *optSchema) Equals(other cat.Object) bool {
 	otherSchema, ok := other.(*optSchema)
-	return ok && os.desc.GetID() == otherSchema.desc.GetID()
+	return ok && os.ID() == otherSchema.ID()
 }
 
 // Name is part of the cat.Schema interface.
@@ -115,7 +128,7 @@ func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceNa
 		os.planner.Txn(),
 		os.planner,
 		os.planner.ExecCfg().Codec,
-		os.desc,
+		os.database,
 		os.name.Schema(),
 		true, /* explicitPrefix */
 	)
@@ -133,7 +146,7 @@ func (oc *optCatalog) ResolveSchema(
 	}
 
 	oc.tn.ObjectNamePrefix = *name
-	found, desc, err := oc.tn.ObjectNamePrefix.Resolve(
+	found, prefixI, err := oc.tn.ObjectNamePrefix.Resolve(
 		ctx,
 		oc.planner,
 		oc.planner.CurrentDatabase(),
@@ -152,10 +165,13 @@ func (oc *optCatalog) ResolveSchema(
 			pgcode.InvalidSchemaName, "target database or schema does not exist",
 		)
 	}
+
+	prefix := prefixI.(*sqlbase.ObjectPrefix)
 	return &optSchema{
-		planner: oc.planner,
-		desc:    desc.(*sqlbase.ImmutableDatabaseDescriptor),
-		name:    oc.tn.ObjectNamePrefix,
+		planner:  oc.planner,
+		database: prefix.Database.(*sqlbase.ImmutableDatabaseDescriptor),
+		schema:   prefix.Schema,
+		name:     oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil
 }
 
@@ -210,7 +226,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 func getDescForCatalogObject(o cat.Object) (sqlbase.DescriptorInterface, error) {
 	switch t := o.(type) {
 	case *optSchema:
-		return t.desc, nil
+		return t.database, nil
 	case *optTable:
 		return t.desc, nil
 	case *optVirtualTable:
@@ -1363,11 +1379,13 @@ func newOptVirtualTable(
 	id := cat.StableID(desc.ID)
 	if name.Catalog() != "" {
 		// TODO(radu): it's unfortunate that we have to lookup the schema again.
-		_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+		//  this will be cached soon, so it's not a problem?
+		_, prefixI, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
+		prefix := prefixI.(*sqlbase.ObjectPrefix)
 		if err != nil {
 			return nil, err
 		}
-		if dbDesc == nil {
+		if prefix == nil {
 			// The database was not found. This can happen e.g. when
 			// accessing a virtual schema over a non-existent
 			// database. This is a common scenario when the current db
@@ -1380,7 +1398,7 @@ func newOptVirtualTable(
 			// both cases.
 			id |= cat.StableID(math.MaxUint32) << 32
 		} else {
-			id |= cat.StableID(dbDesc.(*sqlbase.ImmutableDatabaseDescriptor).GetID()) << 32
+			id |= cat.StableID(prefix.Database.GetID()) << 32
 		}
 	}
 

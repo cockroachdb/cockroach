@@ -199,8 +199,8 @@ func ResolveExistingObject(
 // prefix for the input object.
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
-) (*sqlbase.ImmutableDatabaseDescriptor, tree.ObjectNamePrefix, error) {
-	found, prefix, descI, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+) (*sqlbase.ObjectPrefix, tree.ObjectNamePrefix, error) {
+	found, prefix, scMeta, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, prefix, err
 	}
@@ -214,11 +214,12 @@ func ResolveTargetObject(
 		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
 		return nil, prefix, err
 	}
-	if prefix.Schema() != tree.PublicSchema {
+	scInfo := scMeta.(*sqlbase.ObjectPrefix)
+	if scInfo.Schema.Kind == sqlbase.SchemaVirtual {
 		return nil, prefix, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
-	return descI.(*sqlbase.ImmutableDatabaseDescriptor), prefix, nil
+	return scInfo, prefix, nil
 }
 
 // ResolveRequiredType can be passed to the ResolveExistingTableObject function to

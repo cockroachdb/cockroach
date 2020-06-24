@@ -37,10 +37,8 @@ func (p *planner) schemaExists(
 	if schema == tree.PublicSchema {
 		return true, nil
 	}
-	for _, vs := range virtualSchemas {
-		if schema == vs.name {
-			return true, nil
-		}
+	if isVirtualSchema(schema) {
+		return true, nil
 	}
 	// Now lookup in the namespace for other schemas.
 	exists, _, err := sqlbase.LookupObjectID(ctx, p.txn, p.ExecCfg().Codec, parentID, keys.RootNamespaceID, schema)

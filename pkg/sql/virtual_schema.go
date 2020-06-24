@@ -265,6 +265,15 @@ var startTime = hlc.Timestamp{
 	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
 }
 
+func isVirtualSchema(schema string) bool {
+	for _, s := range virtualSchemas {
+		if s.name == schema {
+			return true
+		}
+	}
+	return false
+}
+
 //
 // SQL-layer interface to work with virtual schemas.
 //

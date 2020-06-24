@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // UncachedPhysicalAccessor implements direct access to sql object descriptors
@@ -70,11 +71,39 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	return desc, err
 }
 
-// IsValidSchema implements the Accessor interface.
-func (a UncachedPhysicalAccessor) IsValidSchema(
+// GetSchema implements the Accessor interface.
+func (a UncachedPhysicalAccessor) GetSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string,
-) (bool, sqlbase.ID, error) {
-	return ResolveSchemaID(ctx, txn, codec, dbID, scName)
+) (bool, sqlbase.ResolvedSchema, error) {
+	// Fast path public schema, as it is always found.
+	if scName == tree.PublicSchema {
+		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+	}
+
+	exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, scName)
+	if err != nil || !exists {
+		return exists, sqlbase.ResolvedSchema{}, err
+	}
+
+	// Get the descriptor from disk.
+	desc, err := GetDescriptorByID(ctx, txn, codec, schemaID)
+	if err != nil {
+		return false, sqlbase.ResolvedSchema{}, err
+	}
+
+	if desc == nil {
+		return false, sqlbase.ResolvedSchema{}, nil
+	}
+
+	sc := desc.SchemaDesc()
+	if sc == nil {
+		return false, sqlbase.ResolvedSchema{}, errors.Newf("%q was not a schema", scName)
+	}
+	return true, sqlbase.ResolvedSchema{
+		ID:   sc.ID,
+		Kind: sqlbase.SchemaUserDefined,
+		Desc: sqlbase.NewImmutableSchemaDescriptor(*sc),
+	}, nil
 }
 
 // GetObjectNames implements the Accessor interface.
@@ -86,7 +115,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schemaID, err := a.IsValidSchema(ctx, txn, codec, dbDesc.GetID(), scName)
+	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +128,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	}
 
 	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
-	prefix := sqlbase.NewTableKey(dbDesc.GetID(), schemaID, "").Key(codec)
+	prefix := sqlbase.NewTableKey(dbDesc.GetID(), schema.ID, "").Key(codec)
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -168,7 +197,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	txn *kv.Txn,
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
-	db, schema, object string,
+	db, scName, object string,
 	flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	// Look up the database ID.
@@ -178,13 +207,13 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 
-	ok, schemaID, err := a.IsValidSchema(ctx, txn, codec, dbID, schema)
+	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		if flags.Required {
-			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
+			a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
 			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&a.tn))
 		}
 		return nil, nil
@@ -197,14 +226,14 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
 	if descID == sqlbase.InvalidID {
 		var found bool
-		found, descID, err = sqlbase.LookupObjectID(ctx, txn, codec, dbID, schemaID, object)
+		found, descID, err = sqlbase.LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
 		if err != nil {
 			return nil, err
 		}
 		if !found {
 			// KV name resolution failed.
 			if flags.Required {
-				a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
+				a.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(scName), tree.Name(object))
 				return nil, sqlbase.NewUndefinedObjectError(&a.tn, flags.DesiredObjectKind)
 			}
 			return nil, nil
