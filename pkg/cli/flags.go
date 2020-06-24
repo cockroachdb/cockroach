@@ -514,7 +514,7 @@ func init() {
 	} {
 		f := cmd.Flags()
 		// Certificate flags.
-		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
+		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
 	}
 
 	clientCmds := []*cobra.Command{

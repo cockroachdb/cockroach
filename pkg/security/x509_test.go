@@ -62,7 +62,7 @@ func TestGenerateCertLifetime(t *testing.T) {
 	// Create a Node certificate expiring in 4 days. Fails on shorter CA lifetime.
 	nodeDuration := time.Hour * 96
 	_, err = security.GenerateServerCert(caCert, testKey,
-		testKey.Public(), nodeDuration, security.NodeUser, []string{"localhost"})
+		testKey.Public(), nodeDuration, security.NodeUser, []string{"localhost"}, x509.ExtKeyUsageServerAuth)
 	if !testutils.IsError(err, "CA lifetime is .*, shorter than the requested .*") {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestGenerateCertLifetime(t *testing.T) {
 	// Try again, but expiring before the CA cert.
 	nodeDuration = time.Hour * 24
 	nodeBytes, err := security.GenerateServerCert(caCert, testKey,
-		testKey.Public(), nodeDuration, security.NodeUser, []string{"localhost"})
+		testKey.Public(), nodeDuration, security.NodeUser, []string{"localhost"}, x509.ExtKeyUsageServerAuth)
 	if err != nil {
 		t.Fatal(err)
 	}
