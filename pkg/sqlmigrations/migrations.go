@@ -317,7 +317,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v20.1.
 		name:   "add CREATEROLE privilege to admin/root",
-		workFn: addCreateRoleToAdminAndRoot,
+		workFn: func(ctx context.Context, r runner) error { return addOptionToAdminAndRoot(ctx, r, "CREATEROLE") },
 	},
 	{
 		// Introduced in v20.2.
@@ -332,6 +332,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn:              createScheduledJobsTable,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAddScheduledJobsTable),
 		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
+	},
+	{
+		// Introduced in v20.2.
+		name:   "add SETPASSWORD privilege to admin/root",
+		workFn: func(ctx context.Context, r runner) error { return addOptionToAdminAndRoot(ctx, r, "SETPASSWORD") },
 	},
 }
 
@@ -1587,25 +1592,29 @@ func createRoleOptionsTable(ctx context.Context, r runner) error {
 	return nil
 }
 
-func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
+func addOptionToAdminAndRoot(ctx context.Context, r runner, option string) error {
 	// Upsert the admin/root roles with CreateRole privilege into the table.
 	// We intentionally override any existing entry.
 	const upsertCreateRoleStmt = `
-          UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'CREATEROLE', NULL)
+          UPSERT INTO system.role_options (username, option, value) VALUES ($1, $2, NULL)
           `
 	err := r.execAsRootWithRetry(ctx,
-		"add role options table and upsert admin with CREATEROLE",
+		"add role options table and upsert admin with "+option,
 		upsertCreateRoleStmt,
-		sqlbase.AdminRole)
+		sqlbase.AdminRole,
+		option,
+	)
 
 	if err != nil {
 		return err
 	}
 
 	return r.execAsRootWithRetry(ctx,
-		"add role options table and upsert admin with CREATEROLE",
+		"add role options table and upsert admin with "+option,
 		upsertCreateRoleStmt,
-		security.RootUser)
+		security.RootUser,
+		option,
+	)
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {

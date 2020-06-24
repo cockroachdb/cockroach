@@ -27,11 +27,11 @@ CREATE ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-myrole    NOLOGIN     {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATEROLE, SETPASSWORD  {}
+myrole    NOLOGIN                  {}
+root      CREATEROLE, SETPASSWORD  {admin}
+testuser  ·                        {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -57,11 +57,11 @@ DROP ROLE admin, myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-myrole    NOLOGIN     {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATEROLE, SETPASSWORD  {}
+myrole    NOLOGIN                  {}
+root      CREATEROLE, SETPASSWORD  {admin}
+testuser  ·                        {}
 
 statement ok
 DROP ROLE myrole
@@ -69,10 +69,10 @@ DROP ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATEROLE, SETPASSWORD  {}
+root      CREATEROLE, SETPASSWORD  {admin}
+testuser  ·                        {}
 
 statement error pq: role/user myrole does not exist
 DROP ROLE myrole
@@ -104,10 +104,10 @@ DROP ROLE rolea, roleb
 query TTT colnames
 SHOW ROLES
 ----
-username  options     member_of
-admin     CREATEROLE  {}
-root      CREATEROLE  {admin}
-testuser  ·           {}
+username  options                  member_of
+admin     CREATEROLE, SETPASSWORD  {}
+root      CREATEROLE, SETPASSWORD  {admin}
+testuser  ·                        {}
 
 statement ok
 CREATE USER testuser2
@@ -449,13 +449,13 @@ roled  testuser false
 query TTT
 SHOW ROLES
 ----
-admin      CREATEROLE  {}
-roleb      NOLOGIN     {}
-roled      NOLOGIN     {}
-rolee      NOLOGIN     {}
-root       CREATEROLE  {admin}
-testuser   ·           {roled}
-testuser2  ·           {}
+admin      CREATEROLE, SETPASSWORD  {}
+roleb      NOLOGIN                  {}
+roled      NOLOGIN                  {}
+rolee      NOLOGIN                  {}
+root       CREATEROLE, SETPASSWORD  {admin}
+testuser   ·                        {roled}
+testuser2  ·                        {}
 
 statement ok
 DROP ROLE roleb
@@ -1016,8 +1016,10 @@ CREATE ROLE rolewithlogin LOGIN
 query TTT
 SELECT * FROM system.role_options
 ----
-admin  CREATEROLE  NULL
-root   CREATEROLE  NULL
+admin  CREATEROLE   NULL
+admin  SETPASSWORD  NULL
+root   CREATEROLE   NULL
+root   SETPASSWORD  NULL
 
 statement ok
 CREATE ROLE rolewithnologin NOLOGIN
@@ -1025,9 +1027,11 @@ CREATE ROLE rolewithnologin NOLOGIN
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATEROLE  NULL
-rolewithnologin  NOLOGIN     NULL
-root             CREATEROLE  NULL
+admin            CREATEROLE   NULL
+admin            SETPASSWORD  NULL
+rolewithnologin  NOLOGIN      NULL
+root             CREATEROLE   NULL
+root             SETPASSWORD  NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
@@ -1036,9 +1040,11 @@ query TTT
 SELECT * FROM system.role_options
 ----
 admin            CREATEROLE   NULL
+admin            SETPASSWORD  NULL
 rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
 rolewithnologin  NOLOGIN      NULL
 root             CREATEROLE   NULL
+root             SETPASSWORD  NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL NULL
@@ -1047,9 +1053,11 @@ query TTT
 SELECT * FROM system.role_options
 ----
 admin            CREATEROLE   NULL
+admin            SETPASSWORD  NULL
 rolewithlogin    VALID UNTIL  NULL
 rolewithnologin  NOLOGIN      NULL
 root             CREATEROLE   NULL
+root             SETPASSWORD  NULL
 
 statement ok
 DROP ROLE rolewithlogin
@@ -1057,9 +1065,11 @@ DROP ROLE rolewithlogin
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATEROLE  NULL
-rolewithnologin  NOLOGIN     NULL
-root             CREATEROLE  NULL
+admin            CREATEROLE   NULL
+admin            SETPASSWORD  NULL
+rolewithnologin  NOLOGIN      NULL
+root             CREATEROLE   NULL
+root             SETPASSWORD  NULL
 
 statement error pq: conflicting role options
 CREATE ROLE thisshouldntwork LOGIN NOLOGIN
@@ -1200,3 +1210,103 @@ INSERT INTO publicdb.publictable VALUES (1)
 query TTT
 SHOW TABLES FROM publicdb
 ----
+
+subtest setpassword_privilege
+
+user root
+
+statement ok
+CREATE ROLE pseudo_admin;
+  ALTER ROLE pseudo_admin CREATEROLE;
+  DROP USER testuser2;
+  DROP USER testuser3;
+  GRANT pseudo_admin TO testuser
+
+user testuser
+
+# By default, a new role does not have privilege SETPASSWORD.
+
+statement ok
+CREATE USER testuser2
+
+statement error user testuser does not have SETPASSWORD privilege
+CREATE USER testuser3 WITH PASSWORD 'abc'
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER USER testuser2 VALID UNTIL '2021-01-01'
+
+statement ok
+CREATE ROLE otherrole
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER ROLE otherrole SETPASSWORD
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER ROLE otherrole NOSETPASSWORD
+
+statement error user testuser does not have SETPASSWORD privilege
+CREATE ROLE otherrole2 SETPASSWORD
+
+statement error user testuser does not have SETPASSWORD privilege
+CREATE ROLE otherrole2 NOSETPASSWORD
+
+user root
+
+statement ok
+ALTER ROLE pseudo_admin SETPASSWORD
+
+user testuser
+
+statement ok
+CREATE USER testuser3 WITH PASSWORD 'abc'
+
+statement ok
+ALTER USER testuser3 WITH PASSWORD 'xyz'
+
+statement ok
+ALTER USER testuser3 VALID UNTIL '2021-01-01'
+
+statement ok
+ALTER ROLE otherrole SETPASSWORD
+
+statement ok
+ALTER ROLE otherrole NOSETPASSWORD
+
+statement ok
+CREATE ROLE otherrole2 SETPASSWORD
+
+statement ok
+CREATE ROLE otherrole3 NOSETPASSWORD
+
+# If SETPASSWORD is revoked, the changes are prevented again.
+
+user root
+
+statement ok
+ALTER ROLE pseudo_admin NOSETPASSWORD
+
+user testuser
+
+statement error user testuser does not have SETPASSWORD privilege
+CREATE USER testuser4 WITH PASSWORD 'abc'
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER USER testuser2 VALID UNTIL '2021-01-01'
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER ROLE otherrole SETPASSWORD
+
+statement error user testuser does not have SETPASSWORD privilege
+ALTER ROLE otherrole NOSETPASSWORD
+
+statement error user testuser does not have SETPASSWORD privilege
+CREATE ROLE otherrole4 SETPASSWORD
+
+statement error user testuser does not have SETPASSWORD privilege
+CREATE ROLE otherrole4 NOSETPASSWORD

@@ -67,6 +67,7 @@ const (
 	VersionAlterColumnTypeGeneral
 	VersionAlterSystemJobsAddCreatedByColumns
 	VersionAddScheduledJobsTable
+	VersionSetPasswordPrivilege
 
 	// Add new versions here (step one of two).
 )
@@ -510,6 +511,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionAddScheduledJobsTable is a version which adds system.scheduled_jobs table.
 		Key:     VersionAddScheduledJobsTable,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 7},
+	},
+	{
+		// VersionSetPasswordPrivilege is when SETPASSWORD/NOSETPASSWORD are introduced.
+		//
+		// It represents adding password management via SETPASSWORD role option.
+		Key:     VersionSetPasswordPrivilege,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 8},
 	},
 
 	// Add new versions here (step two of two).

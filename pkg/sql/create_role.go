@@ -66,6 +66,9 @@ func (p *planner) CreateRoleNode(
 		return p.TypeAsStringOrNull(ctx, e, op)
 	}
 	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
+	if err != nil {
+		return nil, err
+	}
 
 	// Using CREATE ROLE syntax enables NOLOGIN by default.
 	if isRole && !roleOptions.Contains(roleoption.LOGIN) &&
@@ -74,11 +77,14 @@ func (p *planner) CreateRoleNode(
 			roleoption.RoleOption{Option: roleoption.NOLOGIN, HasValue: false})
 	}
 
-	if err != nil {
+	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
 	}
 
-	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
+	// Check that the requested combination of
+	// PASSWORD/SETPASSWORD/NOSETPASSWORD is compatible with the user's
+	// own SETPASSWORD privilege.
+	if err := p.checkPasswordOptionConstraints(ctx, roleOptions); err != nil {
 		return nil, err
 	}
 
@@ -112,6 +118,10 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 
 	var hashedPassword []byte
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
+		if err := params.p.HasRoleOption(params.ctx, roleoption.SETPASSWORD); err != nil {
+			return err
+		}
+
 		hashedPassword, err = n.roleOptions.GetHashedPassword()
 		if err != nil {
 			return err

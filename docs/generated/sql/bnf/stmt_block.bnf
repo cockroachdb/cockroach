@@ -760,6 +760,7 @@ unreserved_keyword ::=
 	| 'NO_INDEX_JOIN'
 	| 'NOCREATEROLE'
 	| 'NOLOGIN'
+	| 'NOSETPASSWORD'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -813,6 +814,7 @@ unreserved_keyword ::=
 	| 'ROLLUP'
 	| 'ROWS'
 	| 'RULE'
+	| 'SETPASSWORD'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -1805,6 +1807,8 @@ role_option ::=
 	| 'NOCREATEROLE'
 	| 'LOGIN'
 	| 'NOLOGIN'
+	| 'SETPASSWORD'
+	| 'NOSETPASSWORD'
 	| password_clause
 	| valid_until_clause
 

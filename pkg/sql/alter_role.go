@@ -65,6 +65,13 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
+	// Check that the requested combination of
+	// PASSWORD/SETPASSWORD/NOSETPASSWORD is compatible with the user's
+	// own SETPASSWORD privilege.
+	if err := p.checkPasswordOptionConstraints(ctx, roleOptions); err != nil {
+		return nil, err
+	}
+
 	ua, err := p.getUserAuthInfo(ctx, nameE, opName)
 	if err != nil {
 		return nil, err
@@ -76,6 +83,33 @@ func (p *planner) AlterRoleNode(
 		isRole:       isRole,
 		roleOptions:  roleOptions,
 	}, nil
+}
+
+func (p *planner) checkPasswordOptionConstraints(
+	ctx context.Context, roleOptions roleoption.List,
+) error {
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.VersionSetPasswordPrivilege) {
+		// TODO(knz): Remove this condition in 21.1.
+		if roleOptions.Contains(roleoption.SETPASSWORD) || roleOptions.Contains(roleoption.NOSETPASSWORD) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`granting SETPASSWORD or NOSETPASSWORD requires all nodes to be upgraded to %s`,
+				clusterversion.VersionByKey(clusterversion.VersionSetPasswordPrivilege))
+		}
+	} else {
+		if roleOptions.Contains(roleoption.SETPASSWORD) ||
+			roleOptions.Contains(roleoption.NOSETPASSWORD) ||
+			roleOptions.Contains(roleoption.PASSWORD) ||
+			roleOptions.Contains(roleoption.VALIDUNTIL) {
+			// Only a role who has SETPASSWORD itself can grant SETPASSWORD
+			// or NOSETPASSWORD to another role, or set up a password for
+			// authentication, or set up password validity, even if they
+			// have CREATEROLE privilege.
+			if err := p.HasRoleOption(ctx, roleoption.SETPASSWORD); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (n *alterRoleNode) startExec(params runParams) error {
