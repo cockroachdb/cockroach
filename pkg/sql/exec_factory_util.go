@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -234,4 +235,62 @@ func convertOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
 		ints[i] = int(ordinals[i])
 	}
 	return ints
+}
+
+func constructSimpleProjectForPlanNode(
+	n planNode, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	// If the top node is already a renderNode, just rearrange the columns. But
+	// we don't want to duplicate a rendering expression (in case it is expensive
+	// to compute or has side-effects); so if we have duplicates we avoid this
+	// optimization (and add a new renderNode).
+	if r, ok := n.(*renderNode); ok && !hasDuplicates(cols) {
+		oldCols, oldRenders := r.columns, r.render
+		r.columns = make(sqlbase.ResultColumns, len(cols))
+		r.render = make([]tree.TypedExpr, len(cols))
+		for i, ord := range cols {
+			r.columns[i] = oldCols[ord]
+			if colNames != nil {
+				r.columns[i].Name = colNames[i]
+			}
+			r.render[i] = oldRenders[ord]
+		}
+		r.reqOrdering = ReqOrdering(reqOrdering)
+		return r, nil
+	}
+	var inputCols sqlbase.ResultColumns
+	if colNames == nil {
+		// We will need the names of the input columns.
+		inputCols = planColumns(n.(planNode))
+	}
+
+	var rb renderBuilder
+	rb.init(n, reqOrdering)
+
+	exprs := make(tree.TypedExprs, len(cols))
+	for i, col := range cols {
+		exprs[i] = rb.r.ivarHelper.IndexedVar(int(col))
+	}
+	var resultTypes []*types.T
+	if colNames != nil {
+		// We will need updated result types.
+		resultTypes = make([]*types.T, len(cols))
+		for i := range exprs {
+			resultTypes[i] = exprs[i].ResolvedType()
+		}
+	}
+	resultCols := getResultColumnsForSimpleProject(cols, colNames, resultTypes, inputCols)
+	rb.setOutput(exprs, resultCols)
+	return rb.res, nil
+}
+
+func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
+	var set util.FastIntSet
+	for _, c := range cols {
+		if set.Contains(int(c)) {
+			return true
+		}
+		set.Add(int(c))
+	}
+	return false
 }
