@@ -40,8 +40,8 @@ func (p *planner) schemaExists(
 	if schema == tree.PublicSchema {
 		return true, nil
 	}
-	for _, vs := range virtualSchemas {
-		if schema == vs.name {
+	for _, s := range virtualSchemas {
+		if s.name == schema {
 			return true, nil
 		}
 	}

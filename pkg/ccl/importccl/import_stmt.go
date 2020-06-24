@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -294,7 +295,7 @@ func importPlanHook(
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"database does not exist: %q", table)
 			}
-			dbDesc := dbDescI.(*sqlbase.ImmutableDatabaseDescriptor)
+			dbDesc := dbDescI.(*catalog.ResolvedObjectPrefix).Database
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {

@@ -476,12 +476,6 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 		panic(err)
 	}
 
-	// Only allow creation of objects in the public schema.
-	if resName.Schema() != tree.PublicSchema {
-		panic(pgerror.Newf(pgcode.InvalidName,
-			"schema cannot be modified: %q", tree.ErrString(&resName)))
-	}
-
 	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
 		panic(err)
 	}

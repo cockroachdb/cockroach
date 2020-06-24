@@ -28,8 +28,9 @@ type Accessor interface {
 	// an error is returned; otherwise a nil reference is returned.
 	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (sqlbase.DatabaseDescriptorInterface, error)
 
-	// IsValidSchema returns true and the SchemaID if the given schema name is valid for the given database.
-	IsValidSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string) (bool, sqlbase.ID, error)
+	// GetSchema returns true and a ResolvedSchema object if the target schema
+	// exists under the target database.
+	GetSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID sqlbase.ID, scName string) (bool, sqlbase.ResolvedSchema, error)
 
 	// GetObjectNames returns the list of all objects in the given
 	// database and schema.
