@@ -1,0 +1,17 @@
+statement ok
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1ms'
+
+statement error pq: cannot set sql.log.slow_query.latency_threshold to a negative duration
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1ms'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1'
+
+statement error pq: could not parse "true" as type interval: interval
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = 'true'
+
+statement error pq: invalid cluster setting argument type
+SET CLUSTER SETTING sql.log.slow_query.latency_threshold = true
