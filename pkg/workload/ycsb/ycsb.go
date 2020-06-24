@@ -616,9 +616,10 @@ func (yw *ycsbWorker) randString(length int) string {
 		loc, _ := time.LoadLocation(timeZoneDefault)
 		currentTime := time.Now().In(loc)
 		copy(str, currentTime.Format(timeFormatTemplate))
+		strStart = timeFormatLen
 	}
 	// the rest of data is random str
-	for i := timeFormatLen; i < length; i++ {
+	for i := strStart; i < length; i++ {
 		str[i] = letters[yw.rng.Intn(len(letters))]
 	}
 	return string(str)
