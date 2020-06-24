@@ -930,7 +930,7 @@ project
  │         └── bool-or [as=bool_or:10, outer=(9)]
  │              └── notnull:9
  └── projections
-      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 
 # Left join caused by zero or one cardinality subquery.
 norm expect=TryDecorrelateProjectSelect
@@ -1013,7 +1013,7 @@ project
  │         └── bool-or [as=bool_or:10, outer=(9)]
  │              └── notnull:9
  └── projections
-      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 
 # Any clause with variable.
 norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
@@ -1054,7 +1054,7 @@ project
  │         └── const-agg [as=i:2, outer=(2)]
  │              └── i:2
  └── projections
-      └── CASE WHEN bool_or:10 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(2,10)]
+      └── CASE WHEN bool_or:10 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(2,10)]
 
 # Any clause with more complex expression that must be cached.
 norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
@@ -1105,7 +1105,7 @@ project
  │         └── const-agg [as=scalar:9, outer=(9)]
  │              └── scalar:9
  └── projections
-      └── CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11), immutable]
+      └── CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(9,11), immutable]
 
 # --------------------------------------------------
 # TryDecorrelateProject
@@ -2290,7 +2290,7 @@ project
  │         └── any-not-null-agg [as=y:7, outer=(7)]
  │              └── y:7
  └── projections
-      └── CASE WHEN y:7 IS NOT NULL THEN array_agg:10 END [as=array_agg:9, outer=(7,10)]
+      └── CASE WHEN y:7 IS NOT NULL THEN array_agg:10 ELSE CAST(NULL AS INT8[]) END [as=array_agg:9, outer=(7,10)]
 
 # With multiple columns. Without LATERAL these tests are a bit verbose.
 norm expect=TryDecorrelateScalarGroupBy
@@ -2323,7 +2323,7 @@ project
  │         └── any-not-null-agg [as=y:7, outer=(7)]
  │              └── y:7
  └── projections
-      └── (CASE WHEN y:7 IS NOT NULL THEN array_agg:12 END, max:9) [as="?column?":11, outer=(7,9,12)]
+      └── (CASE WHEN y:7 IS NOT NULL THEN array_agg:12 ELSE CAST(NULL AS INT8[]) END, max:9) [as="?column?":11, outer=(7,9,12)]
 
 
 # With an aggregate that can't ignore nulls and when a non-nullable column must be synthesized.
@@ -2362,7 +2362,7 @@ project
  │         └── any-not-null-agg [as=canary:10, outer=(10)]
  │              └── canary:10
  └── projections
-      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
+      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:9, outer=(10,11)]
 
 # With an ordering.
 norm expect=TryDecorrelateScalarGroupBy
@@ -2405,7 +2405,7 @@ project
  │         └── any-not-null-agg [as=canary:10, outer=(10)]
  │              └── canary:10
  └── projections
-      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
+      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:9, outer=(10,11)]
 
 # Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
 # use of left joins.
@@ -2537,7 +2537,7 @@ project
       │    │         └── any-not-null-agg [as=x:3, outer=(3)]
       │    │              └── x:3
       │    └── projections
-      │         └── CASE WHEN x:3 IS NOT NULL THEN array_agg:6 END [as=array_agg:5, outer=(3,6)]
+      │         └── CASE WHEN x:3 IS NOT NULL THEN array_agg:6 ELSE CAST(NULL AS INT8[]) END [as=array_agg:5, outer=(3,6)]
       └── filters
            └── array_agg:5 = ARRAY[] [outer=(5), constraints=(/5: [/ARRAY[] - /ARRAY[]]; tight), fd=()-->(5)]
 
@@ -2603,7 +2603,7 @@ project
       │    │         └── any-not-null-agg [as=canary:10, outer=(10)]
       │    │              └── canary:10
       │    └── projections
-      │         └── CASE WHEN canary:10 IS NOT NULL THEN concat_agg:11 END [as=concat_agg:9, outer=(10,11)]
+      │         └── CASE WHEN canary:10 IS NOT NULL THEN concat_agg:11 ELSE CAST(NULL AS STRING) END [as=concat_agg:9, outer=(10,11)]
       └── filters
            └── concat_agg:9 = 'foo' [outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
 
@@ -4075,7 +4075,7 @@ project
       │    │         └── const-agg [as=j:5, outer=(5)]
       │    │              └── j:5
       │    └── projections
-      │         └── CASE WHEN bool_or:9 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:9 IS NULL THEN false END [as=case:10, outer=(2,9)]
+      │         └── CASE WHEN bool_or:9 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:9 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:10, outer=(2,9)]
       └── filters
            └── case:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
 
@@ -4150,7 +4150,7 @@ project
  │         └── const-agg [as=scalar:9, outer=(9)]
  │              └── scalar:9
  └── projections
-      └── NOT CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11), immutable]
+      └── NOT CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(9,11), immutable]
 
 # Regress issue #32270: Panic when expression contains both correlated and
 # uncorrelated subquery.
@@ -4425,7 +4425,7 @@ project
  │         └── bool-or [as=bool_or:10, outer=(9)]
  │              └── notnull:9
  └── projections
-      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 
 # Correlated subquery nested in uncorrelated subquery.
 norm expect=HoistProjectSubquery
@@ -4633,7 +4633,7 @@ project
       │    │         └── const-agg [as=j:5, outer=(5)]
       │    │              └── j:5
       │    └── projections
-      │         └── CASE WHEN bool_or:11 AND (x:6 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=case:12, outer=(6,11)]
+      │         └── CASE WHEN bool_or:11 AND (x:6 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:12, outer=(6,11)]
       └── filters
            └── case:12 OR (x:6 IS NULL) [outer=(6,12)]
 
@@ -4855,7 +4855,7 @@ project
  │    │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
  │    │    │    │              └── notnull:9
  │    │    │    └── projections
- │    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+ │    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
  │    │    ├── values
  │    │    │    ├── columns: column1:8
  │    │    │    ├── outer: (11)

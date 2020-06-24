@@ -880,6 +880,32 @@ values
  ├── fd: ()-->(1)
  └── ('two',)
 
+# Verify that the type of the Case stays integer when we remove the first
+# branch; to ensure this, all branches must have strongly typed values so the
+# type of the Case cannot change when we remove branches. Regression test for
+# #47299.
+norm expect=SimplifyCaseWhenConstValue format=show-all
+SELECT CASE WHEN NULL THEN 0 WHEN random() > 0.5 THEN NULL END
+----
+values
+ ├── columns: case:1(int)
+ ├── cardinality: [1 - 1]
+ ├── volatile, side-effects
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ └── tuple [type=tuple{int}]
+      └── case [type=int]
+           ├── true [type=bool]
+           ├── when [type=int]
+           │    ├── gt [type=bool]
+           │    │    ├── function: random [type=float]
+           │    │    └── const: 0.5 [type=float]
+           │    └── null [type=int]
+           └── null [type=int]
+
 # --------------------------------------------------
 # UnifyComparisonTypes
 # --------------------------------------------------
@@ -1439,7 +1465,7 @@ project
  │         └── any-not-null-agg [as=a.k:7, outer=(7)]
  │              └── a.k:7
  └── projections
-      └── COALESCE(CASE WHEN a.k:7 IS NOT NULL THEN array_agg:15 END, ARRAY[]) [as=array:14, outer=(7,15)]
+      └── COALESCE(CASE WHEN a.k:7 IS NOT NULL THEN array_agg:15 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:14, outer=(7,15)]
 
 # Ensure ordering is maintained.
 norm expect=NormalizeArrayFlattenToAgg
@@ -1479,7 +1505,7 @@ project
  │         └── any-not-null-agg [as=a.k:7, outer=(7)]
  │              └── a.k:7
  └── projections
-      └── COALESCE(CASE WHEN a.k:7 IS NOT NULL THEN array_agg:15 END, ARRAY[]) [as=array:14, outer=(7,15)]
+      └── COALESCE(CASE WHEN a.k:7 IS NOT NULL THEN array_agg:15 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:14, outer=(7,15)]
 
 norm expect=NormalizeArrayFlattenToAgg
 SELECT ARRAY(SELECT generate_series(1, a.k) ORDER BY 1 DESC) FROM a
@@ -1528,7 +1554,7 @@ project
  │         └── any-not-null-agg [as=canary:10, outer=(10)]
  │              └── canary:10
  └── projections
-      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
+      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:9, outer=(10,11)]
 
 # Uncorrelated ArrayFlatten inside a correlated ArrayFlatten.
 norm expect=NormalizeArrayFlattenToAgg
@@ -1572,7 +1598,7 @@ project
  │         └── any-not-null-agg [as=canary:22, outer=(22)]
  │              └── canary:22
  └── projections
-      └── COALESCE(CASE WHEN canary:22 IS NOT NULL THEN array_agg:23 END, ARRAY[]) [as=array:21, outer=(22,23)]
+      └── COALESCE(CASE WHEN canary:22 IS NOT NULL THEN array_agg:23 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:21, outer=(22,23)]
 
 # Correlated ArrayFlatten inside another correlated ArrayFlatten.
 norm expect=NormalizeArrayFlattenToAgg
@@ -1634,7 +1660,7 @@ project
  │    │    │    │              └── a.k:13
  │    │    │    └── projections
  │    │    │         ├── true [as=canary:24]
- │    │    │         └── COALESCE(CASE WHEN a.k:13 IS NOT NULL THEN array_agg:21 END, ARRAY[])[1] [as=array:20, outer=(13,21)]
+ │    │    │         └── COALESCE(CASE WHEN a.k:13 IS NOT NULL THEN array_agg:21 ELSE CAST(NULL AS INT8[]) END, ARRAY[])[1] [as=array:20, outer=(13,21)]
  │    │    └── filters (true)
  │    └── aggregations
  │         ├── array-agg [as=array_agg:25, outer=(20)]
@@ -1642,7 +1668,7 @@ project
  │         └── any-not-null-agg [as=canary:24, outer=(24)]
  │              └── canary:24
  └── projections
-      └── COALESCE(CASE WHEN canary:24 IS NOT NULL THEN array_agg:25 END, ARRAY[]) [as=array:23, outer=(24,25)]
+      └── COALESCE(CASE WHEN canary:24 IS NOT NULL THEN array_agg:25 ELSE CAST(NULL AS INT8[]) END, ARRAY[]) [as=array:23, outer=(24,25)]
 
 # Shouldn't trigger if there's no correlation.
 norm expect-not=NormalizeArrayFlattenToAgg
@@ -1770,7 +1796,7 @@ project
  │    │    │    │         └── any-not-null-agg [as=inhrelid:30, outer=(30)]
  │    │    │    │              └── inhrelid:30
  │    │    │    └── projections
- │    │    │         └── CASE WHEN inhrelid:30 IS NOT NULL THEN array_agg:65 END [as=array_agg:63, outer=(30,65)]
+ │    │    │         └── CASE WHEN inhrelid:30 IS NOT NULL THEN array_agg:65 ELSE CAST(NULL AS NAME[]) END [as=array_agg:63, outer=(30,65)]
  │    │    ├── values
  │    │    │    ├── columns: array:64
  │    │    │    ├── outer: (63)

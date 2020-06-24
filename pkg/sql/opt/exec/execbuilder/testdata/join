@@ -334,8 +334,8 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 1   ·                          order               +nspname,+relname,+conname,+generate_series
 2   render                     ·                   ·
 2   ·                          render 0            CAST(NULL AS STRING)
-2   ·                          render 1            CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 END
-2   ·                          render 2            CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 END
+2   ·                          render 1            CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+2   ·                          render 2            CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
 2   ·                          render 3            CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
 2   ·                          render 4            nspname
 2   ·                          render 5            relname

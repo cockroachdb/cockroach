@@ -281,4 +281,4 @@ project
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── projections
       ├── NULL [as="?column?":5, type=unknown]
-      └── CASE x:1 WHEN y:2 THEN NULL ELSE x:1 END [as=nullif:6, type=int, outer=(1,2)]
+      └── CASE x:1 WHEN y:2 THEN CAST(NULL AS INT8) ELSE x:1 END [as=nullif:6, type=int, outer=(1,2)]

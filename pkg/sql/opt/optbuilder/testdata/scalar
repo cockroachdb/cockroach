@@ -232,9 +232,10 @@ if(false, NULL, 1)
 ----
 case [type=int]
  ├── false [type=bool]
- ├── when [type=unknown]
+ ├── when [type=int]
  │    ├── true [type=bool]
- │    └── null [type=unknown]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
  └── const: 1 [type=int]
 
 build-scalar
@@ -242,9 +243,10 @@ if(true, NULL, 1)
 ----
 case [type=int]
  ├── true [type=bool]
- ├── when [type=unknown]
+ ├── when [type=int]
  │    ├── true [type=bool]
- │    └── null [type=unknown]
+ │    └── cast: INT8 [type=int]
+ │         └── null [type=unknown]
  └── const: 1 [type=int]
 
 build-scalar
@@ -255,16 +257,17 @@ case [type=int]
  ├── when [type=int]
  │    ├── true [type=bool]
  │    └── const: 1 [type=int]
- └── null [type=unknown]
+ └── cast: INT8 [type=int]
+      └── null [type=unknown]
 
 build-scalar
 nullif(1, 2)
 ----
 case [type=int]
  ├── const: 1 [type=int]
- ├── when [type=unknown]
+ ├── when [type=int]
  │    ├── const: 2 [type=int]
- │    └── null [type=unknown]
+ │    └── null [type=int]
  └── const: 1 [type=int]
 
 build-scalar
@@ -273,9 +276,9 @@ nullif(NULL, 0)
 case [type=int]
  ├── cast: INT8 [type=int]
  │    └── null [type=unknown]
- ├── when [type=unknown]
+ ├── when [type=int]
  │    ├── const: 0 [type=int]
- │    └── null [type=unknown]
+ │    └── null [type=int]
  └── cast: INT8 [type=int]
       └── null [type=unknown]
 
@@ -284,9 +287,9 @@ nullif(0, NULL)
 ----
 case [type=int]
  ├── const: 0 [type=int]
- ├── when [type=unknown]
+ ├── when [type=int]
  │    ├── null [type=unknown]
- │    └── null [type=unknown]
+ │    └── null [type=int]
  └── const: 0 [type=int]
 
 build-scalar vars=(string)
@@ -475,7 +478,7 @@ case [type=int]
  │    │    ├── variable: "@1":1 [type=int]
  │    │    └── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── null [type=unknown]
+ └── null [type=int]
 
 build-scalar vars=(int)
 CASE @1 WHEN 5 THEN 1 END
@@ -485,7 +488,7 @@ case [type=int]
  ├── when [type=int]
  │    ├── const: 5 [type=int]
  │    └── const: 1 [type=int]
- └── null [type=unknown]
+ └── null [type=int]
 
 build-scalar vars=(int)
 @1 BETWEEN 1 AND 4
