@@ -76,7 +76,6 @@ func getJoinResultColumns(
 	// they must be available internally for the ON condition evaluation).
 	omitRightColumns := joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin
 
-	// Prepare the metadata for the result columns.
 	// The structure of the join data source results is like this:
 	// - all the left columns,
 	// - then all the right columns (except for anti/semi join).

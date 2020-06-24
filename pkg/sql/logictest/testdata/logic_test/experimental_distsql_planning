@@ -60,3 +60,15 @@ SELECT * FROM kv WHERE k > v
 ----
 2 1
 3 2
+
+statement ok
+INSERT INTO kv VALUES (4, NULL), (5, 3)
+
+query I
+SELECT v FROM kv ORDER BY k
+----
+1
+1
+2
+NULL
+3

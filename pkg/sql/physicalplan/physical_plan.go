@@ -959,7 +959,9 @@ func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]*execinfrapb.FlowS
 // The result routers for each side are returned (they point at processors in
 // the merged plan).
 func MergePlans(
-	mergedPlan *PhysicalPlan, left, right *PhysicalPlan,
+	mergedPlan *PhysicalPlan,
+	left, right *PhysicalPlan,
+	leftPlanDistribution, rightPlanDistribution PlanDistribution,
 ) (leftRouters []ProcessorIdx, rightRouters []ProcessorIdx) {
 	mergedPlan.Processors = append(left.Processors, right.Processors...)
 	rightProcStart := ProcessorIdx(len(left.Processors))
@@ -1003,6 +1005,7 @@ func MergePlans(
 		mergedPlan.MaxEstimatedRowCount = left.MaxEstimatedRowCount
 	}
 
+	mergedPlan.Distribution = leftPlanDistribution.compose(rightPlanDistribution)
 	return leftRouters, rightRouters
 }
 
@@ -1277,10 +1280,20 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
 	}
 }
 
+// GetLastStageDistribution returns the distribution *only* of the last stage.
+// Note that if the last stage consists of a single processor planned on a
+// remote node, such stage is considered distributed.
+func (p *PhysicalPlan) GetLastStageDistribution() PlanDistribution {
+	if len(p.ResultRouters) == 1 && p.Processors[p.ResultRouters[0]].Node == p.GatewayNodeID {
+		return LocalPlan
+	}
+	return FullyDistributedPlan
+}
+
 // IsLastStageDistributed returns whether the last stage of processors is
 // distributed (meaning that it contains at least one remote processor).
 func (p *PhysicalPlan) IsLastStageDistributed() bool {
-	return len(p.ResultRouters) > 1 || p.Processors[p.ResultRouters[0]].Node != p.GatewayNodeID
+	return p.GetLastStageDistribution() != LocalPlan
 }
 
 // PlanDistribution describes the distribution of the physical plan.

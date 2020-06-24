@@ -177,3 +177,35 @@ func getResultColumnsForSimpleProject(
 	}
 	return resultCols
 }
+
+func getEqualityIndicesAndMergeJoinOrdering(
+	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+) (
+	leftEqualityIndices, rightEqualityIndices []exec.NodeColumnOrdinal,
+	mergeJoinOrdering sqlbase.ColumnOrdering,
+	err error,
+) {
+	n := len(leftOrdering)
+	if n == 0 || len(rightOrdering) != n {
+		return nil, nil, nil, errors.Errorf(
+			"orderings from the left and right side must be the same non-zero length",
+		)
+	}
+	leftEqualityIndices = make([]exec.NodeColumnOrdinal, n)
+	rightEqualityIndices = make([]exec.NodeColumnOrdinal, n)
+	for i := 0; i < n; i++ {
+		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
+		leftEqualityIndices[i] = exec.NodeColumnOrdinal(leftColIdx)
+		rightEqualityIndices[i] = exec.NodeColumnOrdinal(rightColIdx)
+	}
+
+	mergeJoinOrdering = make(sqlbase.ColumnOrdering, n)
+	for i := 0; i < n; i++ {
+		// The mergeJoinOrdering "columns" are equality column indices.  Because of
+		// the way we constructed the equality indices, the ordering will always be
+		// 0,1,2,3..
+		mergeJoinOrdering[i].ColIdx = i
+		mergeJoinOrdering[i].Direction = leftOrdering[i].Direction
+	}
+	return leftEqualityIndices, rightEqualityIndices, mergeJoinOrdering, nil
+}

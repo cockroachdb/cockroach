@@ -23,9 +23,64 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
+
+// joinPlanningInfo is a utility struct that contains the information needed to
+// perform the physical planning of hash and merge joins.
+type joinPlanningInfo struct {
+	leftPlan, rightPlan *PhysicalPlan
+	joinType            sqlbase.JoinType
+	joinResultTypes     []*types.T
+	onExpr              execinfrapb.Expression
+	post                execinfrapb.PostProcessSpec
+	joinToStreamColMap  []int
+	// leftEqCols and rightEqCols are the indices of equality columns. These
+	// are only used when planning a hash join.
+	leftEqCols, rightEqCols             []uint32
+	leftEqColsAreKey, rightEqColsAreKey bool
+	// leftMergeOrd and rightMergeOrd are the orderings on both inputs to a
+	// merge join. They must be of the same length, and if the length is 0,
+	// then a hash join is planned.
+	leftMergeOrd, rightMergeOrd                 execinfrapb.Ordering
+	leftPlanDistribution, rightPlanDistribution physicalplan.PlanDistribution
+}
+
+// makeCoreSpec creates a processor core for hash and merge joins based on the
+// join planning information. Merge ordering fields of info determine which
+// kind of join is being planned.
+func (info *joinPlanningInfo) makeCoreSpec() execinfrapb.ProcessorCoreUnion {
+	var core execinfrapb.ProcessorCoreUnion
+	if len(info.leftMergeOrd.Columns) != len(info.rightMergeOrd.Columns) {
+		panic(fmt.Sprintf(
+			"unexpectedly different merge join ordering lengths: left %d, right %d",
+			len(info.leftMergeOrd.Columns), len(info.rightMergeOrd.Columns),
+		))
+	}
+	if len(info.leftMergeOrd.Columns) == 0 {
+		// There is no required ordering on the columns, so we plan a hash join.
+		core.HashJoiner = &execinfrapb.HashJoinerSpec{
+			LeftEqColumns:        info.leftEqCols,
+			RightEqColumns:       info.rightEqCols,
+			OnExpr:               info.onExpr,
+			Type:                 info.joinType,
+			LeftEqColumnsAreKey:  info.leftEqColsAreKey,
+			RightEqColumnsAreKey: info.rightEqColsAreKey,
+		}
+	} else {
+		core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
+			LeftOrdering:         info.leftMergeOrd,
+			RightOrdering:        info.rightMergeOrd,
+			OnExpr:               info.onExpr,
+			Type:                 info.joinType,
+			LeftEqColumnsAreKey:  info.leftEqColsAreKey,
+			RightEqColumnsAreKey: info.rightEqColsAreKey,
+		}
+	}
+	return core
+}
 
 var planInterleavedJoins = settings.RegisterBoolSetting(
 	"sql.distsql.interleaved_joins.enabled",
