@@ -184,7 +184,7 @@ func registerDjango(r *testRegistry) {
 		//  too large.
 		var fullTestResults []byte
 		for _, testName := range enabledDjangoTests {
-			t.Status("Running django test app", testName)
+			t.Status("Running django test app ", testName)
 			// Running the test suite is expected to error out, so swallow the error.
 			rawResults, _ := c.RunWithBuffer(
 				ctx, t.l, node, fmt.Sprintf(djangoRunTestCmd, testName))
@@ -222,18 +222,26 @@ func registerDjango(r *testRegistry) {
 // Test results are only in stderr, so stdout is redirected and printed later.
 const djangoRunTestCmd = `
 cd /mnt/data1/django/tests &&
-python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
+RUNNING_COCKROACH_BACKEND_TESTS=1 python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
 `
 
 const cockroachDjangoSettings = `
 DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
-        'NAME' : 'django_tests',
-        'USER' : 'root',
-        'PASSWORD' : '',
+        'NAME': 'django_tests',
+        'USER': 'root',
+        'PASSWORD': '',
         'HOST': 'localhost',
-        'PORT' : 26257,
+        'PORT': 26257,
+    },
+    'other': {
+        'ENGINE': 'django_cockroachdb',
+        'NAME': 'django_tests2',
+        'USER': 'root',
+        'PASSWORD': '',
+        'HOST': 'localhost',
+        'PORT': 26257,
     },
 }
 SECRET_KEY = 'django_tests_secret_key'
