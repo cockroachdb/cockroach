@@ -304,6 +304,7 @@ func createServerPair(
 
 	// Load the CA pair.
 	var caCertPath, certPath, keyPath, nodeUser string
+	var usage []x509.ExtKeyUsage
 	switch typ {
 	case NodePem:
 		caCertPath = cm.CACertPath()
@@ -312,14 +313,18 @@ func createServerPair(
 		// Allow control of the principal to place in the cert via an env var. This
 		// is intended for testing purposes only.
 		nodeUser = envutil.EnvOrDefaultString("COCKROACH_CERT_NODE_USER", NodeUser)
+		// Both server and client authentication are allowed (for inter-node RPC).
+		usage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
 	case TenantServerPem:
 		caCertPath = cm.TenantServerCACertPath()
 		certPath = cm.TenantServerCertPath()
 		keyPath = cm.TenantServerKeyPath()
 		// NB: nodeUser is unused since these will never be used as client certs.
+		usage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	default:
 		return errors.Newf("invalid type %v", typ)
 	}
+
 	caCert, caPrivateKey, err := loadCACertAndKey(caCertPath, caKeyPath)
 	if err != nil {
 		return err
@@ -332,7 +337,7 @@ func createServerPair(
 	}
 
 	serverCert, err := GenerateServerCert(caCert, caPrivateKey,
-		serverKey.Public(), lifetime, nodeUser, hosts)
+		serverKey.Public(), lifetime, nodeUser, hosts, usage...)
 	if err != nil {
 		return errors.Errorf("error creating node server certificate and key: %s", err)
 	}
