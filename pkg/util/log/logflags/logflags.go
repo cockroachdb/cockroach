@@ -65,8 +65,10 @@ const (
 	LogDirName                    = "log-dir"
 	ShowLogsName                  = "show-logs"
 	LogFileMaxSizeName            = "log-file-max-size"
-	LogFilesCombinedMaxSizeName   = "log-dir-max-size"
+	LogFilesCombinedMaxSizeName   = "log-group-max-size"
 	LogFileVerbosityThresholdName = "log-file-verbosity"
+
+	DeprecatedLogFilesCombinedMaxSizeName = "log-dir-max-size"
 )
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
@@ -85,5 +87,7 @@ func InitFlags(
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
 	flag.Var(humanizeutil.NewBytesValue(logFileMaxSize), LogFileMaxSizeName, "maximum size of each log file")
-	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), LogFilesCombinedMaxSizeName, "maximum combined size of all log files")
+	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), LogFilesCombinedMaxSizeName, "maximum combined size of all log files in a logging group")
+	// The deprecated  name for this last flag.
+	flag.Var(humanizeutil.NewBytesValue(logFilesCombinedMaxSize), "log-dir-max-size", "maximum combined size of all log files in a logging group (deprecated)")
 }

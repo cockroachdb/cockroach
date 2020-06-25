@@ -290,6 +290,9 @@ func init() {
 			flag.Hidden = true
 		}
 		switch flag.Name {
+		case logflags.DeprecatedLogFilesCombinedMaxSizeName:
+			flag.Deprecated = "use --" + logflags.LogFilesCombinedMaxSizeName + " instead"
+			fallthrough
 		case logflags.ShowLogsName, // test-only flag
 			logflags.RedactableLogsName: // support-only flag
 			flag.Hidden = true
