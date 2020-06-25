@@ -41,7 +41,7 @@ type Resource interface {
 	// that Resource again. This behavior allows clients to pool instances of
 	// Resources by creating Resource during Acquisition and destroying them in
 	// Merge.
-	Merge(other Resource)
+	Merge(other Resource) (shouldNotify bool)
 }
 
 // Request is an interface used to acquire quota from the pool.
@@ -200,7 +200,9 @@ func (qp *QuotaPool) Add(v Resource) {
 
 func (qp *QuotaPool) addLocked(r Resource) {
 	if qp.mu.quota != nil {
-		qp.mu.quota.Merge(r)
+		if shouldNotify := qp.mu.quota.Merge(r); !shouldNotify {
+			return
+		}
 	} else {
 		qp.mu.quota = r
 	}

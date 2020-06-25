@@ -79,7 +79,7 @@ type rateBucket struct {
 
 var _ Resource = (*rateBucket)(nil)
 
-func (i *rateBucket) Merge(other Resource) {
+func (i *rateBucket) Merge(other Resource) bool {
 	o := other.(*rateAlloc)
 	i.cur += float64(o.alloc)
 	o.rl.putRateAlloc(o)
@@ -87,6 +87,7 @@ func (i *rateBucket) Merge(other Resource) {
 	if i.cur > float64(i.p.burst) {
 		i.cur = float64(i.p.burst)
 	}
+	return true
 }
 
 // RateAlloc is an allocated quantity of quota which can be released back into
@@ -113,7 +114,7 @@ type rateAlloc RateAlloc
 
 var _ Resource = (*rateAlloc)(nil)
 
-func (i *rateAlloc) Merge(other Resource) {
+func (i *rateAlloc) Merge(other Resource) bool {
 	panic("merge not implemented on rateAlloc")
 }
 
