@@ -305,9 +305,9 @@ func (dsp *DistSQLPlanner) Run(
 	// the line.
 	localState.EvalContext = &evalCtx.EvalContext
 	localState.Txn = txn
+	localState.LocalProcs = plan.LocalProcessors
 	if planCtx.isLocal {
 		localState.IsLocal = true
-		localState.LocalProcs = plan.LocalProcessors
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
@@ -855,8 +855,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
 		).WillDistribute()
 	}
-	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributeSubquery)
-	subqueryPlanCtx.planner = planner
+	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.collectBundle {
 		subqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
@@ -1149,8 +1148,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 			ctx, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
 		).WillDistribute()
 	}
-	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner.txn, distributePostquery)
-	postqueryPlanCtx.planner = planner
+	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
 	if planner.collectBundle {
