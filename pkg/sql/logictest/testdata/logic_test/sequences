@@ -1071,3 +1071,16 @@ DROP TABLE b;
 
 statement ok
 DROP TABLE a;
+subtest regression_50649
+
+statement ok
+CREATE TABLE t_50649(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50649 OWNED BY t_50649.a
+
+statement ok
+DROP SEQUENCE seq_50649
+
+statement ok
+DROP TABLE t_50649
