@@ -202,6 +202,14 @@ func registerBinOpOutputTypes() {
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		binOpOutputTypes[tree.JSONFetchVal][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
 	}
+	
+	binOpOutputTypes[tree.JSONFetchText] = map[typePair]*types.T{
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BytesFamily, anyWidth}: types.Any,
+	}
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		binOpOutputTypes[tree.JSONFetchText][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
+	}
+	
 }
 
 func newBinaryOverloadBase(op tree.BinaryOperator) *overloadBase {
@@ -794,6 +802,8 @@ func convertNativeToDatum(
 		// for types that have the same physical representation.
 		switch op {
 		case tree.JSONFetchVal:
+			runtimeConversion = fmt.Sprintf("tree.DString(%s)", nativeElem)
+		case tree.JSONFetchText:
 			runtimeConversion = fmt.Sprintf("tree.DString(%s)", nativeElem)
 		default:
 			runtimeConversion = fmt.Sprintf("tree.DBytes(%s)", nativeElem)
