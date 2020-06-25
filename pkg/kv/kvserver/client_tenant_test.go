@@ -14,19 +14,27 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
+	"io/ioutil"
 	"regexp"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -126,5 +134,97 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		return nil
 	}
 	testutils.SucceedsSoon(t, check)
+}
 
+// TestTenantRateLimiter ensures that the rate limiter is hooked up properly
+// and report the correct metrics.
+func TestTenantRateLimiter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This test utilizes manual time to make the rate-limiting calculations more
+	// obvious. This timesource is not used inside the actual database.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := quotapool.NewManualTime(t0)
+
+	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TenantRateKnobs: tenantrate.TestingKnobs{
+					TimeSource: timeSource,
+				},
+			},
+		},
+	})
+
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	tenantID := roachpb.MakeTenantID(10)
+	codec := keys.MakeSQLCodec(tenantID)
+
+	tenantPrefix := codec.TenantPrefix()
+	_, _, err := s.SplitRange(tenantPrefix)
+	require.NoError(t, err)
+	tablePrefix := codec.TablePrefix(42)
+	tablePrefix = tablePrefix[:len(tablePrefix):len(tablePrefix)] // appends realloc
+	mkKey := func() roachpb.Key {
+		return encoding.EncodeUUIDValue(tablePrefix, 1, uuid.MakeV4())
+	}
+
+	// Ensure that the qps rate limit does not affect the system tenant even for
+	// the tenant range.
+	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
+	cfg := tenantrate.LimitConfigsFromSettings(s.ClusterSettings())
+	for i := 0; i < int(cfg.Requests.Burst); i++ {
+		require.NoError(t, db.Put(ctx, mkKey(), 0))
+	}
+	// Now ensure that in the same instant the write QPS limit does affect the
+	// tenant. Issuing up to the burst limit of requests can happen without
+	// blocking.
+	for i := 0; i < int(cfg.Requests.Burst); i++ {
+		require.NoError(t, db.Put(tenantCtx, mkKey(), 0))
+	}
+	// Attempt to issue another request, make sure that it gets blocked by
+	// observing a timer.
+	errCh := make(chan error, 1)
+	go func() { errCh <- db.Put(tenantCtx, mkKey(), 0) }()
+	expectedTimer := t0.Add(time.Duration(float64(1/cfg.Requests.Rate) * float64(time.Second)))
+	testutils.SucceedsSoon(t, func() error {
+		timers := timeSource.Timers()
+		if len(timers) != 1 {
+			return errors.Errorf("seeing %d timers: %v", len(timers), timers)
+		}
+		require.EqualValues(t, expectedTimer, timers[0])
+		return nil
+	})
+
+	// Create some tooling to read and verify metrics off of the prometheus
+	// endpoint.
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t,
+		`SET CLUSTER SETTING server.child_metrics.enabled = true`)
+	httpClient, err := s.GetHTTPClient()
+	require.NoError(t, err)
+	getMetrics := func() string {
+		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")
+		require.NoError(t, err)
+		read, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		return string(read)
+	}
+	makeMetricStr := func(expCount int64) string {
+		const tenantMetricStr = `kv_tenant_rate_limit_requests_admitted{store="1",tenant_id="10"}`
+		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
+	}
+
+	// Ensure that the metric for the admitted requests is equal to the number of
+	// requests which we've admitted.
+	require.Contains(t, getMetrics(), makeMetricStr(cfg.Requests.Burst))
+
+	// Allow the blocked request to proceed.
+	timeSource.Advance(time.Second)
+	require.NoError(t, <-errCh)
+
+	// Ensure that it is now reflected in the metrics.
+	require.Contains(t, getMetrics(), makeMetricStr(cfg.Requests.Burst+1))
 }
