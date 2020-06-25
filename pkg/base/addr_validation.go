@@ -11,14 +11,11 @@
 package base
 
 import (
-	"bytes"
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -266,99 +263,4 @@ func LookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 	}
 	// No IPv4 address, return the first resolved address instead.
 	return addrs[0].String(), nil
-}
-
-// CheckCertificateAddrs validates the addresses inside the configured
-// certificates to be compatible with the configured listen and
-// advertise addresses. This is an advisory function (to inform/educate
-// the user) and not a requirement for security.
-// This must also be called after ValidateAddrs() and after
-// the certificate manager was initialized.
-func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
-	if cfg.Insecure {
-		return
-	}
-
-	// By now the certificate manager must be initialized.
-	cm, _ := cfg.GetCertificateManager()
-
-	// Verify that the listen and advertise addresses are compatible
-	// with the provided certificate.
-	certInfo := cm.NodeCert()
-	if certInfo.Error != nil {
-		log.Shoutf(ctx, log.Severity_ERROR,
-			"invalid node certificate: %v", certInfo.Error)
-	} else {
-		cert := certInfo.ParsedCertificates[0]
-		addrInfo := certAddrs(cert)
-
-		// Log the certificate details in any case. This will aid during troubleshooting.
-		log.Infof(ctx, "server certificate addresses: %s", addrInfo)
-
-		var msg bytes.Buffer
-		// Verify the compatibility. This requires that ValidateAddrs() has
-		// been called already.
-		host, _, err := net.SplitHostPort(cfg.AdvertiseAddr)
-		if err != nil {
-			panic("programming error: call ValidateAddrs() first")
-		}
-		if err := cert.VerifyHostname(host); err != nil {
-			fmt.Fprintf(&msg, "advertise address %q not in node certificate (%s)\n", host, addrInfo)
-		}
-		host, _, err = net.SplitHostPort(cfg.SQLAdvertiseAddr)
-		if err != nil {
-			panic("programming error: call ValidateAddrs() first")
-		}
-		if err := cert.VerifyHostname(host); err != nil {
-			fmt.Fprintf(&msg, "advertise SQL address %q not in node certificate (%s)\n", host, addrInfo)
-		}
-		if msg.Len() > 0 {
-			log.Shoutf(ctx, log.Severity_WARNING,
-				"%s"+
-					"Secure client connections are likely to fail.\n"+
-					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr/--sql-addr/--advertise-sql-addr.",
-				msg.String())
-		}
-	}
-
-	// Verify that the http listen and advertise addresses are
-	// compatible with the provided certificate.
-	certInfo = cm.UICert()
-	if certInfo == nil {
-		// A nil UI cert means use the node cert instead;
-		// see details in (*CertificateManager) getEmbeddedUIServerTLSConfig()
-		// and (*CertificateManager) getUICertLocked().
-		certInfo = cm.NodeCert()
-	}
-	if certInfo.Error != nil {
-		log.Shoutf(ctx, log.Severity_ERROR,
-			"invalid UI certificate: %v", certInfo.Error)
-	} else {
-		cert := certInfo.ParsedCertificates[0]
-		addrInfo := certAddrs(cert)
-
-		// Log the certificate details in any case. This will aid during
-		// troubleshooting.
-		log.Infof(ctx, "web UI certificate addresses: %s", addrInfo)
-	}
-}
-
-// certAddrs formats the list of addresses included in a certificate for
-// printing in an error message.
-func certAddrs(cert *x509.Certificate) string {
-	// If an IP address was specified as listen/adv address, the
-	// hostname validation will only use the IPAddresses field. So this
-	// needs to be printed in all cases.
-	addrs := make([]string, len(cert.IPAddresses))
-	for i, ip := range cert.IPAddresses {
-		addrs[i] = ip.String()
-	}
-	// For names, the hostname validation will use DNSNames if
-	// the Subject Alt Name is present in the cert, otherwise
-	// it will use the common name. We can't parse the
-	// extensions here so we print both.
-	return fmt.Sprintf("IP=%s; DNS=%s; CN=%s",
-		strings.Join(addrs, ","),
-		strings.Join(cert.DNSNames, ","),
-		cert.Subject.CommonName)
 }

@@ -270,13 +270,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
-	// Check the compatibility between the configured addresses and that
-	// provided in certificates. This also logs the certificate
-	// addresses in all cases to aid troubleshooting.
-	// This must be called after the certificate manager was initialized
-	// and after ValidateAddrs().
-	cfg.CheckCertificateAddrs(ctx)
-
 	var rpcContext *rpc.Context
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
@@ -308,22 +301,29 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if !cfg.Insecure {
 		// TODO(peter): Call methods on CertificateManager directly. Need to call
 		// base.wrapError or similar on the resulting error.
-		if _, err := cfg.GetServerTLSConfig(); err != nil {
+		if _, err := rpcContext.GetServerTLSConfig(); err != nil {
 			return nil, err
 		}
-		if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+		if _, err := rpcContext.GetUIServerTLSConfig(); err != nil {
 			return nil, err
 		}
-		if _, err := cfg.GetClientTLSConfig(); err != nil {
+		if _, err := rpcContext.GetClientTLSConfig(); err != nil {
 			return nil, err
 		}
-		cm, err := cfg.GetCertificateManager()
+		cm, err := rpcContext.GetCertificateManager()
 		if err != nil {
 			return nil, err
 		}
 		cm.RegisterSignalHandler(stopper)
 		registry.AddMetricStruct(cm.Metrics())
 	}
+
+	// Check the compatibility between the configured addresses and that
+	// provided in certificates. This also logs the certificate
+	// addresses in all cases to aid troubleshooting.
+	// This must be called after the certificate manager was initialized
+	// and after ValidateAddrs().
+	rpcContext.CheckCertificateAddrs(ctx)
 
 	grpcServer := newGRPCServer(rpcContext)
 
@@ -1013,7 +1013,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.rpcContext.SetLocalInternalServer(s.node)
 
 	// Load the TLS configuration for the HTTP server.
-	uiTLSConfig, err := s.cfg.GetUIServerTLSConfig()
+	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
 		return err
 	}

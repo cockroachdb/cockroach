@@ -12,10 +12,7 @@ package base
 
 import (
 	"context"
-	"crypto/tls"
-	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
 )
 
 // Base config defaults.
@@ -145,18 +141,6 @@ var (
 		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 128)
 )
 
-type lazyHTTPClient struct {
-	once       sync.Once
-	httpClient http.Client
-	err        error
-}
-
-type lazyCertificateManager struct {
-	once sync.Once
-	cm   *security.CertificateManager
-	err  error
-}
-
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
@@ -216,12 +200,6 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
-	// The certificate manager. Must be accessed through GetCertificateManager.
-	certificateManager lazyCertificateManager
-
-	// httpClient uses the client TLS config. It is initialized lazily.
-	httpClient lazyHTTPClient
-
 	// RPCHeartbeatInterval controls how often a Ping request is sent on peer
 	// connections to determine connection health and update the local view
 	// of remote clocks.
@@ -250,16 +228,6 @@ func (*Config) HistogramWindowInterval() time.Duration {
 	return DefaultHistogramWindowInterval()
 }
 
-func wrapError(err error) error {
-	if !errors.HasType(err, (*security.Error)(nil)) {
-		return &security.Error{
-			Message: "problem using security settings",
-			Err:     err,
-		}
-	}
-	return err
-}
-
 // InitDefaults sets up the default values for a config.
 // This is also used in tests to reset global objects.
 func (cfg *Config) InitDefaults() {
@@ -274,7 +242,6 @@ func (cfg *Config) InitDefaults() {
 	cfg.SQLAddr = defaultSQLAddr
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
-	cfg.certificateManager = lazyCertificateManager{}
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
@@ -296,206 +263,6 @@ func (cfg *Config) AdminURL() *url.URL {
 		Scheme: cfg.HTTPRequestScheme(),
 		Host:   cfg.HTTPAdvertiseAddr,
 	}
-}
-
-// getClientCertPaths returns the paths to the client cert and key.
-func (cfg *Config) getClientCertPaths(user string) (string, string, error) {
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return "", "", err
-	}
-	return cm.GetClientCertPaths(user)
-}
-
-// getCACertPath returns the path to the CA certificate.
-func (cfg *Config) getCACertPath() (string, error) {
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return "", err
-	}
-	return cm.GetCACertPath()
-}
-
-// LoadSecurityOptions extends a url.Values with SSL settings suitable for
-// the given server config. It returns true if and only if the URL
-// already contained SSL config options.
-func (cfg *Config) LoadSecurityOptions(options url.Values, username string) error {
-	if cfg.Insecure {
-		options.Set("sslmode", "disable")
-		options.Del("sslrootcert")
-		options.Del("sslcert")
-		options.Del("sslkey")
-	} else {
-		sslMode := options.Get("sslmode")
-		if sslMode == "" || sslMode == "disable" {
-			options.Set("sslmode", "verify-full")
-		}
-
-		if sslMode != "require" {
-			// verify-ca and verify-full need a CA certificate.
-			if options.Get("sslrootcert") == "" {
-				// Fetch CA cert. This is required.
-				caCertPath, err := cfg.getCACertPath()
-				if err != nil {
-					return wrapError(err)
-				}
-				options.Set("sslrootcert", caCertPath)
-			}
-		} else {
-			// require does not check the CA.
-			options.Del("sslrootcert")
-		}
-
-		// Fetch certs, but don't fail, we may be using a password.
-		certPath, keyPath, err := cfg.getClientCertPaths(username)
-		if err == nil {
-			if options.Get("sslcert") == "" {
-				options.Set("sslcert", certPath)
-			}
-			if options.Get("sslkey") == "" {
-				options.Set("sslkey", keyPath)
-			}
-		}
-	}
-	return nil
-}
-
-// PGURL constructs a URL for the postgres endpoint, given a server
-// config. There is no default database set.
-func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
-	options := url.Values{}
-	if err := cfg.LoadSecurityOptions(options, user.Username()); err != nil {
-		return nil, err
-	}
-	return &url.URL{
-		Scheme:   "postgresql",
-		User:     user,
-		Host:     cfg.SQLAdvertiseAddr,
-		RawQuery: options.Encode(),
-	}, nil
-}
-
-// GetCertificateManager returns the certificate manager, initializing it
-// on the first call.
-func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error) {
-	cfg.certificateManager.once.Do(func() {
-		cfg.certificateManager.cm, cfg.certificateManager.err =
-			security.NewCertificateManager(cfg.SSLCertsDir)
-		if cfg.certificateManager.err == nil && !cfg.Insecure {
-			infos, err := cfg.certificateManager.cm.ListCertificates()
-			if err != nil {
-				cfg.certificateManager.err = err
-			} else if len(infos) == 0 {
-				// If we know there should be certificates (we're in secure mode)
-				// but there aren't any, this likely indicates that the certs dir
-				// was misconfigured.
-				cfg.certificateManager.err = errors.New("no certificates found; does certs dir exist?")
-			}
-		}
-	})
-	return cfg.certificateManager.cm, cfg.certificateManager.err
-}
-
-// GetClientTLSConfig returns the client TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a TLS config using certs for the config.User.
-// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
-func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if cfg.Insecure {
-		return nil, nil
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-
-	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
-	if err != nil {
-		return nil, wrapError(err)
-	}
-	return tlsCfg, nil
-}
-
-// getUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a TLS config configured to talk to the Admin UI.
-// This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
-func (cfg *Config) getUIClientTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if cfg.Insecure {
-		return nil, nil
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-
-	tlsCfg, err := cm.GetUIClientTLSConfig()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetServerTLSConfig returns the server TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a server TLS config.
-func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if cfg.Insecure {
-		return nil, nil
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-
-	tlsCfg, err := cm.GetServerTLSConfig()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetUIServerTLSConfig returns the server TLS config for the Admin UI, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a server UI TLS config.
-//
-// TODO(peter): This method is only used by `server.NewServer` and
-// `Server.Start`. Move it.
-func (cfg *Config) GetUIServerTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if cfg.Insecure || cfg.DisableTLSForHTTP {
-		return nil, nil
-	}
-
-	cm, err := cfg.GetCertificateManager()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-
-	tlsCfg, err := cm.GetUIServerTLSConfig()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetHTTPClient returns the http client, initializing it
-// if needed. It uses the client TLS config.
-func (cfg *Config) GetHTTPClient() (http.Client, error) {
-	cfg.httpClient.once.Do(func() {
-		cfg.httpClient.httpClient.Timeout = 10 * time.Second
-		var transport http.Transport
-		cfg.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, cfg.httpClient.err = cfg.getUIClientTLSConfig()
-	})
-
-	return cfg.httpClient.httpClient, cfg.httpClient.err
 }
 
 // RaftConfig holds raft tuning parameters.

@@ -79,7 +79,7 @@ func NewNetwork(
 		Settings:   cluster.MakeTestingClusterSettings(),
 	})
 	var err error
-	n.tlsConfig, err = n.RPCContext.Config.GetServerTLSConfig()
+	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
 		log.Fatalf(context.TODO(), "%v", err)
 	}

@@ -722,7 +722,7 @@ func (s *Server) maybeUpgradeToSecureConn(
 	// connection to use TLS/SSL.
 
 	// Do we have a TLS configuration?
-	tlsConfig, serverErr := s.cfg.GetServerTLSConfig()
+	tlsConfig, serverErr := s.execCfg.RPCContext.GetServerTLSConfig()
 	if serverErr != nil {
 		return
 	}

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -350,7 +351,10 @@ func (cliCtx *cliContext) makeClientConnURL() (url.URL, error) {
 		if userName == "" {
 			userName = security.RootUser
 		}
-		if err := cliCtx.LoadSecurityOptions(opts, userName); err != nil {
+		sCtx := rpc.MakeSecurityContext(cliCtx.Config)
+		if err := sCtx.LoadSecurityOptions(
+			opts, userName,
+		); err != nil {
 			return url.URL{}, err
 		}
 	}
