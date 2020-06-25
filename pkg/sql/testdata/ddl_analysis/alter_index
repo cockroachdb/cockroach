@@ -1,0 +1,23 @@
+exec
+CREATE TABLE alter_index(x INT PRIMARY KEY, y INT, INDEX i (x,y))
+----
+
+count
+ALTER INDEX alter_index@i SPLIT AT VALUES (1)
+----
+5
+
+count
+ALTER INDEX alter_index@i UNSPLIT AT VALUES (1)
+----
+2
+
+count
+ALTER INDEX alter_index@i SPLIT AT VALUES (3), (50), (100)
+----
+15
+
+count
+ALTER INDEX alter_index@i UNSPLIT AT VALUES (3), (50), (100)
+----
+6

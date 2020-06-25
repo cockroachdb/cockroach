@@ -1,0 +1,87 @@
+exec
+CREATE TABLE alter_table(x INT NOT NULL, y INT NOT NULL)
+----
+
+# AddColumn
+count
+ALTER TABLE alter_table ADD COLUMN z INT
+----
+3
+
+# Constraint
+count
+ALTER TABLE alter_table ADD CONSTRAINT ck CHECK(x > 0)
+----
+3
+
+# ForeignKey
+exec
+CREATE TABLE fk_table(x INT PRIMARY KEY)
+----
+
+count
+ALTER TABLE alter_table ADD CONSTRAINT fk FOREIGN KEY (x) REFERENCES fk_table(x) ON DELETE CASCADE
+----
+11
+
+# AlterPrimaryKey
+count
+ALTER TABLE alter_table ALTER PRIMARY KEY USING COLUMNS (x, y)
+----
+4
+
+# AlterType
+exec
+CREATE TABLE alter_type(x INT);
+SET enable_experimental_alter_column_type_general = true;
+----
+
+count
+ALTER TABLE alter_type ALTER COLUMN x TYPE STRING
+----
+13
+
+# ConfigureZone
+count
+ALTER TABLE alter_table CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 65536
+----
+21
+
+# DropColumn
+count
+ALTER TABLE alter_table DROP COLUMN z
+----
+7
+
+# DropConstraint
+count
+ALTER TABLE alter_table DROP CONSTRAINT ck
+----
+5
+
+# Split / Unsplit
+count
+ALTER TABLE alter_table SPLIT AT VALUES (1)
+----
+5
+
+count
+ALTER TABLE alter_table UNSPLIT AT VALUES (1)
+----
+2
+
+count
+ALTER TABLE alter_table SPLIT AT VALUES (2), (3)
+----
+10
+
+count
+ALTER TABLE alter_table UNSPLIT AT VALUES (2), (3)
+----
+4
+
+# Validate
+count
+ALTER TABLE alter_table VALIDATE CONSTRAINT fk
+----
+0

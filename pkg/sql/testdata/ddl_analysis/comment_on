@@ -1,0 +1,24 @@
+exec
+CREATE DATABASE d;
+CREATE TABLE t(x INT, INDEX i (x));
+----
+
+count
+COMMENT ON DATABASE d is 'hello'
+----
+4
+
+count
+COMMENT ON TABLE t IS 'hello'
+----
+4
+
+count
+COMMENT ON INDEX t@i IS 'hello'
+----
+4
+
+count
+COMMENT ON COLUMN t.x IS 'hello'
+----
+4

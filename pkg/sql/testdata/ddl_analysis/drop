@@ -1,0 +1,101 @@
+# DropDatabase
+exec
+CREATE DATABASE d
+----
+
+count
+DROP DATABASE d
+----
+7
+
+# DropIndex
+exec
+CREATE TABLE t(x INT, INDEX i (x));
+----
+
+count
+DROP INDEX t@i
+----
+17
+
+# DropRole
+exec
+CREATE ROLE a
+----
+
+count
+DROP ROLE a
+----
+37
+
+exec
+CREATE ROLE a;
+CREATE ROLE b;
+----
+
+count
+DROP ROLE a, b
+----
+41
+
+# DropTable
+exec
+CREATE TABLE t1()
+----
+
+count
+DROP TABLE t1
+----
+7
+
+exec
+CREATE TABLE t1();
+CREATE TABLE t2();
+----
+
+count
+DROP TABLE t1,t2
+----
+16
+
+# DropView
+exec
+CREATE TABLE t1(x INT);
+CREATE VIEW vx1 AS SELECT x FROM t1;
+----
+
+count
+DROP VIEW vx1
+----
+9
+
+exec
+CREATE TABLE t2(x INT);
+CREATE VIEW vx1 AS SELECT x FROM t1;
+CREATE VIEW vx2 AS SELECT x FROM t2;
+----
+
+count
+DROP VIEW vx1, vx2
+----
+26
+
+# DropSequence
+exec
+CREATE SEQUENCE s
+----
+
+count
+DROP SEQUENCE s
+----
+5
+
+exec
+CREATE SEQUENCE s1;
+CREATE SEQUENCE s2;
+----
+
+count
+DROP SEQUENCE s1, s2
+----
+12

@@ -1,0 +1,18 @@
+exec
+CREATE ROLE rolea
+----
+
+count
+ALTER ROLE rolea CREATEROLE
+----
+4
+
+count
+ALTER ROLE rolea CREATEROLE LOGIN
+----
+6
+
+count
+ALTER ROLE rolea CREATEROLE LOGIN PASSWORD '123'
+----
+8

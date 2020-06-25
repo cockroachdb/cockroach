@@ -1,0 +1,27 @@
+# ShowClusterSetting
+count
+SHOW CLUSTER SETTINGS
+----
+0
+
+# ShowTableStats
+exec
+CREATE TABLE t()
+----
+
+count
+SHOW STATISTICS FOR TABLE t
+----
+2
+
+# ShowZoneConfig
+count
+SHOW ZONE CONFIGURATION FOR TABLE t
+----
+11
+
+# ShowFingerprints
+count
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
+----
+0

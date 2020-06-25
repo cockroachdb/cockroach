@@ -1,0 +1,31 @@
+# RenameDatabase
+exec
+CREATE DATABASE d
+----
+
+count
+ALTER DATABASE d RENAME TO d_1
+----
+7
+
+exec
+CREATE TABLE t(x INT, INDEX i(x))
+----
+
+# RenameIndex
+count
+ALTER INDEX t@i RENAME TO j
+----
+2
+
+# RenameColumn
+count
+ALTER TABLE t RENAME COLUMN x to x_1
+----
+3
+
+# RenameTable
+count
+ALTER TABLE t RENAME TO t_1
+----
+9

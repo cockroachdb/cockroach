@@ -1,0 +1,26 @@
+exec
+CREATE TABLE t(x INT)
+----
+
+count
+TRUNCATE t
+----
+16
+
+exec
+INSERT INTO t (x) VALUES (1)
+----
+
+count
+TRUNCATE t
+----
+15
+
+exec
+INSERT INTO t (x) VALUES (1), (2), (3), (4), (5)
+----
+
+count
+TRUNCATE t
+----
+15

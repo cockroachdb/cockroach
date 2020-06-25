@@ -1,0 +1,31 @@
+# SetClusterSetting
+count
+SET CLUSTER SETTING sql.defaults.distsql = 1
+----
+5
+
+# SetVar
+count
+SET search_path = DEFAULT
+----
+0
+
+# SetTransaction
+exec
+BEGIN
+----
+
+count
+SET TRANSACTION PRIORITY HIGH
+----
+0
+
+exec
+ROLLBACK
+----
+
+# SetSessionCharacteristics
+count
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL serializable
+----
+0

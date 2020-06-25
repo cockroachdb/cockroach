@@ -1,0 +1,44 @@
+# CreateDatabase
+count
+CREATE DATABASE d
+----
+6
+
+count
+CREATE TABLE t(x INT NOT NULL, y INT NOT NULL)
+----
+6
+
+# CreateSequence
+count
+CREATE SEQUENCE s
+----
+7
+
+# CreateIndex
+count
+CREATE INDEX ON t (x)
+----
+3
+
+count
+CREATE INDEX ON t (x, y)
+----
+3
+
+count
+CREATE UNIQUE INDEX ON t (x, y)
+----
+3
+
+# CreateStatistics
+count
+CREATE STATISTICS stats ON x FROM t
+----
+9
+
+# CreateRole
+count
+CREATE ROLE rolea
+----
+6
