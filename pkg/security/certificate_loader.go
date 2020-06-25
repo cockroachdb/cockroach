@@ -55,6 +55,11 @@ var defaultAssetLoader = AssetLoader{
 // assetLoaderImpl is used to list/read/stat security assets.
 var assetLoaderImpl = defaultAssetLoader
 
+// GetAssetLoader returns the active asset loader.
+func GetAssetLoader() AssetLoader {
+	return assetLoaderImpl
+}
+
 // SetAssetLoader overrides the asset loader with the passed-in one.
 func SetAssetLoader(al AssetLoader) {
 	assetLoaderImpl = al

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,7 +57,7 @@ type ctxI interface {
 }
 
 var _ ctxI = insecureCtx{}
-var _ ctxI = (*base.Config)(nil)
+var _ ctxI = (*rpc.Context)(nil)
 
 type insecureCtx struct{}
 
@@ -85,17 +87,27 @@ func TestSSLEnforcement(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
+	newRPCContext := func(cfg *base.Config) *rpc.Context {
+		return rpc.NewContext(rpc.ContextOptions{
+			Config:   cfg,
+			Clock:    hlc.NewClock(hlc.UnixNano, 1),
+			Stopper:  s.Stopper(),
+			Settings: s.ClusterSettings(),
+		})
+	}
+
 	// HTTPS with client certs for security.RootUser.
-	rootCertsContext := testutils.NewTestBaseContext(security.RootUser)
+	rootCertsContext := newRPCContext(testutils.NewTestBaseContext(security.RootUser))
 	// HTTPS with client certs for security.NodeUser.
-	nodeCertsContext := testutils.NewNodeTestBaseContext()
+	nodeCertsContext := newRPCContext(testutils.NewNodeTestBaseContext())
 	// HTTPS with client certs for TestUser.
-	testCertsContext := testutils.NewTestBaseContext(TestUser)
+	testCertsContext := newRPCContext(testutils.NewTestBaseContext(TestUser))
 	// HTTPS without client certs. The user does not matter.
 	noCertsContext := insecureCtx{}
 	// Plain http.
-	insecureContext := testutils.NewTestBaseContext(TestUser)
-	insecureContext.Insecure = true
+	plainHTTPCfg := testutils.NewTestBaseContext(TestUser)
+	plainHTTPCfg.Insecure = true
+	insecureContext := newRPCContext(plainHTTPCfg)
 
 	kvGet := &roachpb.GetRequest{}
 	kvGet.Key = roachpb.Key("/")
@@ -777,7 +789,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		})
 	}
 
-	certManager, err := s.RPCContext().Config.GetCertificateManager()
+	certManager, err := s.RPCContext().GetCertificateManager()
 	if err != nil {
 		t.Fatal(err)
 	}

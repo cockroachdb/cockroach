@@ -637,7 +637,8 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			sCtx := rpc.MakeSecurityContext(serverCfg.Config)
+			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return
@@ -809,7 +810,8 @@ If problems persist, please see %s.`
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			sCtx := rpc.MakeSecurityContext(serverCfg.Config)
+			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return err
