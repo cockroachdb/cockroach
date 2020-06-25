@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2729,7 +2730,8 @@ func (sb *statisticsBuilder) applyFilter(
 		// will be accounted for in selectivityFromEquivalencies.
 		scalarProps := conjunct.ScalarProps()
 		constrainedCols.UnionWith(scalarProps.OuterCols)
-		if scalarProps.Constraints != nil {
+		// Don't attempt to fetch histograms for inverted index types.
+		if scalarProps.Constraints != nil && sqlbase.ColumnTypeIsInvertedIndexable(conjunct.Condition.DataType()) {
 			histColsLocal := sb.applyConstraintSet(
 				scalarProps.Constraints, scalarProps.TightConstraints, e, relProps,
 			)
