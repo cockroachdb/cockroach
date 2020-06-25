@@ -2744,7 +2744,7 @@ func (d *DGeography) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	return bytes.Compare(d.EWKB(), other.(*DGeography).EWKB())
+	return geo.CompareSpatialObject(d.Geography.SpatialObject(), other.(*DGeography).SpatialObject())
 }
 
 // Prev implements the Datum interface.
@@ -2852,7 +2852,7 @@ func (d *DGeometry) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	return bytes.Compare(d.EWKB(), other.(*DGeometry).EWKB())
+	return geo.CompareSpatialObject(d.Geometry.SpatialObject(), other.(*DGeometry).SpatialObject())
 }
 
 // Prev implements the Datum interface.

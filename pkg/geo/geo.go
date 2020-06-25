@@ -12,11 +12,13 @@
 package geo
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
@@ -639,4 +641,18 @@ func shapeFromGeom(t geom.T) (geopb.Shape, error) {
 	default:
 		return geopb.Shape_Unset, errors.Newf("unknown shape: %T", t)
 	}
+}
+
+// CompareSpatialObject compares the SpatialObject.
+// This must match the byte ordering that is be produced by encoding.EncodeGeoAscending.
+func CompareSpatialObject(lhs geopb.SpatialObject, rhs geopb.SpatialObject) int {
+	marshalledLHS, err := protoutil.Marshal(&lhs)
+	if err != nil {
+		panic(err)
+	}
+	marshalledRHS, err := protoutil.Marshal(&rhs)
+	if err != nil {
+		panic(err)
+	}
+	return bytes.Compare(marshalledLHS, marshalledRHS)
 }
