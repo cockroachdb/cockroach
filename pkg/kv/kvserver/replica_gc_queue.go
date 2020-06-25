@@ -87,15 +87,21 @@ func makeReplicaGCQueueMetrics() ReplicaGCQueueMetrics {
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
 	*baseQueue
-	metrics ReplicaGCQueueMetrics
-	db      *kv.DB
+	metrics                           ReplicaGCQueueMetrics
+	db                                *kv.DB
+	replicaGCQueueInactivityThreshold time.Duration
 }
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
 func newReplicaGCQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *replicaGCQueue {
+	replicaGCQueueInactivityThreshold := ReplicaGCQueueInactivityThreshold
+	if store.TestingKnobs().ReplicaGCQueueInactivityThreshold != 0 {
+		replicaGCQueueInactivityThreshold = store.TestingKnobs().ReplicaGCQueueInactivityThreshold
+	}
 	rgcq := &replicaGCQueue{
-		metrics: makeReplicaGCQueueMetrics(),
-		db:      db,
+		metrics:                           makeReplicaGCQueueMetrics(),
+		db:                                db,
+		replicaGCQueueInactivityThreshold: replicaGCQueueInactivityThreshold,
 	}
 	store.metrics.registry.AddMetricStruct(&rgcq.metrics)
 	rgcq.baseQueue = newBaseQueue(

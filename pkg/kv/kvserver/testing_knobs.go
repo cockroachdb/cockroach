@@ -240,6 +240,9 @@ type StoreTestingKnobs struct {
 	// RangeFeedPushTxnsAge overrides the default value for
 	// rangefeed.Config.PushTxnsAge.
 	RangeFeedPushTxnsAge time.Duration
+	// ReplicaGCQueueInactivityThreshold overrides the default value for
+	// replica_gc_queue.ReplicaGCQueueInactivityThreshold.
+	ReplicaGCQueueInactivityThreshold time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
