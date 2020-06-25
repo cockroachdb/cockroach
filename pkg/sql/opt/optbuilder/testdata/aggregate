@@ -2628,19 +2628,18 @@ build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
 ----
 project
- ├── columns: r:6 s:9
+ ├── columns: r:6 s:8
  └── group-by
-      ├── columns: max:6 column7:7 column8:8 column9:9
-      ├── grouping columns: column7:7 column8:8 column9:9
+      ├── columns: column5:5 max:6 column7:7 column8:8
+      ├── grouping columns: column5:5 column7:7 column8:8
       ├── project
-      │    ├── columns: column5:5 column7:7 column8:8 column9:9
+      │    ├── columns: column5:5 column7:7 column8:8
       │    ├── scan kv
       │    │    └── columns: k:1!null v:2 w:3 s:4
       │    └── projections
       │         ├── (k:1 + v:2) / (k:1 - v:2) [as=column5:5]
       │         ├── k:1 + v:2 [as=column7:7]
-      │         ├── (k:1 + v:2) / (k:1 - v:2) [as=column8:8]
-      │         └── (k:1 + v:2) * (k:1 - v:2) [as=column9:9]
+      │         └── (k:1 + v:2) * (k:1 - v:2) [as=column8:8]
       └── aggregations
            └── max [as=max:6]
                 └── column5:5

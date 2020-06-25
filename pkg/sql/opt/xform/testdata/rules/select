@@ -983,7 +983,7 @@ scan a
  ├── constraint: /1: [/1 - /1]
  ├── locking: for-update
  ├── cardinality: [0 - 1]
- ├── volatile, side-effects
+ ├── volatile
  ├── key: ()
  └── fd: ()-->(1)
 
@@ -993,7 +993,7 @@ SELECT * FROM b WHERE v >= 1 AND v <= 10 FOR UPDATE
 index-join b
  ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
- ├── volatile, side-effects
+ ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  └── scan b@v
@@ -1001,7 +1001,7 @@ index-join b
       ├── constraint: /3: [/1 - /10]
       ├── locking: for-update
       ├── cardinality: [0 - 10]
-      ├── volatile, side-effects
+      ├── volatile
       ├── key: (1)
       └── fd: (1)-->(3), (3)-->(1)
 
@@ -1011,13 +1011,13 @@ SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 FOR UPDATE
 select
  ├── columns: k:1!null u:2 v:3!null j:4
  ├── cardinality: [0 - 10]
- ├── volatile, side-effects
+ ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)-->(1,2,4)
  ├── index-join b
  │    ├── columns: k:1!null u:2 v:3 j:4
  │    ├── cardinality: [0 - 10]
- │    ├── volatile, side-effects
+ │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3)-->(1), (3)~~>(1,2,4)
  │    └── scan b@v
@@ -1025,7 +1025,7 @@ select
  │         ├── constraint: /3: [/1 - /10]
  │         ├── locking: for-update
  │         ├── cardinality: [0 - 10]
- │         ├── volatile, side-effects
+ │         ├── volatile
  │         ├── key: (1)
  │         └── fd: (1)-->(3), (3)-->(1)
  └── filters
@@ -1285,18 +1285,18 @@ SELECT k FROM b WHERE j @> '{"a": "b"}' FOR UPDATE
 ----
 project
  ├── columns: k:1!null
- ├── volatile, side-effects
+ ├── volatile
  ├── key: (1)
  └── index-join b
       ├── columns: k:1!null j:4
-      ├── volatile, side-effects
+      ├── volatile
       ├── key: (1)
       ├── fd: (1)-->(4)
       └── scan b@inv_idx
            ├── columns: k:1!null
            ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
            ├── locking: for-update
-           ├── volatile, side-effects
+           ├── volatile
            └── key: (1)
 
 # Tests for array inverted indexes.

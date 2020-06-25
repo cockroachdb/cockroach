@@ -218,10 +218,10 @@ SELECT unnest(x) FROM unnest(ARRAY[[1,2,3],[4,5],[6]]) AS x
 ----
 project
  ├── columns: unnest:2
- ├── immutable, side-effects
+ ├── immutable
  └── project-set
       ├── columns: unnest:1!null unnest:2
-      ├── immutable, side-effects
+      ├── immutable
       ├── values
       │    ├── columns: unnest:1!null
       │    ├── cardinality: [3 - 3]
@@ -229,7 +229,7 @@ project
       │    ├── (ARRAY[4,5],)
       │    └── (ARRAY[6],)
       └── zip
-           └── unnest(unnest:1) [outer=(1), immutable, side-effects]
+           └── unnest(unnest:1) [outer=(1), immutable]
 
 # No-op case - an unnest with multiple inputs is not matched.
 norm expect-not=ConvertZipArraysToValues
@@ -237,16 +237,16 @@ SELECT unnest(ARRAY[1,2,3], ARRAY[4,5,6])
 ----
 project
  ├── columns: unnest:3
- ├── immutable, side-effects
+ ├── immutable
  ├── project-set
  │    ├── columns: unnest:1 unnest:2
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── values
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    └── ()
  │    └── zip
- │         └── unnest(ARRAY[1,2,3], ARRAY[4,5,6]) [immutable, side-effects]
+ │         └── unnest(ARRAY[1,2,3], ARRAY[4,5,6]) [immutable]
  └── projections
       └── ((unnest:1, unnest:2) AS unnest, unnest) [as=unnest:3, outer=(1,2)]
 
@@ -256,17 +256,17 @@ SELECT unnest(ARRAY[1,2,3]), unnest(ARRAY[1,2,3], ARRAY[4,5,6])
 ----
 project
  ├── columns: unnest:1 unnest:4
- ├── immutable, side-effects
+ ├── immutable
  ├── project-set
  │    ├── columns: unnest:1 unnest:2 unnest:3
- │    ├── immutable, side-effects
+ │    ├── immutable
  │    ├── values
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
  │    │    └── ()
  │    └── zip
- │         ├── unnest(ARRAY[1,2,3]) [immutable, side-effects]
- │         └── unnest(ARRAY[1,2,3], ARRAY[4,5,6]) [immutable, side-effects]
+ │         ├── unnest(ARRAY[1,2,3]) [immutable]
+ │         └── unnest(ARRAY[1,2,3], ARRAY[4,5,6]) [immutable]
  └── projections
       └── ((unnest:2, unnest:3) AS unnest, unnest) [as=unnest:4, outer=(2,3)]
 
@@ -276,13 +276,13 @@ SELECT unnest((SELECT array_agg(y) FROM xy))
 ----
 project-set
  ├── columns: unnest:5
- ├── immutable, side-effects
+ ├── immutable
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    └── ()
  └── zip
-      └── function: unnest [immutable, side-effects, subquery]
+      └── function: unnest [immutable, subquery]
            └── subquery
                 └── scalar-group-by
                      ├── columns: array_agg:4
@@ -301,11 +301,11 @@ SELECT json_array_elements(j) FROM xy
 ----
 project
  ├── columns: json_array_elements:4
- ├── immutable, side-effects
+ ├── immutable
  └── project-set
       ├── columns: j:3 json_array_elements:4
-      ├── immutable, side-effects
+      ├── immutable
       ├── scan xy
       │    └── columns: j:3
       └── zip
-           └── json_array_elements(j:3) [outer=(3), immutable, side-effects]
+           └── json_array_elements(j:3) [outer=(3), immutable]

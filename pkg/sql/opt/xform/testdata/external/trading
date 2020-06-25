@@ -1232,11 +1232,11 @@ insert transactions
  │    ├── column6:13 => operationid:6
  │    └── column14:14 => version:7
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── values
       ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null column6:13!null column14:14
       ├── cardinality: [1 - 1]
-      ├── volatile, side-effects
+      ├── volatile
       ├── key: ()
       ├── fd: ()-->(8-14)
       └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp())
@@ -1263,18 +1263,18 @@ upsert transactions
  │    ├── column5:12 => customername:5
  │    └── column6:13 => operationid:6
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── left-join (cross)
       ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null column6:13!null column14:14 dealerid:15 isbuy:16 date:17 accountname:18 customername:19 operationid:20 version:21
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
-      ├── volatile, side-effects
+      ├── volatile
       ├── key: ()
       ├── fd: ()-->(8-21)
       ├── values
       │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null column6:13!null column14:14
       │    ├── cardinality: [1 - 1]
-      │    ├── volatile, side-effects
+      │    ├── volatile
       │    ├── key: ()
       │    ├── fd: ()-->(8-14)
       │    └── (1, false, '2020-03-01 00:00:00+00:00', 'the-account', 'the-customer', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', cluster_logical_timestamp())
@@ -1319,11 +1319,11 @@ upsert transactiondetails
  │    └── buyprice:30 => transactiondetails.buyprice:8
  ├── input binding: &2
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  ├── project
  │    ├── columns: upsert_dealerid:31 upsert_isbuy:32 upsert_transactiondate:33 upsert_cardid:34 sellprice:29 buyprice:30 "?column?":11!null bool:12!null current_timestamp:13!null int8:14!null int8:15!null column18:18 transactiondetails.dealerid:21 transactiondetails.isbuy:22 transactiondate:23 cardid:24 quantity:25 transactiondetails.sellprice:26 transactiondetails.buyprice:27 transactiondetails.version:28
  │    ├── cardinality: [1 - 2]
- │    ├── volatile, side-effects
+ │    ├── volatile
  │    ├── key: (14,15)
  │    ├── fd: ()-->(11-13), (14,15)-->(18,21-33), (21-25)-->(26-28), (21)-->(31), (21,22)-->(32), (21,23)-->(33), (14,21,24)-->(34)
  │    ├── left-join (lookup transactiondetails)
@@ -1331,7 +1331,7 @@ upsert transactiondetails
  │    │    ├── key columns: [11 12 13 14 15] = [21 22 23 24 25]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [1 - 2]
- │    │    ├── volatile, side-effects
+ │    │    ├── volatile
  │    │    ├── key: (14,15)
  │    │    ├── fd: ()-->(11-13), (14,15)-->(18-28), (21-25)-->(26-28)
  │    │    ├── ensure-upsert-distinct-on
@@ -1339,13 +1339,13 @@ upsert transactiondetails
  │    │    │    ├── grouping columns: int8:14!null int8:15!null
  │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │    │    │    ├── cardinality: [1 - 2]
- │    │    │    ├── volatile, side-effects
+ │    │    │    ├── volatile
  │    │    │    ├── key: (14,15)
  │    │    │    ├── fd: ()-->(11-13), (14,15)-->(11-13,18-20)
  │    │    │    ├── project
  │    │    │    │    ├── columns: sellprice:19 buyprice:20 column18:18 "?column?":11!null bool:12!null current_timestamp:13!null int8:14!null int8:15!null
  │    │    │    │    ├── cardinality: [2 - 2]
- │    │    │    │    ├── volatile, side-effects
+ │    │    │    │    ├── volatile
  │    │    │    │    ├── fd: ()-->(11-13)
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: detail_b:54!null detail_c:55!null detail_q:56!null detail_s:57!null
@@ -1355,7 +1355,7 @@ upsert transactiondetails
  │    │    │    │    └── projections
  │    │    │    │         ├── crdb_internal.round_decimal_values(detail_s:57::STRING::DECIMAL(10,4), 4) [as=sellprice:19, outer=(57), immutable]
  │    │    │    │         ├── crdb_internal.round_decimal_values(detail_b:54::STRING::DECIMAL(10,4), 4) [as=buyprice:20, outer=(54), immutable]
- │    │    │    │         ├── cluster_logical_timestamp() [as=column18:18, volatile, side-effects]
+ │    │    │    │         ├── cluster_logical_timestamp() [as=column18:18, volatile]
  │    │    │    │         ├── 1 [as="?column?":11]
  │    │    │    │         ├── false [as=bool:12]
  │    │    │    │         ├── '2017-05-10 13:00:00+00:00' [as=current_timestamp:13]
@@ -1419,7 +1419,7 @@ delete inventorydetails
  ├── columns: <none>
  ├── fetch columns: dealerid:6 cardid:7 accountname:8
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── scan inventorydetails@inventorydetails_auto_index_inventorydetailscardidkey
       ├── columns: dealerid:6!null cardid:7!null accountname:8!null
       ├── constraint: /7/6/8
@@ -1451,7 +1451,7 @@ update ci
  ├── update-mapping:
  │    └── actualinventory_new:33 => actualinventory:12
  ├── cardinality: [0 - 0]
- ├── volatile, side-effects, mutations
+ ├── volatile, mutations
  └── project
       ├── columns: actualinventory_new:33 ci.dealerid:15!null ci.cardid:16!null buyprice:17!null sellprice:18!null discount:19!null desiredinventory:20!null actualinventory:21!null maxinventory:22!null ci.version:23!null c:24!null q:25!null
       ├── key: (16)

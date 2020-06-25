@@ -28,15 +28,15 @@ project
 
 # Side-effecting expressions are not deduplicated.
 build
-SELECT a/b, a/b FROM ab
+SELECT random(), random() FROM ab
 ----
 project
- ├── columns: "?column?":4 "?column?":5
+ ├── columns: random:4 random:5
  ├── scan ab
  │    └── columns: a:1 b:2 rowid:3!null
  └── projections
-      ├── a:1 / b:2 [as="?column?":4]
-      └── a:1 / b:2 [as="?column?":5]
+      ├── random() [as=random:4]
+      └── random() [as=random:5]
 
 build
 SELECT random(), random() FROM ab

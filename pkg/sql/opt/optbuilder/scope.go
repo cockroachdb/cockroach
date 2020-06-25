@@ -563,7 +563,7 @@ func findExistingColInList(
 			}
 			var p props.Shared
 			memo.BuildSharedProps(col.scalar, &p)
-			if !p.CanHaveSideEffects {
+			if !p.VolatilitySet.HasVolatile() {
 				return col
 			}
 		}

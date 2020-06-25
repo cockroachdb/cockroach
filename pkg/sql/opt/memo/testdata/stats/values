@@ -27,13 +27,13 @@ distinct-on
  ├── columns: x:1(int) y:2(int!null)
  ├── grouping columns: column1:1(int) column2:2(int!null)
  ├── cardinality: [1 - 5]
- ├── volatile, side-effects
+ ├── volatile
  ├── stats: [rows=4, distinct(1,2)=4, null(1,2)=0]
  ├── key: (1,2)
  └── values
       ├── columns: column1:1(int) column2:2(int!null)
       ├── cardinality: [5 - 5]
-      ├── volatile, side-effects
+      ├── volatile
       ├── stats: [rows=5, distinct(1,2)=4, null(1,2)=0]
       ├── (1, 2) [type=tuple{int, int}]
       ├── (1, 2) [type=tuple{int, int}]
