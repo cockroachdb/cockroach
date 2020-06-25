@@ -37,8 +37,9 @@ var Subdomain = func() string {
 	return "roachprod.crdb.io"
 }()
 
-// Startup script used to find/format/mount all local SSDs in GCE.
-// Each disk is mounted to /mnt/data<disknum> and chmoded to all users.
+// Startup script used to find/format/mount all local SSDs and (non-boot)
+// persistent disks in GCE. Each disk is mounted to /mnt/data<disknum> and
+// chmoded to all users.
 //
 // This is a template because the instantiator needs to optionally configure the
 // mounting options. The script cannot take arguments since it is to be invoked
@@ -50,7 +51,7 @@ mount_opts="discard,defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
 disknum=0
-for d in $(ls /dev/disk/by-id/google-local-*); do
+for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do
   let "disknum++"
   grep -e "${d}" /etc/fstab > /dev/null
   if [ $? -ne 0 ]; then
