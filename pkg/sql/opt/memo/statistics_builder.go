@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -700,7 +701,7 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
 
-	if sb.shouldUseHistogram(relProps) {
+	if sb.shouldUseHistogram(relProps, colSet) {
 		colStat.Histogram = inputColStat.Histogram
 	}
 
@@ -2484,11 +2485,21 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	}
 }
 
-func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational) bool {
+func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational, cols opt.ColSet) bool {
 	// If we know that the cardinality is below a certain threshold (e.g., due to
 	// a constraint on a key column), don't bother adding the overhead of
 	// creating a histogram.
-	return relProps.Cardinality.Max >= minCardinalityForHistogram
+	if relProps.Cardinality.Max < minCardinalityForHistogram {
+		return false
+	}
+	hasInv := false
+	cols.ForEach(func(col opt.ColumnID) {
+		colTyp := sb.md.ColumnMeta(col).Type
+		if sqlbase.ColumnTypeIsInvertedIndexable(colTyp) {
+			hasInv = true
+		}
+	})
+	return !hasInv
 }
 
 // rowsProcessed calculates and returns the number of rows processed by the
@@ -2863,7 +2874,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lowerBound)
 	}
 
-	if !sb.shouldUseHistogram(relProps) {
+	if !sb.shouldUseHistogram(relProps, constrainedCols) {
 		return constrainedCols, histCols
 	}
 
@@ -2926,12 +2937,12 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			continue
 		}
 
-		if !sb.shouldUseHistogram(relProps) {
+		cols := opt.MakeColSet(col)
+		if !sb.shouldUseHistogram(relProps, cols) {
 			continue
 		}
 
 		// Calculate histogram.
-		cols := opt.MakeColSet(col)
 		inputStat, _ := sb.colStatFromInput(cols, e)
 		inputHist := inputStat.Histogram
 		if inputHist != nil {
