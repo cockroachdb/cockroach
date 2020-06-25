@@ -3425,9 +3425,9 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 // lightweight version PlanningCtx is returned that can be used when the caller
 // knows plans will only be run on one node. It is coerced to false on SQL
 // SQL tenants (in which case only local planning is supported), regardless of
-// the passed-in value.
+// the passed-in value. planner argument can be left nil.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
-	ctx context.Context, evalCtx *extendedEvalContext, txn *kv.Txn, distribute bool,
+	ctx context.Context, evalCtx *extendedEvalContext, planner *planner, txn *kv.Txn, distribute bool,
 ) *PlanningCtx {
 	// Tenants can not distribute plans.
 	distribute = distribute && evalCtx.Codec.ForSystemTenant()
@@ -3435,6 +3435,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
 		isLocal:         !distribute,
+		planner:         planner,
 	}
 	if !distribute {
 		return planCtx
