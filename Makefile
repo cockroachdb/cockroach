@@ -31,7 +31,7 @@ override xgo := GOFLAGS= $(GO)
 # This needs to be the first rule because we're including build/defs.mk
 # first thing below, and Make needs to know how to build it.
 .SECONDARY: build/defs.mk
-build/defs.mk: Makefile build/defs.mk.sig remove_obsolete_execgen
+build/defs.mk: Makefile build/defs.mk.sig
 ifndef IGNORE_GOVERS
 	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
 endif
@@ -893,14 +893,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/vec_comparators.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go
 
-.PHONY: remove_obsolete_execgen
-remove_obsolete_execgen:
-	@obsolete="$(filter-out $(EXECGEN_TARGETS), $(shell find pkg/col/coldata pkg/sql/colexec pkg/sql/exec -name '*.eg.go' 2>/dev/null))"; \
-	for file in $${obsolete}; do \
-	  echo "Removing obsolete file $${file}..."; \
-	  rm -f $${file}; \
-	done
-
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
 	pkg/sql/opt/operator.og.go \
@@ -948,7 +940,7 @@ BUILD_TAGGED_RELEASE =
 BUILDINFO_TAG :=
 
 $(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ)
-$(go-targets): $(SQLPARSER_TARGETS) bin/.execgen_targets $(EXECGEN_TARGETS) $(OPTGEN_TARGETS)
+$(go-targets): $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
 $(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(if $(BUILDINFO_TAG),$(BUILDINFO_TAG),$(shell cat .buildinfo/tag))" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
@@ -1130,7 +1122,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) bin/.execgen_targets $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) execgen $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
@@ -1181,7 +1173,6 @@ $(ARCHIVE): $(ARCHIVE).tmp
 ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
-	$(EXECGEN_TARGETS) \
 	$(OPTGEN_TARGETS) \
 	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
 
@@ -1566,14 +1557,6 @@ settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),
 $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 	@$(settings-doc-gen) gen settings-list --format=html > $@
 
-# Produce the dependency list for all the .eg.go files, to make them
-# depend on the right template. We use the -M flag to execgen which
-# produces the dependencies, then include them below.
-.SECONDARY: bin/execgen_out.d
-bin/execgen_out.d: bin/execgen
-	@echo EXECGEN $@; execgen -M $(EXECGEN_TARGETS) >$@.tmp || { rm -f $@.tmp; exit 1; }
-	@mv -f $@.tmp $@
-
 # No need to pull all the world in when a user just wants
 # to know how to invoke `make` or clean up.
 ifneq ($(build-with-dep-files),)
@@ -1613,9 +1596,9 @@ $(EXECGEN_TARGETS): bin/execgen
 	  fi; \
 	  touch -r $$target_timestamp_file $@
 
-bin/.execgen_targets: $(EXECGEN_TARGETS)
+.PHONY: execgen
+execgen: $(EXECGEN_TARGETS)
 	goimports -w $(EXECGEN_TARGETS)
-	touch $@
 
 # Add a catch-all rule for any non-existent execgen generated
 # files. This prevents build errors when switching between branches
@@ -1674,14 +1657,9 @@ unsafe-clean-c-deps:
 	git -C $(LIBROACH_SRC_DIR) clean -dxf
 	git -C $(KRB5_SRC_DIR)     clean -dxf
 
-.PHONY: clean-execgen-files
-clean-execgen-files:
-	find ./pkg/sql/colexec -type f -name '*.eg.go' -exec rm {} +
-	test -d ./pkg/sql/exec && find ./pkg/sql/exec -type f -name '*.eg.go' -exec rm {} + || true
-
 .PHONY: clean
 clean: ## Remove build artifacts.
-clean: clean-c-deps clean-execgen-files
+clean: clean-c-deps
 	rm -rf bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources build/defs.mk*
 	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
@@ -1691,7 +1669,7 @@ clean: clean-c-deps clean-execgen-files
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(EXECGEN_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
+	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
@@ -1755,7 +1733,6 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # TODO(benesch): Derive this automatically. This is getting out of hand.
 bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
 bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
-bin/workload bin/roachtest $(logictest-bins): ./bin/.execgen_targets
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized

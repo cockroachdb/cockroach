@@ -34,8 +34,10 @@ fi
 
 tc_start_block "Ensure generated code is up-to-date"
 # Buffer noisy output and only print it on failure.
-run build/builder.sh make generate buildshort &> artifacts/generate.log || (cat artifacts/generate.log && false)
+run build/builder.sh make generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
+run build/builder.sh make buildshort &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/generate.log
+rm artifacts/buildshort.log
 check_clean
 tc_end_block "Ensure generated code is up-to-date"
 
