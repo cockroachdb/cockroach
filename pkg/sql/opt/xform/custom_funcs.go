@@ -201,7 +201,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
 	for iter.Next() {
 		pred := tabMeta.PartialIndexPredicates[iter.IndexOrdinal()]
-		remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, c.e.f)
+		remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, c.e.f, md, c.e.evalCtx)
 		if !ok {
 			// The filters do not imply the predicate, so the partial index
 			// cannot be used.

@@ -22,6 +22,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// BuildConstraints returns a constraint.Set that represents the given scalar
+// expression. A "tight" boolean is also returned which is true if the
+// constraint is exactly equivalent to the expression.
+func BuildConstraints(
+	e opt.ScalarExpr, md *opt.Metadata, evalCtx *tree.EvalContext,
+) (_ *constraint.Set, tight bool) {
+	cb := constraintsBuilder{md: md, evalCtx: evalCtx}
+	return cb.buildConstraints(e)
+}
+
 // Convenience aliases to avoid the constraint prefix everywhere.
 const includeBoundary = constraint.IncludeBoundary
 const excludeBoundary = constraint.ExcludeBoundary
