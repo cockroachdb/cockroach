@@ -595,9 +595,23 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 }
 
 func (e *distSQLSpecExecFactory) ConstructLimit(
-	input exec.Node, limit, offset tree.TypedExpr,
+	input exec.Node, limitExpr, offsetExpr tree.TypedExpr,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: limit")
+	physPlan, plan := getPhysPlan(input)
+	// Note that we pass in nil slice for exprs because we will evaluate both
+	// expressions below, locally.
+	recommendation := e.checkExprsAndMaybeMergeLastStage(nil /* exprs */, physPlan)
+	count, offset, err := evalLimit(e.planner.EvalContext(), limitExpr, offsetExpr)
+	if err != nil {
+		return nil, err
+	}
+	if err = physPlan.AddLimit(count, offset, e.getPlanCtx(recommendation)); err != nil {
+		return nil, err
+	}
+	// Since addition of limit and/or offset doesn't change any properties of
+	// the physical plan, we don't need to update any of those (like
+	// PlanToStreamColMap, etc).
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructMax1Row(
