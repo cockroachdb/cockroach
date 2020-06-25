@@ -88,13 +88,13 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// Determine whether this is the Else child.
 				if child == t.OrElse {
 					memo.BuildSharedProps(child, &sharedProps)
-					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 
 			case *memo.WhenExpr:
 				if child == t.Value {
 					memo.BuildSharedProps(child, &sharedProps)
-					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 
 			case *memo.IfErrExpr:
@@ -103,7 +103,7 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// it's at position 1.
 				if i == 1 {
 					memo.BuildSharedProps(child, &sharedProps)
-					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 			}
 

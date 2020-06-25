@@ -12,12 +12,12 @@ SELECT generate_series(0,1) FROM (SELECT * FROM xy LIMIT 0)
 project-set
  ├── columns: generate_series:3(int)
  ├── cardinality: [0 - 0]
- ├── immutable, side-effects
+ ├── immutable
  ├── values
  │    ├── cardinality: [0 - 0]
  │    └── key: ()
  └── zip
-      └── function: generate_series [type=int, immutable, side-effects]
+      └── function: generate_series [type=int, immutable]
            ├── const: 0 [type=int]
            └── const: 1 [type=int]
 
