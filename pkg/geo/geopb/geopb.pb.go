@@ -22,27 +22,27 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// Shape is the type of a spatial shape. Each of these corresponds to a
+// ShapeType is the type of a spatial shape. Each of these corresponds to a
 // different representation and serialization format. For example, a Point is a
 // pair of doubles (or more than that for geometries with Z or N), a LineString
 // is an ordered series of Points, etc.
-type Shape int32
+type ShapeType int32
 
 const (
-	Shape_Unset           Shape = 0
-	Shape_Point           Shape = 1
-	Shape_LineString      Shape = 2
-	Shape_Polygon         Shape = 3
-	Shape_MultiPoint      Shape = 4
-	Shape_MultiLineString Shape = 5
-	Shape_MultiPolygon    Shape = 6
+	ShapeType_Unset           ShapeType = 0
+	ShapeType_Point           ShapeType = 1
+	ShapeType_LineString      ShapeType = 2
+	ShapeType_Polygon         ShapeType = 3
+	ShapeType_MultiPoint      ShapeType = 4
+	ShapeType_MultiLineString ShapeType = 5
+	ShapeType_MultiPolygon    ShapeType = 6
 	// Geometry can contain any type.
-	Shape_Geometry Shape = 7
+	ShapeType_Geometry ShapeType = 7
 	// GeometryCollection can contain a list of any above type except for Geometry.
-	Shape_GeometryCollection Shape = 8
+	ShapeType_GeometryCollection ShapeType = 8
 )
 
-var Shape_name = map[int32]string{
+var ShapeType_name = map[int32]string{
 	0: "Unset",
 	1: "Point",
 	2: "LineString",
@@ -53,7 +53,7 @@ var Shape_name = map[int32]string{
 	7: "Geometry",
 	8: "GeometryCollection",
 }
-var Shape_value = map[string]int32{
+var ShapeType_value = map[string]int32{
 	"Unset":              0,
 	"Point":              1,
 	"LineString":         2,
@@ -65,21 +65,104 @@ var Shape_value = map[string]int32{
 	"GeometryCollection": 8,
 }
 
-func (x Shape) String() string {
-	return proto.EnumName(Shape_name, int32(x))
+func (x ShapeType) String() string {
+	return proto.EnumName(ShapeType_name, int32(x))
 }
-func (Shape) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_b9b2328b838d758d, []int{0}
+func (ShapeType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_geopb_112b2df92f10d702, []int{0}
 }
+
+// Shape represents a single shape.
+type Shape struct {
+	// Shape is the shape of the component.
+	ShapeType ShapeType `protobuf:"varint,1,opt,name=shape_type,json=shapeType,proto3,enum=cockroach.geopb.ShapeType" json:"shape_type,omitempty"`
+	// Coords is a flat representation of individual components of the SpatialObject.
+	// They may be split up by the Ends variable.
+	Coords []float64 `protobuf:"fixed64,2,rep,packed,name=coords,proto3" json:"coords,omitempty"`
+	// Ends denotes when to split up coords array.
+	// For example, for Polygons, there may be multiple rings. Ends is the index to slice
+	// at to get each ring.
+	Ends []int64 `protobuf:"varint,3,rep,packed,name=ends,proto3" json:"ends,omitempty"`
+	// Endss denotes when to split up the ends array.
+	// For example, for MultiPolygons, there are multiple ends for multiple rings.
+	// Endss is the index to slice at of the last element of each polygon.
+	Endss []int64 `protobuf:"varint,4,rep,packed,name=endss,proto3" json:"endss,omitempty"`
+}
+
+func (m *Shape) Reset()         { *m = Shape{} }
+func (m *Shape) String() string { return proto.CompactTextString(m) }
+func (*Shape) ProtoMessage()    {}
+func (*Shape) Descriptor() ([]byte, []int) {
+	return fileDescriptor_geopb_112b2df92f10d702, []int{0}
+}
+func (m *Shape) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Shape) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *Shape) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Shape.Merge(dst, src)
+}
+func (m *Shape) XXX_Size() int {
+	return m.Size()
+}
+func (m *Shape) XXX_DiscardUnknown() {
+	xxx_messageInfo_Shape.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Shape proto.InternalMessageInfo
+
+// GeometryCollectionShape represents a GeometryCollection shape.
+type GeometryCollectionShape struct {
+	// Shapes represents all the shapes for a GeometryCollection.
+	Shapes []Shape `protobuf:"bytes,1,rep,name=shapes,proto3" json:"shapes"`
+}
+
+func (m *GeometryCollectionShape) Reset()         { *m = GeometryCollectionShape{} }
+func (m *GeometryCollectionShape) String() string { return proto.CompactTextString(m) }
+func (*GeometryCollectionShape) ProtoMessage()    {}
+func (*GeometryCollectionShape) Descriptor() ([]byte, []int) {
+	return fileDescriptor_geopb_112b2df92f10d702, []int{1}
+}
+func (m *GeometryCollectionShape) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GeometryCollectionShape) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *GeometryCollectionShape) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GeometryCollectionShape.Merge(dst, src)
+}
+func (m *GeometryCollectionShape) XXX_Size() int {
+	return m.Size()
+}
+func (m *GeometryCollectionShape) XXX_DiscardUnknown() {
+	xxx_messageInfo_GeometryCollectionShape.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GeometryCollectionShape proto.InternalMessageInfo
 
 // SpatialObject represents a serialization of a Geospatial type.
 type SpatialObject struct {
-	// EWKB is the EWKB representation of the spatial object.
-	EWKB EWKB `protobuf:"bytes,1,opt,name=ewkb,proto3,casttype=EWKB" json:"ewkb,omitempty"`
-	// SRID is the denormalized SRID derived from the EWKB.
-	SRID SRID `protobuf:"varint,2,opt,name=srid,proto3,casttype=SRID" json:"srid,omitempty"`
-	// Shape is denormalized Shape derived from the EWKB.
-	Shape Shape `protobuf:"varint,3,opt,name=shape,proto3,enum=cockroach.geopb.Shape" json:"shape,omitempty"`
+	// SRID is the SRID of the given spatial object.
+	SRID SRID `protobuf:"varint,1,opt,name=srid,proto3,casttype=SRID" json:"srid,omitempty"`
+	// Shape represents the make up of the SpatialObject.
+	//
+	// Types that are valid to be assigned to Shape:
+	//	*SpatialObject_SingleShape
+	//	*SpatialObject_GeometryCollectionShape
+	Shape isSpatialObject_Shape `protobuf_oneof:"shape"`
 	// BoundingBox is the bounding box of the SpatialObject.
 	BoundingBox *BoundingBox `protobuf:"bytes,4,opt,name=bounding_box,json=boundingBox,proto3" json:"bounding_box,omitempty"`
 }
@@ -88,7 +171,7 @@ func (m *SpatialObject) Reset()         { *m = SpatialObject{} }
 func (m *SpatialObject) String() string { return proto.CompactTextString(m) }
 func (*SpatialObject) ProtoMessage()    {}
 func (*SpatialObject) Descriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_b9b2328b838d758d, []int{0}
+	return fileDescriptor_geopb_112b2df92f10d702, []int{2}
 }
 func (m *SpatialObject) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -113,6 +196,117 @@ func (m *SpatialObject) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SpatialObject proto.InternalMessageInfo
 
+type isSpatialObject_Shape interface {
+	isSpatialObject_Shape()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type SpatialObject_SingleShape struct {
+	SingleShape *Shape `protobuf:"bytes,2,opt,name=single_shape,json=singleShape,proto3,oneof"`
+}
+type SpatialObject_GeometryCollectionShape struct {
+	GeometryCollectionShape *GeometryCollectionShape `protobuf:"bytes,3,opt,name=geometry_collection_shape,json=geometryCollectionShape,proto3,oneof"`
+}
+
+func (*SpatialObject_SingleShape) isSpatialObject_Shape()             {}
+func (*SpatialObject_GeometryCollectionShape) isSpatialObject_Shape() {}
+
+func (m *SpatialObject) GetShape() isSpatialObject_Shape {
+	if m != nil {
+		return m.Shape
+	}
+	return nil
+}
+
+func (m *SpatialObject) GetSingleShape() *Shape {
+	if x, ok := m.GetShape().(*SpatialObject_SingleShape); ok {
+		return x.SingleShape
+	}
+	return nil
+}
+
+func (m *SpatialObject) GetGeometryCollectionShape() *GeometryCollectionShape {
+	if x, ok := m.GetShape().(*SpatialObject_GeometryCollectionShape); ok {
+		return x.GeometryCollectionShape
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*SpatialObject) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _SpatialObject_OneofMarshaler, _SpatialObject_OneofUnmarshaler, _SpatialObject_OneofSizer, []interface{}{
+		(*SpatialObject_SingleShape)(nil),
+		(*SpatialObject_GeometryCollectionShape)(nil),
+	}
+}
+
+func _SpatialObject_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*SpatialObject)
+	// shape
+	switch x := m.Shape.(type) {
+	case *SpatialObject_SingleShape:
+		_ = b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.SingleShape); err != nil {
+			return err
+		}
+	case *SpatialObject_GeometryCollectionShape:
+		_ = b.EncodeVarint(3<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.GeometryCollectionShape); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("SpatialObject.Shape has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _SpatialObject_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*SpatialObject)
+	switch tag {
+	case 2: // shape.single_shape
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Shape)
+		err := b.DecodeMessage(msg)
+		m.Shape = &SpatialObject_SingleShape{msg}
+		return true, err
+	case 3: // shape.geometry_collection_shape
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(GeometryCollectionShape)
+		err := b.DecodeMessage(msg)
+		m.Shape = &SpatialObject_GeometryCollectionShape{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+func _SpatialObject_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*SpatialObject)
+	// shape
+	switch x := m.Shape.(type) {
+	case *SpatialObject_SingleShape:
+		s := proto.Size(x.SingleShape)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *SpatialObject_GeometryCollectionShape:
+		s := proto.Size(x.GeometryCollectionShape)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case nil:
+	default:
+		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
+	}
+	return n
+}
+
 // BoundingBox represents the bounding box of a Geospatial type.
 type BoundingBox struct {
 	MinX float64 `protobuf:"fixed64,1,opt,name=min_x,json=minX,proto3" json:"min_x,omitempty"`
@@ -125,7 +319,7 @@ func (m *BoundingBox) Reset()         { *m = BoundingBox{} }
 func (m *BoundingBox) String() string { return proto.CompactTextString(m) }
 func (*BoundingBox) ProtoMessage()    {}
 func (*BoundingBox) Descriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_b9b2328b838d758d, []int{1}
+	return fileDescriptor_geopb_112b2df92f10d702, []int{3}
 }
 func (m *BoundingBox) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -151,10 +345,111 @@ func (m *BoundingBox) XXX_DiscardUnknown() {
 var xxx_messageInfo_BoundingBox proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*Shape)(nil), "cockroach.geopb.Shape")
+	proto.RegisterType((*GeometryCollectionShape)(nil), "cockroach.geopb.GeometryCollectionShape")
 	proto.RegisterType((*SpatialObject)(nil), "cockroach.geopb.SpatialObject")
 	proto.RegisterType((*BoundingBox)(nil), "cockroach.geopb.BoundingBox")
-	proto.RegisterEnum("cockroach.geopb.Shape", Shape_name, Shape_value)
+	proto.RegisterEnum("cockroach.geopb.ShapeType", ShapeType_name, ShapeType_value)
 }
+func (m *Shape) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Shape) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ShapeType != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(m.ShapeType))
+	}
+	if len(m.Coords) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(len(m.Coords)*8))
+		for _, num := range m.Coords {
+			f1 := math.Float64bits(float64(num))
+			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(f1))
+			i += 8
+		}
+	}
+	if len(m.Ends) > 0 {
+		dAtA3 := make([]byte, len(m.Ends)*10)
+		var j2 int
+		for _, num1 := range m.Ends {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				dAtA3[j2] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j2++
+			}
+			dAtA3[j2] = uint8(num)
+			j2++
+		}
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(j2))
+		i += copy(dAtA[i:], dAtA3[:j2])
+	}
+	if len(m.Endss) > 0 {
+		dAtA5 := make([]byte, len(m.Endss)*10)
+		var j4 int
+		for _, num1 := range m.Endss {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				dAtA5[j4] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j4++
+			}
+			dAtA5[j4] = uint8(num)
+			j4++
+		}
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(j4))
+		i += copy(dAtA[i:], dAtA5[:j4])
+	}
+	return i, nil
+}
+
+func (m *GeometryCollectionShape) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GeometryCollectionShape) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Shapes) > 0 {
+		for _, msg := range m.Shapes {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintGeopb(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
 func (m *SpatialObject) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -170,35 +465,59 @@ func (m *SpatialObject) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.EWKB) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintGeopb(dAtA, i, uint64(len(m.EWKB)))
-		i += copy(dAtA[i:], m.EWKB)
-	}
 	if m.SRID != 0 {
-		dAtA[i] = 0x10
+		dAtA[i] = 0x8
 		i++
 		i = encodeVarintGeopb(dAtA, i, uint64(m.SRID))
 	}
-	if m.Shape != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintGeopb(dAtA, i, uint64(m.Shape))
+	if m.Shape != nil {
+		nn6, err := m.Shape.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += nn6
 	}
 	if m.BoundingBox != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintGeopb(dAtA, i, uint64(m.BoundingBox.Size()))
-		n1, err := m.BoundingBox.MarshalTo(dAtA[i:])
+		n7, err := m.BoundingBox.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n1
+		i += n7
 	}
 	return i, nil
 }
 
+func (m *SpatialObject_SingleShape) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	if m.SingleShape != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(m.SingleShape.Size()))
+		n8, err := m.SingleShape.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	return i, nil
+}
+func (m *SpatialObject_GeometryCollectionShape) MarshalTo(dAtA []byte) (int, error) {
+	i := 0
+	if m.GeometryCollectionShape != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(m.GeometryCollectionShape.Size()))
+		n9, err := m.GeometryCollectionShape.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	return i, nil
+}
 func (m *BoundingBox) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -250,21 +569,61 @@ func encodeVarintGeopb(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *Shape) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ShapeType != 0 {
+		n += 1 + sovGeopb(uint64(m.ShapeType))
+	}
+	if len(m.Coords) > 0 {
+		n += 1 + sovGeopb(uint64(len(m.Coords)*8)) + len(m.Coords)*8
+	}
+	if len(m.Ends) > 0 {
+		l = 0
+		for _, e := range m.Ends {
+			l += sovGeopb(uint64(e))
+		}
+		n += 1 + sovGeopb(uint64(l)) + l
+	}
+	if len(m.Endss) > 0 {
+		l = 0
+		for _, e := range m.Endss {
+			l += sovGeopb(uint64(e))
+		}
+		n += 1 + sovGeopb(uint64(l)) + l
+	}
+	return n
+}
+
+func (m *GeometryCollectionShape) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Shapes) > 0 {
+		for _, e := range m.Shapes {
+			l = e.Size()
+			n += 1 + l + sovGeopb(uint64(l))
+		}
+	}
+	return n
+}
+
 func (m *SpatialObject) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	l = len(m.EWKB)
-	if l > 0 {
-		n += 1 + l + sovGeopb(uint64(l))
-	}
 	if m.SRID != 0 {
 		n += 1 + sovGeopb(uint64(m.SRID))
 	}
-	if m.Shape != 0 {
-		n += 1 + sovGeopb(uint64(m.Shape))
+	if m.Shape != nil {
+		n += m.Shape.Size()
 	}
 	if m.BoundingBox != nil {
 		l = m.BoundingBox.Size()
@@ -273,6 +632,30 @@ func (m *SpatialObject) Size() (n int) {
 	return n
 }
 
+func (m *SpatialObject_SingleShape) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SingleShape != nil {
+		l = m.SingleShape.Size()
+		n += 1 + l + sovGeopb(uint64(l))
+	}
+	return n
+}
+func (m *SpatialObject_GeometryCollectionShape) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.GeometryCollectionShape != nil {
+		l = m.GeometryCollectionShape.Size()
+		n += 1 + l + sovGeopb(uint64(l))
+	}
+	return n
+}
 func (m *BoundingBox) Size() (n int) {
 	if m == nil {
 		return 0
@@ -307,6 +690,353 @@ func sovGeopb(x uint64) (n int) {
 func sozGeopb(x uint64) (n int) {
 	return sovGeopb(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+func (m *Shape) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGeopb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Shape: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Shape: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ShapeType", wireType)
+			}
+			m.ShapeType = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ShapeType |= (ShapeType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType == 1 {
+				var v uint64
+				if (iNdEx + 8) > l {
+					return io.ErrUnexpectedEOF
+				}
+				v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+				iNdEx += 8
+				v2 := float64(math.Float64frombits(v))
+				m.Coords = append(m.Coords, v2)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowGeopb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthGeopb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				elementCount = packedLen / 8
+				if elementCount != 0 && len(m.Coords) == 0 {
+					m.Coords = make([]float64, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v uint64
+					if (iNdEx + 8) > l {
+						return io.ErrUnexpectedEOF
+					}
+					v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					iNdEx += 8
+					v2 := float64(math.Float64frombits(v))
+					m.Coords = append(m.Coords, v2)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Coords", wireType)
+			}
+		case 3:
+			if wireType == 0 {
+				var v int64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowGeopb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (int64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Ends = append(m.Ends, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowGeopb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthGeopb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Ends) == 0 {
+					m.Ends = make([]int64, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v int64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowGeopb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (int64(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Ends = append(m.Ends, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ends", wireType)
+			}
+		case 4:
+			if wireType == 0 {
+				var v int64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowGeopb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (int64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Endss = append(m.Endss, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowGeopb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthGeopb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Endss) == 0 {
+					m.Endss = make([]int64, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v int64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowGeopb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (int64(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Endss = append(m.Endss, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Endss", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGeopb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GeometryCollectionShape) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGeopb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GeometryCollectionShape: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GeometryCollectionShape: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Shapes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Shapes = append(m.Shapes, Shape{})
+			if err := m.Shapes[len(m.Shapes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGeopb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -337,37 +1067,6 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EWKB", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowGeopb
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthGeopb
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.EWKB = append(m.EWKB[:0], dAtA[iNdEx:postIndex]...)
-			if m.EWKB == nil {
-				m.EWKB = []byte{}
-			}
-			iNdEx = postIndex
-		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SRID", wireType)
 			}
@@ -386,11 +1085,11 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Shape", wireType)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SingleShape", wireType)
 			}
-			m.Shape = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowGeopb
@@ -400,11 +1099,56 @@ func (m *SpatialObject) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Shape |= (Shape(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Shape{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Shape = &SpatialObject_SingleShape{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GeometryCollectionShape", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &GeometryCollectionShape{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Shape = &SpatialObject_GeometryCollectionShape{v}
+			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BoundingBox", wireType)
@@ -658,34 +1402,41 @@ var (
 	ErrIntOverflowGeopb   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_b9b2328b838d758d) }
+func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_112b2df92f10d702) }
 
-var fileDescriptor_geopb_b9b2328b838d758d = []byte{
-	// 406 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x91, 0xd1, 0x6a, 0xd4, 0x40,
-	0x14, 0x86, 0x33, 0x6d, 0xd2, 0xd6, 0xb3, 0x6b, 0x3b, 0x4c, 0xb5, 0x2c, 0x22, 0x63, 0x28, 0x82,
-	0x41, 0x24, 0x85, 0xfa, 0x00, 0x42, 0x54, 0x44, 0x54, 0x2c, 0x09, 0x62, 0xeb, 0xcd, 0x92, 0xa4,
-	0x43, 0x3a, 0x36, 0x3b, 0x27, 0x64, 0xa7, 0x98, 0xbc, 0x85, 0x77, 0xbe, 0x52, 0xf1, 0xaa, 0x97,
-	0xbd, 0x12, 0xcd, 0xbe, 0x45, 0xaf, 0x24, 0x33, 0x59, 0x5c, 0xec, 0xcd, 0x9c, 0x73, 0xfe, 0xff,
-	0x3b, 0xf0, 0xcf, 0x0c, 0xdc, 0x2f, 0x04, 0x1e, 0x14, 0x02, 0xab, 0xcc, 0x9e, 0x61, 0x55, 0xa3,
-	0x46, 0xb6, 0x93, 0x63, 0x7e, 0x5e, 0x63, 0x9a, 0x9f, 0x85, 0x46, 0x7e, 0x70, 0xaf, 0xc0, 0x02,
-	0x8d, 0x77, 0xd0, 0x77, 0x16, 0xdb, 0xff, 0x49, 0xe0, 0x6e, 0x52, 0xa5, 0x5a, 0xa6, 0xe5, 0xc7,
-	0xec, 0xab, 0xc8, 0x35, 0x7b, 0x0c, 0xae, 0xf8, 0x76, 0x9e, 0x4d, 0x88, 0x4f, 0x82, 0x71, 0x44,
-	0xbb, 0x5f, 0x8f, 0xdc, 0xd7, 0x9f, 0xdf, 0x45, 0x37, 0x43, 0x8d, 0x8d, 0xdb, 0x53, 0xf3, 0x5a,
-	0x9e, 0x4e, 0xd6, 0x7c, 0x12, 0x78, 0x96, 0x4a, 0xe2, 0xb7, 0xaf, 0x6e, 0x86, 0x1a, 0x1b, 0x97,
-	0x3d, 0x03, 0x6f, 0x7e, 0x96, 0x56, 0x62, 0xb2, 0xee, 0x93, 0x60, 0xfb, 0x70, 0x2f, 0xfc, 0x2f,
-	0x54, 0x98, 0xf4, 0x6e, 0x6c, 0x21, 0xf6, 0x02, 0xc6, 0x19, 0x5e, 0xa8, 0x53, 0xa9, 0x8a, 0x69,
-	0x86, 0xcd, 0xc4, 0xf5, 0x49, 0x30, 0x3a, 0x7c, 0x78, 0x6b, 0x29, 0x1a, 0xa0, 0x08, 0x9b, 0x78,
-	0x94, 0xfd, 0x1b, 0xf6, 0x53, 0x18, 0xad, 0x78, 0x6c, 0x17, 0xbc, 0x99, 0x54, 0xd3, 0xc6, 0x5c,
-	0x85, 0xc4, 0xee, 0x4c, 0xaa, 0xe3, 0xa5, 0xd8, 0x9a, 0xe4, 0x56, 0x3c, 0x31, 0x62, 0xda, 0x4c,
-	0x1b, 0x93, 0xb3, 0x17, 0xd3, 0xe6, 0x78, 0x29, 0xb6, 0x26, 0x87, 0x15, 0x4f, 0x9e, 0xfe, 0x20,
-	0xe0, 0x99, 0xd0, 0xec, 0x0e, 0x78, 0x9f, 0xd4, 0x5c, 0x68, 0xea, 0xf4, 0xed, 0x11, 0x4a, 0xa5,
-	0x29, 0x61, 0xdb, 0x00, 0xef, 0xa5, 0x12, 0x89, 0xae, 0xa5, 0x2a, 0xe8, 0x1a, 0x1b, 0xc1, 0xe6,
-	0x11, 0x96, 0x6d, 0x81, 0x8a, 0xae, 0xf7, 0xe6, 0x87, 0x8b, 0x52, 0x4b, 0x0b, 0xbb, 0x6c, 0x17,
-	0x76, 0xcc, 0xbc, 0xb2, 0xe1, 0x31, 0x0a, 0xe3, 0x01, 0xb2, 0x6b, 0x1b, 0x6c, 0x0c, 0x5b, 0x6f,
-	0x04, 0xce, 0x84, 0xae, 0x5b, 0xba, 0xc9, 0xf6, 0x80, 0x2d, 0xa7, 0x97, 0x58, 0x96, 0x22, 0xd7,
-	0x12, 0x15, 0xdd, 0x8a, 0x9e, 0x5c, 0xfe, 0xe1, 0xce, 0x65, 0xc7, 0xc9, 0x55, 0xc7, 0xc9, 0x75,
-	0xc7, 0xc9, 0xef, 0x8e, 0x93, 0xef, 0x0b, 0xee, 0x5c, 0x2d, 0xb8, 0x73, 0xbd, 0xe0, 0xce, 0x17,
-	0xcf, 0x3c, 0x5f, 0xb6, 0x61, 0x7e, 0xfe, 0xf9, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x51, 0xa8,
-	0xbe, 0x84, 0x39, 0x02, 0x00, 0x00,
+var fileDescriptor_geopb_112b2df92f10d702 = []byte{
+	// 522 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x53, 0xc1, 0x6e, 0xd3, 0x40,
+	0x10, 0xf5, 0xc6, 0x76, 0xd2, 0x4c, 0x42, 0x6b, 0x6d, 0x4b, 0x6a, 0x2a, 0xe4, 0x46, 0x11, 0x12,
+	0x11, 0x87, 0x54, 0x2a, 0x5c, 0x10, 0x07, 0x24, 0x83, 0x44, 0x91, 0x40, 0xad, 0x1c, 0x90, 0x5a,
+	0x2e, 0x96, 0xed, 0x2c, 0xee, 0x82, 0xb3, 0x6b, 0xd9, 0xae, 0x64, 0xdf, 0xf9, 0x00, 0xee, 0x5c,
+	0xf9, 0x98, 0x1c, 0x7b, 0xec, 0xa9, 0x82, 0xe4, 0x2f, 0x38, 0x21, 0x8f, 0x9d, 0x52, 0x91, 0xe6,
+	0x92, 0x9d, 0x79, 0xf3, 0xf6, 0xed, 0xbc, 0xa7, 0x18, 0xee, 0x87, 0x4c, 0x1e, 0x84, 0x4c, 0xc6,
+	0x7e, 0xf5, 0x3b, 0x8a, 0x13, 0x99, 0x49, 0xba, 0x15, 0xc8, 0xe0, 0x6b, 0x22, 0xbd, 0xe0, 0x7c,
+	0x84, 0xf0, 0xde, 0x4e, 0x28, 0x43, 0x89, 0xb3, 0x83, 0xb2, 0xaa, 0x68, 0x83, 0x6f, 0x04, 0xf4,
+	0xf1, 0xb9, 0x17, 0x33, 0xfa, 0x1c, 0x20, 0x2d, 0x0b, 0x37, 0x2b, 0x62, 0x66, 0x92, 0x3e, 0x19,
+	0x6e, 0x1e, 0xee, 0x8d, 0xfe, 0x53, 0x19, 0x21, 0xf7, 0x43, 0x11, 0x33, 0xa7, 0x9d, 0x2e, 0x4b,
+	0xda, 0x83, 0x66, 0x20, 0x65, 0x32, 0x49, 0xcd, 0x46, 0x5f, 0x1d, 0x12, 0xa7, 0xee, 0x28, 0x05,
+	0x8d, 0x89, 0x49, 0x6a, 0xaa, 0x7d, 0x75, 0xa8, 0x3a, 0x58, 0xd3, 0x1d, 0xd0, 0xcb, 0x33, 0x35,
+	0x35, 0x04, 0xab, 0x66, 0x70, 0x0c, 0xbb, 0x6f, 0x98, 0x9c, 0xb2, 0x2c, 0x29, 0x5e, 0xc9, 0x28,
+	0x62, 0x41, 0xc6, 0xa5, 0xa8, 0xf6, 0x7a, 0x06, 0x4d, 0x7c, 0x29, 0x35, 0x49, 0x5f, 0x1d, 0x76,
+	0x0e, 0x7b, 0x77, 0xef, 0x64, 0x6b, 0xb3, 0xeb, 0x7d, 0xc5, 0xa9, 0xb9, 0x83, 0x9f, 0x0d, 0xb8,
+	0x37, 0x8e, 0xbd, 0x8c, 0x7b, 0xd1, 0xb1, 0xff, 0x85, 0x05, 0x19, 0x7d, 0x04, 0x5a, 0x9a, 0xf0,
+	0x09, 0x3a, 0xd3, 0x6d, 0x63, 0x7e, 0xbd, 0xaf, 0x8d, 0x9d, 0xb7, 0xaf, 0xff, 0xd4, 0xa7, 0x83,
+	0x53, 0xfa, 0x02, 0xba, 0x29, 0x17, 0x61, 0xc4, 0x5c, 0x14, 0x32, 0x1b, 0x7d, 0xb2, 0xfe, 0xcd,
+	0x23, 0xc5, 0xe9, 0x54, 0xec, 0x6a, 0xd5, 0xcf, 0xf0, 0x20, 0xac, 0x5d, 0xb8, 0xc1, 0x8d, 0x8d,
+	0x5a, 0x49, 0x45, 0xa5, 0xe1, 0x8a, 0xd2, 0x1a, 0xdf, 0x47, 0x8a, 0xb3, 0x1b, 0xae, 0x89, 0xe4,
+	0x25, 0x74, 0x7d, 0x79, 0x21, 0x26, 0x5c, 0x84, 0xae, 0x2f, 0x73, 0x53, 0x43, 0xe9, 0x87, 0x2b,
+	0xd2, 0x76, 0x4d, 0xb2, 0x65, 0xee, 0x74, 0xfc, 0x7f, 0x8d, 0xdd, 0x02, 0x1d, 0x97, 0x1a, 0x78,
+	0xd0, 0xb9, 0x45, 0xa2, 0xdb, 0xa0, 0x4f, 0xb9, 0x70, 0x73, 0x0c, 0x89, 0x38, 0xda, 0x94, 0x8b,
+	0xd3, 0x25, 0x58, 0x60, 0x16, 0x15, 0x78, 0x86, 0xa0, 0x97, 0xbb, 0x39, 0xda, 0x2a, 0x41, 0x2f,
+	0x3f, 0x5d, 0x82, 0x05, 0x2e, 0x54, 0x81, 0x67, 0x4f, 0x7e, 0x10, 0x68, 0xdf, 0xfc, 0x6b, 0x68,
+	0x1b, 0xf4, 0x8f, 0x22, 0x65, 0x99, 0xa1, 0x94, 0xe5, 0x89, 0xe4, 0x22, 0x33, 0x08, 0xdd, 0x04,
+	0x78, 0xc7, 0x05, 0x1b, 0x67, 0x09, 0x17, 0xa1, 0xd1, 0xa0, 0x1d, 0x68, 0x9d, 0xc8, 0xa8, 0x08,
+	0xa5, 0x30, 0xd4, 0x72, 0xf8, 0xfe, 0x22, 0xca, 0x78, 0x45, 0xd6, 0xe8, 0x36, 0x6c, 0x61, 0x7f,
+	0xeb, 0x86, 0x4e, 0x0d, 0xe8, 0xd6, 0xa4, 0xea, 0x5a, 0x93, 0x76, 0x61, 0x63, 0x19, 0xad, 0xd1,
+	0xa2, 0x3d, 0xa0, 0xab, 0x41, 0x1b, 0x1b, 0xf6, 0xe3, 0xd9, 0x6f, 0x4b, 0x99, 0xcd, 0x2d, 0x72,
+	0x39, 0xb7, 0xc8, 0xd5, 0xdc, 0x22, 0xbf, 0xe6, 0x16, 0xf9, 0xbe, 0xb0, 0x94, 0xcb, 0x85, 0xa5,
+	0x5c, 0x2d, 0x2c, 0xe5, 0x93, 0x8e, 0x59, 0xfa, 0x4d, 0xfc, 0x5e, 0x9e, 0xfe, 0x0d, 0x00, 0x00,
+	0xff, 0xff, 0x55, 0x3f, 0x40, 0x82, 0x6f, 0x03, 0x00, 0x00,
 }

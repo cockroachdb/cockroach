@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
-	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/geojson"
 	"github.com/twpayne/go-geom/encoding/kml"
 	"github.com/twpayne/go-geom/encoding/wkb"
@@ -29,9 +28,9 @@ import (
 	"github.com/twpayne/go-geom/encoding/wkt"
 )
 
-// EWKBToWKT transforms a given EWKB to WKT.
-func EWKBToWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.WKT, error) {
-	t, err := ewkb.Unmarshal([]byte(b))
+// SpatialObjectToWKT transforms a given EWKB to WKT.
+func SpatialObjectToWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.WKT, error) {
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
@@ -39,9 +38,9 @@ func EWKBToWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.WKT, error) {
 	return geopb.WKT(ret), err
 }
 
-// EWKBToEWKT transforms a given EWKB to EWKT.
-func EWKBToEWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.EWKT, error) {
-	t, err := ewkb.Unmarshal([]byte(b))
+// SpatialObjectToEWKT transforms a given EWKB to EWKT.
+func SpatialObjectToEWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.EWKT, error) {
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
@@ -55,9 +54,9 @@ func EWKBToEWKT(b geopb.EWKB, maxDecimalDigits int) (geopb.EWKT, error) {
 	return geopb.EWKT(ret), err
 }
 
-// EWKBToWKB transforms a given EWKB to WKB.
-func EWKBToWKB(b geopb.EWKB, byteOrder binary.ByteOrder) (geopb.WKB, error) {
-	t, err := ewkb.Unmarshal([]byte(b))
+// SpatialObjectToWKB transforms a given EWKB to WKB.
+func SpatialObjectToWKB(so geopb.SpatialObject, byteOrder binary.ByteOrder) (geopb.WKB, error) {
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +64,8 @@ func EWKBToWKB(b geopb.EWKB, byteOrder binary.ByteOrder) (geopb.WKB, error) {
 	return geopb.WKB(ret), err
 }
 
-// EWKBToGeoJSONFlag maps to the ST_AsGeoJSON flags for PostGIS.
-type EWKBToGeoJSONFlag int
+// SpatialObjectToGeoJSONFlag maps to the ST_AsGeoJSON flags for PostGIS.
+type SpatialObjectToGeoJSONFlag int
 
 // These should be kept with ST_AsGeoJSON in PostGIS.
 // 0: means no option
@@ -75,12 +74,12 @@ type EWKBToGeoJSONFlag int
 // 4: GeoJSON Long CRS (e.g urn:ogc:def:crs:EPSG::4326)
 // 8: GeoJSON Short CRS if not EPSG:4326 (default)
 const (
-	EWKBToGeoJSONFlagIncludeBBox EWKBToGeoJSONFlag = 1 << (iota)
-	EWKBToGeoJSONFlagShortCRS
-	EWKBToGeoJSONFlagLongCRS
-	EWKBToGeoJSONFlagShortCRSIfNot4326
+	SpatialObjectToGeoJSONFlagIncludeBBox SpatialObjectToGeoJSONFlag = 1 << (iota)
+	SpatialObjectToGeoJSONFlagShortCRS
+	SpatialObjectToGeoJSONFlagLongCRS
+	SpatialObjectToGeoJSONFlagShortCRSIfNot4326
 
-	EWKBToGeoJSONFlagZero = 0
+	SpatialObjectToGeoJSONFlagZero = 0
 )
 
 // geomToGeoJSONCRS converts a geom to its CRS GeoJSON form.
@@ -104,16 +103,18 @@ func geomToGeoJSONCRS(t geom.T, long bool) (*geojson.CRS, error) {
 	return crs, nil
 }
 
-// EWKBToGeoJSON transforms a given EWKB to GeoJSON.
-func EWKBToGeoJSON(b geopb.EWKB, maxDecimalDigits int, flag EWKBToGeoJSONFlag) ([]byte, error) {
-	t, err := ewkb.Unmarshal([]byte(b))
+// SpatialObjectToGeoJSON transforms a given EWKB to GeoJSON.
+func SpatialObjectToGeoJSON(
+	so geopb.SpatialObject, maxDecimalDigits int, flag SpatialObjectToGeoJSONFlag,
+) ([]byte, error) {
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return nil, err
 	}
 	options := []geojson.EncodeGeometryOption{
 		geojson.EncodeGeometryWithMaxDecimalDigits(maxDecimalDigits),
 	}
-	if flag&EWKBToGeoJSONFlagIncludeBBox != 0 {
+	if flag&SpatialObjectToGeoJSONFlagIncludeBBox != 0 {
 		options = append(
 			options,
 			geojson.EncodeGeometryWithBBox(),
@@ -121,19 +122,19 @@ func EWKBToGeoJSON(b geopb.EWKB, maxDecimalDigits int, flag EWKBToGeoJSONFlag) (
 	}
 	// Take CRS flag in order of precedence.
 	if t.SRID() != 0 {
-		if flag&EWKBToGeoJSONFlagLongCRS != 0 {
+		if flag&SpatialObjectToGeoJSONFlagLongCRS != 0 {
 			crs, err := geomToGeoJSONCRS(t, true /* long */)
 			if err != nil {
 				return nil, err
 			}
 			options = append(options, geojson.EncodeGeometryWithCRS(crs))
-		} else if flag&EWKBToGeoJSONFlagShortCRS != 0 {
+		} else if flag&SpatialObjectToGeoJSONFlagShortCRS != 0 {
 			crs, err := geomToGeoJSONCRS(t, false /* long */)
 			if err != nil {
 				return nil, err
 			}
 			options = append(options, geojson.EncodeGeometryWithCRS(crs))
-		} else if flag&EWKBToGeoJSONFlagShortCRSIfNot4326 != 0 {
+		} else if flag&SpatialObjectToGeoJSONFlagShortCRSIfNot4326 != 0 {
 			if t.SRID() != 4326 {
 				crs, err := geomToGeoJSONCRS(t, false /* long */)
 				if err != nil {
@@ -147,9 +148,9 @@ func EWKBToGeoJSON(b geopb.EWKB, maxDecimalDigits int, flag EWKBToGeoJSONFlag) (
 	return geojson.Marshal(t, options...)
 }
 
-// EWKBToWKBHex transforms a given EWKB to WKBHex.
-func EWKBToWKBHex(b geopb.EWKB) (string, error) {
-	t, err := ewkb.Unmarshal([]byte(b))
+// SpatialObjectToWKBHex transforms a given EWKB to WKBHex.
+func SpatialObjectToWKBHex(so geopb.SpatialObject) (string, error) {
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}
@@ -157,9 +158,9 @@ func EWKBToWKBHex(b geopb.EWKB) (string, error) {
 	return strings.ToUpper(ret), err
 }
 
-// EWKBToKML transforms a given EWKB to KML.
-func EWKBToKML(b geopb.EWKB) (string, error) {
-	t, err := ewkb.Unmarshal([]byte(b))
+// SpatialObjectToKML transforms a given EWKB to KML.
+func SpatialObjectToKML(so geopb.SpatialObject) (string, error) {
+	t, err := spatialObjectToGeomT(so)
 	if err != nil {
 		return "", err
 	}

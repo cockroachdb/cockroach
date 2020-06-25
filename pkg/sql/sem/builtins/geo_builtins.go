@@ -139,7 +139,7 @@ var geomFromWKBOverload = bytesOverload1(
 )
 
 // geometryFromTextCheckShapeBuiltin is used for the ST_<Shape>FromText builtins.
-func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
+func geometryFromTextCheckShapeBuiltin(shape geopb.ShapeType) builtinDefinition {
 	return makeBuiltin(
 		defProps(),
 		stringOverload1(
@@ -148,7 +148,7 @@ func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 				if err != nil {
 					return nil, err
 				}
-				if g.Shape() != shape {
+				if g.ShapeType() != shape {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -172,7 +172,7 @@ func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 				if err != nil {
 					return nil, err
 				}
-				if g.Shape() != shape {
+				if g.ShapeType() != shape {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -189,7 +189,7 @@ func geometryFromTextCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 }
 
 // geometryFromWKBCheckShapeBuiltin is used for the ST_<Shape>FromWKB builtins.
-func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
+func geometryFromWKBCheckShapeBuiltin(shape geopb.ShapeType) builtinDefinition {
 	return makeBuiltin(
 		defProps(),
 		bytesOverload1(
@@ -198,7 +198,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 				if err != nil {
 					return nil, err
 				}
-				if g.Shape() != shape {
+				if g.ShapeType() != shape {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -222,7 +222,7 @@ func geometryFromWKBCheckShapeBuiltin(shape geopb.Shape) builtinDefinition {
 				if err != nil {
 					return nil, err
 				}
-				if g.Shape() != shape {
+				if g.ShapeType() != shape {
 					return tree.DNull, nil
 				}
 				return tree.NewDGeometry(g), nil
@@ -406,7 +406,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if g.Geometry.Empty() {
 					return tree.DBoolFalse, nil
 				}
-				if g.Geometry.Shape() == geopb.Shape_Point {
+				if g.Geometry.ShapeType() == geopb.ShapeType_Point {
 					return tree.DBoolFalse, nil
 				}
 				return tree.DBoolTrue, nil
@@ -531,34 +531,34 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 	),
 
-	"st_geomcollfromtext":        geometryFromTextCheckShapeBuiltin(geopb.Shape_GeometryCollection),
-	"st_geomcollfromwkb":         geometryFromWKBCheckShapeBuiltin(geopb.Shape_GeometryCollection),
-	"st_linefromtext":            geometryFromTextCheckShapeBuiltin(geopb.Shape_LineString),
-	"st_linefromwkb":             geometryFromWKBCheckShapeBuiltin(geopb.Shape_LineString),
-	"st_linestringfromtext":      geometryFromTextCheckShapeBuiltin(geopb.Shape_LineString), // missing from PostGIS
-	"st_linestringfromwkb":       geometryFromWKBCheckShapeBuiltin(geopb.Shape_LineString),
-	"st_mlinefromtext":           geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiLineString),
-	"st_mlinefromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiLineString),
-	"st_mpointfromtext":          geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPoint),
-	"st_mpointfromwkb":           geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPoint),
-	"st_mpolyfromtext":           geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPolygon),
-	"st_mpolyfromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPolygon),
-	"st_multilinefromtext":       geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiLineString), // missing from PostGIS
-	"st_multilinefromwkb":        geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiLineString),
-	"st_multilinestringfromtext": geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiLineString),
-	"st_multilinestringfromwkb":  geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiLineString), // missing from PostGIS
-	"st_multipointfromtext":      geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPoint),     // SRID version missing from PostGIS
-	"st_multipointfromwkb":       geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPoint),
-	"st_multipolyfromtext":       geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPolygon), // missing from PostGIS
-	"st_multipolyfromwkb":        geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPolygon),
-	"st_multipolygonfromtext":    geometryFromTextCheckShapeBuiltin(geopb.Shape_MultiPolygon),
-	"st_multipolygonfromwkb":     geometryFromWKBCheckShapeBuiltin(geopb.Shape_MultiPolygon), // missing from PostGIS
-	"st_pointfromtext":           geometryFromTextCheckShapeBuiltin(geopb.Shape_Point),
-	"st_pointfromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.Shape_Point),
-	"st_polyfromtext":            geometryFromTextCheckShapeBuiltin(geopb.Shape_Polygon),
-	"st_polyfromwkb":             geometryFromWKBCheckShapeBuiltin(geopb.Shape_Polygon),
-	"st_polygonfromtext":         geometryFromTextCheckShapeBuiltin(geopb.Shape_Polygon),
-	"st_polygonfromwkb":          geometryFromWKBCheckShapeBuiltin(geopb.Shape_Polygon),
+	"st_geomcollfromtext":        geometryFromTextCheckShapeBuiltin(geopb.ShapeType_GeometryCollection),
+	"st_geomcollfromwkb":         geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_GeometryCollection),
+	"st_linefromtext":            geometryFromTextCheckShapeBuiltin(geopb.ShapeType_LineString),
+	"st_linefromwkb":             geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_LineString),
+	"st_linestringfromtext":      geometryFromTextCheckShapeBuiltin(geopb.ShapeType_LineString), // missing from PostGIS
+	"st_linestringfromwkb":       geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_LineString),
+	"st_mlinefromtext":           geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiLineString),
+	"st_mlinefromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiLineString),
+	"st_mpointfromtext":          geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiPoint),
+	"st_mpointfromwkb":           geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiPoint),
+	"st_mpolyfromtext":           geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiPolygon),
+	"st_mpolyfromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiPolygon),
+	"st_multilinefromtext":       geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiLineString), // missing from PostGIS
+	"st_multilinefromwkb":        geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiLineString),
+	"st_multilinestringfromtext": geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiLineString),
+	"st_multilinestringfromwkb":  geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiLineString), // missing from PostGIS
+	"st_multipointfromtext":      geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiPoint),     // SRID version missing from PostGIS
+	"st_multipointfromwkb":       geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiPoint),
+	"st_multipolyfromtext":       geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiPolygon), // missing from PostGIS
+	"st_multipolyfromwkb":        geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiPolygon),
+	"st_multipolygonfromtext":    geometryFromTextCheckShapeBuiltin(geopb.ShapeType_MultiPolygon),
+	"st_multipolygonfromwkb":     geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_MultiPolygon), // missing from PostGIS
+	"st_pointfromtext":           geometryFromTextCheckShapeBuiltin(geopb.ShapeType_Point),
+	"st_pointfromwkb":            geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_Point),
+	"st_polyfromtext":            geometryFromTextCheckShapeBuiltin(geopb.ShapeType_Polygon),
+	"st_polyfromwkb":             geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_Polygon),
+	"st_polygonfromtext":         geometryFromTextCheckShapeBuiltin(geopb.ShapeType_Polygon),
+	"st_polygonfromwkb":          geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_Polygon),
 
 	//
 	// Input (Geography)
@@ -674,7 +674,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB(), defaultWKTDecimalDigits)
+				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
 			types.String,
@@ -692,7 +692,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(wkt)), err
 			},
 			Info: infoBuilder{
@@ -702,7 +702,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkt, err := geo.EWKBToWKT(g.Geography.EWKB(), defaultWKTDecimalDigits)
+				wkt, err := geo.SpatialObjectToWKT(g.Geography.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
 			types.String,
@@ -720,7 +720,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				wkt, err := geo.EWKBToWKT(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				wkt, err := geo.SpatialObjectToWKT(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(wkt)), err
 			},
 			Info: infoBuilder{
@@ -733,7 +733,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB(), defaultWKTDecimalDigits)
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
 			types.String,
@@ -751,7 +751,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(ewkt)), err
 			},
 			Info: infoBuilder{
@@ -761,7 +761,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB(), defaultWKTDecimalDigits)
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geography.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
 			types.String,
@@ -779,7 +779,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(ewkt)), err
 			},
 			Info: infoBuilder{
@@ -792,7 +792,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.DefaultEWKBEncodingFormat)
+				wkb, err := geo.SpatialObjectToWKB(g.Geometry.SpatialObject(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
@@ -801,7 +801,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.DefaultEWKBEncodingFormat)
+				wkb, err := geo.SpatialObjectToWKB(g.Geography.SpatialObject(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
@@ -818,7 +818,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				g := args[0].(*tree.DGeometry)
 				text := string(tree.MustBeDString(args[1]))
 
-				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.StringToByteOrder(text))
+				wkb, err := geo.SpatialObjectToWKB(g.Geometry.SpatialObject(), geo.StringToByteOrder(text))
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			Info: infoBuilder{
@@ -837,7 +837,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				g := args[0].(*tree.DGeography)
 				text := string(tree.MustBeDString(args[1]))
 
-				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.StringToByteOrder(text))
+				wkb, err := geo.SpatialObjectToWKB(g.Geography.SpatialObject(), geo.StringToByteOrder(text))
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			Info: infoBuilder{
@@ -870,7 +870,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				hexwkb, err := geo.EWKBToWKBHex(g.Geometry.EWKB())
+				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geometry.SpatialObject())
 				return tree.NewDString(hexwkb), err
 			},
 			types.String,
@@ -879,7 +879,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				hexwkb, err := geo.EWKBToWKBHex(g.Geography.EWKB())
+				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geography.SpatialObject())
 				return tree.NewDString(hexwkb), err
 			},
 			types.String,
@@ -976,7 +976,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				kml, err := geo.EWKBToKML(g.Geometry.EWKB())
+				kml, err := geo.SpatialObjectToKML(g.Geometry.SpatialObject())
 				return tree.NewDString(kml), err
 			},
 			types.String,
@@ -985,7 +985,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				kml, err := geo.EWKBToKML(g.Geography.EWKB())
+				kml, err := geo.SpatialObjectToKML(g.Geography.SpatialObject())
 				return tree.NewDString(kml), err
 			},
 			types.String,
@@ -997,7 +997,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), defaultGeoJSONDecimalDigits, geo.EWKBToGeoJSONFlagShortCRSIfNot4326)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), defaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
@@ -1018,7 +1018,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.EWKBToGeoJSONFlagShortCRSIfNot4326)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1036,8 +1036,8 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				options := geo.EWKBToGeoJSONFlag(tree.MustBeDInt(args[2]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
+				options := geo.SpatialObjectToGeoJSONFlag(tree.MustBeDInt(args[2]))
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1054,7 +1054,7 @@ Options is a flag that can be bitmasked. The options are:
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), defaultGeoJSONDecimalDigits, geo.EWKBToGeoJSONFlagZero)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), defaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
@@ -1075,7 +1075,7 @@ Options is a flag that can be bitmasked. The options are:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.EWKBToGeoJSONFlagZero)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.SpatialObjectToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1093,8 +1093,8 @@ Options is a flag that can be bitmasked. The options are:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				options := geo.EWKBToGeoJSONFlag(tree.MustBeDInt(args[2]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
+				options := geo.SpatialObjectToGeoJSONFlag(tree.MustBeDInt(args[2]))
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1206,7 +1206,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 					return nil, err
 				}
 
-				summary, err := geo.Summary(t, g.Shape(), false)
+				summary, err := geo.Summary(t, g.Geometry.SpatialObject().BoundingBox != nil, g.ShapeType(), false)
 				if err != nil {
 					return nil, err
 				}
@@ -1234,7 +1234,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					return nil, err
 				}
 
-				summary, err := geo.Summary(t, g.Shape(), true)
+				summary, err := geo.Summary(t, g.Geography.SpatialObject().BoundingBox != nil, g.ShapeType(), true)
 				if err != nil {
 					return nil, err
 				}
@@ -1755,7 +1755,7 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(g.Shape().String()), nil
+				return tree.NewDString(g.ShapeType().String()), nil
 			},
 			types.String,
 			infoBuilder{
@@ -1769,7 +1769,7 @@ Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(fmt.Sprintf("ST_%s", g.Shape().String())), nil
+				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType().String())), nil
 			},
 			types.String,
 			infoBuilder{

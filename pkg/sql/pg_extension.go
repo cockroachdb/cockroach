@@ -62,12 +62,12 @@ func postgisColumnsTablePopulator(
 					}
 
 					var datumNDims tree.Datum
-					switch m.Shape {
-					case geopb.Shape_Point, geopb.Shape_LineString, geopb.Shape_Polygon,
-						geopb.Shape_MultiPoint, geopb.Shape_MultiLineString, geopb.Shape_MultiPolygon,
-						geopb.Shape_GeometryCollection:
+					switch m.ShapeType {
+					case geopb.ShapeType_Point, geopb.ShapeType_LineString, geopb.ShapeType_Polygon,
+						geopb.ShapeType_MultiPoint, geopb.ShapeType_MultiLineString, geopb.ShapeType_MultiPolygon,
+						geopb.ShapeType_GeometryCollection:
 						datumNDims = tree.NewDInt(2)
-					case geopb.Shape_Geometry, geopb.Shape_Unset:
+					case geopb.ShapeType_Geometry, geopb.ShapeType_Unset:
 						// For geometry_columns, the query in PostGIS COALESCES the value to 2.
 						// Otherwise, the value is NULL.
 						if matchingFamily == types.GeometryFamily {
@@ -77,9 +77,9 @@ func postgisColumnsTablePopulator(
 						}
 					}
 
-					shapeName := m.Shape.String()
-					if m.Shape == geopb.Shape_Unset {
-						shapeName = geopb.Shape_Geometry.String()
+					shapeName := m.ShapeType.String()
+					if m.ShapeType == geopb.ShapeType_Unset {
+						shapeName = geopb.ShapeType_Geometry.String()
 					}
 
 					if err := addRow(

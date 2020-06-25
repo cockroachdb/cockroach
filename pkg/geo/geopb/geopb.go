@@ -10,9 +10,23 @@
 
 package geopb
 
-import "fmt"
+// SpatialObjectShape is a type alias for a shape inside SpatialObject.
+type SpatialObjectShape = isSpatialObject_Shape
 
-// EWKBHex returns the EWKB-hex version of this data type
-func (b *SpatialObject) EWKBHex() string {
-	return fmt.Sprintf("%X", b.EWKB)
+// MakeGeometryCollectionSpatialObjectShape makes the nested structure
+// for the oneof shape GeometryCollection element.
+func MakeGeometryCollectionSpatialObjectShape(shapes []Shape) SpatialObjectShape {
+	return &SpatialObject_GeometryCollectionShape{
+		GeometryCollectionShape: &GeometryCollectionShape{
+			Shapes: shapes,
+		},
+	}
+}
+
+// MakeSingleSpatialObjectShape makes the nested structure
+// for the oneof SingleShape element.
+func MakeSingleSpatialObjectShape(shape Shape) SpatialObjectShape {
+	return &SpatialObject_SingleShape{
+		SingleShape: &shape,
+	}
 }

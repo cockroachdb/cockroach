@@ -511,8 +511,8 @@ func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
 func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
     return u.val.([]tree.PartitionedBackup)
 }
-func (u *sqlSymUnion) geoFigure() geopb.Shape {
-  return u.val.(geopb.Shape)
+func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
+  return u.val.(geopb.ShapeType)
 }
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
@@ -7679,25 +7679,25 @@ simple_typename:
 | POLYGON error { return unimplementedWithIssueDetail(sqllex, 21286, "polygon") } // needed or else it generates a syntax error.
 
 geo_shape:
-  POINT { $$.val = geopb.Shape_Point }
-| LINESTRING { $$.val = geopb.Shape_LineString }
-| POLYGON { $$.val = geopb.Shape_Polygon }
-| GEOMETRYCOLLECTION { $$.val = geopb.Shape_GeometryCollection }
-| MULTIPOLYGON { $$.val = geopb.Shape_MultiPolygon }
-| MULTILINESTRING { $$.val = geopb.Shape_MultiLineString }
-| MULTIPOINT { $$.val = geopb.Shape_MultiPoint }
-| GEOMETRY { $$.val = geopb.Shape_Geometry }
+  POINT { $$.val = geopb.ShapeType_Point }
+| LINESTRING { $$.val = geopb.ShapeType_LineString }
+| POLYGON { $$.val = geopb.ShapeType_Polygon }
+| GEOMETRYCOLLECTION { $$.val = geopb.ShapeType_GeometryCollection }
+| MULTIPOLYGON { $$.val = geopb.ShapeType_MultiPolygon }
+| MULTILINESTRING { $$.val = geopb.ShapeType_MultiLineString }
+| MULTIPOINT { $$.val = geopb.ShapeType_MultiPoint }
+| GEOMETRY { $$.val = geopb.ShapeType_Geometry }
 
 const_geo:
   GEOGRAPHY { $$.val = types.Geography }
 | GEOMETRY  { $$.val = types.Geometry }
 | GEOMETRY '(' geo_shape ')'
   {
-    $$.val = types.MakeGeometry($3.geoFigure(), 0)
+    $$.val = types.MakeGeometry($3.geoShapeType(), 0)
   }
 | GEOGRAPHY '(' geo_shape ')'
   {
-    $$.val = types.MakeGeography($3.geoFigure(), 0)
+    $$.val = types.MakeGeography($3.geoShapeType(), 0)
   }
 | GEOMETRY '(' geo_shape ',' signed_iconst ')'
   {
@@ -7705,7 +7705,7 @@ const_geo:
     if err != nil {
       return setErr(sqllex, err)
     }
-    $$.val = types.MakeGeometry($3.geoFigure(), geopb.SRID(val))
+    $$.val = types.MakeGeometry($3.geoShapeType(), geopb.SRID(val))
   }
 | GEOGRAPHY '(' geo_shape ',' signed_iconst ')'
   {
@@ -7713,7 +7713,7 @@ const_geo:
     if err != nil {
       return setErr(sqllex, err)
     }
-    $$.val = types.MakeGeography($3.geoFigure(), geopb.SRID(val))
+    $$.val = types.MakeGeography($3.geoShapeType(), geopb.SRID(val))
   }
 
 // We have a separate const_typename to allow defaulting fixed-length types

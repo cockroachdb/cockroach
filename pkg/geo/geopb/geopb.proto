@@ -14,11 +14,11 @@ option go_package = "geopb";
 
 import "gogoproto/gogo.proto";
 
-// Shape is the type of a spatial shape. Each of these corresponds to a
+// ShapeType is the type of a spatial shape. Each of these corresponds to a
 // different representation and serialization format. For example, a Point is a
 // pair of doubles (or more than that for geometries with Z or N), a LineString
 // is an ordered series of Points, etc.
-enum Shape {
+enum ShapeType {
   Unset = 0;
 
   Point = 1;
@@ -33,14 +33,40 @@ enum Shape {
   GeometryCollection = 8;
 }
 
+// Shape represents a single shape.
+message Shape {
+  // Shape is the shape of the component.
+  ShapeType shape_type = 1;
+  // Coords is a flat representation of individual components of the SpatialObject.
+  // They may be split up by the Ends variable.
+  repeated double coords = 2;
+  // Ends denotes when to split up coords array.
+  // For example, for Polygons, there may be multiple rings. Ends is the index to slice
+  // at to get each ring.
+  repeated int64 ends = 3;
+  // Endss denotes when to split up the ends array.
+  // For example, for MultiPolygons, there are multiple ends for multiple rings.
+  // Endss is the index to slice at of the last element of each polygon.
+  repeated int64 endss = 4;
+}
+
+// GeometryCollectionShape represents a GeometryCollection shape.
+message GeometryCollectionShape {
+  // Shapes represents all the shapes for a GeometryCollection.
+  repeated Shape shapes = 1 [(gogoproto.nullable)=false];
+}
+
 // SpatialObject represents a serialization of a Geospatial type.
 message SpatialObject {
-  // EWKB is the EWKB representation of the spatial object.
-  bytes ewkb = 1 [(gogoproto.customname)="EWKB",(gogoproto.casttype)="EWKB"];
-  // SRID is the denormalized SRID derived from the EWKB.
-  int32 srid = 2 [(gogoproto.customname)="SRID",(gogoproto.casttype)="SRID"];
-  // Shape is denormalized Shape derived from the EWKB.
-  Shape shape = 3;
+  // SRID is the SRID of the given spatial object.
+  int32 srid = 1 [(gogoproto.customname)="SRID",(gogoproto.casttype)="SRID"];
+  // Shape represents the make up of the SpatialObject.
+  oneof shape {
+    // SingleShape is a single shape.
+    Shape single_shape = 2;
+    // GeometryCollectionShape is represents a GeometryCollection shape.
+    GeometryCollectionShape geometry_collection_shape = 3;
+  }
   // BoundingBox is the bounding box of the SpatialObject.
   BoundingBox bounding_box = 4;
 }

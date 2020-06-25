@@ -11,7 +11,6 @@
 package geo
 
 import (
-	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -86,25 +85,19 @@ func init() {
 	}
 }
 
-func mustDecodeEWKBFromString(t *testing.T, h string) geopb.EWKB {
-	decoded, err := hex.DecodeString(h)
-	require.NoError(t, err)
-	return geopb.EWKB(decoded)
-}
-
 func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	testCases := []struct {
 		t             GeospatialType
 		srid          geopb.SRID
-		shape         geopb.Shape
+		shape         geopb.ShapeType
 		errorContains string
 	}{
-		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.Shape_Geometry, ""},
-		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.Shape_Unset, ""},
-		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.Shape_Geometry, ""},
-		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.Shape_Unset, ""},
-		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.Shape_LineString, "type Point does not match column type LineString"},
-		{MustParseGeometry("POINT(1.0 1.0)"), 4326, geopb.Shape_Geometry, "SRID 0 does not match column SRID 4326"},
+		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.ShapeType_Geometry, ""},
+		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.ShapeType_Unset, ""},
+		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.ShapeType_Geometry, ""},
+		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.ShapeType_Unset, ""},
+		{MustParseGeometry("SRID=4326;POINT(1.0 1.0)"), 0, geopb.ShapeType_LineString, "type Point does not match column type LineString"},
+		{MustParseGeometry("POINT(1.0 1.0)"), 4326, geopb.ShapeType_Geometry, "SRID 0 does not match column SRID 4326"},
 	}
 
 	for _, tc := range testCases {
@@ -120,7 +113,7 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	}
 }
 
-func TestSpatialObjectFromGeom(t *testing.T) {
+func TestSpatialObjectFromGeomT(t *testing.T) {
 	testCases := []struct {
 		desc string
 		g    geom.T
@@ -130,9 +123,11 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"point",
 			testGeomPoint,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "0101000000000000000000F03F0000000000000040"),
-				SRID:        0,
-				Shape:       geopb.Shape_Point,
+				SRID: 0,
+				Shape: geopb.MakeSingleSpatialObjectShape(geopb.Shape{
+					ShapeType: geopb.ShapeType_Point,
+					Coords:    []float64{1, 2},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 2, MaxY: 2},
 			},
 		},
@@ -140,9 +135,11 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"linestring",
 			testGeomLineString,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040"),
-				SRID:        4326,
-				Shape:       geopb.Shape_LineString,
+				SRID: 4326,
+				Shape: geopb.MakeSingleSpatialObjectShape(geopb.Shape{
+					ShapeType: geopb.ShapeType_LineString,
+					Coords:    []float64{1, 1, 2, 2},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
@@ -150,9 +147,12 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"polygon",
 			testGeomPolygon,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "01030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F"),
-				SRID:        0,
-				Shape:       geopb.Shape_Polygon,
+				SRID: 0,
+				Shape: geopb.MakeSingleSpatialObjectShape(geopb.Shape{
+					ShapeType: geopb.ShapeType_Polygon,
+					Coords:    []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0},
+					Ends:      []int64{8},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
@@ -160,9 +160,12 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"multipoint",
 			testGeomMultiPoint,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "0104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
-				SRID:        0,
-				Shape:       geopb.Shape_MultiPoint,
+				SRID: 0,
+				Shape: geopb.MakeSingleSpatialObjectShape(geopb.Shape{
+					ShapeType: geopb.ShapeType_MultiPoint,
+					Coords:    []float64{1.0, 1.0, 2.0, 2.0},
+					Ends:      []int64{2, 4},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
@@ -170,9 +173,12 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"multilinestring",
 			testGeomMultiLineString,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "010500000002000000010200000002000000000000000000F03F000000000000F03F000000000000004000000000000000400102000000020000000000000000000840000000000000084000000000000010400000000000001040"),
-				SRID:        0,
-				Shape:       geopb.Shape_MultiLineString,
+				SRID: 0,
+				Shape: geopb.MakeSingleSpatialObjectShape(geopb.Shape{
+					ShapeType: geopb.ShapeType_MultiLineString,
+					Coords:    []float64{1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0},
+					Ends:      []int64{4, 8},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 4, MinY: 1, MaxY: 4},
 			},
 		},
@@ -180,9 +186,13 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"multipolygon",
 			testGeomMultiPolygon,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "01060000000200000001030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F0103000000010000000400000000000000000008400000000000000840000000000000104000000000000010400000000000000840000000000000104000000000000008400000000000000840"),
-				SRID:        0,
-				Shape:       geopb.Shape_MultiPolygon,
+				SRID: 0,
+				Shape: geopb.MakeSingleSpatialObjectShape(geopb.Shape{
+					ShapeType: geopb.ShapeType_MultiPolygon,
+					Coords:    []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0, 3.0, 3.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0},
+					Ends:      []int64{8, 16},
+					Endss:     []int64{1, 2},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 4, MinY: 1, MaxY: 4},
 			},
 		},
@@ -190,16 +200,25 @@ func TestSpatialObjectFromGeom(t *testing.T) {
 			"geometrycollection",
 			testGeomGeometryCollection,
 			geopb.SpatialObject{
-				EWKB:        mustDecodeEWKBFromString(t, "0107000000020000000101000000000000000000F03F00000000000000400104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
-				SRID:        0,
-				Shape:       geopb.Shape_GeometryCollection,
+				SRID: 0,
+				Shape: geopb.MakeGeometryCollectionSpatialObjectShape([]geopb.Shape{
+					{
+						ShapeType: geopb.ShapeType_Point,
+						Coords:    []float64{1, 2},
+					},
+					{
+						ShapeType: geopb.ShapeType_MultiPoint,
+						Coords:    []float64{1.0, 1.0, 2.0, 2.0},
+						Ends:      []int64{2, 4},
+					},
+				}),
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
 			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			so, err := spatialObjectFromGeom(tc.g)
+			so, err := spatialObjectFromGeomT(tc.g)
 			require.NoError(t, err)
 			require.Equal(t, tc.ret, so)
 		})
