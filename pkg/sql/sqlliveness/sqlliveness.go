@@ -19,52 +19,121 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
 type Claim struct {
-	name  string
-	epoch int64
+	Name  string
+	Epoch int64
 }
 
 // OptionalNodeLivenessI is the interface used in OptionalNodeLiveness.
-type Liveness interface {
-	Self() (Liveness, error)
-	GetLiveNames() []Liveness
-	IsLive(string) (bool, error)
+type ClaimManager interface {
+	GetLiveEpoch(context.Context, string, time.Duration) (int64, error)
+	ExtendClaim(context.Context, *Claim, time.Duration) (*time.Time, error)
+	GetLiveClaims(context.Context) ([]Claim, error)
 }
 
 type SqlLiveness struct {
-	db   *kv.DB
-	ex   sqlutil.InternalExecutor
-	name string
-	// Epoch is a monotonically-increasing value for node liveness. It
-	// may be incremented if the liveness record expires (current time
-	// is later than the expiration timestamp).
-	Epoch int64
-
-	// The timestamp at which this liveness record expires. The logical part of
-	// this timestamp is zero.
-	Expiration hlc.Timestamp
+	db *kv.DB
+	ex sqlutil.InternalExecutor
 }
 
-func (l *SqlLiveness) GetLiveClaims(ctx context.Context) []Claim {
-	return l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		row, err := l.ex.QueryRowEx(
+func NewSqlLiveness(db *kv.DB, ex sqlutil.InternalExecutor) ClaimManager {
+	return &SqlLiveness{
+		db: db,
+		ex: ex,
+	}
+}
+
+func (l *SqlLiveness) GetLiveClaims(ctx context.Context) ([]Claim, error) {
+	var res []Claim
+	var rows []tree.Datums
+	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		rows, err = l.ex.QueryEx(
 			ctx, "get-expired-ids", txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			`UPDATE system.sqlliveness SET epoch = epoch + 1
-			WHERE expiration <= $1 RETURNING name, epoch`
-			r.ID(), operatingStatus,
+			`UPDATE system.sqlliveness
+			SET epoch = CASE WHEN expiration <= now() THEN epoch + 1 ELSE epoch END
+			WHERE epoch IS NOT NULL RETURNING name, epoch`,
+		)
+		return err
+	}); err != nil {
+		return nil, errors.Wrapf(err, "update sqlliveness claims")
+	}
+	res = make([]Claim, len(rows))
+	for i, r := range rows {
+		res[i] = Claim{
+			Name:  string(*r[0].(*tree.DString)),
+			Epoch: int64(*r[1].(*tree.DInt)),
+		}
+	}
+	return res, nil
+}
+
+var (
+	MissingClaimErr = errors.New("")
+)
+
+func (l *SqlLiveness) GetLiveEpoch(
+	ctx context.Context, name string, d time.Duration,
+) (int64, error) {
+	var epoch int64
+	if err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		row, err := l.ex.QueryRowEx(
+			ctx, "extend-claim", txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			`UPDATE system.sqlliveness
+			SET
+				epoch = CASE WHEN expiration <= now() THEN epoch + 1 ELSE epoch END,
+			  expiration = now() + $2
+			WHERE name = $1 RETURNING epoch`,
+			name, d.Microseconds(),
 		)
 		if err != nil {
-			return errors.Wrap(err, "could not query jobs table")
+			return errors.Wrapf(err, "create claim for name %s)", name)
 		}
 		if row == nil {
-			// TODO handle this more gracefully
-			panic("we have lost our liveness record")
+			_, err = l.ex.QueryRowEx(
+				ctx, "insert-claim", txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				`INSERT INTO system.sqlliveness VALUES ($1, 0, now() + $2)`,
+				name, d.Microseconds(),
+			)
+			if err != nil {
+				return errors.Wrapf(err, "create claim for name %s)", name)
+			}
+		} else {
+			epoch = int64(*row[0].(*tree.DInt))
 		}
-		epoch := int64(*row[0].(*tree.DInt))
+		return nil
+	}); err != nil {
+		return -1, err
+	}
+	return epoch, nil
+}
+
+func (l *SqlLiveness) ExtendClaim(
+	ctx context.Context, c *Claim, d time.Duration,
+) (*time.Time, error) {
+	var res *time.Time
+	err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		row, err := l.ex.QueryRowEx(
+			ctx, "extend-claim", txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			`UPDATE system.sqlliveness SET expiration = now() + '$1 microsecond'
+			WHERE name = $2 AND epoch = $3 RETURNING expiration`,
+			d.Microseconds(), c.Name, c.Epoch,
+		)
+		if err != nil {
+			return errors.Wrapf(err, "extend liveness claim (%s, %d)", c.Name, c.Epoch)
+		}
+		if row == nil {
+			return errors.Wrapf(MissingClaimErr, "claim (%s, %d)", c.Name, c.Epoch)
+		}
+		res = &row[0].(*tree.DTimestampTZ).Time
+		return nil
 	})
+	return res, err
 }
