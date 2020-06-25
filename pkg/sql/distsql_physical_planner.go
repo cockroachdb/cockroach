@@ -1245,22 +1245,25 @@ func (dsp *DistSQLPlanner) selectRenders(
 	return nil
 }
 
-// addSorters adds sorters corresponding to a sortNode and updates the plan to
-// reflect the sort node.
-func (dsp *DistSQLPlanner) addSorters(p *PhysicalPlan, n *sortNode) {
+// addSorters adds sorters corresponding to the ordering and updates the plan
+// accordingly. When alreadyOrderedPrefix is non-zero, the input is already
+// ordered on the prefix ordering[:alreadyOrderedPrefix].
+func (dsp *DistSQLPlanner) addSorters(
+	p *PhysicalPlan, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
+) {
 	// Sorting is needed; we add a stage of sorting processors.
-	ordering := execinfrapb.ConvertToMappedSpecOrdering(n.ordering, p.PlanToStreamColMap)
+	outputOrdering := execinfrapb.ConvertToMappedSpecOrdering(ordering, p.PlanToStreamColMap)
 
 	p.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{
 			Sorter: &execinfrapb.SorterSpec{
-				OutputOrdering:   ordering,
-				OrderingMatchLen: uint32(n.alreadyOrderedPrefix),
+				OutputOrdering:   outputOrdering,
+				OrderingMatchLen: uint32(alreadyOrderedPrefix),
 			},
 		},
 		execinfrapb.PostProcessSpec{},
 		p.ResultTypes,
-		ordering,
+		outputOrdering,
 	)
 }
 
@@ -2505,7 +2508,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-		dsp.addSorters(plan, n)
+		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix)
 
 	case *unaryNode:
 		plan, err = dsp.createPlanForUnary(planCtx, n)

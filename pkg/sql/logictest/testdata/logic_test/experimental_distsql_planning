@@ -93,3 +93,13 @@ SELECT min(v) FROM kv
 # that behavior.
 statement error pq: unimplemented: experimental opt-driven distsql planning: window
 SELECT min(v) OVER () FROM kv
+
+# Check that sort is supported.
+query I
+SELECT v FROM kv ORDER BY v DESC
+----
+3
+2
+1
+1
+NULL
