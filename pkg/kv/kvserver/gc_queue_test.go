@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/syncmap"
 )
@@ -569,9 +570,11 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	expKVs := []struct {
 		key roachpb.Key
@@ -804,9 +807,11 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	testutils.SucceedsSoon(t, func() error {
 		for strKey, sp := range testCases {
@@ -934,9 +939,11 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		t.Fatal("config not set")
 	}
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	// This must be done in a SucceedsSoon loop because intent resolution
@@ -993,9 +1000,11 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
@@ -1098,10 +1107,11 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1e9 + 1)
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
-
+	assert.True(t, processed, "queue not processed")
 	// We wrote two batches worth of keys spread out, and two keys that
 	// each have enough old versions to fill a whole batch each in the
 	// first case, and two whole batches in the second, adding up to
