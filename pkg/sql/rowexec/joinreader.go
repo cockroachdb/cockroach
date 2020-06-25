@@ -45,6 +45,13 @@ const (
 	jrEmittingRows
 )
 
+type joinReaderType int
+
+const (
+	lookupJoinReaderType joinReaderType = iota
+	indexJoinReaderType
+)
+
 // joinReader performs a lookup join between `input` and the specified `index`.
 // `lookupCols` specifies the input columns which will be used for the index
 // lookup.
@@ -69,6 +76,7 @@ type joinReader struct {
 	alloc              sqlbase.DatumAlloc
 	rowAlloc           sqlbase.EncDatumRowAlloc
 	shouldLimitBatches bool
+	readerType         joinReaderType
 
 	input      execinfra.RowSource
 	inputTypes []*types.T
@@ -99,12 +107,32 @@ func newJoinReader(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
+	readerType joinReaderType,
 ) (execinfra.RowSourcedProcessor, error) {
-	jr := &joinReader{
-		desc:       spec.Table,
-		input:      input,
-		inputTypes: input.OutputTypes(),
-		lookupCols: spec.LookupColumns,
+	if spec.IndexIdx != 0 && readerType == indexJoinReaderType {
+		return nil, errors.AssertionFailedf("index join must be against primary index")
+	}
+
+	var jr *joinReader
+	if readerType == lookupJoinReaderType {
+		jr = &joinReader{
+			desc:       spec.Table,
+			input:      input,
+			inputTypes: input.OutputTypes(),
+			lookupCols: spec.LookupColumns,
+		}
+	} else {
+		pkIDs := spec.Table.PrimaryIndex.ColumnIDs
+		pkCols := make([]uint32, len(pkIDs))
+		for i := range pkIDs {
+			pkCols[i] = uint32(i)
+		}
+		jr = &joinReader{
+			desc:       spec.Table,
+			input:      input,
+			inputTypes: input.OutputTypes(),
+			lookupCols: pkCols,
+		}
 	}
 
 	var err error
@@ -125,17 +153,27 @@ func newJoinReader(
 
 	// If the lookup columns form a key, there is only one result per lookup, so the fetcher
 	// should parallelize the key lookups it performs.
-	jr.shouldLimitBatches = !spec.LookupColumnsAreKey
+	jr.shouldLimitBatches = !spec.LookupColumnsAreKey && (readerType != indexJoinReaderType)
+	jr.readerType = readerType
 
+	var leftTypes []*types.T
+	var leftEqCols []uint32
+	if readerType == indexJoinReaderType {
+		leftTypes = columnTypes
+		leftEqCols = indexCols
+	} else {
+		leftTypes = input.OutputTypes()
+		leftEqCols = jr.lookupCols
+	}
 	if err := jr.joinerBase.init(
 		jr,
 		flowCtx,
 		processorID,
-		input.OutputTypes(),
+		leftTypes,
 		columnTypes,
 		spec.Type,
 		spec.OnExpr,
-		jr.lookupCols,
+		leftEqCols,
 		indexCols,
 		0, /* numMergedColumns */
 		post,
@@ -162,10 +200,18 @@ func newJoinReader(
 	}
 
 	var fetcher row.Fetcher
+	var colIdxMap map[sqlbase.ColumnID]int
+	if readerType == indexJoinReaderType {
+		colIdxMap = jr.desc.ColumnIdxMapWithMutations(returnMutations)
+		neededRightCols = jr.Out.NeededColumns()
+	} else {
+		colIdxMap = jr.colIdxMap
+	}
 	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), colIdxMap, false, /* reverse */
 		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +223,10 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
-	jr.initJoinReaderStrategy(flowCtx, jr.desc.ColumnTypesWithMutations(returnMutations), len(columnIDs), spec.MaintainOrdering)
+	jr.initJoinReaderStrategy(
+		flowCtx, jr.desc.ColumnTypesWithMutations(returnMutations), len(columnIDs), spec.MaintainOrdering, neededRightCols,
+		readerType,
+	)
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
@@ -185,10 +234,15 @@ func newJoinReader(
 }
 
 func (jr *joinReader) initJoinReaderStrategy(
-	flowCtx *execinfra.FlowCtx, typs []*types.T, numKeyCols int, maintainOrdering bool,
+	flowCtx *execinfra.FlowCtx,
+	typs []*types.T,
+	numKeyCols int,
+	maintainOrdering bool,
+	neededRightCols util.FastIntSet,
+	readerType joinReaderType,
 ) {
 	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
-	spanBuilder.SetNeededColumns(jr.neededRightCols())
+	spanBuilder.SetNeededColumns(neededRightCols)
 
 	spanGenerator := defaultSpanGenerator{
 		spanBuilder:          spanBuilder,
@@ -196,6 +250,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 		numKeyCols:           numKeyCols,
 		lookupCols:           jr.lookupCols,
 	}
+	if readerType == indexJoinReaderType {
+		jr.strategy = &joinReaderIndexJoinStrategy{
+			joinerBase:           &jr.joinerBase,
+			defaultSpanGenerator: spanGenerator,
+		}
+		return
+	}
+
 	if !maintainOrdering {
 		jr.strategy = &joinReaderNoOrderingStrategy{
 			joinerBase:           &jr.joinerBase,
@@ -365,7 +427,9 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 	// results per batch. It's safe to reorder the spans here because we already
 	// restore the original order of the output during the output collection
 	// phase.
-	sort.Sort(spans)
+	if jr.shouldLimitBatches {
+		sort.Sort(spans)
+	}
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
