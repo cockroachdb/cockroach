@@ -61,3 +61,10 @@ upper_bound             range_rows  distinct_range_rows  equal_rows
 '\xfd0fffffff00000000'  0           0                    1
 '\xfd1000000100000000'  0           0                    1
 '\xfd1aaaaaab00000000'  0           0                    1
+
+# Regression for #50596.
+statement ok
+CREATE TABLE t50596 (_jsonb JSONB, INVERTED INDEX (_jsonb));
+INSERT INTO t50596 VALUES ('{}');
+CREATE STATISTICS foo FROM t50596;
+SELECT NULL FROM t50596 WHERE '1' != _jsonb;
