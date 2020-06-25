@@ -549,6 +549,10 @@ func (b *Builder) buildInvertedFilter(invFilter *memo.InvertedFilterExpr) (execP
 		return execPlan{}, err
 	}
 	// Apply a post-projection to remove the inverted column.
+	//
+	// TODO(rytaft): the invertedFilter used to do this post-projection, but we
+	// had difficulty integrating that behavior. Investigate and restore that
+	// original behavior.
 	return b.applySimpleProject(
 		res, invFilter.Relational().OutputCols, invFilter.ProvidedPhysical().Ordering,
 	)

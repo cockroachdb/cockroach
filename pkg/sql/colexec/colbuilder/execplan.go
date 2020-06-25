@@ -560,7 +560,15 @@ func NewColOperator(
 		if core.MetadataTestReceiver != nil {
 			return r, errors.Newf("core.MetadataTestReceiver is not supported")
 		}
-
+		if core.InvertedFilterer != nil {
+			// colfetcher.cfetcher currently tries to decode the inverted
+			// column needed for inverted filtering, but that inverted column is
+			// not of the same type as the original column that was indexed (e.g.
+			// for geometry, the inverted column contains an int, and for arrays
+			// the inverted column contains the array element type).
+			// For now, we do not vectorize flows with inverted filterers.
+			return r, errors.Newf("core.InvertedFilterer is not supported")
+		}
 		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
 
 		inputTypes := make([][]*types.T, len(spec.Input))
