@@ -205,7 +205,7 @@ error (42703): column "c" does not exist
 build fully-qualify-names
 SELECT t.kv.k FROM abc AS kv
 ----
-error (42P01): no data source matches prefix: t.kv
+error (42P01): no data source matches prefix: t.kv in this context
 
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)

@@ -127,13 +127,6 @@ func registerBinOpOutputTypes() {
 			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
 			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
 		}
-
-		for _, compatibleFamily := range compatibleCanonicalTypeFamilies[typeconv.DatumVecCanonicalTypeFamily] {
-			for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
-				binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
-				binOpOutputTypes[binOp][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
-			}
-		}
 	}
 	// There is a special case for division with integers; it should have a
 	// decimal result.
@@ -156,6 +149,26 @@ func registerBinOpOutputTypes() {
 	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
 	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.TimestampTZ
+	for _, compatibleFamily := range []types.Family{
+		types.IntFamily,      // types.Date + types.Time
+		types.IntervalFamily, // types.Time + types.Interval
+	} {
+		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
+			binOpOutputTypes[tree.Plus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
+			binOpOutputTypes[tree.Plus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+		}
+	}
+	for _, compatibleFamily := range []types.Family{
+		typeconv.DatumVecCanonicalTypeFamily, // types.INet - types.INet
+		types.IntFamily,                      // types.Date - types.Time
+		types.IntervalFamily,                 // types.Time - types.Interval
+		types.BytesFamily,                    // types.Jsonb - types.String
+	} {
+		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
+			binOpOutputTypes[tree.Minus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
+			binOpOutputTypes[tree.Minus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+		}
+	}
 
 	// Other arithmetic binary operators.
 	for _, binOp := range []tree.BinaryOperator{tree.FloorDiv, tree.Mod, tree.Pow} {
@@ -730,27 +743,20 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 // - leftColdataExtDatum - the variable name of the left datum element that
 // must be of *coldataext.Datum type
 // - rightDatumElem - the variable name of the right datum element which could
-// be *coldataext.Datum, tree.Datum, or nil
-// - leftCol and rightCol - same as corresponding parameters in assignFunc
-// signature
-// - datumVecOnRightSide - indicates whether we have datum-backed vector on the
-// right side (it'll be used only to supply the eval context).
-func executeBinOpOnDatums(
-	prelude, targetElem, leftColdataExtDatum, rightDatumElem, leftCol, rightCol string,
-	datumVecOnRightSide bool,
-) string {
+// be *coldataext.Datum, tree.Datum, or nil.
+func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumElem string) string {
 	vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
 	if err != nil {
 		return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
 	}
 	return fmt.Sprintf(`
 			%s
-			_res, err := %s.BinFn(_overloadHelper.binFn, %s, %s)
+			_res, err := %s.BinFn(_overloadHelper.binFn, _overloadHelper.evalCtx, %s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
 			%s
-		`, prelude, leftColdataExtDatum, getDatumVecVariableName(leftCol, rightCol, datumVecOnRightSide), rightDatumElem,
+		`, prelude, leftColdataExtDatum, rightDatumElem,
 		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res"),
 	)
 }
@@ -760,7 +766,6 @@ func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 		return executeBinOpOnDatums(
 			"" /* prelude */, targetElem,
 			leftElem+".(*coldataext.Datum)", rightElem,
-			leftCol, rightCol, false, /* datumVecOnRightSide */
 		)
 	}
 }
@@ -812,7 +817,6 @@ func (c datumNonDatumCustomizer) getBinOpAssignFunc() assignFunc {
 		return executeBinOpOnDatums(
 			prelude, targetElem,
 			leftElem+".(*coldataext.Datum)", rightDatumElem,
-			leftCol, rightCol, false, /* datumVecOnRightSide */
 		)
 	}
 }
@@ -830,11 +834,7 @@ func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 			convertNativeToDatum(op.BinOp, c.leftCanonicalTypeFamily, leftElem, leftDatumElem),
 			leftColdataExtDatum, leftDatumElem,
 		)
-		return executeBinOpOnDatums(
-			prelude, targetElem,
-			leftColdataExtDatum, rightElem,
-			leftCol, rightCol, true, /* datumVecOnRightSide */
-		)
+		return executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightElem)
 	}
 }
 

@@ -118,7 +118,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 		t.Fatal(err)
 	} else if intent != nil {
 		t.Fatalf("got unexpected intent: %v", intent)
-	} else if !val.EqualData(v) {
+	} else if !val.EqualTagAndData(v) {
 		t.Fatalf("expected %v, got %v", v, val)
 	}
 

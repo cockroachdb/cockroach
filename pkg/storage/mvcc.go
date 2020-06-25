@@ -1869,9 +1869,10 @@ const (
 	CPutFailIfMissing CPutMissingBehavior = false
 )
 
-// MVCCConditionalPut sets the value for a specified key only if the
-// expected value matches. If not, the return a ConditionFailedError
-// containing the actual value.
+// MVCCConditionalPut sets the value for a specified key only if the expected
+// value matches. If not, the return a ConditionFailedError containing the
+// actual value. An empty expVal signifies that the key is expected to not
+// exist.
 //
 // The condition check reads a value from the key using the same operational
 // timestamp as we use to write a value.
@@ -1879,6 +1880,10 @@ const (
 // Note that, when writing transactionally, the txn's timestamps
 // dictate the timestamp of the operation, and the timestamp paramater is
 // confusing and redundant. See the comment on mvccPutInternal for details.
+//
+// An empty expVal means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
 func MVCCConditionalPut(
 	ctx context.Context,
 	rw ReadWriter,
@@ -1886,7 +1891,7 @@ func MVCCConditionalPut(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
-	expVal *roachpb.Value,
+	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
@@ -1912,7 +1917,7 @@ func MVCCBlindConditionalPut(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
-	expVal *roachpb.Value,
+	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
@@ -1927,16 +1932,15 @@ func mvccConditionalPutUsingIter(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
-	expVal *roachpb.Value,
+	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	return mvccPutUsingIter(
 		ctx, writer, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if expValPresent, existValPresent := expVal != nil, existVal.IsPresent(); expValPresent && existValPresent {
-				// Every type flows through here, so we can't use the typed getters.
-				if !expVal.EqualData(*existVal) {
+			if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
+				if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
 					}
@@ -2013,7 +2017,7 @@ func mvccInitPutUsingIter(
 				// We found a tombstone and failOnTombstones is true: fail.
 				return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
 			}
-			if existVal.IsPresent() && !existVal.EqualData(value) {
+			if existVal.IsPresent() && !existVal.EqualTagAndData(value) {
 				// The existing value does not match the supplied value.
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ShallowClone(),

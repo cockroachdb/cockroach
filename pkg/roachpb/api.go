@@ -960,23 +960,29 @@ func NewPutInline(key Key, value Value) Request {
 	}
 }
 
-// NewConditionalPut returns a Request initialized to put value as a byte
-// slice at key if the existing value at key equals expValueBytes.
-func NewConditionalPut(key Key, value, expValue Value, allowNotExist bool) Request {
+// NewConditionalPut returns a Request initialized to put value at key if the
+// existing value at key equals expValue.
+//
+// The callee takes ownership of value's underlying bytes and it will mutate
+// them. The caller retains ownership of expVal; NewConditionalPut will copy it
+// into the request.
+func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool) Request {
 	value.InitChecksum(key)
-	var expValuePtr *Value
-	if expValue.RawBytes != nil {
-		// Make a copy to avoid forcing expValue itself on to the heap.
-		expValueTmp := expValue
-		expValuePtr = &expValueTmp
-		expValue.InitChecksum(key)
+	// Compatibility with 20.1 servers.
+	var expValueVal *Value
+	if expValue != nil {
+		expValueVal = &Value{}
+		expValueVal.SetTagAndData(expValue)
+		// The expected value does not need a checksum, so we don't initialize it.
 	}
+
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
 		Value:               value,
-		ExpValue:            expValuePtr,
+		DeprecatedExpValue:  expValueVal,
+		ExpBytes:            expValue,
 		AllowIfDoesNotExist: allowNotExist,
 	}
 }

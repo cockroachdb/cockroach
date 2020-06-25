@@ -114,7 +114,13 @@ message BackupManifest {
                 (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   repeated string partition_descriptor_filenames = 19;
   repeated string locality_kvs = 20 [(gogoproto.customname) = "LocalityKVs"];
-  repeated sql.stats.TableStatisticProto statistics = 21;
+  // This field is used by backups in 19.2 and 20.1 where a backup manifest stores all the table
+  // statistics in the field, the later versions all write the statistics to a separate file
+  // indicated in the table_statistic_files field.
+  repeated sql.stats.TableStatisticProto deprecated_statistics = 21;
+  map<uint32, string> statistics_filenames = 23 [
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 }
@@ -138,4 +144,11 @@ message EncryptionInfo {
 
   Scheme scheme = 1;
   bytes salt = 2;
+}
+
+// In 20.2 and later, the Statistics object is stored separately from the backup manifest.
+// StatsTables is a struct containing an array of sql.stats.TableStatisticProto object so
+// that it can be easily marshaled into or unmarshaled from a file.
+message StatsTable {
+  repeated sql.stats.TableStatisticProto statistics = 1;
 }

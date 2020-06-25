@@ -50,6 +50,9 @@ const (
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 	// ZipType is the format of a GZipped compressed file.
 	ZipType = "application/x-gzip"
+	// BackupStatisticsFileName is the file name used to store the serialized table
+	// statistics for the tables being backed up.
+	BackupStatisticsFileName = "BACKUP-STATISTICS"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
@@ -232,6 +235,36 @@ func readBackupPartitionDescriptor(
 	return backupManifest, err
 }
 
+// readTableStatistics reads and unmarshals a StatsTable from filename in
+// the provided export store, and returns its pointer.
+func readTableStatistics(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *roachpb.FileEncryptionOptions,
+) (*StatsTable, error) {
+	r, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	statsBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	if encryption != nil {
+		statsBytes, err = storageccl.DecryptFile(statsBytes, encryption.Key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var tableStats StatsTable
+	if err := protoutil.Unmarshal(statsBytes, &tableStats); err != nil {
+		return nil, err
+	}
+	return &tableStats, err
+}
+
 func writeBackupManifest(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -287,6 +320,29 @@ func writeBackupPartitionDescriptor(
 	}
 
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+}
+
+// writeTableStatistics writes a StatsTable object to a file of the filename
+// to the specified exportStore. It will be encrypted according to the encryption
+// option given.
+func writeTableStatistics(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *roachpb.FileEncryptionOptions,
+	stats *StatsTable,
+) error {
+	statsBuf, err := protoutil.Marshal(stats)
+	if err != nil {
+		return err
+	}
+	if encryption != nil {
+		statsBuf, err = storageccl.EncryptFile(statsBuf, encryption.Key)
+		if err != nil {
+			return err
+		}
+	}
+	return exportStore.WriteFile(ctx, filename, bytes.NewReader(statsBuf))
 }
 
 func loadBackupManifests(
@@ -555,6 +611,25 @@ func resolveBackupManifests(
 	}
 
 	return defaultURIs, mainBackupManifests, localityInfo, nil
+}
+
+// TODO(anzoteh96): benchmark the performance of different search algorithms,
+// e.g.  linear search, binary search, reverse linear search.
+func getBackupIndexAtTime(backupManifests []BackupManifest, asOf hlc.Timestamp) (int, error) {
+	if len(backupManifests) == 0 {
+		return -1, errors.New("expected a nonempty backup manifest list, got an empty list")
+	}
+	backupManifestIndex := len(backupManifests) - 1
+	if asOf.IsEmpty() {
+		return backupManifestIndex, nil
+	}
+	for ind, b := range backupManifests {
+		if asOf.Less(b.StartTime) {
+			break
+		}
+		backupManifestIndex = ind
+	}
+	return backupManifestIndex, nil
 }
 
 func loadSQLDescsFromBackupsAtTime(

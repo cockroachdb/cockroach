@@ -208,7 +208,7 @@ type mvccCPutOp struct {
 	writer readWriterID
 	key    roachpb.Key
 	value  roachpb.Value
-	expVal roachpb.Value
+	expVal []byte
 	txn    txnID
 }
 
@@ -217,7 +217,7 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
 	txn.Sequence++
 
-	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, &m.expVal, true, txn)
+	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key, txn.WriteTimestamp, m.value, m.expVal, true, txn)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
@@ -738,7 +738,7 @@ var opGenerators = []opGenerator{
 			writer := readWriterID(args[0])
 			key := m.keyGenerator.parse(args[1])
 			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[2]))
-			expVal := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[3]))
+			expVal := m.valueGenerator.parse(args[3])
 			txn := txnID(args[4])
 
 			// Track this write in the txn generator. This ensures the batch will be

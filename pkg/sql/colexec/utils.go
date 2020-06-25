@@ -47,6 +47,7 @@ var (
 type overloadHelper struct {
 	tmpDec1, tmpDec2 apd.Decimal
 	binFn            *tree.BinOp
+	evalCtx          *tree.EvalContext
 }
 
 // makeWindowIntoBatch updates windowedBatch so that it provides a "window"

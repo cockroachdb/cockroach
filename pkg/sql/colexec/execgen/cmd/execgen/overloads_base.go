@@ -923,20 +923,3 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 	// This code is unreachable, but the compiler cannot infer that.
 	return ""
 }
-
-// getDatumVecVariableName returns the variable name for a datumVec given
-// leftCol and rightCol (either of which could be "_" - meaning there is no
-// vector in scope for the corresponding side).
-// - preferRightSide determines whether we prefer the right side.
-func getDatumVecVariableName(leftCol, rightCol string, preferRightSide bool) string {
-	preferredSide, otherSide := leftCol, rightCol
-	if preferRightSide {
-		preferredSide, otherSide = rightCol, leftCol
-	}
-	switch preferredSide {
-	case "_":
-		return otherSide
-	default:
-		return preferredSide
-	}
-}

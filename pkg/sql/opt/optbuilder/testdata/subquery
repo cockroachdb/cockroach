@@ -1305,7 +1305,7 @@ error (42P09): ambiguous source name: "kv"
 build fully-qualify-names
 SELECT (SELECT kv1.k) FROM db1.kv, kv
 ----
-error (42P01): no data source matches prefix: kv1
+error (42P01): no data source matches prefix: kv1 in this context
 
 build fully-qualify-names
 SELECT (SELECT kv1.k) FROM db1.kv AS kv1, kv

@@ -281,14 +281,22 @@ func (v *Value) ClearChecksum() {
 // checksum of the value's contents. If the value's Checksum is not
 // set the verification is a noop.
 func (v Value) Verify(key []byte) error {
-	if n := len(v.RawBytes); n > 0 && n < headerSize {
-		return fmt.Errorf("%s: invalid header size: %d", Key(key), n)
+	if err := v.VerifyHeader(); err != nil {
+		return err
 	}
 	if sum := v.checksum(); sum != 0 {
 		if computedSum := v.computeChecksum(key); computedSum != sum {
 			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
 				Key(key), computedSum, v.RawBytes)
 		}
+	}
+	return nil
+}
+
+// VerifyHeader checks that, if the Value is not empty, it includes a header.
+func (v Value) VerifyHeader() error {
+	if n := len(v.RawBytes); n > 0 && n < headerSize {
+		return errors.Errorf("invalid header size: %d", n)
 	}
 	return nil
 }
@@ -345,6 +353,12 @@ func (v Value) dataBytes() []byte {
 	return v.RawBytes[headerSize:]
 }
 
+// TagAndDataBytes returns the value's tag and data (no checksum, no timestamp).
+// This is suitable to be used as the expected value in a CPut.
+func (v Value) TagAndDataBytes() []byte {
+	return v.RawBytes[tagPos:]
+}
+
 func (v *Value) ensureRawBytes(size int) {
 	if cap(v.RawBytes) < size {
 		v.RawBytes = make([]byte, size)
@@ -354,7 +368,7 @@ func (v *Value) ensureRawBytes(size int) {
 	v.setChecksum(checksumUninitialized)
 }
 
-// EqualData returns a boolean reporting whether the receiver and the parameter
+// EqualTagAndData returns a boolean reporting whether the receiver and the parameter
 // have equivalent byte values. This check ignores the optional checksum field
 // in the Values' byte slices, returning only whether the Values have the same
 // tag and encoded data.
@@ -362,15 +376,24 @@ func (v *Value) ensureRawBytes(size int) {
 // This method should be used whenever the raw bytes of two Values are being
 // compared instead of comparing the RawBytes slices directly because it ignores
 // the checksum header, which is optional.
-func (v Value) EqualData(o Value) bool {
-	return bytes.Equal(v.RawBytes[checksumSize:], o.RawBytes[checksumSize:])
+func (v Value) EqualTagAndData(o Value) bool {
+	return bytes.Equal(v.TagAndDataBytes(), o.TagAndDataBytes())
 }
 
-// SetBytes sets the bytes and tag field of the receiver and clears the checksum.
+// SetBytes copies the bytes and tag field to the receiver and clears the
+// checksum.
 func (v *Value) SetBytes(b []byte) {
 	v.ensureRawBytes(headerSize + len(b))
 	copy(v.dataBytes(), b)
 	v.setTag(ValueType_BYTES)
+}
+
+// SetTagAndData copies the bytes and tag field to the receiver and clears the
+// checksum. As opposed to SetBytes, b is assumed to contain the tag too, not
+// just the data.
+func (v *Value) SetTagAndData(b []byte) {
+	v.ensureRawBytes(checksumSize + len(b))
+	copy(v.TagAndDataBytes(), b)
 }
 
 // SetString sets the bytes and tag field of the receiver and clears the

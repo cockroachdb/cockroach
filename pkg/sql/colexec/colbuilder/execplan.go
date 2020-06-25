@@ -1489,8 +1489,7 @@ func planSelectionOperators(
 				return op, resultIdx, ct, internalMemUsedLeft, err
 			}
 			op, err := colexec.GetSelectionConstOperator(
-				lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx,
-				constArg, nil,
+				lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx, constArg, nil, /* binFn */
 			)
 			return op, resultIdx, ct, internalMemUsedLeft, err
 		}
@@ -1501,8 +1500,7 @@ func planSelectionOperators(
 			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		op, err := colexec.GetSelectionOperator(
-			lTyp, ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx,
-			nil,
+			lTyp, ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx, nil, /* binFn */
 		)
 		return op, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, err
 	default:
@@ -1815,7 +1813,7 @@ func planProjectionExpr(
 		// to the input batch.
 		op, err = colexec.GetProjectionLConstOperator(
 			colmem.NewAllocator(ctx, acc, factory), left.ResolvedType(), typs[rightIdx], outputType,
-			projOp, input, rightIdx, lConstArg, resultIdx, binFn,
+			projOp, input, rightIdx, lConstArg, resultIdx, binFn, evalCtx,
 		)
 	} else {
 		var (
@@ -1863,7 +1861,7 @@ func planProjectionExpr(
 			} else {
 				op, err = colexec.GetProjectionRConstOperator(
 					colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], right.ResolvedType(), outputType,
-					projOp, input, leftIdx, rConstArg, resultIdx, binFn,
+					projOp, input, leftIdx, rConstArg, resultIdx, binFn, evalCtx,
 				)
 			}
 		} else {
@@ -1882,7 +1880,7 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			op, err = colexec.GetProjectionOperator(
 				colmem.NewAllocator(ctx, acc, factory), typs[leftIdx], typs[rightIdx], outputType,
-				projOp, input, leftIdx, rightIdx, resultIdx, binFn,
+				projOp, input, leftIdx, rightIdx, resultIdx, binFn, evalCtx,
 			)
 		}
 	}

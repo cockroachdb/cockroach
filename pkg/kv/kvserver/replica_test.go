@@ -402,7 +402,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		Header: roachpb.Header{Timestamp: tc.Clock().Now()},
 	}
 	descKey := keys.RangeDescriptorKey(oldDesc.StartKey)
-	if err := updateRangeDescriptor(&ba, descKey, dbDescKV.Value, &newDesc); err != nil {
+	if err := updateRangeDescriptor(&ba, descKey, dbDescKV.Value.TagAndDataBytes(), &newDesc); err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
 	if err := tc.store.DB().Run(ctx, &ba); err != nil {
@@ -1598,18 +1598,11 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 }
 
 func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutRequest {
-	var optExpV *roachpb.Value
 	if expValue != nil {
-		expV := roachpb.MakeValueFromBytes(expValue)
-		optExpV = &expV
+		expValue = roachpb.MakeValueFromBytes(expValue).TagAndDataBytes()
 	}
-	return roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
-		},
-		Value:    roachpb.MakeValueFromBytes(value),
-		ExpValue: optExpV,
-	}
+	req := roachpb.NewConditionalPut(key, roachpb.MakeValueFromBytes(value), expValue, false /* allowNotExist */)
+	return *req.(*roachpb.ConditionalPutRequest)
 }
 
 func iPutArgs(key roachpb.Key, value []byte) roachpb.InitPutRequest {
@@ -3273,7 +3266,7 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			if foundVal == nil {
 				return nil
 			}
-			if foundVal.EqualData(*val) {
+			if foundVal.EqualTagAndData(*val) {
 				return nil
 			}
 		}
@@ -6717,7 +6710,7 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	ba.Add(&roachpb.ConditionalPutRequest{
 		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
 		Value:         roachpb.MakeValueFromString("irrelevant"),
-		ExpValue:      nil, // not true after above Put
+		ExpBytes:      nil, // not true after above Put
 	})
 	// This one is never executed.
 	ba.Add(&roachpb.GetRequest{
