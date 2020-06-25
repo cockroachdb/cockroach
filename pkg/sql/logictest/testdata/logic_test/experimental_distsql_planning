@@ -91,5 +91,5 @@ SELECT min(v) FROM kv
 # We currently have experimental_distsql_planning set to 'always' which returns
 # an error for SELECT query with an unsupported processor core. Let's verify
 # that behavior.
-statement error pq: unimplemented: experimental opt-driven distsql planning
+statement error pq: unimplemented: experimental opt-driven distsql planning: window
 SELECT min(v) OVER () FROM kv

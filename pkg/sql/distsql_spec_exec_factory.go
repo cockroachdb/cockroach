@@ -154,7 +154,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
-		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: virtual table scan")
 	}
 
 	p := MakePhysicalPlan(e.gatewayNodeID)
@@ -372,7 +372,7 @@ func (e *distSQLSpecExecFactory) ConstructApplyJoin(
 	onCond tree.TypedExpr,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: apply join")
 }
 
 // TODO(yuzefovich): move the decision whether to use an interleaved join from
@@ -546,25 +546,25 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 	nullsAreDistinct bool,
 	errorOnDup string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: distinct")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSetOp(
 	typ tree.UnionType, all bool, left, right exec.Node,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: sort")
 }
 
 func (e *distSQLSpecExecFactory) ConstructOrdinality(
 	input exec.Node, colName string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: ordinality")
 }
 
 func (e *distSQLSpecExecFactory) ConstructIndexJoin(
@@ -574,7 +574,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: index join")
 }
 
 func (e *distSQLSpecExecFactory) ConstructLookupJoin(
@@ -588,7 +588,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: lookup join")
 }
 
 func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
@@ -602,7 +602,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: geo lookup join")
 }
 
 func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
@@ -618,31 +618,31 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: zigzag join")
 }
 
 func (e *distSQLSpecExecFactory) ConstructLimit(
 	input exec.Node, limit, offset tree.TypedExpr,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: limit")
 }
 
 func (e *distSQLSpecExecFactory) ConstructMax1Row(
 	input exec.Node, errorText string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: max1row")
 }
 
 func (e *distSQLSpecExecFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: project set")
 }
 
 func (e *distSQLSpecExecFactory) ConstructWindow(
 	input exec.Node, window exec.WindowInfo,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: window")
 }
 
 func (e *distSQLSpecExecFactory) RenameColumns(
@@ -675,7 +675,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 	plan string, envOpts exec.ExplainEnvData,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain opt")
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplain(
@@ -691,7 +691,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 func (e *distSQLSpecExecFactory) ConstructShowTrace(
 	typ tree.ShowTraceType, compact bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: show trace")
 }
 
 func (e *distSQLSpecExecFactory) ConstructInsert(
@@ -702,7 +702,7 @@ func (e *distSQLSpecExecFactory) ConstructInsert(
 	checkCols exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert")
 }
 
 func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
@@ -713,7 +713,7 @@ func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
 	checkCols exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert fast path")
 }
 
 func (e *distSQLSpecExecFactory) ConstructUpdate(
@@ -726,7 +726,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
 }
 
 func (e *distSQLSpecExecFactory) ConstructUpsert(
@@ -740,7 +740,7 @@ func (e *distSQLSpecExecFactory) ConstructUpsert(
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: upsert")
 }
 
 func (e *distSQLSpecExecFactory) ConstructDelete(
@@ -750,7 +750,7 @@ func (e *distSQLSpecExecFactory) ConstructDelete(
 	returnCols exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete")
 }
 
 func (e *distSQLSpecExecFactory) ConstructDeleteRange(
@@ -761,13 +761,13 @@ func (e *distSQLSpecExecFactory) ConstructDeleteRange(
 	maxReturnedKeys int,
 	allowAutoCommit bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete range")
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateTable(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create table")
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateView(
@@ -780,91 +780,91 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	columns sqlbase.ResultColumns,
 	deps opt.ViewDeps,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create view")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: sequence select")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSaveTable(
 	input exec.Node, table *cat.DataSourceName, colNames []string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: save table")
 }
 
 func (e *distSQLSpecExecFactory) ConstructErrorIfRows(
 	input exec.Node, mkErr func(tree.Datums) error,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: error if rows")
 }
 
 func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: opaque")
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table split")
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table unsplit")
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table unsplit all")
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateLease bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table relocate")
 }
 
 func (e *distSQLSpecExecFactory) ConstructBuffer(
 	input exec.Node, label string,
 ) (exec.BufferNode, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: buffer")
 }
 
 func (e *distSQLSpecExecFactory) ConstructScanBuffer(
 	ref exec.BufferNode, label string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: scan buffer")
 }
 
 func (e *distSQLSpecExecFactory) ConstructRecursiveCTE(
 	initial exec.Node, fn exec.RecursiveCTEIterationFn, label string,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: recursive CTE")
 }
 
 func (e *distSQLSpecExecFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: control jobs")
 }
 
 func (e *distSQLSpecExecFactory) ConstructCancelQueries(
 	input exec.Node, ifExists bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cancel queries")
 }
 
 func (e *distSQLSpecExecFactory) ConstructCancelSessions(
 	input exec.Node, ifExists bool,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: cancel sessions")
 }
 
 func (e *distSQLSpecExecFactory) ConstructExport(
 	input exec.Node, fileName tree.TypedExpr, fileFormat string, options []exec.KVOption,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: export")
 }
 
 func getPhysPlan(n exec.Node) (*PhysicalPlan, planMaybePhysical) {
