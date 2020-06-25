@@ -461,6 +461,13 @@ EXPLAIN (VEC) SELECT _json -> _int2 FROM many_types
   └ *colexec.projJSONFetchValDatumInt16Op
     └ *colexec.colBatchScan
 
+query T
+EXPLAIN (VEC) SELECT _json -> 2 ->> 'a' FROM many_types
+----
+│
+└ Node 1
+  └ *rowexec.tableReader
+
 query I rowsort
 SELECT _int2^_int FROM many_types WHERE _int2 < 10 AND _int < 10
 ----
@@ -502,6 +509,15 @@ NULL
 NULL
 NULL
 {"a": ["foo", {"b": 3}]}
+
+query T
+SELECT _json -> 2 ->> 'a' FROM many_types
+----
+NULL
+["foo", {"b": 3}]
+NULL
+["foo", {"b": 3}]
+
 
 query T
 EXPLAIN (VEC) SELECT _json -> _int FROM many_types
