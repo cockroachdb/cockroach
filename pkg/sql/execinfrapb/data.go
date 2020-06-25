@@ -231,9 +231,14 @@ func (e *Error) ErrorDetail(ctx context.Context) (err error) {
 
 // ProducerMetadata represents a metadata record flowing through a DistSQL flow.
 type ProducerMetadata struct {
-	// Only one of these fields will be set. If this ever changes, note that
-	// there're consumers out there that extract the error and, if there is one,
-	// forward it in isolation and drop the rest of the record.
+	// StreamIdx informs DistSQL the index of the output stream that this metadata
+	// should be sent on when hooked up to a BY_META router. This is used by
+	// metadata-only streams (e.g. restore). This will be set in conjunction with
+	// another field.
+	StreamIdx int
+	// If StreamIdx is not set, only one of these fields will be set. If this ever
+	// changes, note that there're consumers out there that extract the error and,
+	// if there is one, forward it in isolation and drop the rest of the record.
 	Ranges []roachpb.RangeInfo
 	// TODO(vivek): change to type Error
 	Err error

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
+	"github.com/stretchr/testify/require"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
@@ -904,6 +905,147 @@ func TestRangeRouterInit(t *testing.T) {
 	}
 }
 
+// TestMetaRouter tests the metadata router. It behaves sufficiently differently
+// from the other routers (namely, it doesn't accept rows) that it warrants its
+// own test.
+func TestMetaRouter(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
+
+	const numMetas = 10
+	const numBuckets = 4
+
+	spec := execinfrapb.OutputRouterSpec{Type: execinfrapb.OutputRouterSpec_BY_META}
+
+	t.Run("routing", func(t *testing.T) {
+		bufs := make([]*distsqlutils.RowBuffer, numBuckets)
+		recvs := make([]execinfra.RowReceiver, numBuckets)
+		spec.Streams = make([]execinfrapb.StreamEndpointSpec, numBuckets)
+
+		for i := 0; i < numBuckets; i++ {
+			bufs[i] = &distsqlutils.RowBuffer{}
+			recvs[i] = bufs[i]
+			spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
+		}
+
+		r, wg := setupRouter(t, st, evalCtx, diskMonitor, spec, []*types.T{}, recvs)
+
+		for i := 0; i < numMetas; i++ {
+			meta := &execinfrapb.ProducerMetadata{StreamIdx: i % numBuckets}
+			if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+				t.Fatalf("unexpected status: %d", status)
+			}
+		}
+		r.ProducerDone()
+		wg.Wait()
+
+		metaStreams := make([][]*execinfrapb.ProducerMetadata, len(bufs))
+		for i, b := range bufs {
+			if !b.ProducerClosed() {
+				t.Fatalf("bucket not closed: %d", i)
+			}
+			metaStreams[i] = b.GetMetaNoRows(t)
+		}
+
+		metaCount := 0
+		for bIdx := range metaStreams {
+			for _, meta := range metaStreams[bIdx] {
+				metaCount++
+				// Ensure that all of the metas were put in the right bucket.
+				require.Equal(t, bIdx, meta.StreamIdx)
+			}
+		}
+		require.Equal(t, numMetas, metaCount)
+	})
+
+	t.Run("consumer status", func(t *testing.T) {
+		const numStreams = 2
+		bufs := make([]*distsqlutils.RowBuffer, numStreams)
+		recvs := make([]execinfra.RowReceiver, numStreams)
+		spec.Streams = make([]execinfrapb.StreamEndpointSpec, numStreams)
+
+		for i := 0; i < numStreams; i++ {
+			bufs[i] = &distsqlutils.RowBuffer{}
+			recvs[i] = bufs[i]
+			spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
+		}
+
+		r, wg := setupRouter(t, st, evalCtx, diskMonitor, spec, []*types.T{}, recvs)
+
+		// Push a meta to stream 0. Expect NeedMoreRows.
+		meta := &execinfrapb.ProducerMetadata{StreamIdx: 0}
+		if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+
+		// Start draining stream 0. Keep expecting NeedMoreRows, regardless on
+		// which stream we send.
+		bufs[0].ConsumerDone()
+		meta = &execinfrapb.ProducerMetadata{StreamIdx: 0}
+		if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+		meta = &execinfrapb.ProducerMetadata{StreamIdx: 1}
+		if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+
+		// Close stream 0. Continue to expect NeedMoreRows.
+		bufs[0].ConsumerClosed()
+		meta = &execinfrapb.ProducerMetadata{StreamIdx: 0}
+		if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+		meta = &execinfrapb.ProducerMetadata{StreamIdx: 1}
+		if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+
+		// Start draining stream 1. Now that all streams are draining, expect
+		// DrainRequested.
+		bufs[1].ConsumerDone()
+		testutils.SucceedsSoon(t, func() error {
+			meta = &execinfrapb.ProducerMetadata{StreamIdx: 0}
+			if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+				t.Fatalf("unexpected status: %d", status)
+			}
+			return nil
+		})
+
+		// Close stream 1. Everything's closed now, and the routers should detect
+		// this when trying to send metadata - so we expect everything to be closed.
+		bufs[1].ConsumerClosed()
+		testutils.SucceedsSoon(t, func() error {
+			meta = &execinfrapb.ProducerMetadata{StreamIdx: 0}
+			if status := r.Push(nil /* row */, meta); status != execinfra.NeedMoreRows {
+				t.Fatalf("unexpected status: %d", status)
+			}
+			return nil
+		})
+
+		r.ProducerDone()
+		wg.Wait()
+	})
+	t.Run("blocks", func(t *testing.T) {
+
+	})
+	t.Run("disk spill", func(t *testing.T) {
+
+	})
+	t.Run("forward to close stream", func(t *testing.T) {
+
+	})
+	t.Run("streamIdx out of range", func(t *testing.T) {
+
+	})
+}
+
 func BenchmarkRouter(b *testing.B) {
 	numCols := 1
 	numRows := 1 << 16
@@ -916,7 +1058,7 @@ func BenchmarkRouter(b *testing.B) {
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	input := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
+	rowInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, sqlbase.MakeIntRows(numRows, numCols))
 
 	for _, spec := range []execinfrapb.OutputRouterSpec{
 		{
@@ -933,14 +1075,26 @@ func BenchmarkRouter(b *testing.B) {
 		{
 			Type: execinfrapb.OutputRouterSpec_MIRROR,
 		},
+		{
+			Type: execinfrapb.OutputRouterSpec_BY_META,
+		},
 	} {
 		b.Run(spec.Type.String(), func(b *testing.B) {
+			var input execinfra.RepeatableSource = rowInput
 			for _, nOutputs := range []int{2, 4, 8} {
+				if spec.Type == execinfrapb.OutputRouterSpec_BY_META {
+					input = execinfra.NewRepeatableMetaSource(execinfra.MakeMetas(numRows, nOutputs))
+				}
 				chans := make([]execinfra.RowChannel, nOutputs)
 				recvs := make([]execinfra.RowReceiver, nOutputs)
 				spec.Streams = make([]execinfrapb.StreamEndpointSpec, nOutputs)
 				b.Run(fmt.Sprintf("outputs=%d", nOutputs), func(b *testing.B) {
-					b.SetBytes(int64(nOutputs * numCols * numRows * 8))
+					if spec.Type == execinfrapb.OutputRouterSpec_BY_META {
+						// TODO(pbardea): This seems... wrong?
+						b.SetBytes(int64(numRows))
+					} else {
+						b.SetBytes(int64(nOutputs * numCols * numRows * 8))
+					}
 					for i := 0; i < b.N; i++ {
 						input.Reset()
 						for i := 0; i < nOutputs; i++ {

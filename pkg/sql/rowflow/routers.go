@@ -69,6 +69,9 @@ func makeRouter(
 	case execinfrapb.OutputRouterSpec_BY_RANGE:
 		return makeRangeRouter(rb, spec.RangeRouterSpec)
 
+	case execinfrapb.OutputRouterSpec_BY_META:
+		return makeMetaRouter(rb, spec.RangeRouterSpec)
+
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
 	}
@@ -473,9 +476,15 @@ type rangeRouter struct {
 	defaultDest *int
 }
 
+// TODO(pbardea): Document
+type metaRouter struct {
+	routerBase
+}
+
 var _ execinfra.RowReceiver = &mirrorRouter{}
 var _ execinfra.RowReceiver = &hashRouter{}
 var _ execinfra.RowReceiver = &rangeRouter{}
+var _ execinfra.RowReceiver = &metaRouter{}
 
 func makeMirrorRouter(rb routerBase) (router, error) {
 	if len(rb.outputs) < 2 {
@@ -695,6 +704,82 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 		return -1
 	}
 	return int(rr.spans[i].Stream)
+}
+
+func makeMetaRouter(
+	rb routerBase, spec execinfrapb.OutputRouterSpec_RangeRouterSpec,
+) (*metaRouter, error) {
+	// TODO: It may be a good idea to keep the default destination here.
+	//var defaultDest *int
+	//if spec.DefaultDest != nil {
+	//	i := int(*spec.DefaultDest)
+	//	defaultDest = &i
+	//}
+
+	return &metaRouter{
+		routerBase: rb,
+		//defaultDest: defaultDest,
+	}, nil
+}
+
+// sendMetadataToStream attempts to send the given metadata to the output stream
+// with the specified index. The boolean returns true iff the metadata was sent.
+// If the requested streamIdx is out of range, an error will be returned.
+func (mr *metaRouter) sendMetadataToStream(
+	meta *execinfrapb.ProducerMetadata, streamIdx int,
+) (bool, error) {
+	if streamIdx < 0 || streamIdx >= len(mr.outputs) {
+		return false, errors.Newf(
+			"cannot send metadata to stream %d, only %d outputs", streamIdx, len(mr.outputs))
+	}
+	ro := &mr.outputs[streamIdx]
+	ro.mu.Lock()
+	defer ro.mu.Unlock()
+	if ro.mu.streamStatus != execinfra.ConsumerClosed {
+		ro.addMetadataLocked(meta)
+		ro.mu.cond.Signal()
+		return true, nil
+	}
+	return false, nil
+}
+
+func (mr *metaRouter) Push(
+	_ sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	// TODO(pbardea): Verify that the row is empty.
+	if meta == nil {
+		log.Fatalf(context.TODO(), "sending empty metadata over a meta-data only stream")
+	}
+
+	// TODO(pbardea): Should this semaphore usage be conditional on
+	// mr.shouldUseSemaphore()? We seem to always use the semaphore for metadata.
+	mr.semaphore <- struct{}{}
+	defer func() { <-mr.semaphore }()
+
+	// TODO(pbardea): I can see an accidental ommission of this lead to everything
+	// being sent to the first stream.
+	targetStream := meta.StreamIdx
+	success, err := mr.sendMetadataToStream(meta, targetStream)
+	if err != nil {
+		log.Fatalf(context.TODO(), "%+v", err)
+	}
+	if success {
+		return mr.aggStatus()
+	}
+
+	// Fallback to the first open stream.
+	for i := range mr.outputs {
+		if success, err := mr.sendMetadataToStream(meta, i); err != nil {
+			log.Fatalf(context.TODO(), "%+v", err)
+		} else if success {
+			return mr.aggStatus()
+		}
+	}
+
+	// If we got here it means that we couldn't even forward metadata anywhere;
+	// all streams are closed.
+	atomic.StoreUint32(&mr.aggregatedStatus, uint32(execinfra.ConsumerClosed))
+	return mr.aggStatus()
 }
 
 const routerOutputTagPrefix = "routeroutput."

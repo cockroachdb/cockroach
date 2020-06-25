@@ -217,6 +217,22 @@ func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
 	return row
 }
 
+// GetMetaNoRows returns the metadata in the buffer; it fails the test if it
+// encounters any rows.
+func (rb *RowBuffer) GetMetaNoRows(t *testing.T) []*execinfrapb.ProducerMetadata {
+	var res []*execinfrapb.ProducerMetadata
+	for {
+		// TODO(pbardea): Fix this - we should be checking that we don't get any rows.
+		_, meta := rb.Next()
+		if meta == nil {
+			break
+			//t.Fatalf("unexpected empty meta with row: %+v, res %+v", row, res)
+		}
+		res = append(res, meta)
+	}
+	return res
+}
+
 // GetRowsNoMeta returns the rows in the buffer; it fails the test if it
 // encounters any metadata.
 func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {

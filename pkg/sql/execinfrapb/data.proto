@@ -146,6 +146,9 @@ message OutputRouterSpec {
     // Each row is sent to one stream, chosen according to preset boundaries
     // for the values of certain columns of the row.
     BY_RANGE = 3;
+    // Each metadata is sent to one stream, specified within the metadata
+    // itself.
+    BY_META = 4;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];

@@ -380,6 +380,8 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 		return "by hash", []string{colListStr(r.HashColumns)}
 	case OutputRouterSpec_BY_RANGE:
 		return "by range", []string{}
+	case OutputRouterSpec_BY_META:
+		return "by meta", []string{}
 	default:
 		return "unknown", []string{}
 	}

@@ -25,6 +25,13 @@ import (
 // StaticNodeID is the default Node ID to be used in tests.
 const StaticNodeID = roachpb.NodeID(3)
 
+type RepeatableSource interface {
+	RowSource
+	// Reset resets the RepeatableSource such that a subsequent call to Next()
+	// returns the first row.
+	Reset()
+}
+
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
 // reinitialize a new RowSource every time during multiple passes of the input.
 // It is intended to be initialized with all rows.
@@ -66,8 +73,7 @@ func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 	return nextRow, nil
 }
 
-// Reset resets the RepeatableRowSource such that a subsequent call to Next()
-// returns the first row.
+// Reset is part of the RepeatableSource interface.
 func (r *RepeatableRowSource) Reset() {
 	r.nextRowIdx = 0
 }
@@ -77,6 +83,63 @@ func (r *RepeatableRowSource) ConsumerDone() {}
 
 // ConsumerClosed is part of the RowSource interface.
 func (r *RepeatableRowSource) ConsumerClosed() {}
+
+// TODO(pbardea): Document.
+func MakeMetas(numMeta, numOutputs int) []*execinfrapb.ProducerMetadata {
+	metas := make([]*execinfrapb.ProducerMetadata, numMeta)
+	uniqueMetas := make([]*execinfrapb.ProducerMetadata, numOutputs)
+	for i := range metas {
+		metas[i] = &execinfrapb.ProducerMetadata{StreamIdx: i, SamplerProgress: &execinfrapb.RemoteProducerMetadata_SamplerProgress{
+			RowsProcessed: 10,
+		}}
+	}
+	for i := range metas {
+		metas[i] = uniqueMetas[i%numOutputs]
+	}
+	return metas
+}
+
+type RepeatableMetaSource struct {
+	metas       []*execinfrapb.ProducerMetadata
+	nextMetaIdx int
+}
+
+var _ RowSource = &RepeatableMetaSource{}
+
+// NewRepeatableMetaSource creates a RepeatableMetaSource with the given metas.
+func NewRepeatableMetaSource(metas []*execinfrapb.ProducerMetadata) *RepeatableMetaSource {
+	return &RepeatableMetaSource{metas: metas}
+}
+
+// OutputTypes is part of the RowSource interface.
+func (r *RepeatableMetaSource) OutputTypes() []*types.T {
+	return []*types.T{}
+}
+
+// Start is part of the RowSource interface.
+func (r *RepeatableMetaSource) Start(ctx context.Context) context.Context { return ctx }
+
+// Next is part of the RowSource interface.
+func (r *RepeatableMetaSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	// If we've emitted all metadata entries, signal that we have reached the end.
+	if r.nextMetaIdx >= len(r.metas) {
+		return nil, nil
+	}
+	nextMeta := r.metas[r.nextMetaIdx]
+	r.nextMetaIdx++
+	return nil, nextMeta
+}
+
+// Reset is part of the RepeatableSource interface.
+func (r *RepeatableMetaSource) Reset() {
+	r.nextMetaIdx = 0
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (r *RepeatableMetaSource) ConsumerDone() {}
+
+// ConsumerClosed is part of the RowSource interface.
+func (r *RepeatableMetaSource) ConsumerClosed() {}
 
 // NewTestMemMonitor creates and starts a new memory monitor to be used in
 // tests.
