@@ -1662,7 +1662,12 @@ func MakeTableDesc(
 
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
-	computedColValidator := schemaexpr.NewComputedColumnValidator(ctx, &desc, semaCtx)
+	computedColValidator := schemaexpr.NewComputedColumnValidator(
+		ctx,
+		&desc,
+		semaCtx,
+		&n.Table,
+	)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:

@@ -444,14 +444,14 @@ func (ru *Updater) UpdateRow(
 					// add foreign key checks in this case, because we are guaranteed to enter here.
 					oldIdx++
 					newIdx++
-					var expValue *roachpb.Value
+					var expValue []byte
 					if !bytes.Equal(oldEntry.Key, newEntry.Key) {
 						if traceKV {
 							log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldEntry.Key))
 						}
 						batch.Del(oldEntry.Key)
-					} else if !newEntry.Value.EqualData(oldEntry.Value) {
-						expValue = &oldEntry.Value
+					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
+						expValue = oldEntry.Value.TagAndDataBytes()
 					} else {
 						continue
 					}

@@ -26,20 +26,25 @@ import (
 // ComputedColumnValidator validates that an expression is a valid computed
 // column. See Validate for more details.
 type ComputedColumnValidator struct {
-	ctx     context.Context
-	desc    *sqlbase.MutableTableDescriptor
-	semaCtx *tree.SemaContext
+	ctx       context.Context
+	desc      *sqlbase.MutableTableDescriptor
+	semaCtx   *tree.SemaContext
+	tableName *tree.TableName
 }
 
 // NewComputedColumnValidator returns an ComputedColumnValidator struct that can
 // be used to validate computed columns. See Validate for more details.
 func NewComputedColumnValidator(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor, semaCtx *tree.SemaContext,
+	ctx context.Context,
+	desc *sqlbase.MutableTableDescriptor,
+	semaCtx *tree.SemaContext,
+	tn *tree.TableName,
 ) ComputedColumnValidator {
 	return ComputedColumnValidator{
-		ctx:     ctx,
-		desc:    desc,
-		semaCtx: semaCtx,
+		ctx:       ctx,
+		desc:      desc,
+		semaCtx:   semaCtx,
+		tableName: tn,
 	}
 }
 
@@ -111,14 +116,16 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 	// Check that the type of the expression is of type defType and that there
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions.
-	typedExpr, _, err := ReplaceColumnVarsAndSanitizeExpr(
+	typedExpr, _, err := DequalifyAndValidateExpr(
 		v.ctx,
 		v.desc,
 		d.Computed.Expr,
 		defType,
 		"computed column",
 		v.semaCtx,
-		false /* allowImpure */)
+		false, /* allowImpure */
+		v.tableName,
+	)
 	if err != nil {
 		return err
 	}

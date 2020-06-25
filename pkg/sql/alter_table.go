@@ -371,7 +371,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
-			computedColValidator := schemaexpr.NewComputedColumnValidator(params.ctx, n.tableDesc, &params.p.semaCtx)
+			computedColValidator := schemaexpr.NewComputedColumnValidator(
+				params.ctx,
+				n.tableDesc,
+				&params.p.semaCtx,
+				tn,
+			)
 			if err := computedColValidator.ValidateNoDependents(colToDrop); err != nil {
 				return err
 			}
@@ -603,7 +608,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(params.ctx, n.tableDesc, col, t, params, n.n.Cmds); err != nil {
+			if err := applyColumnMutation(params.ctx, n.tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -804,10 +809,11 @@ func applyColumnMutation(
 	mut tree.ColumnMutationCmd,
 	params runParams,
 	cmds tree.AlterTableCmds,
+	tn *tree.TableName,
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		return AlterColumnType(ctx, tableDesc, col, t, params, cmds)
+		return AlterColumnType(ctx, tableDesc, col, t, params, cmds, tn)
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {

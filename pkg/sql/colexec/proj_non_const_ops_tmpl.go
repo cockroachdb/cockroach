@@ -247,6 +247,7 @@ func GetProjectionOperator(
 	col2Idx int,
 	outputIdx int,
 	binFn *tree.BinOp,
+	evalCtx *tree.EvalContext,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -255,7 +256,7 @@ func GetProjectionOperator(
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,
 		outputIdx:      outputIdx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
 
 	switch op.(type) {

@@ -706,7 +706,7 @@ ON CONFLICT (x) DO
 UPDATE SET x=1
 RETURNING excluded.x
 ----
-error (42P01): no data source matches prefix: excluded
+error (42P01): no data source matches prefix: excluded in this context
 
 # Referencing column without "excluded" or "xyz" prefix is not allowed.
 build

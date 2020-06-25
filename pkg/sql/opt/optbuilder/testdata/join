@@ -754,12 +754,12 @@ project
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b) AS q
 ----
-error (42P01): no data source matches prefix: a
+error (42P01): no data source matches prefix: a in this context
 
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b)
 ----
-error (42P01): no data source matches prefix: a
+error (42P01): no data source matches prefix: a in this context
 
 
 ## Simple test cases for inner, left, right, and outer joins

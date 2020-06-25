@@ -706,7 +706,10 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Remove the range descriptor for the deleted range.
-		if err := updateRangeDescriptor(b, rightDescKey, dbRightDescKV.Value, nil); err != nil {
+		if err := updateRangeDescriptor(b, rightDescKey,
+			dbRightDescKV.Value.TagAndDataBytes(), /* oldValue */
+			nil,                                   /* newDesc */
+		); err != nil {
 			return err
 		}
 
@@ -1957,14 +1960,14 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 // This ConditionFailedError is a historical artifact. We used to pass the
 // parsed RangeDescriptor directly as the expected value in a CPut, but proto
 // message encodings aren't stable so this was fragile. Calling this method and
-// then passing the returned *roachpb.Value as the expected value in a CPut does
-// the same thing, but also correctly handles proto equality. See #38308.
+// then passing the returned bytes as the expected value in a CPut does the same
+// thing, but also correctly handles proto equality. See #38308.
 func conditionalGetDescValueFromDB(
 	ctx context.Context,
 	txn *kv.Txn,
 	startKey roachpb.RKey,
 	check func(*roachpb.RangeDescriptor) bool,
-) (*roachpb.RangeDescriptor, *roachpb.Value, error) {
+) (*roachpb.RangeDescriptor, []byte, error) {
 	descKey := keys.RangeDescriptorKey(startKey)
 	existingDescKV, err := txn.Get(ctx, descKey)
 	if err != nil {
@@ -1981,7 +1984,7 @@ func conditionalGetDescValueFromDB(
 	if !check(existingDesc) {
 		return nil, nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
 	}
-	return existingDesc, existingDescKV.Value, nil
+	return existingDesc, existingDescKV.Value.TagAndDataBytes(), nil
 }
 
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
@@ -1998,7 +2001,7 @@ func conditionalGetDescValueFromDB(
 // descriptor, a CommitTrigger must be used to update the in-memory
 // descriptor; it will not automatically be copied from newDesc.
 func updateRangeDescriptor(
-	b *kv.Batch, descKey roachpb.Key, oldValue *roachpb.Value, newDesc *roachpb.RangeDescriptor,
+	b *kv.Batch, descKey roachpb.Key, oldValue []byte, newDesc *roachpb.RangeDescriptor,
 ) error {
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So

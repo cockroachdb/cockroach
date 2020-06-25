@@ -493,22 +493,21 @@ CREATE TABLE t27 (x INT);
 statement error pq: column "y" does not exist
 ALTER TABLE t26 ALTER COLUMN x TYPE BOOL USING (y > 0);
 
-# TODO(richardjcai): Enable these tests once #50069 is fixed.
 # Ensure USING EXPRESSION cannot reference other tables.
-# statement error pq: cannot reference column in table t26
-# ALTER TABLE t27 ALTER COLUMN x TYPE BOOL USING (t26.x > 0);
+statement error pq: no data source matches prefix: t26 in this context
+ALTER TABLE t27 ALTER COLUMN x TYPE BOOL USING (t26.x > 0);
 
 # Ensure USING EXPRESSION cannot reference columns with a database or column
 # specified.
 
-# statement error pq: cannot qualify columns in expression with database or schema
-# ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (db.schema.t.x::STRING)
+statement error pq: no data source matches prefix: db.schema.t in this context
+ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (db.schema.t.x::STRING)
 
-# statement error pq: cannot qualify columns in expression with database or schema
-# ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (schema.t.x::STRING)
+statement error pq: no data source matches prefix: schema.t in this context
+ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (schema.t.x::STRING)
 
-# statement ok
-# ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (x::STRING)
+statement ok
+ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (x::STRING)
 
 # Ensure ALTER COLUMN TYPE ... USING EXPRESSION does not perform a no-op when
 # converting to the same type.

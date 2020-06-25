@@ -585,7 +585,7 @@ func FindFKOriginIndexInTxn(
 // an equality method on that interface or something like that.
 func ConditionalGetTableDescFromTxn(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, expectation *TableDescriptor,
-) (*roachpb.Value, error) {
+) ([]byte, error) {
 	key := MakeDescMetadataKey(codec, expectation.ID)
 	existingKV, err := txn.Get(ctx, key)
 	if err != nil {
@@ -604,7 +604,7 @@ func ConditionalGetTableDescFromTxn(
 	if !existing.Equal(wrapped) {
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
 	}
-	return existingKV.Value, nil
+	return existingKV.Value.TagAndDataBytes(), nil
 }
 
 // FilterTableState inspects the state of a given table and returns an error if

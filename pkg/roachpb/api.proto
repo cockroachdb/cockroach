@@ -160,9 +160,8 @@ message PutResponse {
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
 //
-// - Returns true and sets value if exp_value equals existing value.
-// - If key doesn't exist and exp_value is nil, sets value.
-// - If key exists, but value is empty and exp_value is not nil but empty, sets value.
+// - Returns true and sets value if exp_bytes equals existing value.
+// - If key doesn't exist and exp_bytes is empty, sets value.
 // - Otherwise, returns a ConditionFailedError containing the actual value of the key.
 //
 // Note that the client is free to send more requests after a
@@ -178,10 +177,31 @@ message ConditionalPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
-  // Set exp_value.bytes empty to test for non-existence. Specify as nil
-  // to indicate there should be no existing entry. This is different
-  // from the expectation that the value exists but is empty.
-  Value exp_value = 3;
+  // deprecated_exp_val represents the expected existing value for the key. If
+  // the existing value is different, the request will return a
+  // ConditionFailedError. A missing (Go nil) deprecated_exp_value.raw_bytes
+  // means that the key is expected to not exist.
+  //
+  // This is deprecated in 20.2 in favor of exp_bytes, which clarifies that the
+  // checksum and timestamp of the expected value are irrelevant. Remove in
+  // 21.1.
+  Value deprecated_exp_value = 3;
+  // exp_bytes represents the expected existing value for the key. If empty, the
+  // key is expected to not exist. If not empty, these bytes are expected to
+  // contain the tag and data of the existing value (without the existing
+  // value's checksum; the byte array is expected to come from
+  // Value.TagAndDataBytes()). A value's checksum covers the key in addition to
+  // covering the value, so not including a checksum here makes for a easier to
+  // use API - the creator of the ConditionalPutRequest can simply put in bytes
+  // coming from a different key.
+  // Note that there's no such thing as expecting a key to exist, but have an
+  // empty value. Such key-values don't exist.
+  //
+  // Note that the existing value's timestamp doesn't matter, only its data. So,
+  // the CPut will succeed in ABA situations (if a reader got value A and checks
+  // against it later, the check will succeed even if, in the meantime, there's
+  // been a subsequent write of value B and another one back to value A).
+  bytes exp_bytes = 6;
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
