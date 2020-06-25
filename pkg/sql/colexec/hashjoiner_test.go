@@ -379,22 +379,22 @@ func init() {
 
 			leftTuples: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets},
 				{0},
-				{hashTableNumBuckets * 2},
+				{HashTableNumBuckets * 2},
 				{1},
 				{1},
-				{hashTableNumBuckets + 1},
+				{HashTableNumBuckets + 1},
 			},
 			rightTuples: tuples{
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 2},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 2},
+				{HashTableNumBuckets * 3},
 				{0},
 				{1},
-				{hashTableNumBuckets + 1},
+				{HashTableNumBuckets + 1},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -407,15 +407,15 @@ func init() {
 			rightEqColsAreKey: false,
 
 			expected: tuples{
-				{hashTableNumBuckets, hashTableNumBuckets},
-				{hashTableNumBuckets, hashTableNumBuckets},
-				{hashTableNumBuckets, hashTableNumBuckets},
-				{hashTableNumBuckets * 2, hashTableNumBuckets * 2},
+				{HashTableNumBuckets, HashTableNumBuckets},
+				{HashTableNumBuckets, HashTableNumBuckets},
+				{HashTableNumBuckets, HashTableNumBuckets},
+				{HashTableNumBuckets * 2, HashTableNumBuckets * 2},
 				{0, 0},
 				{0, 0},
 				{1, 1},
 				{1, 1},
-				{hashTableNumBuckets + 1, hashTableNumBuckets + 1},
+				{HashTableNumBuckets + 1, HashTableNumBuckets + 1},
 			},
 		},
 		{
@@ -500,14 +500,14 @@ func init() {
 			// hash to the same bucket.
 			leftTuples: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 2},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 2},
+				{HashTableNumBuckets * 3},
 			},
 			rightTuples: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 3},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -520,8 +520,8 @@ func init() {
 
 			expected: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 3},
 			},
 		},
 		{
@@ -606,17 +606,17 @@ func init() {
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
 				{10, 0, 0},
-				{20, 0, hashTableNumBuckets},
-				{40, hashTableNumBuckets, 0},
-				{50, hashTableNumBuckets, hashTableNumBuckets},
-				{60, hashTableNumBuckets * 2, 0},
-				{70, hashTableNumBuckets * 2, hashTableNumBuckets},
+				{20, 0, HashTableNumBuckets},
+				{40, HashTableNumBuckets, 0},
+				{50, HashTableNumBuckets, HashTableNumBuckets},
+				{60, HashTableNumBuckets * 2, 0},
+				{70, HashTableNumBuckets * 2, HashTableNumBuckets},
 			},
 			rightTuples: tuples{
-				{0, hashTableNumBuckets},
-				{hashTableNumBuckets * 2, hashTableNumBuckets},
+				{0, HashTableNumBuckets},
+				{HashTableNumBuckets * 2, HashTableNumBuckets},
 				{0, 0},
-				{0, hashTableNumBuckets * 2},
+				{0, HashTableNumBuckets * 2},
 			},
 
 			leftEqCols:   []uint32{1, 2},
@@ -628,8 +628,8 @@ func init() {
 			rightEqColsAreKey: true,
 
 			expected: tuples{
-				{20, 0, hashTableNumBuckets},
-				{70, hashTableNumBuckets * 2, hashTableNumBuckets},
+				{20, 0, HashTableNumBuckets},
+				{70, HashTableNumBuckets * 2, HashTableNumBuckets},
 				{10, 0, 0},
 			},
 		},
@@ -1010,7 +1010,7 @@ func TestHashJoiner(t *testing.T) {
 						}
 						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 						args.TestingKnobs.DiskSpillingDisabled = true
-						result, err := NewColOperator(ctx, flowCtx, args)
+						result, err := TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
@@ -1077,14 +1077,14 @@ func BenchmarkHashJoiner(b *testing.B) {
 										if fullOuter {
 											joinType = sqlbase.FullOuterJoin
 										}
-										hjSpec, err := makeHashJoinerSpec(
+										hjSpec, err := MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
 										require.NoError(b, err)
-										hj := newHashJoiner(
+										hj := NewHashJoiner(
 											testAllocator, hjSpec,
 											leftSource, rightSource,
 										)
@@ -1191,7 +1191,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	args.TestingKnobs.DiskSpillingDisabled = true
-	hjOp, err := NewColOperator(ctx, flowCtx, args)
+	hjOp, err := TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Op.Init()
 	for b := hjOp.Op.Next(ctx); b.Length() > 0; b = hjOp.Op.Next(ctx) {
