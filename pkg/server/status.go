@@ -559,7 +559,7 @@ func (s *statusServer) Certificates(
 		return status.Certificates(ctx, req)
 	}
 
-	cm, err := s.cfg.GetCertificateManager()
+	cm, err := s.rpcCtx.GetCertificateManager()
 	if err != nil {
 		return nil, err
 	}
