@@ -178,6 +178,7 @@ type providerOpts struct {
 	projects       []string
 	ServiceAccount string
 	MachineType    string
+	MinCPUPlatform string
 	Zones          []string
 	Image          string
 	SSDCount       int
@@ -270,6 +271,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
+	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
+		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
 		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
 
@@ -430,6 +433,9 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 	}()
 
 	args = append(args, "--machine-type", p.opts.MachineType)
+	if p.opts.MinCPUPlatform != "" {
+		args = append(args, "--min-cpu-platform", p.opts.MinCPUPlatform)
+	}
 	args = append(args, "--labels", fmt.Sprintf("lifetime=%s", opts.Lifetime))
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
