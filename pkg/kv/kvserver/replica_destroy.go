@@ -128,6 +128,12 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 		r.store.metrics.releaseTenant(ctx, tenantID)
 	}
 
+	// Unhook the tenant rate limiter if we have one.
+	if r.tenantLimiter != nil {
+		r.store.tenantRateLimiters.Release(r.tenantLimiter)
+		r.tenantLimiter = nil
+	}
+
 	return nil
 }
 
