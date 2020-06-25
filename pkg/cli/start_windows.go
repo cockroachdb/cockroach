@@ -15,6 +15,10 @@ import "os"
 // drainSignals are the signals that will cause the server to drain and exit.
 var drainSignals = []os.Signal{os.Interrupt}
 
+// termSignal is the signal that causes an idempotent graceful
+// shutdown (i.e. second occurrence does not incur hard shutdown).
+var termSignal os.Signal = nil
+
 // quitSignal is the signal to recognize to dump Go stacks.
 var quitSignal os.Signal = nil
 
