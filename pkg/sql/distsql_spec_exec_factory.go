@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
 
 type distSQLSpecExecFactory struct {
@@ -140,13 +139,13 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// scanNode.canParallelize() returns true. We should plumb that info from
 	// here somehow as well.
 	var spans roachpb.Spans
-	spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	if invertedConstraint != nil {
+		spans, err = GenerateInvertedSpans(invertedConstraint, sb)
+	} else {
+		spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	}
 	if err != nil {
 		return nil, err
-	}
-	// TODO(rytaft, sumeerbhola): Add support for inverted constraints.
-	if invertedConstraint != nil {
-		return nil, errors.Errorf("Geospatial constrained scans are not yet supported")
 	}
 
 	isFullTableScan := len(spans) == 1 && spans[0].EqualValue(
@@ -266,8 +265,8 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
 	n exec.Node, invFilter *invertedexpr.SpanExpression, invColumn exec.NodeColumnOrdinal,
 ) (exec.Node, error) {
-	// TODO(rytaft, sumeerbhola): Fill this in.
-	return nil, errors.Errorf("Inverted filters are not yet supported")
+	return nil, unimplemented.NewWithIssue(
+		47473, "experimental opt-driven distsql planning: inverted filter")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSimpleProject(
