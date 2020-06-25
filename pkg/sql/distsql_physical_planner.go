@@ -289,6 +289,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *filterNode:
 	case *groupNode:
 	case *indexJoinNode:
+	case *invertedFilterNode:
 	case *joinNode:
 	case *limitNode:
 	case *lookupJoinNode:
@@ -350,6 +351,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, err
 		}
 		return checkSupportForPlanNode(n.input)
+
+	// TODO(sumeer): When the filtering is only a union expression, we should
+	// distribute, as outlined in the discussion on PR #50158.
+	case *invertedFilterNode:
+		return cannotDistribute, nil
 
 	case *joinNode:
 		if err := checkExpr(n.pred.onCond); err != nil {
@@ -2294,6 +2300,24 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(planCtx, n)
+
+	case *invertedFilterNode:
+		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.input)
+		if err != nil {
+			return nil, err
+		}
+		invertedFiltererSpec := &execinfrapb.InvertedFiltererSpec{
+			InvertedColIdx: uint32(n.invColumn),
+			InvertedExpr:   *n.expression.ToProto(),
+		}
+
+		plan.AddSingleGroupStage(dsp.gatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: invertedFiltererSpec,
+			},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+		planToStreamColMap := make([]int, len(plan.PlanToStreamColMap))
+		copy(planToStreamColMap, plan.PlanToStreamColMap)
 
 	case *joinNode:
 		plan, err = dsp.createPlanForJoin(planCtx, n)
