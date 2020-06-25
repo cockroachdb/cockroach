@@ -1,0 +1,41 @@
+# LogicTest: !fakedist-metadata !3node-tenant
+
+# EXPLAIN test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+CREATE TABLE geo_table2(
+  k int,
+  geom geometry,
+  k_plus_one int,
+  PRIMARY KEY (k, k_plus_one),
+  INVERTED INDEX geom_index(geom)
+)
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v2jAUhu_3K6xzA0hesRM-Wl8xrWHLRIFBpG1qIpThIxYt2JltJibEf5-SdKPQgtpcJDofr_0-OWcH9lcOAubBKHgfkY3JyXA2uSP3wdfp6F04Js3bcB7NP49a5KHlZ92wQr1w6fccPfLlYzALiHWLTDk0FpfONhvTSTiOmv4VI_4VazWE-BBM7oJo9o2W0nUrAQpKSxyna7Qg7oFDQqEweonWalOmdlVDKLcgGIVMFRtXphMKS20QxA5c5nIEAVFpZIapRNNmQEGiS7O8Ora8bJEpidvBwTJQmBepsoK0Oe96Nx7vsk6P9a47vZt-7-0zyT5JlSQ-I9r9QGMh2VPQG3ewZF26QhB8T19uO1S_0TiUwyx3aNC0-bH3f_VgWxiiFRlwQWzpm1iXGidiiGO_341j5rE4Zuz_y2PRbfUJYiCo5As6hzGQE0YKk40TZMDpwD8L7L0G-JPO1MOYvGPUwmTr1Pw5nlH9X8TpajHOOHv6XHeexA3xeO8GXuvAdBbIfw3QDG2hlcUjmHMns31CAeUK6-W2emOWODV6WV1Th5NKVyUkWldXeR2Eqi6VBh-L-UWxd1nsXRT7J-Jk_-ZvAAAA___zeE2X
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1v2jAUfd-vsO5LQfKKnfDR-olpDVsmCgwibVMToQxfsajBzmxnYkL89ylJtxa6IpqHRPfcc-xzcu8O7M8cBCyCcfA-IqXJyWg-vSV3wdfZ-F04Ia2bcBEtPo_b5IFyT8n9sshLu9QKG_Ia9dKl33P0yJePwTwg1i0z5dBYXDnbuphNw0nU8i8Z8S9Z-0KID8H0Nojm32gl3bQToKC0xEm6QQviDjgkFAqjV2itNhW0qwmh3IJgFDJVlK6CEworbRDEDlzmcgQBUWVkjqlE02FAQaJLs7w-trpsmSmJ2-GjZaCwKFJlBelw3vOuPd5j3T7rX3X714P-2_-AA5IqSXxGtPuBxkKyp6BL92jJunSNIPienm87VL_QOJSjLHdo0HT4ofe__WBbGKIVGXJBbOWbWJcaJ2KIY3_Qi2PmsThm7N_LY9FN_QliIKjkGcxRDOQoI4Vp6QQZcjr0XwzsvSbwJ52phzF5h1ELk21S8_twRs1_EcerxTjj7Plz1X1WX4inezf02udl8l-TaY620MriQZ6XTmb7hALKNTb7bXVpVjgzelVf05TTWlcDEq1rurwpQtW0KoNPxfyk2Dst9k6K_SNxsn_zJwAA__8jeVKx
+
+query TTT
+EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+·                                    distribution     local
+·                                    vectorized       false
+render                               ·                ·
+ └── filter                          ·                ·
+      │                              filter           st_intersects('010100000000000000000008400000000000000840', geom)
+      └── index-join                 ·                ·
+           │                         table            geo_table2@primary
+           │                         key columns      k, k_plus_one
+           └── render                ·                ·
+                └── inverted-filter  ·                ·
+                     │               inverted column  2
+                     │               num spans        31
+                     └── scan        ·                ·
+·                                    table            geo_table2@geom_index
+·                                    spans            /1152921504606846976-/1152921504606846977 /1152921573326323712-/1152921573326323713 /1152921574400065536-/1152921574400065537 /1152921574668500992-/1152921574668500993 /1152921574735609856-/1152921574735609857 /1152921574739804160-/1152921574739804161 /1152921574740066304-/1152921574740066305 /1152921574740070400-/1152921574740070401 /1152921574740070464-/1152921574740070465 /1152921574740070468-/1152921574740070469 /1152921574740070469-/1152921574740070470 /1152921574740070480-/1152921574740070481 /1152921574740070656-/1152921574740070657 /1152921574740071424-/1152921574740071425 /1152921574740082688-/1152921574740082689 /1152921574740131840-/1152921574740131841 /1152921574740852736-/1152921574740852737 /1152921574752387072-/1152921574752387073 /1152921577621291008-/1152921577621291009 /1152921590506192896-/1152921590506192897 /1152921779484753920-/1152921779484753921 /1152922604118474752-/1152922604118474753 /1152925902653358080-/1152925902653358081 /1152939096792891392-/1152939096792891393 /1152991873351024640-/1152991873351024641 /1153202979583557632-/1153202979583557633 /1154047404513689600-/1154047404513689601 /1157425104234217472-/1157425104234217473 /1170935903116328960-/1170935903116328961 /1224979098644774912-/1224979098644774913 /1441151880758558720-/1441151880758558721
