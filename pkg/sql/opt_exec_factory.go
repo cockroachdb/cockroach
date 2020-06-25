@@ -124,13 +124,13 @@ func (ef *execFactory) ConstructScan(
 	scan.maxResults = maxResults
 	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
-	scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	if invertedConstraint != nil {
+		scan.spans, err = GenerateInvertedSpans(invertedConstraint, sb)
+	} else {
+		scan.spans, err = sb.SpansFromConstraint(indexConstraint, needed, false /* forDelete */)
+	}
 	if err != nil {
 		return nil, err
-	}
-	// TODO(rytaft, sumeerbhola): Add support for inverted constraints.
-	if invertedConstraint != nil {
-		return nil, errors.Errorf("Geospatial constrained scans are not yet supported")
 	}
 
 	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
@@ -270,8 +270,17 @@ func (ef *execFactory) ConstructInvertedFilter(
 	invColumn exec.NodeColumnOrdinal,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// TODO(rytaft, sumeerbhola): Fill this in.
-	return nil, errors.Errorf("Inverted filters are not yet supported")
+	inputCols := planColumns(n.(planNode))
+	columns := make(sqlbase.ResultColumns, len(inputCols)-1)
+	copy(columns[:invColumn], inputCols[:invColumn])
+	copy(columns[invColumn:], inputCols[invColumn+1:])
+	n = &invertedFilterNode{
+		input:         n.(planNode),
+		expression:    invFilter,
+		invColumn:     int(invColumn),
+		resultColumns: columns,
+	}
+	return n, nil
 }
 
 // ConstructSimpleProject is part of the exec.Factory interface.

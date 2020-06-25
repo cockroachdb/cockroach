@@ -1,0 +1,80 @@
+# LogicTest: local
+# Test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+SET vectorize = off
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1.0 1.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (3, 'POINT(3.0 3.0)'),
+  (4, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (5, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (6, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE geo_table]
+----
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {1}       1
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy02m9vozYcB_DnexWWn7SV2NWQtL3jEdlCt2y9hqaZttsRRVzwOrQEZ7aztar63k_Apc0f_tjmxz24CvA3_gBWIn3lZyz-XWIX3_s3_o9TtOFLdD0Zf0Sf_T-Cm8HoFg1uBzef_vTR6XB0P72_uzlD34b-Uwx8oGwuoy9Lin7_2Z_4SMh5kkrKBV1IcXoSjEe309PeO4J678jZiev-5I8_-tPJJytLrs5m2MIpi-lttKICu5-xjWcWXnO2oEIwnp16zgeM4kfsEgsn6Xojs9MzCy8Yp9h9xjKRS4pdPM0cExrFlJ8TbOGYyihZ5h-bTTZP0pg-eq9ibOH7dZQKF53b9oXzwbEvSP-SXL7vX364uvy-5OQVitIY9Qhi8m_KBbYwZ_8LxGkUu8jBFhYyWi6RTFbURSS7_uVJ0u2AKwf9gGcvFmYb-XYTQkYPFLv2i6V-o6P0P8olja-TpaSc8nN7_2631_3HNUcsRZ7tIpHd6lyyeYEJN4T0FmGKkJARly4KcRj2ri7CkDgkDAl5_c8h02H-xw9xNp6mscro62x0PgsN0_aTD7Um92EnD7Qmv4Od3NOafAA6uV2c0ADkCRsU0ddG9OERRBtBYBGeFsADndzfOaEGeEuAvgY9xBAeEWgjAniEp43wwBG_7R2rQg5SYE_ECDPtBhMYYYJuMJ4RxusEYx9alEFlSSBU3xhVloR6bcaosiQA6mgZKYHKUu0x5ctIBVSZbI8qX0YqqMpka1TFMlJAVSfbocqXUROoMtUKU7OMGkD1yVaommXUgKpPtkHVLaN6VEPSGFWzjGpA9SlTTNMyqgYpJE1RTcuoGqWQhPmNM_uyVEOlLKa7lr-ihWScxvNNmrB0LorS5-26fgei14IgtJWBWoaaFr9DS6BpuevQ4mlaBt1ZdvsT_QalG1PfwNTv2EQMTKRDk6fp8bqzHHUv-u1LJ-9M1zTs2HTUzOh3M-Cmo6JGv6qBNpX3NmbNDfjzMrSVFTnQtvJWx6zXgbaVlzxmNQ-wrabzMW99gI01FZB5CQT9jlsYy7LQxpqCyKwigrM19UXmjRGcsak-Mi-QwIyNbZJ5nwRjbCqXzOolEJtS12TeNoEYlaon8_IJwqjWRJl3Ua2NSsWUWTXV1qbeU5k3VW2N6rWVeXEF-7ts-p2tatz-xRYeb6SLPFthz9EqekQrumL8CW0EzUYR9GtSvfXI0dl69AtL0m9brJz9TUdrnqwi_rS3v6rYoOQe7gojNrHJ8b_3_aPjE3d3y5jnnGk9iXzDFzoYVZw8GFv1bHo6z2ZCxZqlgu49l6pPJi8zC9P4gRZ73ATb8AUNOFvk0xSH4zyXn4ipkMVVuzgYpcWlDLgbtmvDTn3YqQ33DsKzl---BgAA__9DrJgu
+
+query I colnames
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+k
+6
+3
+
+query I colnames
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(4.5 4.5)'::geometry, geom)
+----
+k
+6
+4
+
+query I colnames
+SELECT k FROM geo_table WHERE ST_CoveredBy('POINT(4.0 4.5)'::geometry, geom)
+----
+k
+6
+
+statement ok
+CREATE TABLE geo_table2(
+  k int,
+  geom geometry,
+  another_k int,
+  PRIMARY KEY (k, another_k),
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table2 VALUES
+  (1, 'LINESTRING(1.0 1.0, 2.0 2.0)', 1),
+  (2, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))', 2)
+
+# TODO(sumeer): this test panics
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8mt9P40YQx9_7V6zmBZDcY-0EuPOTaTFtWo7kQqr2eo4iXzylVhNvurtpQYj__WQ7d5BgO94fhgcir-fr72c3k0QzmgcQ_y7Ah5vwKvxxQtZ8QS7Hw_fkU_jH6Op8cE3Or8-vPv4ZksOLwc3k5sPVEdmE_lMG3iKbyfjzAsnvP4fjkAg5SzOJXOBcisOD0XBwPTnsvaGk94YeHfj-T-HwfTgZf3Ry5fJoCg5kLMHreIkC_E_gwtSBFWdzFILxfOmhCBgkd-BTB9JstZb58tSBOeMI_gPIVC4QfJjkHGOME-THFBxIUMbponhsbjZLswTvgm_E4MDNKs6ET45d98R757kntH9KT9_2T9-dnX5fsXhG4iwhPUqY_Bu5AAc4-18QjnHiEw8cEDJeLIhMl-gTmt__fC_xa8CZR36A6aMDbC2fNiFkfIvgu49O-40Osv-QS0wu04VEjvzY3d7t1_vh3YoTlpHA9YnItzqTbFbARGtKe3MhYy79CKKod3YSRdSjUUTpt38enVwUL2EEBLOkReRlBKR4NhoZXrQ2DO0YjlobfrBjGLQ2PLdi6JYLLU2LaNeKcV_JuG_PmCoZUzvGQWvTwIph-Gxhv-lTtJUjbm98Yc94pGQ8smccKBkH1ox_27puY76jMN65MsDELsBIGWBkFyBQBgisAri7_q0gqlSGIH0tkCqV6VuiBVKlMgB5kRZ7IaoU-gDVabEPolalD1KdFvtAalXaIDVpsQekXqUHUp0WTRC1Ci2AhrRogGhWaYE0pEUDSLNKB6QpLepB9qiUQRrSogaiWaEKsC8tqiFaqFRB9qVFNUgLldlvivoXWBuQvKTf-P8VzyXjmMzWWcqyWYH4GoW4BV-tetyCr1ZZbsFXqzo39zUr0s39zWp1C-eu5L_7UTPz16_cjXwtFPDG597ev7KON_K3UM4b-Vuo6k38bRb3RuegzFFf45tw2Cz1TThsVvwGHJ0U_gY8ndT_Ju-TFk-VypzHejdAj6O7poAeT3e9AS2eDlsE6jzddAqUOTpuGCjzdNw3UOXpun2gxNNhF0GF4zWaCSo8r9FT0P-dUv_-a8OzeQEHhmvpk8BtMY-wjO_IEpeM35O1wDyKkl_T-rEET2Us4ReWZpvxC297IGHF02XM77dmL8rhBX93YoS61KUv_972X1wf-M_HSQLvSOkkimEQshNVLu7E1p1NT-VsxihWLBO4dS51T6aPUwcwucVy_kWwNZ_jiLN5YVNeDgtdsZCgkOVdt7wYZOWtHPC52G0Ue81ir1Hc2xFPH7_7EgAA___3oJTb
+
+query I colnames
+SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+k
+6
+3

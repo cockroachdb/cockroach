@@ -207,6 +207,16 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return name, details
 }
 
+// summary implements the diagramCellType interface.
+func (ifs *InvertedFiltererSpec) summary() (string, []string) {
+	name := "InvertedFilterer"
+	// TODO: the InvertedExpr.String() produces a very long line. What is the typical
+	// way this is handled -- linebreaks or truncate the output?
+	details := append([]string(nil), fmt.Sprintf(
+		"InvertedExpr on @%d: %s", ifs.InvertedColIdx, ifs.InvertedExpr.String()))
+	return name, details
+}
+
 func orderedJoinDetails(
 	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
 ) []string {

@@ -289,6 +289,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *filterNode:
 	case *groupNode:
 	case *indexJoinNode:
+	case *invertedFilterNode:
 	case *joinNode:
 	case *limitNode:
 	case *lookupJoinNode:
@@ -350,6 +351,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, err
 		}
 		return checkSupportForPlanNode(n.input)
+
+	// TODO(sumeer): When the filtering is only a union expression, we should
+	// distribute, as outlined in the discussion on PR #50158.
+	case *invertedFilterNode:
+		return cannotDistribute, nil
 
 	case *joinNode:
 		if err := checkExpr(n.pred.onCond); err != nil {
@@ -2307,6 +2313,38 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(planCtx, n)
+
+	case *invertedFilterNode:
+		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.input)
+		if err != nil {
+			return nil, err
+		}
+		invertedFiltererSpec := &execinfrapb.InvertedFiltererSpec{
+			InvertedColIdx: uint32(n.invColumn),
+			InvertedExpr:   *n.expression.ToProto(),
+		}
+
+		plan.AddSingleGroupStage(dsp.gatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: invertedFiltererSpec,
+			},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+		numInputNodeCols := len(planColumns(n.input))
+		planToStreamColMap := makePlanToStreamColMap(numInputNodeCols - 1)
+		// TODO(sumeer): figure this out.
+		// When the table columns are (k, geom, another_k) the following commented out code
+		// does not work. It causes the map to have {0, 2}. This eventually creates a panic
+		// in createPlanForIndexJoin since it has n.keyCols = {0, 2} and
+		// plan.PlanToStreamColMap = {0, 2}, so when
+		// plan.PlanToStreamColMap[n.keyCols[1]] is executed it is out of bounds.
+		//
+		// copy(planToStreamColMap[:n.invColumn], plan.PlanToStreamColMap[:n.invColumn])
+		// copy(planToStreamColMap[n.invColumn:], plan.PlanToStreamColMap[n.invColumn+1:])
+		// plan.PlanToStreamColMap = planToStreamColMap
+		//
+		// This identityMap does not work either. n.KeyCols is the same as earlier, and
+		// plan.PlanToStreamColMap = {0, 1}
+		plan.PlanToStreamColMap = identityMap(planToStreamColMap, len(planToStreamColMap))
 
 	case *joinNode:
 		plan, err = dsp.createPlanForJoin(planCtx, n)
