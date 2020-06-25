@@ -170,28 +170,52 @@ func BenchmarkPredicateImplication(b *testing.B) {
 			pred:     "@3 >= 10 AND @3 <= 100",
 		},
 		{
-			name:     "multi-column-exact-match",
+			name:     "multi-column-and-exact-match",
 			varTypes: "int, string",
 			filters:  "@1 >= 10 AND @2 = 'foo'",
 			pred:     "@1 >= 10 AND @2 = 'foo'",
 		},
 		{
-			name:     "multi-column-exact-match-reverse",
+			name:     "multi-column-or-exact-match",
+			varTypes: "int, string",
+			filters:  "@1 >= 10 OR @2 = 'foo'",
+			pred:     "@1 >= 10 OR @2 = 'foo'",
+		},
+		{
+			name:     "multi-column-and-exact-match-reverse",
 			varTypes: "int, string",
 			filters:  "@1 >= 10 AND @2 = 'foo'",
 			pred:     "@2 = 'foo' AND @1 >= 10",
 		},
 		{
-			name:     "multi-column-exact-match-extra-filters",
+			name:     "multi-column-and-exact-match-reverse",
+			varTypes: "int, string",
+			filters:  "@1 >= 10 OR @2 = 'foo'",
+			pred:     "@2 = 'foo' OR @1 >= 10",
+		},
+		{
+			name:     "multi-column-and-exact-match-extra-filters",
 			varTypes: "int, int, int, int, string",
 			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
 			pred:     "@2 > 0 AND @5 = 'foo'",
 		},
 		{
-			name:     "filters-do-not-imply-pred",
+			name:     "multi-column-or-exact-match-extra-predicate",
+			varTypes: "int, int, int, int, string",
+			filters:  "@2 > 0 OR @5 = 'foo'",
+			pred:     "@1 < 0 OR @2 > 0 OR @3 >= 10 OR @4 = 4 OR @5 = 'foo'",
+		},
+		{
+			name:     "and-filters-do-not-imply-pred",
 			varTypes: "int, int, int, int, string",
 			filters:  "@1 < 0 AND @2 > 10 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
 			pred:     "@2 > 0 AND @5 = 'foo'",
+		},
+		{
+			name:     "or-filters-do-not-imply-pred",
+			varTypes: "int, int, int, int, string",
+			filters:  "@1 < 0 OR @2 > 10 OR @3 >= 10 OR @4 = 4 OR @5 = 'foo'",
+			pred:     "@2 > 0 OR @5 = 'foo'",
 		},
 	}
 	// Generate a few test cases with many columns to show how performance

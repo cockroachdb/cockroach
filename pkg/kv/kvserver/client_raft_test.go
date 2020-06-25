@@ -4081,6 +4081,16 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
+
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		// Use RocksDB engines because Pebble does not use the compactor queue.
+		eng := storage.NewInMem(ctx, enginepb.EngineTypeRocksDB, roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		mtc.engines = append(mtc.engines, eng)
+	}
+
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -4091,7 +4101,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := repl.AnnotateCtx(context.Background())
+	ctx = repl.AnnotateCtx(ctx)
 
 	deleteStore := mtc.stores[2]
 	chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, roachpb.ReplicationTarget{

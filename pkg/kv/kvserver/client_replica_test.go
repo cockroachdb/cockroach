@@ -1879,11 +1879,6 @@ func TestClearRange(t *testing.T) {
 	// Verify that a ClearRange request from [lg1, lg3) removes lg1 and lg2.
 	clearRange(lg1, lg3)
 	verifyKeysWithPrefix(lg, []roachpb.Key{lg3})
-
-	// Verify that only the large ClearRange request used a range deletion
-	// tombstone by checking for the presence of a suggested compaction.
-	verifyKeysWithPrefix(keys.LocalStoreSuggestedCompactionsMin,
-		[]roachpb.Key{keys.StoreSuggestedCompactionKey(lg1, lg3)})
 }
 
 // TestLeaseTransferInSnapshotUpdatesTimestampCache prevents a regression of
