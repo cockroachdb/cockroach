@@ -1081,3 +1081,17 @@ CREATE TABLE c(a INT DEFAULT(currval('currval_dep_test')))
 
 statement error pq: cannot drop sequence currval_dep_test because other objects depend on it
 DROP SEQUENCE currval_dep_test
+
+subtest regression_50649
+
+statement ok
+CREATE TABLE  t_50649(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50649 OWNED BY t_50649.a
+
+statement ok
+DROP SEQUENCE seq_50649
+
+statement ok
+DROP TABLE t_50649
