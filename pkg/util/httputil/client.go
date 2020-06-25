@@ -65,7 +65,7 @@ func Post(
 
 // Get does like http.Client.Get but uses the provided context and obeys its cancellation.
 func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err error) {
-	req, err := NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (c *Client) Get(ctx context.Context, url string) (resp *http.Response, err 
 
 // Head does like http.Client.Head but uses the provided context and obeys its cancellation.
 func (c *Client) Head(ctx context.Context, url string) (resp *http.Response, err error) {
-	req, err := NewRequestWithContext(ctx, "HEAD", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (c *Client) Head(ctx context.Context, url string) (resp *http.Response, err
 func (c *Client) Post(
 	ctx context.Context, url, contentType string, body io.Reader,
 ) (resp *http.Response, err error) {
-	req, err := NewRequestWithContext(ctx, "POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, err
 	}
