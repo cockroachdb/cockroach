@@ -1333,10 +1333,15 @@ SELECT x, y FROM t ORDER BY (x, y)
 
 subtest array_indexes
 
-# Create indexes on arrays.
+# Indexes not yet supported for arrays, see #50659.
 statement ok
-DROP TABLE IF EXISTS t;
+DROP TABLE IF EXISTS t
+
+statement error column x is of type int\[\] and thus is not indexable
 CREATE TABLE t (x INT[] PRIMARY KEY)
+
+statement ok
+CREATE TABLE t (x INT[])
 
 statement ok
 INSERT INTO t VALUES
@@ -1350,8 +1355,9 @@ INSERT INTO t VALUES
   (ARRAY[NULL, NULL, NULL])
 
 # Test that the unique index rejects bad inserts.
-statement error pq: duplicate key value \(x\)=\(ARRAY\[1,NULL,10\]\) violates unique constraint "primary"
-INSERT INTO t VALUES (ARRAY[1, NULL, 10])
+# Disabled until #50659 is resolved.
+#statement error pq: duplicate key value \(x\)=\(ARRAY\[1,NULL,10\]\) violates unique constraint "primary"
+#INSERT INTO t VALUES (ARRAY[1, NULL, 10])
 
 query T
 SELECT x FROM t ORDER BY x
@@ -1413,18 +1419,20 @@ SELECT x FROM t WHERE x > ARRAY[NULL, NULL]:::INT[] ORDER BY x
 {5}
 
 # Test some operations on a descending index.
-statement ok
+statement error column x is of type int\[\] and thus is not indexable
 CREATE INDEX i ON t(x DESC)
 
+# Add "t@i" index annotation once #50659 is fixed.
 query T
-SELECT x FROM t@i WHERE x <= ARRAY[1] ORDER BY x DESC
+SELECT x FROM t WHERE x <= ARRAY[1] ORDER BY x DESC
 ----
 {1}
 {NULL,NULL,NULL}
 {NULL}
 
+# Add "t@i" index annotation once #50659 is fixed.
 query T
-SELECT x FROM t@i WHERE x > ARRAY[1] ORDER BY x
+SELECT x FROM t WHERE x > ARRAY[1] ORDER BY x
 ----
 {1,NULL,10}
 {1,4,5}
@@ -1470,13 +1478,15 @@ SELECT x FROM t ORDER BY x DESC
 {NULL,NULL,NULL}
 {NULL}
 
+# Enable index creation once #50659 is fixed.
 statement ok
-CREATE INDEX i ON t (x);
+--CREATE INDEX i ON t (x);
 INSERT INTO t VALUES (NULL), (NULL)
 
 # Test that NULL's are differentiated from {NULL}.
+# Add "t@i" index annotation once #50659 is fixed.
 query T
-SELECT x FROM t@i WHERE x IS NOT NULL ORDER BY x
+SELECT x FROM t WHERE x IS NOT NULL ORDER BY x
 ----
 {NULL}
 {NULL,NULL,NULL}
@@ -1492,8 +1502,9 @@ statement error pq: unimplemented: column x is of type geography\[\] and thus is
 CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
 
 # Test arrays of composite types.
+# Add x to PRIMARY KEY once #50659 is fixed.
 statement ok
-CREATE TABLE tarray(x DECIMAL[] PRIMARY KEY);
+CREATE TABLE tarray(x DECIMAL[]);
 INSERT INTO tarray VALUES (ARRAY[1.00]), (ARRAY[1.501])
 
 # Ensure these are round tripped correctly.
@@ -1504,9 +1515,10 @@ SELECT x FROM tarray ORDER BY x
 {1.501}
 
 # Test indexes on multiple columns with arrays.
+# Add multicolumn INDEX i (x, y, z) once #50659 is fixed.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x INT, y INT[], z INT, INDEX i (x, y, z));
+CREATE TABLE t (x INT, y INT[], z INT);
 INSERT INTO t VALUES
   (1, ARRAY[1, 2, 3], 3),
   (NULL, ARRAY[1, NULL, 3], NULL),
@@ -1527,20 +1539,24 @@ SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 2  {4,5}             7
 
 # Test that interleaving an array index doesn't lead to problems.
+# Add parent PRIMARY KEY (x, y DESC) once #50659 is fixed.
+# Add child PRIMARY KEY (x, y DESC, z) once #50659 is fixed.
+# Add INTERLEAVE IN PARENT parent (x, y) once #50659 is fixed.
+# Uncomment INSERT values once #50659 is fixed.
 statement ok
 DROP TABLE IF EXISTS parent, child CASCADE;
-CREATE TABLE parent (x INT, y INT[], PRIMARY KEY (x, y DESC));
-CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x, y DESC, z)) INTERLEAVE IN PARENT parent (x, y);
+CREATE TABLE parent (x INT, y INT[], PRIMARY KEY (x));
+CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x)) INTERLEAVE IN PARENT parent (x);
 INSERT INTO parent VALUES
   (1, ARRAY[1, 2, 3]),
-  (1, ARRAY[1, NULL]),
+--  (1, ARRAY[1, NULL]),
   (2, ARRAY[NULL]),
   (3, ARRAY[NULL, 1, NULL]);
 INSERT INTO child VALUES
   (1, ARRAY[1, 2, 3], ARRAY[4]),
-  (1, ARRAY[1, 2, 3, 4], ARRAY[5]),
-  (1, ARRAY[1, NULL], ARRAY[5]),
-  (1, ARRAY[1, NULL, NULL], ARRAY[10]),
+--  (1, ARRAY[1, 2, 3, 4], ARRAY[5]),
+--  (1, ARRAY[1, NULL], ARRAY[5]),
+--  (1, ARRAY[1, NULL, NULL], ARRAY[10]),
   (2, ARRAY[NULL], ARRAY[1]),
   (3, ARRAY[NULL, 1, NULL], ARRAY[3]);
 
@@ -1549,24 +1565,21 @@ query IT
 SELECT x, y FROM parent ORDER BY x, y DESC
 ----
 1  {1,2,3}
-1  {1,NULL}
 2  {NULL}
 3  {NULL,1,NULL}
 
 query ITT
 SELECT x, y, z FROM child ORDER BY x, y DESC, z
 ----
-1  {1,2,3,4}      {5}
 1  {1,2,3}        {4}
-1  {1,NULL,NULL}  {10}
-1  {1,NULL}       {5}
 2  {NULL}         {1}
 3  {NULL,1,NULL}  {3}
 
 # Test arrays of strings.
+# Add parent PRIMARY KEY (x) once #50659 is fixed.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x STRING[] PRIMARY KEY);
+CREATE TABLE t (x STRING[]);
 INSERT INTO t VALUES
   (ARRAY['']),
   (ARRAY['hello', 'hi\nthere']),
@@ -1588,9 +1601,10 @@ SELECT x FROM t WHERE x > ARRAY['hell'] AND x < ARRAY['i']
 
 # Test arrays of bytes, and insert some bytes that are used by the
 # array encoding itself.
+# Add parent PRIMARY KEY (x) once #50659 is fixed.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x BYTES[] PRIMARY KEY);
+CREATE TABLE t (x BYTES[]);
 INSERT INTO t VALUES
   (ARRAY[b'\xFF', b'\x00']),
   (ARRAY[NULL, b'\x01', b'\x01', NULL]),
@@ -1604,9 +1618,10 @@ SELECT x FROM t ORDER BY x
 {"\\xff","\\x00"}
 
 # Repeat the above test with a descending encoding.
+# Add parent PRIMARY KEY (x DESC) once #50659 is fixed.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x BYTES[], PRIMARY KEY (x DESC));
+CREATE TABLE t (x BYTES[]);
 INSERT INTO t VALUES
   (ARRAY[b'\xFF', b'\x00']),
   (ARRAY[NULL, b'\x01', b'\x01', NULL]),
@@ -1620,9 +1635,10 @@ SELECT x FROM t ORDER BY x
 {"\\xff","\\x00"}
 
 # Test some indexes with multiple array columns.
+# Add parent PRIMARY KEY (x, y) once #50659 is fixed.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x INT[], y INT[], PRIMARY KEY (x, y));
+CREATE TABLE t (x INT[], y INT[]);
 INSERT INTO t VALUES
   (ARRAY[1, 2], ARRAY[3, 4]),
   (ARRAY[NULL, NULL], ARRAY[NULL, NULL]),
@@ -1646,29 +1662,31 @@ SELECT x, y FROM t WHERE x > ARRAY[NULL]:::INT[] ORDER BY y
 {1,2}        {3,4}
 
 # Test that we can create foreign key references on arrays.
-statement ok
-DROP TABLE IF EXISTS t1, t2 CASCADE;
-CREATE TABLE t1 (x INT[] PRIMARY KEY);
-CREATE TABLE t2 (x INT[] PRIMARY KEY);
-ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x)
+# Enable once #50659 is fixed.
+#statement ok
+#DROP TABLE IF EXISTS t1, t2 CASCADE;
+#CREATE TABLE t1 (x INT[] PRIMARY KEY);
+#CREATE TABLE t2 (x INT[] PRIMARY KEY);
+#ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x)
 
-statement ok
-INSERT INTO t1 VALUES (ARRAY[1, 2, NULL, 3])
+#statement ok
+#INSERT INTO t1 VALUES (ARRAY[1, 2, NULL, 3])
 
-statement error pq: insert on table "t2" violates foreign key constraint "fk_x_ref_t1"
-INSERT INTO t2 VALUES (ARRAY[1, 2])
+#statement error pq: insert on table "t2" violates foreign key constraint "fk_x_ref_t1"
+#INSERT INTO t2 VALUES (ARRAY[1, 2])
 
-statement ok
-INSERT INTO t2 VALUES (ARRAY[1, 2, NULL, 3])
+#statement ok
+#INSERT INTO t2 VALUES (ARRAY[1, 2, NULL, 3])
 
-statement error pq: delete on table "t1" violates foreign key constraint "fk_x_ref_t1" on table "t2"
-DELETE FROM t1 WHERE x > ARRAY[1]
+#statement error pq: delete on table "t1" violates foreign key constraint "fk_x_ref_t1" on table "t2"
+#DELETE FROM t1 WHERE x > ARRAY[1]
 
 # Test different joins on indexed arrays.
+# Add t1 and t2 PRIMARY KEY x once #50659 is fixed.
 statement ok
 DROP TABLE IF EXISTS t1, t2 CASCADE;
-CREATE TABLE t1 (x INT[] PRIMARY KEY);
-CREATE TABLE t2 (x INT[] PRIMARY KEY);
+CREATE TABLE t1 (x INT[]);
+CREATE TABLE t2 (x INT[]);
 INSERT INTO t1 VALUES
   (ARRAY[1, 2]),
   (ARRAY[NULL]),
@@ -1690,16 +1708,18 @@ SELECT t1.x FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
 {NULL}
 {1,2}
 
-query T rowsort
-SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
-----
-{NULL}
-{1,2}
+# Enable once #50659 is fixed.
+#query T rowsort
+#SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x =# t2.x
+#----
+#{NULL}
+#{1,2}
 
 # Test that we can group by arrays.
+# Add INDEX (x) once #50659 is fixed.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x INT[], INDEX (x));
+CREATE TABLE t (x INT[]);
 INSERT INTO t VALUES
   (ARRAY[1, 2]),
   (ARRAY[1, 2]),
