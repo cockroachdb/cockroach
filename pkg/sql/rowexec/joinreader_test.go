@@ -445,6 +445,7 @@ func TestJoinReader(t *testing.T) {
 						in,
 						&c.post,
 						out,
+						lookupJoinReaderType,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -582,6 +583,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			OutputColumns: []uint32{2},
 		},
 		out,
+		lookupJoinReaderType,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -672,8 +674,8 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
-		)
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{},
+			out, lookupJoinReaderType)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -693,8 +695,8 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerDone()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
-		)
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{},
+			out, lookupJoinReaderType)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -731,6 +733,146 @@ func TestJoinReaderDrain(t *testing.T) {
 			t.Fatal("missing txn final state")
 		}
 	})
+}
+
+func TestIndexJoiner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Create a table where each row is:
+	//
+	//  |     a    |     b    |         sum         |         s           |
+	//  |-----------------------------------------------------------------|
+	//  | rowId/10 | rowId%10 | rowId/10 + rowId%10 | IntToEnglish(rowId) |
+
+	aFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 10))
+	}
+	bFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 10))
+	}
+	sumFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/10 + row%10))
+	}
+
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s)",
+		99,
+		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
+
+	sqlutils.CreateTable(t, sqlDB, "t2",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s)",
+		99,
+		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
+
+	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tdf := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+
+	v := [10]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = sqlbase.IntEncDatum(i)
+	}
+
+	testCases := []struct {
+		description string
+		desc        *sqlbase.TableDescriptor
+		post        execinfrapb.PostProcessSpec
+		input       sqlbase.EncDatumRows
+		outputTypes []*types.T
+		expected    sqlbase.EncDatumRows
+	}{
+		{
+			description: "Test selecting rows using the primary index",
+			desc:        td,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[0], v[2]},
+				{v[0], v[5]},
+				{v[1], v[0]},
+				{v[1], v[5]},
+			},
+			outputTypes: sqlbase.ThreeIntCols,
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[2], v[2]},
+				{v[0], v[5], v[5]},
+				{v[1], v[0], v[1]},
+				{v[1], v[5], v[6]},
+			},
+		},
+		{
+			description: "Test a filter in the post process spec and using a secondary index",
+			desc:        td,
+			post: execinfrapb.PostProcessSpec{
+				Filter:        execinfrapb.Expression{Expr: "@3 <= 5"}, // sum <= 5
+				Projection:    true,
+				OutputColumns: []uint32{3},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[0], v[1]},
+				{v[2], v[5]},
+				{v[0], v[5]},
+				{v[2], v[1]},
+				{v[3], v[4]},
+				{v[1], v[3]},
+				{v[5], v[1]},
+				{v[5], v[0]},
+			},
+			outputTypes: []*types.T{types.String},
+			expected: sqlbase.EncDatumRows{
+				{sqlbase.StrEncDatum("one")},
+				{sqlbase.StrEncDatum("five")},
+				{sqlbase.StrEncDatum("two-one")},
+				{sqlbase.StrEncDatum("one-three")},
+				{sqlbase.StrEncDatum("five-zero")},
+			},
+		},
+		{
+			description: "Test selecting rows using the primary index with multiple family spans",
+			desc:        tdf,
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: sqlbase.EncDatumRows{
+				{v[0], v[2]},
+				{v[0], v[5]},
+				{v[1], v[0]},
+				{v[1], v[5]},
+			},
+			outputTypes: sqlbase.ThreeIntCols,
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[2], v[2]},
+				{v[0], v[5], v[5]},
+				{v[1], v[0], v[1]},
+				{v[1], v[5], v[6]},
+			},
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.description, func(t *testing.T) {
+			spec := execinfrapb.JoinReaderSpec{
+				Table:    *c.desc,
+				IndexIdx: 0,
+			}
+			txn := kv.NewTxn(context.Background(), s.DB(), s.NodeID())
+			runProcessorTest(
+				t,
+				execinfrapb.ProcessorCoreUnion{JoinReader: &spec},
+				c.post,
+				sqlbase.TwoIntCols,
+				c.input,
+				c.outputTypes,
+				c.expected,
+				txn,
+			)
+		})
+	}
 }
 
 // BenchmarkJoinReader benchmarks different lookup join match ratios against a
@@ -922,7 +1064,7 @@ func BenchmarkJoinReader(b *testing.B) {
 							spilled := false
 							for i := 0; i < b.N; i++ {
 								flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-								jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+								jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output, lookupJoinReaderType)
 								if err != nil {
 									b.Fatal(err)
 								}
