@@ -577,7 +577,11 @@ func (e *distSQLSpecExecFactory) ConstructSetOp(
 func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: sort")
+	physPlan, plan := getPhysPlan(input)
+	e.dsp.addSorters(physPlan, ordering, alreadyOrderedPrefix)
+	// Since addition of sorters doesn't change any properties of the physical
+	// plan, we don't need to update any of those.
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructOrdinality(
