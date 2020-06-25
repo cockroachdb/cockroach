@@ -207,6 +207,28 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return name, details
 }
 
+// summary implements the diagramCellType interface.
+func (ifs *InvertedFiltererSpec) summary() (string, []string) {
+	name := "InvertedFilterer"
+	var b strings.Builder
+	const numToPrint = 2
+	for i := range ifs.InvertedExpr.SpansToRead {
+		if i >= numToPrint {
+			fmt.Fprintf(&b, " and %d others", len(ifs.InvertedExpr.SpansToRead)-numToPrint)
+			break
+		} else {
+			var sep string
+			if i > 0 {
+				sep = ", "
+			}
+			fmt.Fprintf(&b, "%s%s", sep, ifs.InvertedExpr.SpansToRead[i].String())
+		}
+	}
+	details := append([]string(nil), fmt.Sprintf(
+		"InvertedExpr on @%d: spans %s", ifs.InvertedColIdx, b.String()))
+	return name, details
+}
+
 func orderedJoinDetails(
 	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
 ) []string {
