@@ -178,5 +178,6 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *roachpb.BatchR
 			}
 		}
 	}
+
 	return nil
 }
