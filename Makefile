@@ -1289,7 +1289,7 @@ bin/.go_protobuf_sources: $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PRO
 		-e 's!golang.org/x/net/context!context!g' \
 		$(GO_SOURCES)
 	@# TODO(benesch): Remove the last sed command after https://github.com/grpc/grpc-go/issues/711.
-	gofmt -s -w $(GO_SOURCES)
+	bin/gofmt -s -w $(GO_SOURCES)
 	touch $@
 
 bin/.gw_protobuf_sources: $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap
@@ -1298,9 +1298,9 @@ bin/.gw_protobuf_sources: $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PRO
 	build/werror.sh $(PROTOC) -Ipkg:./vendor/github.com:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(ERRORS_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_TS_PROTOS)
 	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.
 	$(SED_INPLACE) -E 's!golang.org/x/net/context!context!g' $(GW_SOURCES)
-	gofmt -s -w $(GW_SOURCES)
+	bin/gofmt -s -w $(GW_SOURCES)
 	@# TODO(jordan,benesch) This can be removed along with the above TODO.
-	goimports -w $(GW_SOURCES)
+	bin/goimports -w $(GW_SOURCES)
 	touch $@
 
 bin/.cpp_protobuf_sources: $(PROTOC) $(CPP_PROTOS)
@@ -1421,8 +1421,8 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
 	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
-	gofmt -s -w $@
-	goimports -w $@
+	bin/gofmt -s -w $@
+	bin/goimports -w $@
 
 pkg/ui/yarn.opt.installed:
 	$(NODE_RUN) -C pkg/ui/opt yarn install
@@ -1479,7 +1479,7 @@ pkg/sql/parser/sql.go: pkg/sql/parser/gen/sql.go.tmp | bin/.bootstrap
 	 cat $^ | \
 	 sed -E 's/^const ([A-Z][_A-Z0-9]*) =.*$$/const \1 = lex.\1/g') > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
-	goimports -w $@
+	bin/goimports -w $@
 
 # This modifies the grammar to:
 # - improve the types used by the generated parser for non-terminals
@@ -1513,12 +1513,12 @@ pkg/sql/parser/gen/sql-gen.y: pkg/sql/parser/sql.y pkg/sql/parser/replace_help_r
 pkg/sql/lex/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserved_keywords.awk | bin/.bootstrap
 	awk -f pkg/sql/parser/reserved_keywords.awk < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
-	gofmt -s -w $@
+	bin/gofmt -s -w $@
 
 pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/lex/all_keywords.go | bin/.bootstrap
 	go run -tags all-keywords pkg/sql/lex/all_keywords.go < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
-	gofmt -s -w $@
+	bin/gofmt -s -w $@
 
 # This target will print unreserved_keywords which are not actually
 # used in the grammar.
@@ -1533,12 +1533,12 @@ sqlparser-unused-unreserved-keywords: pkg/sql/parser/sql.y pkg/sql/parser/unrese
 pkg/sql/parser/helpmap_test.go: pkg/sql/parser/gen/sql-gen.y pkg/sql/parser/help_gen_test.sh | bin/.bootstrap
 	@pkg/sql/parser/help_gen_test.sh < $< >$@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
-	gofmt -s -w $@
+	bin/gofmt -s -w $@
 
 pkg/sql/parser/help_messages.go: pkg/sql/parser/sql.y pkg/sql/parser/help.awk | bin/.bootstrap
 	awk -f pkg/sql/parser/help.awk < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
-	gofmt -s -w $@
+	bin/gofmt -s -w $@
 
 bin/.docgen_bnfs: bin/docgen
 	docgen grammar bnf docs/generated/sql/bnf --quiet
@@ -1614,7 +1614,7 @@ $(EXECGEN_TARGETS): bin/execgen
 	  touch -r $$target_timestamp_file $@
 
 bin/.execgen_targets: $(EXECGEN_TARGETS)
-	goimports -w $(EXECGEN_TARGETS)
+	bin/goimports -w $(EXECGEN_TARGETS)
 	touch $@
 
 # Add a catch-all rule for any non-existent execgen generated
