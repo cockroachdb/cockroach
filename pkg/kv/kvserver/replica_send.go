@@ -114,6 +114,7 @@ func (r *Replica) sendWithRangeID(
 			pErr = filter(ctx, *ba, br)
 		}
 	}
+	r.maybeRecordRead(ctx, br)
 	return br, pErr
 }
 

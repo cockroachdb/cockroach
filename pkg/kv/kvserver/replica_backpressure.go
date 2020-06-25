@@ -178,5 +178,27 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *roachpb.BatchR
 			}
 		}
 	}
+
+	if r.tenantLimiter != nil {
+		// TODO(ajwerner): Come up with a better methodology to calculate for write
+		// bytes.
+		var writeBytes int64
+		if ba.IsWrite() {
+			writeBytes = int64(ba.Size())
+		}
+		return r.tenantLimiter.Wait(ctx, writeBytes)
+	}
 	return nil
+}
+
+// maybeRecordRead is used to record a read against the tenant rate limiter.
+// TODO(ajwerner): Consider whether this needs to only run on batch requests
+// for which canBackpressure is true.
+func (r *Replica) maybeRecordRead(ctx context.Context, br *roachpb.BatchResponse) {
+	if r.tenantLimiter == nil || br == nil {
+		return
+	}
+	// TODO(ajwerner): Come up with a better methodology to compute the read
+	// bytes.
+	r.tenantLimiter.RecordRead(int64(br.Size()))
 }
