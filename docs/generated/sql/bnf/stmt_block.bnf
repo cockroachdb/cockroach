@@ -2278,10 +2278,10 @@ const_datetime ::=
 const_geo ::=
 	'GEOGRAPHY'
 	| 'GEOMETRY'
-	| 'GEOMETRY' '(' geo_shape ')'
-	| 'GEOGRAPHY' '(' geo_shape ')'
-	| 'GEOMETRY' '(' geo_shape ',' signed_iconst ')'
-	| 'GEOGRAPHY' '(' geo_shape ',' signed_iconst ')'
+	| 'GEOMETRY' '(' geo_shape_type ')'
+	| 'GEOGRAPHY' '(' geo_shape_type ')'
+	| 'GEOMETRY' '(' geo_shape_type ',' signed_iconst ')'
+	| 'GEOGRAPHY' '(' geo_shape_type ',' signed_iconst ')'
 
 opt_varying ::=
 	'VARYING'
@@ -2467,7 +2467,7 @@ opt_timezone ::=
 	| 'WITHOUT' 'TIME' 'ZONE'
 	| 
 
-geo_shape ::=
+geo_shape_type ::=
 	'POINT'
 	| 'LINESTRING'
 	| 'POLYGON'

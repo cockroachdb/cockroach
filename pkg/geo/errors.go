@@ -21,9 +21,9 @@ import (
 func NewMismatchingSRIDsError(a GeospatialType, b GeospatialType) error {
 	return errors.Newf(
 		"operation on mixed SRIDs forbidden: (%s, %d) != (%s, %d)",
-		a.Shape(),
+		a.ShapeType(),
 		a.SRID(),
-		b.Shape(),
+		b.ShapeType(),
 		b.SRID(),
 	)
 }

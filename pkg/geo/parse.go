@@ -34,7 +34,7 @@ func parseEWKBRaw(in geopb.EWKB) (geopb.SpatialObject, error) {
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	return spatialObjectFromGeom(t)
+	return spatialObjectFromGeomT(t)
 }
 
 // parseAmbiguousText parses a text as a number of different options
@@ -68,7 +68,7 @@ func parseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.SpatialObject, erro
 	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return spatialObjectFromGeom(t)
+	return spatialObjectFromGeomT(t)
 }
 
 // parseEWKB takes given bytes assumed to be EWKB and transforms it into a SpatialObject.
@@ -83,7 +83,7 @@ func parseEWKB(
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return spatialObjectFromGeom(t)
+	return spatialObjectFromGeomT(t)
 }
 
 // parseWKB takes given bytes assumed to be WKB and transforms it into a SpatialObject.
@@ -93,7 +93,7 @@ func parseWKB(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
 		return geopb.SpatialObject{}, err
 	}
 	adjustGeomSRID(t, defaultSRID)
-	return spatialObjectFromGeom(t)
+	return spatialObjectFromGeomT(t)
 }
 
 // parseGeoJSON takes given bytes assumed to be GeoJSON and transforms it into a SpatialObject.
@@ -105,7 +105,7 @@ func parseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error)
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return spatialObjectFromGeom(t)
+	return spatialObjectFromGeomT(t)
 }
 
 // adjustGeomSRID adjusts the SRID of a given geom.T.
