@@ -2477,7 +2477,9 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
-	return !MustBeValueEncoded(t)
+	// Some inverted index types also have a key encoding, but we don't
+	// want to support those yet. See #50659.
+	return !MustBeValueEncoded(t) && !ColumnTypeIsInvertedIndexable(t)
 }
 
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
