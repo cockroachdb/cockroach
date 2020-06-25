@@ -13,8 +13,6 @@ package rowexec
 import (
 	"context"
 	"fmt"
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
+	"sort"
 )
 
 // joinReaderState represents the state of the processor.
@@ -69,6 +68,7 @@ type joinReader struct {
 	alloc              sqlbase.DatumAlloc
 	rowAlloc           sqlbase.EncDatumRowAlloc
 	shouldLimitBatches bool
+	indexJoin          bool
 
 	input      execinfra.RowSource
 	inputTypes []*types.T
@@ -99,12 +99,32 @@ func newJoinReader(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
+	indexJoin bool,
 ) (execinfra.RowSourcedProcessor, error) {
-	jr := &joinReader{
-		desc:       spec.Table,
-		input:      input,
-		inputTypes: input.OutputTypes(),
-		lookupCols: spec.LookupColumns,
+	if spec.IndexIdx != 0 && indexJoin {
+		return nil, errors.Errorf("index join must be against primary index")
+	}
+
+	var jr *joinReader
+	if !indexJoin {
+		jr = &joinReader{
+			desc:       spec.Table,
+			input:      input,
+			inputTypes: input.OutputTypes(),
+			lookupCols: spec.LookupColumns,
+		}
+	} else {
+		pkIDs := spec.Table.PrimaryIndex.ColumnIDs
+		pkCols := make([]uint32, len(pkIDs))
+		for i, _ := range pkIDs {
+			pkCols[i] = uint32(i)
+		}
+		jr = &joinReader{
+			desc:       spec.Table,
+			input:      input,
+			inputTypes: input.OutputTypes(),
+			lookupCols: pkCols,
+		}
 	}
 
 	var err error
@@ -125,30 +145,57 @@ func newJoinReader(
 
 	// If the lookup columns form a key, there is only one result per lookup, so the fetcher
 	// should parallelize the key lookups it performs.
-	jr.shouldLimitBatches = !spec.LookupColumnsAreKey
+	jr.shouldLimitBatches = !spec.LookupColumnsAreKey && !indexJoin
+	jr.indexJoin = indexJoin
 
-	if err := jr.joinerBase.init(
-		jr,
-		flowCtx,
-		processorID,
-		input.OutputTypes(),
-		columnTypes,
-		spec.Type,
-		spec.OnExpr,
-		jr.lookupCols,
-		indexCols,
-		0, /* numMergedColumns */
-		post,
-		output,
-		execinfra.ProcStateOpts{
-			InputsToDrain: []execinfra.RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				jr.close()
-				return jr.generateMeta(ctx)
+	if indexJoin {
+		if err := jr.joinerBase.init(
+			jr,
+			flowCtx,
+			processorID,
+			columnTypes,
+			columnTypes,
+			spec.Type,
+			spec.OnExpr,
+			indexCols,
+			indexCols,
+			0,      /* numMergedColumns */
+			post,
+			output,
+			execinfra.ProcStateOpts{
+				InputsToDrain: []execinfra.RowSource{jr.input},
+				TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+					jr.close()
+					return jr.generateMeta(ctx)
+				},
 			},
-		},
-	); err != nil {
-		return nil, err
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := jr.joinerBase.init(
+			jr,
+			flowCtx,
+			processorID,
+			input.OutputTypes(),
+			columnTypes,
+			spec.Type,
+			spec.OnExpr,
+			jr.lookupCols,
+			indexCols,
+			0,      /* numMergedColumns */
+			post,   //idx
+			output, //idx
+			execinfra.ProcStateOpts{
+				InputsToDrain: []execinfra.RowSource{jr.input},
+				TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+					jr.close()
+					return jr.generateMeta(ctx)
+				},
+			},
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	collectingStats := false
@@ -162,10 +209,18 @@ func newJoinReader(
 	}
 
 	var fetcher row.Fetcher
-	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
-	)
+	if indexJoin {
+		_, _, err = initRowFetcher(
+			flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.desc.ColumnIdxMapWithMutations(returnMutations), false, /* reverse */
+			jr.Out.NeededColumns(), false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
+		)
+	} else {
+		_, _, err = initRowFetcher(
+			flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+			neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
+		)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +232,7 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
-	jr.initJoinReaderStrategy(flowCtx, jr.desc.ColumnTypesWithMutations(returnMutations), len(columnIDs), spec.MaintainOrdering)
+	jr.initJoinReaderStrategy(flowCtx, jr.desc.ColumnTypesWithMutations(returnMutations), len(columnIDs), spec.MaintainOrdering, indexJoin)
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
@@ -185,10 +240,18 @@ func newJoinReader(
 }
 
 func (jr *joinReader) initJoinReaderStrategy(
-	flowCtx *execinfra.FlowCtx, typs []*types.T, numKeyCols int, maintainOrdering bool,
+	flowCtx *execinfra.FlowCtx,
+	typs []*types.T,
+	numKeyCols int,
+	maintainOrdering bool,
+	indexJoin bool,
 ) {
 	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
-	spanBuilder.SetNeededColumns(jr.neededRightCols())
+	if indexJoin {
+		spanBuilder.SetNeededColumns(jr.Out.NeededColumns())
+	} else {
+		spanBuilder.SetNeededColumns(jr.neededRightCols())
+	}
 
 	spanGenerator := defaultSpanGenerator{
 		spanBuilder:          spanBuilder,
@@ -196,6 +259,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 		numKeyCols:           numKeyCols,
 		lookupCols:           jr.lookupCols,
 	}
+	if indexJoin {
+		jr.strategy = &joinReaderIndexJoinStrategy{
+			joinerBase:           &jr.joinerBase,
+			defaultSpanGenerator: spanGenerator,
+		}
+		return
+	}
+
 	if !maintainOrdering {
 		jr.strategy = &joinReaderNoOrderingStrategy{
 			joinerBase:           &jr.joinerBase,
@@ -365,7 +436,9 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 	// results per batch. It's safe to reorder the spans here because we already
 	// restore the original order of the output during the output collection
 	// phase.
-	sort.Sort(spans)
+	if jr.shouldLimitBatches {
+		sort.Sort(spans)
+	}
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */

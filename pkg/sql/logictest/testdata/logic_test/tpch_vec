@@ -601,7 +601,7 @@ EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE 
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *rowexec.joinReader
-        └ *rowexec.indexJoiner
+        └ *rowexec.joinReader
           └ *colfetcher.colBatchScan
 
 # Query 5
@@ -623,7 +623,7 @@ EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue 
             │ │     ├ *colfetcher.colBatchScan
             │ │     └ *colexec.selEQBytesBytesConstOp
             │ │       └ *colfetcher.colBatchScan
-            │ └ *rowexec.indexJoiner
+            │ └ *rowexec.joinReader
             │   └ *colfetcher.colBatchScan
             └ *colfetcher.colBatchScan
 
@@ -635,7 +635,7 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice * l_discount) AS revenue FROM lineitem 
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexec.distinctChainOps
-      └ *rowexec.indexJoiner
+      └ *rowexec.joinReader
         └ *colfetcher.colBatchScan
 
 # Query 7
@@ -743,7 +743,7 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
           └ *colexec.hashJoiner
             ├ *colexec.hashJoiner
             │ ├ *colfetcher.colBatchScan
-            │ └ *rowexec.indexJoiner
+            │ └ *rowexec.joinReader
             │   └ *colfetcher.colBatchScan
             └ *colfetcher.colBatchScan
 
@@ -773,7 +773,7 @@ EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *rowexec.joinReader
-        └ *rowexec.indexJoiner
+        └ *rowexec.joinReader
           └ *colfetcher.colBatchScan
 
 # Query 13
@@ -806,7 +806,7 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
                 ├ *colexec.bufferOp
                 │ └ *colexec.hashJoiner
                 │   ├ *colfetcher.colBatchScan
-                │   └ *rowexec.indexJoiner
+                │   └ *rowexec.joinReader
                 │     └ *colfetcher.colBatchScan
                 ├ *colexec.projMultFloat64Float64Op
                 │ └ *colexec.projMinusFloat64ConstFloat64Op
@@ -831,7 +831,7 @@ EXPLAIN (VEC) SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM s
         └ *colexec.castOpNullAny
           └ *colexec.constNullOp
             └ *colexec.hashAggregator
-              └ *rowexec.indexJoiner
+              └ *rowexec.joinReader
                 └ *colfetcher.colBatchScan
 
 statement ok
@@ -964,7 +964,7 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
       │   │ └ *colexec.projMultFloat64Float64ConstOp
       │   │   └ *colexec.hashAggregator
       │   │     └ *colexec.hashJoiner
-      │   │       ├ *rowexec.indexJoiner
+      │   │       ├ *rowexec.joinReader
       │   │       │ └ *colfetcher.colBatchScan
       │   │       └ *colfetcher.colBatchScan
       │   └ *colexec.selPrefixBytesBytesConstOp

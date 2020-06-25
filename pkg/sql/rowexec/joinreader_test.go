@@ -445,6 +445,7 @@ func TestJoinReader(t *testing.T) {
 						in,
 						&c.post,
 						out,
+						false,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -582,6 +583,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			OutputColumns: []uint32{2},
 		},
 		out,
+		false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -672,8 +674,8 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerClosed()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
-		)
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{},
+			out, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -693,8 +695,8 @@ func TestJoinReaderDrain(t *testing.T) {
 		out := &distsqlutils.RowBuffer{}
 		out.ConsumerDone()
 		jr, err := newJoinReader(
-			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{}, out,
-		)
+			&flowCtx, 0 /* processorID */, &execinfrapb.JoinReaderSpec{Table: *td}, in, &execinfrapb.PostProcessSpec{},
+			out, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -922,7 +924,7 @@ func BenchmarkJoinReader(b *testing.B) {
 							spilled := false
 							for i := 0; i < b.N; i++ {
 								flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-								jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
+								jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output, false)
 								if err != nil {
 									b.Fatal(err)
 								}
