@@ -86,6 +86,20 @@ func (c *Columns) Equals(other *Columns) bool {
 	return true
 }
 
+// IsStrictPrefixOf returns true if the columns in c are a strict prefix of the
+// columns in other.
+func (c *Columns) IsStrictPrefixOf(other *Columns) bool {
+	if c.firstCol != other.firstCol || len(c.otherCols) > len(other.otherCols) {
+		return false
+	}
+	for i := range c.otherCols {
+		if c.otherCols[i] != other.otherCols[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // IsStrictSuffixOf returns true if the columns in c are a strict suffix of the
 // columns in other.
 func (c *Columns) IsStrictSuffixOf(other *Columns) bool {

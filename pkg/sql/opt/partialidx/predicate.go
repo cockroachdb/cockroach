@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // FiltersImplyPredicate attempts to prove that a partial index predicate is
@@ -37,7 +38,7 @@ import (
 // The logic is as follows, where "=>" means "implies" and an "atom" is any
 // expression that is not a logical conjunction or disjunction.
 //
-//   atom A => atom B iff:          A contains B
+//   atom A => atom B iff:          B contains A
 //   atom A => AND-expr B iff:      A => each of B's children
 //   atom A => OR-expr B iff:       A => any of B's children
 //
@@ -116,10 +117,18 @@ import (
 // the filters are never traversed when searching for exact matches to remove
 // (rule #3).
 func FiltersImplyPredicate(
-	filters memo.FiltersExpr, pred opt.ScalarExpr, f *norm.Factory,
+	filters memo.FiltersExpr,
+	pred opt.ScalarExpr,
+	f *norm.Factory,
+	md *opt.Metadata,
+	evalCtx *tree.EvalContext,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
+	// Empty filters are equivalent to True, which only implies True.
+	if len(filters) == 0 && pred == memo.TrueSingleton {
+		return filters, true
+	}
 
-	// First, check for exact matches at the root FiltersExpr. This check is not
+	// Next, check for exact matches at the root FiltersExpr. This check is not
 	// necessary for correctness because the recursive approach below handles
 	// all cases. However, this is a faster path for common cases where
 	// expressions in filters are exact matches to the entire predicate.
@@ -145,17 +154,27 @@ func FiltersImplyPredicate(
 		}
 	}
 
+	im := implicator{
+		md:      md,
+		evalCtx: evalCtx,
+	}
+
 	// If no exact match was found, recursively check the sub-expressions of the
 	// filters and predicate. Use exactMatches to keep track of expressions in
 	// filters that exactly matches expressions in pred, so that the can be
 	// removed from the remaining filters.
 	exactMatches := make(map[opt.Expr]struct{})
-	if scalarExprImpliesPredicate(&filters, pred, exactMatches) {
+	if im.scalarExprImpliesPredicate(&filters, pred, exactMatches) {
 		remainingFilters = simplifyFiltersExpr(filters, exactMatches, f)
 		return remainingFilters, true
 	}
 
 	return nil, false
+}
+
+type implicator struct {
+	md      *opt.Metadata
+	evalCtx *tree.EvalContext
 }
 
 // scalarExprImpliesPredicate returns true if the expression e implies the
@@ -170,7 +189,7 @@ func FiltersImplyPredicate(
 //
 // Also note that exactMatches is optional, and nil can be passed when it is not
 // necessary to keep track of exactly matching expressions.
-func scalarExprImpliesPredicate(
+func (im *implicator) scalarExprImpliesPredicate(
 	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 
@@ -184,33 +203,33 @@ func scalarExprImpliesPredicate(
 
 	switch t := e.(type) {
 	case *memo.FiltersExpr:
-		return filtersExprImpliesPredicate(t, pred, exactMatches)
+		return im.filtersExprImpliesPredicate(t, pred, exactMatches)
 
 	case *memo.RangeExpr:
 		and := t.And.(*memo.AndExpr)
-		return andExprImpliesPredicate(and, pred, exactMatches)
+		return im.andExprImpliesPredicate(and, pred, exactMatches)
 
 	case *memo.AndExpr:
-		return andExprImpliesPredicate(t, pred, exactMatches)
+		return im.andExprImpliesPredicate(t, pred, exactMatches)
 
 	case *memo.OrExpr:
-		return orExprImpliesPredicate(t, pred)
+		return im.orExprImpliesPredicate(t, pred)
 
 	default:
-		return atomImpliesPredicate(e, pred, exactMatches)
+		return im.atomImpliesPredicate(e, pred, exactMatches)
 	}
 }
 
 // filtersExprImpliesPredicate returns true if the FiltersExpr e implies the
 // ScalarExpr pred.
-func filtersExprImpliesPredicate(
+func (im *implicator) filtersExprImpliesPredicate(
 	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	switch pt := pred.(type) {
 	case *memo.AndExpr:
 		// AND-expr A => AND-expr B iff A => each of B's children.
-		return filtersExprImpliesPredicate(e, pt.Left, exactMatches) &&
-			filtersExprImpliesPredicate(e, pt.Right, exactMatches)
+		return im.filtersExprImpliesPredicate(e, pt.Left, exactMatches) &&
+			im.filtersExprImpliesPredicate(e, pt.Right, exactMatches)
 
 	case *memo.OrExpr:
 		// The logic for proving that an AND implies an OR is:
@@ -226,10 +245,10 @@ func filtersExprImpliesPredicate(
 		// pt.Right, because matching expressions below a disjunction in a
 		// predicate cannot be removed from the remaining filters. See
 		// FiltersImplyPredicate (rule #2) for more details.
-		if filtersExprImpliesPredicate(e, pt.Left, nil /* exactMatches */) {
+		if im.filtersExprImpliesPredicate(e, pt.Left, nil /* exactMatches */) {
 			return true
 		}
-		if filtersExprImpliesPredicate(e, pt.Right, nil /* exactMatches */) {
+		if im.filtersExprImpliesPredicate(e, pt.Right, nil /* exactMatches */) {
 			return true
 		}
 	}
@@ -240,10 +259,11 @@ func filtersExprImpliesPredicate(
 	//   AND-expr A => OR-expr B if any of A's children => B
 	//   AND-pred A => atom B iff any of A's children => B
 	for i := range *e {
-		if scalarExprImpliesPredicate((*e)[i].Condition, pred, exactMatches) {
+		if im.scalarExprImpliesPredicate((*e)[i].Condition, pred, exactMatches) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -251,13 +271,13 @@ func filtersExprImpliesPredicate(
 // pred. This function transforms e into an equivalent FiltersExpr that is
 // passed to filtersExprImpliesPredicate to prevent duplicating logic for both
 // types of conjunctions.
-func andExprImpliesPredicate(
+func (im *implicator) andExprImpliesPredicate(
 	e *memo.AndExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	f := make(memo.FiltersExpr, 2)
 	f[0] = memo.FiltersItem{Condition: e.Left}
 	f[1] = memo.FiltersItem{Condition: e.Right}
-	return filtersExprImpliesPredicate(&f, pred, exactMatches)
+	return im.filtersExprImpliesPredicate(&f, pred, exactMatches)
 }
 
 // orExprImpliesPredicate returns true if the FiltersExpr e implies the
@@ -265,12 +285,12 @@ func andExprImpliesPredicate(
 //
 // Note that in all recursive calls within this function, we do not pass
 // exactMatches. See FiltersImplyPredicate (rule #3) for more details.
-func orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
+func (im *implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
 	switch pt := pred.(type) {
 	case *memo.AndExpr:
 		// OR-expr A => AND-expr B iff A => each of B's children.
-		return orExprImpliesPredicate(e, pt.Left) &&
-			orExprImpliesPredicate(e, pt.Right)
+		return im.orExprImpliesPredicate(e, pt.Left) &&
+			im.orExprImpliesPredicate(e, pt.Right)
 
 	case *memo.OrExpr:
 		// OR-expr A => OR-expr B iff each of A's children => any of B's
@@ -283,7 +303,7 @@ func orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
 		for i := range eFlat {
 			eChildImpliesAnyPredChild := false
 			for j := range predFlat {
-				if scalarExprImpliesPredicate(eFlat[i], predFlat[j], nil /* exactMatches */) {
+				if im.scalarExprImpliesPredicate(eFlat[i], predFlat[j], nil /* exactMatches */) {
 					eChildImpliesAnyPredChild = true
 					break
 				}
@@ -296,36 +316,80 @@ func orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
 
 	default:
 		// OR-expr A => atom B iff each of A's children => B.
-		return scalarExprImpliesPredicate(e.Left, pred, nil /* exactMatches */) &&
-			scalarExprImpliesPredicate(e.Right, pred, nil /* exactMatches */)
+		return im.scalarExprImpliesPredicate(e.Left, pred, nil /* exactMatches */) &&
+			im.scalarExprImpliesPredicate(e.Right, pred, nil /* exactMatches */)
 	}
 }
 
 // atomImpliesPredicate returns true if the atom expression e implies the
 // ScalarExpr pred. The atom e cannot be an AndExpr, OrExpr, RangeExpr, or
 // FiltersExpr.
-func atomImpliesPredicate(
+func (im *implicator) atomImpliesPredicate(
 	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	switch pt := pred.(type) {
 	case *memo.AndExpr:
 		// atom A => AND-expr B iff A => each of B's children.
-		leftPredImplied := atomImpliesPredicate(e, pt.Left, exactMatches)
-		rightPredImplied := atomImpliesPredicate(e, pt.Right, exactMatches)
+		leftPredImplied := im.atomImpliesPredicate(e, pt.Left, exactMatches)
+		rightPredImplied := im.atomImpliesPredicate(e, pt.Right, exactMatches)
 		return leftPredImplied && rightPredImplied
 
 	case *memo.OrExpr:
 		// atom A => OR-expr B iff A => any of B's children.
-		if atomImpliesPredicate(e, pt.Left, exactMatches) {
+		if im.atomImpliesPredicate(e, pt.Left, exactMatches) {
 			return true
 		}
-		return atomImpliesPredicate(e, pt.Right, exactMatches)
+		return im.atomImpliesPredicate(e, pt.Right, exactMatches)
 
 	default:
-		// atom A => atom B iff A contains B.
-		// TODO(mgartner): Handle inexact atom matches.
+		// atom A => atom B iff B contains A.
+		return im.atomContainsAtom(pred, e)
+	}
+}
+
+// atomContainedByAtom returns true if atom expression a is contained by atom
+// expression b, meaning that all values for variables in which a evaluates to
+// true, b also evaluates to true.
+//
+// Constraints are used to prove containment because they make it easy to assess
+// if one expression contains another, handling many types of expressions
+// including comparisons, IN operators, and tuples.
+func (im *implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
+	aSet, aTight := memo.BuildConstraints(a, im.md, im.evalCtx)
+	bSet, bTight := memo.BuildConstraints(b, im.md, im.evalCtx)
+
+	// If either set has more than one constraint, then constraints cannot be
+	// used to prove containment. This happens when an expression has more than
+	// one variable. For example:
+	//
+	//   @1 > @2
+	//
+	// Produces the constraint set:
+	//
+	//   /1: (/NULL - ]; /2: (/NULL - ]
+	//
+	// TODO(mgartner): Prove implication in cases like (a > b) => (a >= b),
+	// without using constraints.
+	if aSet.Length() > 1 || bSet.Length() > 1 {
 		return false
 	}
+
+	// Containment cannot be proven if either constraint is not tight, because
+	// the constraint does not fully represent the expression.
+	if !aTight || !bTight {
+		return false
+	}
+
+	ac := aSet.Constraint(0)
+	bc := bSet.Constraint(0)
+
+	// If the columns in ac are not a prefix of the columns in bc, then ac
+	// cannot contain bc.
+	if !ac.Columns.IsStrictPrefixOf(&bc.Columns) {
+		return false
+	}
+
+	return ac.Contains(im.evalCtx, bc)
 }
 
 // simplifyFiltersExpr returns a new FiltersExpr with any expressions in e that

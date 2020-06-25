@@ -228,6 +228,65 @@ func (c Constraint) String() string {
 	return b.String()
 }
 
+// Contains returns true if the constraint contains every span in the given
+// constraint. The columns of the constraint must be a prefix of the columns of
+// other.
+func (c *Constraint) Contains(evalCtx *tree.EvalContext, other *Constraint) bool {
+	if !c.Columns.IsStrictPrefixOf(&other.Columns) {
+		panic(errors.AssertionFailedf("columns must be a prefix of other columns"))
+	}
+
+	// Unconstrained constraints or contradictions cannot contain each other.
+	if c.IsUnconstrained() || other.IsUnconstrained() || c.IsContradiction() || other.IsContradiction() {
+		return false
+	}
+
+	// Use variation on merge sort, because both sets of spans are ordered and
+	// non-overlapping.
+	left := &c.Spans
+	leftIndex := 0
+	right := &other.Spans
+	rightIndex := 0
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+
+	for leftIndex < left.Count() && rightIndex < right.Count() {
+		// If the current left span starts after the current right span, then
+		// the left span cannot contain the right span. Furthermore, no left
+		// spans can contain the current right spans.
+		cmpStart := left.Get(leftIndex).CompareStarts(&keyCtx, right.Get(rightIndex))
+		if cmpStart > 0 {
+			return false
+		}
+
+		cmpEnd := left.Get(leftIndex).CompareEnds(&keyCtx, right.Get(rightIndex))
+
+		// If the current left span end has the same end as the current right
+		// span, then the left span contains the right span. Move on to the next
+		// left and right spans.
+		if cmpEnd == 0 {
+			leftIndex++
+			rightIndex++
+		}
+
+		// If the current left span ends after the the current right span, then
+		// the left span contains the right span. The current left span could
+		// also contain other right spans, so only increment rightIndex.
+		if cmpEnd > 0 {
+			rightIndex++
+		}
+
+		// If the current left span ends before the current right span, then the
+		// left span cannot contain the right span, but other left spans could.
+		// Move on to the next left span.
+		if cmpEnd < 0 {
+			leftIndex++
+		}
+	}
+
+	// Return true if containment was proven for each span in right.
+	return rightIndex == right.Count()
+}
+
 // ContainsSpan returns true if the constraint contains the given span (or a
 // span that contains it).
 func (c *Constraint) ContainsSpan(evalCtx *tree.EvalContext, sp *Span) bool {

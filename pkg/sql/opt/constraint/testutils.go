@@ -11,6 +11,7 @@
 package constraint
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ import (
 func ParseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
 	s := strings.SplitN(str, ": ", 2)
 	if len(s) != 2 {
-		panic(str)
+		panic(fmt.Sprintf("invalid constraint format: %s", str))
 	}
 	var cols []opt.OrderingColumn
 	for _, v := range parseIntPath(s[0]) {
@@ -47,7 +48,7 @@ func parseSpans(evalCtx *tree.EvalContext, str string) Spans {
 	s := strings.Split(str, " ")
 	// Each span has three pieces.
 	if len(s)%3 != 0 {
-		panic(str)
+		panic(fmt.Sprintf("invalid span format: %s", str))
 	}
 	var result Spans
 	for i := 0; i < len(s)/3; i++ {

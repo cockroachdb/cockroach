@@ -155,6 +155,127 @@ func TestConstraintIntersect(t *testing.T) {
 	test(t, &evalCtx, &data.mangoStrawberry, &data.cherryRaspberry, expected)
 }
 
+func TestConstraintContains(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		a        string
+		b        string
+		expected bool
+	}{
+		// Positive tests.
+		{
+			"/1: [/1 - /1]",
+			"/1: [/1 - /1]",
+			true,
+		},
+		{
+			a:        "/1: [/1 - /5]",
+			b:        "/1: [/1 - /4]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/1 - /5]",
+			b:        "/1: [/2 - /5]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/1 - /5]",
+			b:        "/1: [/2 - /4]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/0 - /1] [/3 - /3]",
+			b:        "/1: [/3 - /3]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/0 - /1] [/3 - /6]",
+			b:        "/1: [/4 - /5]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/0 - /1] [/3 - /6]",
+			b:        "/1: [/4 - /5]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/1 - /100]",
+			b:        "/1: [/2 - /2] [/4 - /5] [/20 - /30]",
+			expected: true,
+		},
+		{
+			a:        "/1: [/0 - /0] [/1 - /100] [/150 - /200]",
+			b:        "/1: [/2 - /2] [/4 - /5] [/20 - /30]",
+			expected: true,
+		},
+		// Negative tests.
+		{
+			a:        "/1: [/1 - /1]",
+			b:        "/1: [/2 - /2]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/1 - /2]",
+			b:        "/1: [/0 - /2]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/1 - /2]",
+			b:        "/1: [/1 - /3]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/0 - /0] [/1 - /1]",
+			b:        "/1: [/0 - /0] [/2 - /2]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/0 - /0] [/2 - /3]",
+			b:        "/1: [/0 - /0] [/1 - /3]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/0 - /0] [/1 - /2]",
+			b:        "/1: [/0 - /0] [/1 - /3]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/0 - /1] [/3 - /3]",
+			b:        "/1: [/2 - /2]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/1 - /100]",
+			b:        "/1: [/2 - /2] [/4 - /5] [/90 - /110]",
+			expected: false,
+		},
+		{
+			a:        "/1: [/0 - /0] [/1 - /100] [/120 - /120]",
+			b:        "/1: [/2 - /2] [/4 - /5] [/90 - /110]",
+			expected: false,
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			ac := ParseConstraint(&evalCtx, tc.a)
+			bc := ParseConstraint(&evalCtx, tc.b)
+
+			res := ac.Contains(&evalCtx, &bc)
+			if res == tc.expected {
+				return
+			}
+			if tc.expected {
+				t.Errorf("%s should contain %s", ac, bc)
+			} else {
+				t.Errorf("%s should not contain %s", ac, bc)
+			}
+		})
+	}
+}
+
 func TestConstraintContainsSpan(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

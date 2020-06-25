@@ -26,10 +26,27 @@ predtest vars=(bool, bool)
 true
 └── remaining filters: @2
 
+predtest vars=(int, int)
+(@1, @2) = (1, 2)
+=>
+@1 = 1 OR @2 = 2
+----
+true
+└── remaining filters: (@1 = 1) AND (@2 = 2)
+
 predtest vars=(bool, bool)
 NOT @2
 =>
 @1 OR @2
+----
+false
+
+# TODO(mgartner): This filter actually implies this predicate, but our logic
+# does not currently handle this case.
+predtest vars=(int)
+@1 IN (1, 2)
+=>
+@1 = 1 OR @1 = 2
 ----
 false
 
@@ -83,6 +100,14 @@ predtest vars=(bool, bool, bool)
 true
 └── remaining filters: (@1 AND @2) AND @3
 
+predtest vars=(int, int)
+@1 > 10 AND @2 < 20
+=>
+@1 > 0 OR @2 < 30
+----
+true
+└── remaining filters: (@1 > 10) AND (@2 < 20)
+
 predtest vars=(bool, bool)
 @1 AND @2
 =>
@@ -94,6 +119,13 @@ predtest vars=(bool, bool, bool)
 @1 AND @2
 =>
 NOT @1 OR @3
+----
+false
+
+predtest vars=(int, int)
+@1 > 10 AND @2 < 20
+=>
+@1 > 11 OR @2 < 19
 ----
 false
 
@@ -115,6 +147,14 @@ predtest vars=(int)
 true
 └── remaining filters: (@1 > 10) AND (@1 < 100)
 
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 0 OR @1 < 90
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 100)
+
 predtest vars=(int, bool)
 @1 > 10 AND @2 AND @1 < 100
 =>
@@ -122,6 +162,21 @@ predtest vars=(int, bool)
 ----
 true
 └── remaining filters: ((@1 > 10) AND (@1 < 100)) AND @2
+
+predtest vars=(int)
+@1 > 0 AND @1 < 90
+=>
+@1 > 10 OR @1 < 100
+----
+true
+└── remaining filters: (@1 > 0) AND (@1 < 90)
+
+predtest vars=(int)
+@1 > 0 AND @1 < 90
+=>
+@1 < 10 OR @1 > 100
+----
+false
 
 # Disjunction filters
 
@@ -132,6 +187,14 @@ predtest vars=(bool)
 ----
 true
 └── remaining filters: none
+
+predtest vars=(int)
+@1 < 10 OR @1 > 100
+=>
+@1 < 20 OR @1 > 80
+----
+true
+└── remaining filters: (@1 < 10) OR (@1 > 100)
 
 predtest vars=(bool, bool)
 @1 OR @2
@@ -185,6 +248,14 @@ predtest vars=(int)
 ----
 true
 └── remaining filters: (@1 > 11) OR (@1 < 0)
+
+predtest vars=(int)
+(@1 > 10 OR @1 < 0) AND (@1 > 11 OR @1 < 0)
+=>
+@1 > 5 OR @1 < 1
+----
+true
+└── remaining filters: ((@1 > 10) OR (@1 < 0)) AND ((@1 > 11) OR (@1 < 0))
 
 predtest vars=(bool, bool, bool)
 @1 OR (@2 AND @3)
