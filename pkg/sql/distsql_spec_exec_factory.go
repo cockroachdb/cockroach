@@ -74,6 +74,12 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 	return e.planContexts.localPlanCtx
 }
 
+// TODO(yuzefovich): consider adding machinery that would confirm that
+// assumptions that the execution makes about the plans coming from the
+// optimizer are satisfied. A couple of examples are making sure that the
+// constants in comparison expressions are always on the right and that the
+// tuples in IN clause are sorted.
+
 func (e *distSQLSpecExecFactory) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
