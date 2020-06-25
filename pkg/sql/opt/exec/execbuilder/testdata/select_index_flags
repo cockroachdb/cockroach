@@ -142,18 +142,18 @@ index-join    ·             ·
 query TTT
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,ASC} ORDER BY b DESC LIMIT 5
 ----
-·                     distribution  local
-·                     vectorized    true
-limit                 ·             ·
- │                    count         5
- └── sort             ·             ·
-      │               order         -b
-      └── index-join  ·             ·
-           │          table         abcd@primary
-           │          key columns   a
-           └── scan   ·             ·
-·                     table         abcd@b
-·                     spans         FULL SCAN
+·                    distribution  local
+·                    vectorized    true
+index-join           ·             ·
+ │                   table         abcd@primary
+ │                   key columns   a
+ └── limit           ·             ·
+      │              count         5
+      └── sort       ·             ·
+           │         order         -b
+           └── scan  ·             ·
+·                    table         abcd@b
+·                    spans         FULL SCAN
 
 # Force index cd
 query TTT
