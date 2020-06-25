@@ -35,7 +35,6 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "import (\n")
 	fmt.Fprintf(g.w, "  \"unsafe\"\n")
 	fmt.Fprintf(g.w, "\n")
-	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/geo/geoindex\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/cat\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint\"\n")

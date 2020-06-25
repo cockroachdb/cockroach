@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -30,12 +31,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func setTestEqColForSide(colName string, side *scanNode, equalityIndices *[]int) error {
+func setTestEqColForSide(
+	colName string, side *scanNode, equalityIndices *[]exec.NodeColumnOrdinal,
+) error {
 	colFound := false
 
 	for i, leftCol := range side.cols {
 		if colName == leftCol.Name {
-			*equalityIndices = append(*equalityIndices, i)
+			*equalityIndices = append(*equalityIndices, exec.NodeColumnOrdinal(i))
 			colFound = true
 			break
 		}
@@ -774,7 +777,7 @@ func TestAlignInterleavedSpans(t *testing.T) {
 // The returned ordering can be partial, i.e. only contains a subset of the
 // equality columns.
 func computeMergeJoinOrdering(
-	a, b sqlbase.ColumnOrdering, colA, colB []int,
+	a, b sqlbase.ColumnOrdering, colA, colB []exec.NodeColumnOrdinal,
 ) sqlbase.ColumnOrdering {
 	if len(colA) != len(colB) {
 		panic(fmt.Sprintf("invalid column lists %v; %v", colA, colB))
@@ -786,7 +789,7 @@ func computeMergeJoinOrdering(
 			break
 		}
 		for j := range colA {
-			if colA[j] == a[i].ColIdx && colB[j] == b[i].ColIdx {
+			if int(colA[j]) == a[i].ColIdx && int(colB[j]) == b[i].ColIdx {
 				result = append(result, sqlbase.ColumnOrderInfo{
 					ColIdx:    j,
 					Direction: a[i].Direction,

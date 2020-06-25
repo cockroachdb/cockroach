@@ -12,12 +12,25 @@ package invertedexpr
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
+
+// DatumToInvertedExpr is an interface that is used by the
+// rowexec.invertedJoiner to extract a SpanExpressionProto given an
+// input row. The rowexec.invertedJoiner calls Convert and uses the resulting
+// SpanExpressionProto.SpansToRead to determine which spans to read from the
+// inverted index. Then it computes a set expression on the scanned rows as
+// defined by the SpanExpressionProto.Node.
+type DatumToInvertedExpr interface {
+	// Convert uses the lookup column to construct an inverted expression.
+	Convert(context.Context, sqlbase.EncDatum) (*SpanExpressionProto, error)
+}
 
 // EncInvertedVal is the encoded form of a value in the inverted column.
 // This library does not care about how the value is encoded. The following

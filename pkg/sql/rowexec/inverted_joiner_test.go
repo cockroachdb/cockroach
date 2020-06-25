@@ -59,10 +59,10 @@ const numRows = 99
 // 50, since 50%10 = 0, 50/10 = 5.
 type arrayIntersectionExpr struct{}
 
-var _ DatumToInvertedExpr = &arrayIntersectionExpr{}
+var _ invertedexpr.DatumToInvertedExpr = &arrayIntersectionExpr{}
 
 func (arrayIntersectionExpr) Convert(
-	datum sqlbase.EncDatum,
+	ctx context.Context, datum sqlbase.EncDatum,
 ) (*invertedexpr.SpanExpressionProto, error) {
 	d := int64(*(datum.Datum.(*tree.DInt)))
 	d1Span := invertedexpr.MakeSingleInvertedValSpan(intToEncodedInvertedVal(d / 10))
@@ -79,10 +79,10 @@ func (arrayIntersectionExpr) Convert(
 // match a right side row with row index d.
 type jsonIntersectionExpr struct{}
 
-var _ DatumToInvertedExpr = &jsonIntersectionExpr{}
+var _ invertedexpr.DatumToInvertedExpr = &jsonIntersectionExpr{}
 
 func (jsonIntersectionExpr) Convert(
-	datum sqlbase.EncDatum,
+	ctx context.Context, datum sqlbase.EncDatum,
 ) (*invertedexpr.SpanExpressionProto, error) {
 	d := int64(*(datum.Datum.(*tree.DInt)))
 	d1 := d / 10
@@ -112,9 +112,11 @@ func (jsonIntersectionExpr) Convert(
 // {1..9, 15, 25, 35, ..., 95}.
 type jsonUnionExpr struct{}
 
-var _ DatumToInvertedExpr = &jsonUnionExpr{}
+var _ invertedexpr.DatumToInvertedExpr = &jsonUnionExpr{}
 
-func (jsonUnionExpr) Convert(datum sqlbase.EncDatum) (*invertedexpr.SpanExpressionProto, error) {
+func (jsonUnionExpr) Convert(
+	ctx context.Context, datum sqlbase.EncDatum,
+) (*invertedexpr.SpanExpressionProto, error) {
 	d := int64(*(datum.Datum.(*tree.DInt)))
 	d1 := d / 10
 	d2 := d % 10
@@ -173,7 +175,7 @@ func TestInvertedJoiner(t *testing.T) {
 		onExpr      string
 		input       [][]tree.Datum
 		lookupCol   uint32
-		datumToExpr DatumToInvertedExpr
+		datumToExpr invertedexpr.DatumToInvertedExpr
 		joinType    sqlbase.JoinType
 		inputTypes  []*types.T
 		outputTypes []*types.T

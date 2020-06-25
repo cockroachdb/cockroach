@@ -17,7 +17,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -561,10 +560,6 @@ func (h *hasher) HashLockingItem(val *tree.LockingItem) {
 	}
 }
 
-func (h *hasher) HashGeoRelationshipType(val geoindex.RelationshipType) {
-	h.HashUint64(uint64(val))
-}
-
 func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -904,10 +899,6 @@ func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
 		return l == r
 	}
 	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
-}
-
-func (h *hasher) IsGeoRelationshipTypeEqual(l, r geoindex.RelationshipType) bool {
-	return l == r
 }
 
 func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {

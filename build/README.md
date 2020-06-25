@@ -90,6 +90,9 @@ Dependencies are managed using `go mod`. We use `go mod vendor` so that we can i
 
 Run `go get -u <dependency>`. To get a specific version, run `go get -u <dependency>@<version|branch|sha>`.
 
+When updating a dependency, you should run `go mod tidy` after `go get` to ensure the old entries
+are removed from go.sum.
+
 You must then run `make -k vendor_rebuild` to ensure the modules are installed. These changes must
 then be committed in the submodule directory (see Working with Submodules).
 
@@ -159,6 +162,18 @@ conflict on the `vendor` submodule pointer. When resolving that conflict, it
 is important to re-run `go mod tidy `and `make -k vendor_rebuild`
 against the fetched, updated `vendor` ref, thus generating a new commit in
 the submodule that has as its parent the one from the earlier change.
+
+### Recovering from a broken vendor directory
+
+If you happen to run into a broken `vendor` directory which is irrecoverable,
+you can run the following commands which will restore the directory in
+working order:
+
+```
+rm -rf vendor
+git checkout HEAD vendor # you can replace HEAD with any branch/sha
+git submodule update --init --recursive
+```
 
 ### Repository Name
 
