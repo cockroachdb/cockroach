@@ -836,17 +836,22 @@ func NewStore(
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 
-	s.compactor = compactor.NewCompactor(
-		s.cfg.Settings,
-		s.engine,
-		func() (roachpb.StoreCapacity, error) {
-			return s.Capacity(false /* useCached */)
-		},
-		func(ctx context.Context) {
-			s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
-		},
-	)
-	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+	// Pebble's compaction picker is aware of range deletions and will account
+	// for them during compaction picking, so don't create a compactor for
+	// Pebble.
+	if s.engine.Type() != enginepb.EngineTypePebble {
+		s.compactor = compactor.NewCompactor(
+			s.cfg.Settings,
+			s.engine,
+			func() (roachpb.StoreCapacity, error) {
+				return s.Capacity(false /* useCached */)
+			},
+			func(ctx context.Context) {
+				s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
+			},
+		)
+		s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+	}
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
@@ -1562,7 +1567,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Start the storage engine compactor.
-	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
+	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) && s.compactor != nil {
 		s.compactor.Start(s.AnnotateCtx(context.Background()), s.stopper)
 	}
 

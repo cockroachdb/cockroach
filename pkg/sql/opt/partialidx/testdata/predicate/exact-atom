@@ -156,3 +156,20 @@ predtest vars=(int)
 @1 > 10
 ----
 false
+
+# Disjunction filters
+
+predtest vars=(bool)
+@1 OR @1
+=>
+@1
+----
+true
+└── remaining filters: none
+
+predtest vars=(bool, bool)
+@1 OR @2
+=>
+@2
+----
+false
