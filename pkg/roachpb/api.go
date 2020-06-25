@@ -212,6 +212,48 @@ type Request interface {
 	flags() int
 }
 
+// SizedWriteRequest is an interface used to expose the number of bytes a
+// request might write.
+type SizedWriteRequest interface {
+	Request
+	WriteBytes() int64
+}
+
+var _ SizedWriteRequest = (*PutRequest)(nil)
+
+// WriteBytes makes PutRequest implement SizedWriteRequest.
+func (r *PutRequest) WriteBytes() int64 {
+	return int64(len(r.Key)) + int64(r.Value.Size())
+}
+
+var _ SizedWriteRequest = (*ConditionalPutRequest)(nil)
+
+// WriteBytes makes ConditionalPutRequest implement SizedWriteRequest.
+func (r *ConditionalPutRequest) WriteBytes() int64 {
+	return int64(len(r.Key)) + int64(r.Value.Size())
+}
+
+var _ SizedWriteRequest = (*DeleteRequest)(nil)
+
+// WriteBytes makes DeleteRequest implement SizedWriteRequest.
+func (r *DeleteRequest) WriteBytes() int64 {
+	return int64(len(r.Key))
+}
+
+var _ SizedWriteRequest = (*IncrementRequest)(nil)
+
+// WriteBytes makes IncrementRequest implement SizedWriteRequest.
+func (r *IncrementRequest) WriteBytes() int64 {
+	return int64(len(r.Key)) + 8 // assume 8 bytes for the int64
+}
+
+var _ SizedWriteRequest = (*AddSSTableRequest)(nil)
+
+// WriteBytes makes AddSSTableRequest implement SizedWriteRequest.
+func (r *AddSSTableRequest) WriteBytes() int64 {
+	return int64(len(r.Data))
+}
+
 // leaseRequestor is implemented by requests dealing with leases.
 // Implementors return the previous lease at the time the request
 // was proposed.
@@ -296,7 +338,7 @@ func (sr *ScanResponse) combine(c combinable) error {
 	return nil
 }
 
-var _ combinable = &AdminVerifyProtectedTimestampResponse{}
+var _ combinable = &ScanResponse{}
 
 func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error {
 	other := c.(*AdminVerifyProtectedTimestampResponse)
@@ -309,7 +351,7 @@ func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error 
 	return nil
 }
 
-var _ combinable = &ScanResponse{}
+var _ combinable = &AdminVerifyProtectedTimestampResponse{}
 
 // combine implements the combinable interface.
 func (sr *ReverseScanResponse) combine(c combinable) error {
