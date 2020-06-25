@@ -90,3 +90,13 @@ query I
 SELECT min(v) FROM kv
 ----
 1
+
+# Check that sort is supported.
+query I
+SELECT v FROM kv ORDER BY v DESC
+----
+3
+2
+1
+1
+NULL
