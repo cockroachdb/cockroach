@@ -125,6 +125,10 @@ type pebbleMVCCScanner struct {
 	curValue []byte
 	results  pebbleResults
 	intents  pebble.Batch
+	// mostRecentTS stores the largest timestamp observed that is above the scan
+	// timestamp. Only applicable if failOnMoreRecent is true. If set and no
+	// other error is hit, a WriteToOld error will be returned from the scan.
+	mostRecentTS hlc.Timestamp
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
@@ -161,6 +165,7 @@ func (p *pebbleMVCCScanner) get() {
 		return
 	}
 	p.getAndAdvance()
+	p.maybeFailOnMoreRecent()
 }
 
 // scan iterates until maxKeys records are in results, or the underlying
@@ -179,6 +184,7 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 
 	for p.getAndAdvance() {
 	}
+	p.maybeFailOnMoreRecent()
 
 	var resume *roachpb.Span
 	if p.maxKeys > 0 && p.results.count == p.maxKeys && p.advanceKey() {
@@ -252,14 +258,17 @@ func (p *pebbleMVCCScanner) getFromIntentHistory() (value []byte, found bool) {
 	return intent.Value, true
 }
 
-// Returns a write too old error with the specified timestamp.
-func (p *pebbleMVCCScanner) writeTooOldError(ts hlc.Timestamp) bool {
+// Returns a write too old error if an error is not already set on the scanner
+// and a more recent value was found during the scan.
+func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
+	if p.err != nil || p.mostRecentTS.IsEmpty() {
+		return
+	}
 	// The txn can't write at the existing timestamp, so we provide the error
 	// with the timestamp immediately after it.
-	p.err = roachpb.NewWriteTooOldError(p.ts, ts.Next())
+	p.err = roachpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next())
 	p.results.clear()
 	p.intents.Reset()
-	return false
 }
 
 // Returns an uncertainty error with the specified timestamp and p.txn.
@@ -284,7 +293,11 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			// 2. Our txn's read timestamp is less than the most recent
 			// version's timestamp and the scanner has been configured
 			// to throw a write too old error on more recent versions.
-			return p.writeTooOldError(p.curKey.Timestamp)
+			// Merge the current timestamp with the maximum timestamp
+			// we've seen so we know to return an error, but then keep
+			// scanning so that we can return the largest possible time.
+			p.mostRecentTS.Forward(p.curKey.Timestamp)
+			return p.advanceKey()
 		}
 
 		if p.checkUncertainty {
