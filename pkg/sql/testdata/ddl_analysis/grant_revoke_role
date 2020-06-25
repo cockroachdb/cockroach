@@ -1,0 +1,25 @@
+exec
+CREATE ROLE a;
+CREATE ROLE b;
+CREATE ROLE c;
+----
+
+count
+GRANT a to b
+----
+3
+
+count
+REVOKE a FROM b
+----
+3
+
+count
+GRANT a,b to C
+----
+3
+
+count
+REVOKE a,b FROM c
+----
+3

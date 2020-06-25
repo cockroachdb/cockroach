@@ -1,0 +1,36 @@
+# CreateRole
+count
+CREATE ROLE rolea
+----
+6
+
+count
+CREATE ROLE roleb LOGIN
+----
+6
+
+count
+CREATE ROLE rolec LOGIN CREATEROLE
+----
+8
+
+count
+CREATE ROLE roled LOGIN CREATEROLE VALID UNTIL '2021-01-01'
+----
+10
+
+# AlterRole
+count
+ALTER ROLE rolea CREATEROLE
+----
+4
+
+count
+ALTER ROLE rolea CREATEROLE LOGIN
+----
+6
+
+count
+ALTER ROLE rolea CREATEROLE LOGIN PASSWORD '123'
+----
+8

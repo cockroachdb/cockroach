@@ -1,0 +1,115 @@
+exec
+CREATE TABLE alter_table(x INT NOT NULL, y INT NOT NULL, z INT NOT NULL, PRIMARY KEY (x,y,z))
+----
+
+# AddColumn
+count
+ALTER TABLE alter_table ADD COLUMN a INT
+----
+3
+
+count
+ALTER TABLE alter_table ADD COLUMN b INT, ADD COLUMN c INT
+----
+3
+
+count
+ALTER TABLE alter_table ADD COLUMN d INT, ADD COLUMN e INT, ADD COLUMN f INT
+----
+3
+
+# Constraint
+count
+ALTER TABLE alter_table ADD CONSTRAINT ck CHECK(x > 0)
+----
+3
+
+count
+ALTER TABLE alter_table ADD CONSTRAINT ck1 CHECK(y > 0), ADD CONSTRAINT ck2 CHECK(z > 0)
+----
+3
+
+count
+ALTER TABLE alter_table ADD CONSTRAINT ck3 CHECK(x > 0), ADD CONSTRAINT ck4 CHECK(y > 0), ADD CONSTRAINT ck5 CHECK(z > 0)
+----
+3
+
+# ForeignKey
+exec
+CREATE TABLE fk_table1(x INT PRIMARY KEY);
+CREATE TABLE fk_table2(y INT PRIMARY KEY);
+----
+
+count
+ALTER TABLE alter_table ADD CONSTRAINT fk FOREIGN KEY (x) REFERENCES fk_table1(x) ON DELETE CASCADE
+----
+11
+
+count
+ALTER TABLE alter_table ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk_table1(x) ON DELETE CASCADE, ADD CONSTRAINT fk2 FOREIGN KEY (y) REFERENCES fk_table2(y) ON DELETE CASCADE
+----
+22
+
+exec
+CREATE TABLE referencer(x INT, y INT, z INT, PRIMARY KEY(x,y,z));
+CREATE TABLE referenced(x INT, y INT, z INT, PRIMARY KEY(x,y,z));
+----
+
+# Adding a FK takes a constant number of round trips regardless of # of columns.
+count
+ALTER TABLE referencer ADD CONSTRAINT fk FOREIGN KEY (x,y,z) REFERENCES referenced(x,y,z) ON DELETE CASCADE
+----
+11
+
+# DropColumn
+count
+ALTER TABLE alter_table DROP COLUMN a
+----
+8
+
+count
+ALTER TABLE alter_table DROP COLUMN b, DROP COLUMN c
+----
+13
+
+count
+ALTER TABLE alter_table DROP COLUMN d, DROP COLUMN e, DROP COLUMN f
+----
+18
+
+# DropConstraint
+count
+ALTER TABLE alter_table DROP CONSTRAINT ck
+----
+6
+
+count
+ALTER TABLE alter_table DROP CONSTRAINT ck1, DROP CONSTRAINT ck2
+----
+9
+
+count
+ALTER TABLE alter_table DROP CONSTRAINT ck3, DROP CONSTRAINT ck4, DROP CONSTRAINT ck5
+----
+12
+
+# Split / Unsplit
+count
+ALTER TABLE alter_table SPLIT AT VALUES (1)
+----
+5
+
+count
+ALTER TABLE alter_table UNSPLIT AT VALUES (1)
+----
+2
+
+count
+ALTER TABLE alter_table SPLIT AT VALUES (2), (3)
+----
+10
+
+count
+ALTER TABLE alter_table UNSPLIT AT VALUES (2), (3)
+----
+4

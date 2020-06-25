@@ -1,0 +1,40 @@
+exec
+CREATE USER TEST
+----
+
+exec
+CREATE TABLE t0()
+----
+
+count
+GRANT ALL ON * TO TEST
+----
+10
+
+count
+REVOKE ALL ON * FROM TEST
+----
+10
+
+exec
+CREATE TABLE t1();
+CREATE TABLE t2();
+CREATE TABLE t3();
+CREATE TABLE t4();
+CREATE TABLE t5();
+CREATE TABLE t6();
+CREATE TABLE t7();
+CREATE TABLE t8();
+CREATE TABLE t9();
+CREATE TABLE t10();
+----
+
+count
+GRANT ALL ON * TO TEST
+----
+160
+
+count
+REVOKE ALL ON * FROM TEST
+----
+160

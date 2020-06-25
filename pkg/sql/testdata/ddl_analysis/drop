@@ -1,0 +1,126 @@
+# DropRole
+exec
+CREATE ROLE a
+----
+
+count
+DROP ROLE a
+----
+36
+
+exec
+CREATE ROLE a;
+CREATE ROLE b;
+----
+
+count
+DROP ROLE a, b
+----
+40
+
+exec
+CREATE ROLE a;
+CREATE ROLE b;
+CREATE ROLE c;
+----
+
+count
+DROP ROLE a, b, c
+----
+44
+
+# DropTable
+exec
+CREATE TABLE t1()
+----
+
+count
+DROP TABLE t1
+----
+7
+
+exec
+CREATE TABLE t1();
+CREATE TABLE t2();
+----
+
+count
+DROP TABLE t1,t2
+----
+16
+
+exec
+CREATE TABLE t1();
+CREATE TABLE t2();
+CREATE TABLE t3();
+----
+
+count
+DROP TABLE t1,t2,t3
+----
+27
+
+# DropView
+exec
+CREATE TABLE t1(x INT);
+CREATE VIEW vx1 AS SELECT x FROM t1;
+----
+
+count
+DROP VIEW vx1
+----
+9
+
+exec
+CREATE TABLE t2(x INT);
+CREATE VIEW vx1 AS SELECT x FROM t1;
+CREATE VIEW vx2 AS SELECT x FROM t2;
+----
+
+count
+DROP VIEW vx1, vx2
+----
+26
+
+exec
+CREATE TABLE t3(x INT);
+CREATE VIEW vx1 AS SELECT x FROM t1;
+CREATE VIEW vx2 AS SELECT x FROM t2;
+CREATE VIEW vx3 AS SELECT x FROM t3;
+----
+
+count
+DROP VIEW vx1, vx2, vx3
+----
+51
+
+# DropSequence
+exec
+CREATE SEQUENCE s
+----
+
+count
+DROP SEQUENCE s
+----
+5
+
+exec
+CREATE SEQUENCE s1;
+CREATE SEQUENCE s2;
+----
+
+count
+DROP SEQUENCE s1, s2
+----
+12
+
+exec
+CREATE SEQUENCE s1;
+CREATE SEQUENCE s2;
+CREATE SEQUENCE s3;
+----
+
+count
+DROP SEQUENCE s1, s2, s3
+----
+21
