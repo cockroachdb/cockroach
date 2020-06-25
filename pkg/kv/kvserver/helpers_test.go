@@ -166,7 +166,8 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.Background())
-	return q.process(ctx, repl, cfg)
+	_, err := q.process(ctx, repl, cfg)
+	return err
 }
 
 // ManualGC processes the specified replica using the store's GC queue.

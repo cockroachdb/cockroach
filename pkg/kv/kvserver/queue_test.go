@@ -47,6 +47,7 @@ type testQueueImpl struct {
 	blocker       chan struct{} // timer() blocks on this if not nil
 	pChan         chan time.Time
 	err           error // always returns this error on process
+	noop          bool  // if enabled, process will return false
 }
 
 func (tq *testQueueImpl) shouldQueue(
@@ -55,9 +56,14 @@ func (tq *testQueueImpl) shouldQueue(
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ *config.SystemConfig) error {
+func (tq *testQueueImpl) process(
+	_ context.Context, _ *Replica, _ *config.SystemConfig,
+) (bool, error) {
 	atomic.AddInt32(&tq.processed, 1)
-	return tq.err
+	if tq.err != nil {
+		return false, tq.err
+	}
+	return !tq.noop, nil
 }
 
 func (tq *testQueueImpl) getProcessed() int {
@@ -371,6 +377,60 @@ func TestBaseQueueAdd(t *testing.T) {
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
+}
+
+// TestBaseQueueNoop verifies that only successful processes
+// are counted as successes, while no-ops are not.
+func TestBaseQueueNoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tsc := TestStoreConfig(nil)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	repls := createReplicas(t, &tc, 2)
+	r1, r2 := repls[0], repls[1]
+
+	testQueue := &testQueueImpl{
+		blocker: make(chan struct{}, 1),
+		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueue = true
+			priority = float64(r.RangeID)
+			return
+		},
+		noop: false,
+	}
+	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	bq.Start(stopper)
+	ctx := context.Background()
+	bq.maybeAdd(ctx, r1, hlc.Timestamp{})
+	testQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replica; got %d", pc)
+		}
+		if v := bq.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 successfully processed replicas; got %d", v)
+		}
+		return nil
+	})
+
+	// Ensure that when process is a no-op, the success count
+	// is not incremented
+	testQueue.noop = true
+	bq.maybeAdd(ctx, r2, hlc.Timestamp{})
+	testQueue.blocker <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		if pc := testQueue.getProcessed(); pc != 2 {
+			return errors.Errorf("expected 2 processed replicas; got %d", pc)
+		}
+		if v := bq.successes.Count(); v != 1 {
+			return errors.Errorf("expected 1 successfully processed replica; got %d", v)
+		}
+		return nil
+	})
+	close(testQueue.blocker)
 }
 
 // TestBaseQueueProcess verifies that items from the queue are
@@ -841,10 +901,11 @@ type processTimeoutQueueImpl struct {
 
 func (pq *processTimeoutQueueImpl) process(
 	ctx context.Context, r *Replica, _ *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
-	return ctx.Err()
+	err = ctx.Err()
+	return err == nil, err
 }
 
 func TestBaseQueueProcessTimeout(t *testing.T) {
@@ -958,9 +1019,9 @@ type processTimeQueueImpl struct {
 
 func (pq *processTimeQueueImpl) process(
 	_ context.Context, _ *Replica, _ *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
-	return nil
+	return true, nil
 }
 
 func TestBaseQueueTimeMetric(t *testing.T) {
@@ -1090,14 +1151,14 @@ type parallelQueueImpl struct {
 
 func (pq *parallelQueueImpl) process(
 	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	err := pq.testQueueImpl.process(ctx, repl, cfg)
+	processed, err = pq.testQueueImpl.process(ctx, repl, cfg)
 	atomic.AddInt32(&pq.processing, -1)
-	return err
+	return processed, err
 }
 
 func (pq *parallelQueueImpl) getProcessing() int {

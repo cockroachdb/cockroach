@@ -158,8 +158,10 @@ func (unsplittableRangeError) purgatoryErrorMarker() {}
 var _ purgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg *config.SystemConfig) error {
-	err := sq.processAttempt(ctx, r, sysCfg)
+func (sq *splitQueue) process(
+	ctx context.Context, r *Replica, sysCfg *config.SystemConfig,
+) (processed bool, err error) {
+	processed, err = sq.processAttempt(ctx, r, sysCfg)
 	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
@@ -167,14 +169,15 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg *config.Sy
 		// this replica again in case it still needs to be split.
 		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying")
 		sq.MaybeAddAsync(ctx, r, sq.store.Clock().Now())
-		return nil
+		return false, nil
 	}
-	return err
+
+	return processed, err
 }
 
 func (sq *splitQueue) processAttempt(
 	ctx context.Context, r *Replica, sysCfg *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	desc := r.Desc()
 	// First handle the case of splitting due to zone config maps.
 	if splitKey := sysCfg.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
@@ -191,9 +194,9 @@ func (sq *splitQueue) processAttempt(
 			false, /* delayable */
 			"zone config",
 		); err != nil {
-			return errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
+			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
-		return nil
+		return true, nil
 	}
 
 	// Next handle case of splitting due to size. Note that we don't perform
@@ -209,7 +212,8 @@ func (sq *splitQueue) processAttempt(
 			false, /* delayable */
 			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
 		)
-		return err
+
+		return err == nil, err
 	}
 
 	now := timeutil.Now()
@@ -249,16 +253,16 @@ func (sq *splitQueue) processAttempt(
 			false, /* delayable */
 			reason,
 		); pErr != nil {
-			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
+			return false, errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}
 
 		telemetry.Inc(sq.loadBasedCount)
 
 		// Reset the splitter now that the bounds of the range changed.
 		r.loadBasedSplitter.Reset()
-		return nil
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // timer returns interval between processing successive queued splits.
