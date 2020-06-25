@@ -1,4 +1,7 @@
-# LogicTest: !3node-tenant
+# LogicTest: !local-spec-planning !fakedist-spec-planning !3node-tenant
+# Note that the new factory currently has limited support of EXPLAIN (PLAN)
+# statements, so spec-planning configurations are currently skipped.
+
 query TTT
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
 ----

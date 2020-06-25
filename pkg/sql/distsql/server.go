@@ -439,8 +439,9 @@ func (ds *ServerImpl) SetupSyncFlow(
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 ) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor,
-		req, output, LocalState{})
+	ctx, f, err := ds.setupFlow(
+		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -461,10 +462,6 @@ type LocalState struct {
 	// If there is concurrency, a LeafTxn will be created.
 	Txn *kv.Txn
 
-	/////////////////////////////////////////////
-	// Fields below are empty if IsLocal == false
-	/////////////////////////////////////////////
-
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
 	LocalProcs []execinfra.LocalProcessor
@@ -480,8 +477,9 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	output execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output,
-		localState)
+	ctx, f, err := ds.setupFlow(
+		ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
