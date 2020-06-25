@@ -398,12 +398,9 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return rec, nil
 
 	case *limitNode:
-		if err := checkExpr(n.countExpr); err != nil {
-			return cannotDistribute, err
-		}
-		if err := checkExpr(n.offsetExpr); err != nil {
-			return cannotDistribute, err
-		}
+		// Note that we don't need to check whether we support distribution of
+		// n.countExpr or n.offsetExpr because those expressions are evaluated
+		// locally, during the physical planning.
 		return checkSupportForPlanNode(n.plan)
 
 	case *lookupJoinNode:
@@ -2374,10 +2371,11 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if err != nil {
 			return nil, err
 		}
-		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
+		var count, offset int64
+		if count, offset, err = evalLimit(planCtx.EvalContext(), n.countExpr, n.offsetExpr); err != nil {
 			return nil, err
 		}
-		if err := plan.AddLimit(n.count, n.offset, planCtx); err != nil {
+		if err := plan.AddLimit(count, offset, planCtx); err != nil {
 			return nil, err
 		}
 
