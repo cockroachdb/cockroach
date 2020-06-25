@@ -47,10 +47,10 @@ const (
 	hjDone
 )
 
-// hashJoinerSpec is the specification for a hash join operator. The hash
+// HashJoinerSpec is the specification for a hash join operator. The hash
 // joiner performs a join on the left and right's equal columns and returns
 // combined left and right output columns.
-type hashJoinerSpec struct {
+type HashJoinerSpec struct {
 	joinType sqlbase.JoinType
 	// left and right are the specifications of the two input table sources to
 	// the hash joiner.
@@ -164,7 +164,7 @@ type hashJoiner struct {
 
 	allocator *colmem.Allocator
 	// spec holds the specification for the current hash join process.
-	spec hashJoinerSpec
+	spec HashJoinerSpec
 	// state stores the current state of the hash joiner.
 	state hashJoinerState
 	// ht holds the hashTable that is populated during the build phase and used
@@ -216,7 +216,7 @@ type hashJoiner struct {
 	}
 }
 
-var _ bufferingInMemoryOperator = &hashJoiner{}
+var _ colexecbase.BufferingInMemoryOperator = &hashJoiner{}
 var _ resetter = &hashJoiner{}
 
 func (hj *hashJoiner) Init() {
@@ -230,7 +230,7 @@ func (hj *hashJoiner) Init() {
 	}
 	hj.ht = newHashTable(
 		hj.allocator,
-		hashTableNumBuckets,
+		HashTableNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		allowNullEquality,
@@ -623,21 +623,21 @@ func (hj *hashJoiner) reset(ctx context.Context) {
 	hj.exportBufferedState.rightExported = 0
 }
 
-// makeHashJoinerSpec creates a specification for columnar hash join operator.
+// MakeHashJoinerSpec creates a specification for columnar hash join operator.
 // leftEqCols and rightEqCols specify the equality columns while leftOutCols
 // and rightOutCols specifies the output columns. leftTypes and rightTypes
 // specify the input column types of the two sources. rightDistinct indicates
 // whether the equality columns of the right source form a key.
-func makeHashJoinerSpec(
+func MakeHashJoinerSpec(
 	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	rightDistinct bool,
-) (hashJoinerSpec, error) {
+) (HashJoinerSpec, error) {
 	var (
-		spec                  hashJoinerSpec
+		spec                  HashJoinerSpec
 		leftOuter, rightOuter bool
 	)
 	switch joinType {
@@ -675,7 +675,7 @@ func makeHashJoinerSpec(
 		sourceTypes: rightTypes,
 		outer:       rightOuter,
 	}
-	spec = hashJoinerSpec{
+	spec = HashJoinerSpec{
 		joinType:      joinType,
 		left:          left,
 		right:         right,
@@ -684,10 +684,10 @@ func makeHashJoinerSpec(
 	return spec, nil
 }
 
-// newHashJoiner creates a new equality hash join operator on the left and
+// NewHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
-func newHashJoiner(
-	allocator *colmem.Allocator, spec hashJoinerSpec, leftSource, rightSource colexecbase.Operator,
+func NewHashJoiner(
+	allocator *colmem.Allocator, spec HashJoinerSpec, leftSource, rightSource colexecbase.Operator,
 ) colexecbase.Operator {
 	hj := &hashJoiner{
 		twoInputNode:    newTwoInputNode(leftSource, rightSource),

@@ -25,7 +25,7 @@ type fnOp struct {
 	fn func()
 }
 
-var _ resettableOperator = fnOp{}
+var _ ResettableOperator = fnOp{}
 
 func (f fnOp) Init() {
 	f.input.Init()

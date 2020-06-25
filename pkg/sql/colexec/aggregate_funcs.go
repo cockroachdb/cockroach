@@ -224,7 +224,9 @@ func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 	return funcs
 }
 
-func makeAggregateFuncsOutputTypes(
+// MakeAggregateFuncsOutputTypes produces the output types for a given set of
+// aggregates.
+func MakeAggregateFuncsOutputTypes(
 	aggTyps [][]*types.T, aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]*types.T, error) {
 	var err error
@@ -249,27 +251,6 @@ func extractAggTypes(aggCols [][]uint32, typs []*types.T) [][]*types.T {
 		}
 	}
 	return aggTyps
-}
-
-// isAggregateSupported checks whether the aggregate function that operates on
-// columns of types 'inputTypes' (which can be empty in case of COUNT_ROWS) is
-// supported and returns an error if it isn't.
-func isAggregateSupported(aggFn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T) error {
-	supported := false
-	for _, supportedAggFn := range SupportedAggFns {
-		if aggFn == supportedAggFn {
-			supported = true
-			break
-		}
-	}
-	if !supported {
-		return errors.Errorf("unsupported columnar aggregate function %s", aggFn.String())
-	}
-	_, err := makeAggregateFuncsOutputTypes(
-		[][]*types.T{inputTypes},
-		[]execinfrapb.AggregatorSpec_Func{aggFn},
-	)
-	return err
 }
 
 type aggAllocBase struct {

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -193,7 +194,7 @@ func TestEval(t *testing.T) {
 				ProcessorConstructor: rowexec.NewProcessor,
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-			result, err := colexec.NewColOperator(ctx, flowCtx, args)
+			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 			if testutils.IsError(err, "unsupported type") {
 				// Skip this test as execution is not supported by the vectorized
 				// engine.

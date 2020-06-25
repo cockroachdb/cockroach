@@ -179,3 +179,8 @@ func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
+
+// Input returns the input of this columnarizer.
+func (c *Columnarizer) Input() execinfra.RowSource {
+	return c.input
+}
