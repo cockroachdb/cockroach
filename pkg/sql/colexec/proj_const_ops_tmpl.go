@@ -197,7 +197,16 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // {{range .RightFamilies}}
 // {{range .RightWidths}}
 
+// {{if not _IS_CONST_LEFT}}
+// {{/*
+//     Comparison operators are always normalized so that the constant is on
+//     the right side, so we skip generating the code when the constant is on
+//     the left.
+// */}}
+
 // {{template "projConstOp" .}}
+
+// {{end}}
 
 // {{end}}
 // {{end}}
@@ -289,6 +298,12 @@ func GetProjection_CONST_SIDEConstOperator(
 			}
 			// {{end}}
 		}
+	// {{if not _IS_CONST_LEFT}}
+	// {{/*
+	//     Comparison operators are always normalized so that the constant is on
+	//     the right side, so we skip generating the code when the constant is on
+	//     the left.
+	// */}}
 	case tree.ComparisonOperator:
 		switch op {
 		// {{range .CmpOps}}
@@ -308,31 +323,7 @@ func GetProjection_CONST_SIDEConstOperator(
 						case _RIGHT_TYPE_WIDTH:
 							return &_OP_CONST_NAME{
 								projConstOpBase: projConstOpBase,
-								// {{if _IS_CONST_LEFT}}
-								// {{if eq $leftFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
-								// {{/*
-								//     Comparison operations are evaluated using
-								//     coldataext.Datum.CompareDatum method which requires that we
-								//     have *coldataext.Datum on the left, so we create that at the
-								//     operator construction time to avoid runtime conversion. Note
-								//     that when the constant is on the right side, then the left
-								//     element necessarily comes from the vector and will be of the
-								//     desired type, so no additional work is needed.
-								//     Note: although it appears as if the comparison expressions
-								//     supported by this template (EQ, NE, LT, GT, LE, GE) are
-								//     normalized so that the constant is on the right side, we
-								//     choose to be safe and perform the conversion here.
-								//     TODO(yuzefovich): this appears to be a dead code, look into
-								//     whether we can skip generation of the code for the case when
-								//     the constant is on the left.
-								// */}}
-								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
-								// {{else}}
-								constArg: c.(_L_GO_TYPE),
-								// {{end}}
-								// {{else}}
-								constArg: c.(_R_GO_TYPE),
-								// {{end}}
+								constArg:        c.(_R_GO_TYPE),
 							}, nil
 							// {{end}}
 						}
@@ -344,6 +335,7 @@ func GetProjection_CONST_SIDEConstOperator(
 			}
 			// {{end}}
 		}
+		// {{end}}
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())
 }
