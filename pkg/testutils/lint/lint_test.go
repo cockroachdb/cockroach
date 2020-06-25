@@ -222,6 +222,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`\.pb\.go`),
 			stream.GrepNot(`\.pb\.gw\.go`),
 			stream.GrepNot(`\.og\.go`),
+			stream.GrepNot(`\.eg\.go`),
 			stream.GrepNot(`_string\.go`),
 			stream.GrepNot(`_generated\.go`),
 			stream.GrepNot(`/embedded.go`),
