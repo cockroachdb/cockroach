@@ -176,7 +176,7 @@ func (rb *tokenBuckets) subtract(req *waitRequest) {
 	rb.writeBytes.tokens -= float64(req.writeBytes)
 }
 
-func (rb *tokenBuckets) Merge(val interface{}) {
+func (rb *tokenBuckets) Merge(val interface{}) (shouldNotify bool) {
 	switch toAdd := val.(type) {
 	case LimitConfigs:
 		// Account for the accumulation since lastUpdate and now under the old
@@ -186,13 +186,13 @@ func (rb *tokenBuckets) Merge(val interface{}) {
 		rb.requests.setConf(toAdd.Requests)
 		rb.readBytes.setConf(toAdd.ReadBytes)
 		rb.writeBytes.setConf(toAdd.WriteBytes)
+		return true
 	case *readBytesResource:
-		// TODO(ajwerner): We should not notify the head of the queue when reducing
-		// the number of tokens. To implement this we should add some boolean
-		// return value to indicate that nothing was added. Such an optimization
-		// could also be applied to settings changes but those are too rare to be
-		// worrisome.
 		rb.readBytes.tokens -= float64(*toAdd)
+		// Do not notify the head of the queue. In the best case we did not disturb
+		// the time at which it can be fulfilled and in the worst case, we made it
+		// further in the future.
+		return false
 	default:
 		panic(errors.AssertionFailedf("Merge not implemented for %T", val))
 	}

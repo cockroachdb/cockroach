@@ -39,18 +39,30 @@ record_read
 ----
 [g1@2]
 
-# Note that the head of the queue received this update and reset its timer.
-# This is probably not advisable and should be addressed.
+# Note that the head of the queue will not be notified immediately but rather
+# will be notified when its previous timer expires. If it were notified every
+# time reads occurred it could be quite inefficient.
 
+timers
+----
+00:00:00.500
+
+# Note that the head of the queue notices the removal of readbytes and sets a
+# new timer.
+
+advance
+501ms
+----
+00:00:00.501
 
 timers
 ----
 00:00:01.000
 
 advance
-1s
+500ms
 ----
-00:00:01.000
+00:00:01.001
 
 await
 - g1
