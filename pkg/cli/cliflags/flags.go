@@ -1096,9 +1096,9 @@ If non-empty, write log files in this directory. If empty, write log files to
 	}
 
 	LogDirMaxSize = FlagInfo{
-		Name: "log-dir-max-size",
+		Name: "log-group-max-size",
 		Description: `
-Maximum combined size of all log files.
+Maximum combined size of all log files in a logging group.
 `,
 	}
 
