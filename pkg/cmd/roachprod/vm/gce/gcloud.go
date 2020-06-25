@@ -181,6 +181,8 @@ type providerOpts struct {
 	Zones          []string
 	Image          string
 	SSDCount       int
+	PDVolumeType   string
+	PDVolumeSize   int
 
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
@@ -265,17 +267,24 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.ServiceAccount, ProviderName+"-service-account",
 		os.Getenv("GCE_SERVICE_ACCOUNT"), "Service account to use")
+
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
+		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
+
+	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
+		"Number of local SSDs to create, only used if local-ssd=true")
+	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "pd-ssd",
+		"Type of the persistent disk volume, only used if local-ssd=false")
+	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
+		"Size in GB of persistent disk volume, only used if local-ssd=false")
+
 	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", nil,
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
-		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
-	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
-		"Number of local SSDs to create on GCE instance.")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.MultipleProjectsOption) {
@@ -402,6 +411,13 @@ func (p *Provider) Create(names []string, opts vm.CreateOpts) error {
 		if opts.SSDOpts.NoExt4Barrier {
 			extraMountOpts = "nobarrier"
 		}
+	} else {
+		pdProps := []string{
+			fmt.Sprintf("type=%s", p.opts.PDVolumeType),
+			fmt.Sprintf("size=%dGB", p.opts.PDVolumeSize),
+			"auto-delete=yes",
+		}
+		args = append(args, "--create-disk", strings.Join(pdProps, ","))
 	}
 
 	// Create GCE startup script file.
