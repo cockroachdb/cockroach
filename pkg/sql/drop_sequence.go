@@ -107,6 +107,9 @@ func (p *planner) dropSequenceImpl(
 	jobDesc string,
 	behavior tree.DropBehavior,
 ) error {
+	if err := removeSequenceOwnerIfExists(ctx, p, seqDesc.ID, seqDesc.GetSequenceOpts()); err != nil {
+		return err
+	}
 	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc, true /* drainName */)
 }
 
