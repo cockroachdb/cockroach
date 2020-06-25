@@ -19,7 +19,6 @@ import (
 	"hash"
 	"hash/fnv"
 	"math"
-	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -81,6 +80,8 @@ const (
 		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
 		FIELD JSONB
 	)`
+
+	timeFormatTemplate = `2006-01-02 15:04:05.000000-07:00`
 )
 
 type ycsb struct {
@@ -88,6 +89,9 @@ type ycsb struct {
 	connFlags *workload.ConnFlags
 
 	seed        uint64
+	timeString  bool
+	insertHash  bool
+	zeroPadding int
 	insertStart int
 	insertCount int
 	recordCount int
@@ -119,6 +123,9 @@ var ycsbMeta = workload.Meta{
 			`workload`: {RuntimeOnly: true},
 		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
+		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
+		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
 		g.flags.IntVar(&g.insertStart, `insert-start`, 0, `Key to start initial sequential insertions from. (default 0)`)
 		g.flags.IntVar(&g.insertCount, `insert-count`, 10000, `Number of rows to sequentially insert before beginning workload.`)
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
@@ -340,9 +347,7 @@ func (g *ycsb) Tables() []workload.Table {
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
 
-					copy(tmpbuf[:], "user")
-					k := strconv.AppendUint(tmpbuf[:4], w.hashKey(uint64(rowIdx)), 10)
-					key.Set(rowOffset, k)
+					key.Set(rowOffset, []byte(w.buildKeyName(uint64(rowIdx))))
 
 					for i := range fields {
 						randStringLetters(rng, tmpbuf[:])
@@ -584,11 +589,18 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 }
 
 func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
-	return keyNameFromHash(yw.hashKey(keynum))
+	if yw.config.insertHash {
+		return keyNameFromHash(yw.hashKey(keynum))
+	}
+	return keyNameFromOrder(keynum, yw.config.zeroPadding)
 }
 
 func keyNameFromHash(hashedKey uint64) string {
 	return fmt.Sprintf("user%d", hashedKey)
+}
+
+func keyNameFromOrder(keynum uint64, zeroPadding int) string {
+	return fmt.Sprintf("user%0*d", zeroPadding, keynum)
 }
 
 // Keys are chosen by first drawing from a Zipf distribution, hashing the drawn
@@ -632,7 +644,16 @@ var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 // Gnerate a random string of alphabetic characters.
 func (yw *ycsbWorker) randString(length int) string {
 	str := make([]byte, length)
-	for i := range str {
+	// prepend current timestamp matching the default CRDB UTC time format
+	strStart := 0
+	if yw.config.timeString {
+		currentTime := timeutil.Now().UTC()
+		str = currentTime.AppendFormat(str[:0], timeFormatTemplate)
+		strStart = len(str)
+		str = str[:length]
+	}
+	// the rest of data is random str
+	for i := strStart; i < length; i++ {
 		str[i] = letters[yw.rng.Intn(len(letters))]
 	}
 	return string(str)
