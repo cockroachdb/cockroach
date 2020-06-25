@@ -378,6 +378,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.left.plan = v.visit(n.left.plan)
 		n.right.plan = v.visit(n.right.plan)
 
+	case *invertedFilterNode:
+		n.input = v.visit(n.input)
+
 	case *limitNode:
 		if v.observer.expr != nil {
 			v.expr(name, "count", -1, n.countExpr)
@@ -928,6 +931,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&indexJoinNode{}):         "index-join",
 	reflect.TypeOf(&insertNode{}):            "insert",
 	reflect.TypeOf(&insertFastPathNode{}):    "insert-fast-path",
+	reflect.TypeOf(&invertedFilterNode{}):    "inverted-filter",
 	reflect.TypeOf(&joinNode{}):              "join",
 	reflect.TypeOf(&limitNode{}):             "limit",
 	reflect.TypeOf(&lookupJoinNode{}):        "lookup-join",

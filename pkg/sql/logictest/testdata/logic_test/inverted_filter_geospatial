@@ -1,0 +1,80 @@
+# LogicTest: local
+
+# Test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1.0 1.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (3, 'POINT(3.0 3.0)'),
+  (4, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (5, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (6, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk1FP2zAQx9_3KU73ApU8sFNowU9lI2zdSsvaSBsjETLNiUVL7Mx2tiLU7z4lAUbLQDQPie7u_7fvfrrcovuVo8RZOArfR1DZHE6mk1O4CL-djY6GYzgaH43Ov4ewfTycRbMvow7cSX-2wmsyl15d5QRfP4bTEJy_zLQn62ju3fbW2WQ4jra7Oxy6O7yzJeWHcHIaRtNzVjuLToIMtUlprApyKC9QYMKwtGZOzhlbp24bwTBdoOQMM11Wvk4nDOfGEspb9JnPCSVGdR9TUinZXY4MU_Iqy5tj68suM53SYvDQMTKclUo7CbtC7AeHgdjnez3eO9jrHfZ7b_-T7IPSKXQ5GP-DrEOG1vxxYEmlEgJk6LzKc_BZQRJ4Xb-68XQv6AfwDpMlQ1P5f0M4r64JpViy1w861L_JekpPstyTJbsrVqe9r4eL0oLRMBASXD0qOK-slzHGcbe_H8c84HHM-cMr4NFx8wljBNLpK5QnMcITLJPKSxiIVwAq1AIKKoy9gcpRreLwOXueU7AJp08m03f7EKwSKm1WKHuzsgwtTbm-wlxwwZ8-B3tP4i35eL8HQWcjEs12wpqqTa5pn2PT3YTNlFxptKMVLs-dzJcJQ0qvqf0hnansnM6smTfXtOGk8TWJlJxvq6INhrot1Q0-NosXzcHL5uBFc3fNnCzf_A0AAP__X62IDA==
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom) ORDER BY k
+----
+3
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(4.5 4.5)'::geometry, geom) ORDER BY k
+----
+4
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_CoveredBy('POINT(4.0 4.5)'::geometry, geom) ORDER BY k
+----
+6
+
+statement ok
+CREATE TABLE geo_table2(
+  k int,
+  geom geometry,
+  k_plus_one int,
+  PRIMARY KEY (k, k_plus_one),
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table2 VALUES
+  (1, 'LINESTRING(1.0 1.0, 2.0 2.0)', 2),
+  (2, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))', 3)
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk1FP2zAQx9_3KU73ApU8sBNowU9lI2zdSsvaShsjFTL1iUVL7M52tiLU7z4lgUHLQCUPie7u_7fvfrrcov-Vo8Rx0k_eT6B0OZyMhqdwkXw76x_1BnA0OOqff09g-7g3noy_9FtwJ_3ZCK_JXgZ1lVMEXz8mowR8uMxMIOdpFvz21tmwN5hsxzsc4h3e2pLyQzI8TSajc1ZZi9YUGRqraaAK8igvUOCU4dzZGXlvXZW6rQU9vUDJGWZmXoYqPWU4s45Q3mLIQk4ocVI1MiKlye1yZKgpqCyvj60uu8yMpkX3oWVkOJ4r4yXsCrEfHUZin--1eftgr33Yab_9T7IDymiIOdjwg5xHhs7-8eBIaQkCGfqg8hxCVpAEXtWvbgLdC-IOvMPpkqEtw8MUPqhrQimWbPNJe-Y3uUD6JMsDOXK7YnXc-3qymDuwBrpCgq9GBR-UCzLFNI07-2nKI56mnP97RXxyXH-SFIGM3kB5kiI8wTIsg4SuYN14A0aFWkBBhXU3UHrSEiIOn7PnUUWvQfXJZuZuJ6JVSHOXFcrdrC5EQ1Su7zEXXPCnz8Hek3hLPl7ybtR6oLEBinpFYU3VJNe0z8GJXwNnRH5ujacVMM-dzJdThqSvqfkrvS3djM6cndXXNOGw9tUJTT40VdEEPdOUqgYfm8WL5uhlc_SiOV4zT5dv_gYAAP__ezGJPg==
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9FP2z4Qx99_f8XpXqCSf2An0IKfykbYupWWtZU2RqIq1CcWkdiZ7WxFqP_7lAQGLQNBHhLd3fdr3310uUX3M0eJ02gYvZ9BZXM4mYxP4SL6djY8GozgaHQ0PP8ewfbxYDqbfhl24E56zeB6XuaVmxtNremKzNynlzkF8PVjNInA-XmmPVlHC--2t87Gg9FsO9zhEO7wzpaUH6LxaTSbnLPaWnQSZKiNolFakEN5gQIThqU1C3LO2Dp12wgGaomSM8x0Wfk6nTBcGEsob9FnPieUOKsbmVCqyO5yZKjIp1neHFtfNs-0omX_oWVkOC1T7STsCrEfHAZin-91efdgr3vY6_7_j2QPUq0g5GD8D7IOGVrz24GlVEkQyND5NM_BZwVJ4HX98sbTvSDswTtMVgxN5R-mcD69IpRixV4_6UD_IutJnWS5J0t2V6yPe1-PlqUFo6EvJLh6VHA-tV7GGMdhbz-OecDjmPO_r4DPjptPFCOQVq9QnsQIT7CMKy-hL1g_fAWjIl1CQYWxN1A5UhICDp-z51EFb0H1yWT6bieCdUilzYrU3qwvREtUbu4xF1zwp8_B3pN4Sz5e8n7QeSuNZkthQ9UmN7TP8QnfwmdCrjTa0Rqb507mq4QhqStqf0xnKrugM2sWzTVtOG58TUKR821VtMFAt6W6wcdm8aI5eNkcvGgON8zJ6r8_AQAA__-cV45Y
+
+query I
+SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+2
+
+query II
+SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+2  3
+
+query IIT
+SELECT k, k_plus_one, geom FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+2  3  01030000000100000005000000000000000000F03F000000000000F03F0000000000001440000000000000F03F00000000000014400000000000001440000000000000F03F0000000000001440000000000000F03F000000000000F03F
