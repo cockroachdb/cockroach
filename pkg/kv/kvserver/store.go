@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -607,6 +608,9 @@ type Store struct {
 		droppedPlaceholders int32
 	}
 
+	// tenantRateLimiters manages tenantrate.Limiters
+	tenantRateLimiters *tenantrate.LimiterFactory
+
 	computeInitialMetrics sync.Once
 }
 
@@ -907,6 +911,9 @@ func NewStore(
 		s.limiters.ConcurrentRangefeedIters.SetLimit(
 			int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)))
 	})
+
+	s.tenantRateLimiters = tenantrate.NewLimiterFactory(cfg.Settings, nil /* knobs */)
+	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.

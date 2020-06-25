@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -246,6 +247,10 @@ type Replica struct {
 	// requests that intend to perform conflicting operations. It is the
 	// centerpiece of transaction contention handling.
 	concMgr concurrency.Manager
+
+	// tenantLimiter rate limits requests on a per-tenant basis and accumulates
+	// metrics about it.
+	tenantLimiter tenantrate.Limiter
 
 	mu struct {
 		// Protects all fields in the mu struct.

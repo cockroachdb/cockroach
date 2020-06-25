@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -308,6 +309,13 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		r.mu.lastReplicaAddedTime = time.Time{}
 	}
 
+	if r.tenantLimiter == nil {
+		if _, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey()); err != nil {
+			log.Fatalf(ctx, "failed to decode tenant ID from desc key: %v", err)
+		} else if tenantID != roachpb.SystemTenantID {
+			r.tenantLimiter = r.store.tenantRateLimiters.GetTenant(tenantID)
+		}
+	}
 	r.rangeStr.store(r.mu.replicaID, desc)
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)
