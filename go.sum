@@ -147,6 +147,8 @@ github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f h1:o/kfcElHqOi
 github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f/go.mod h1:i/u985jwjWRlyHXQbwatDASoW0RMlZ/3i9yJHE2xLkI=
 github.com/cockroachdb/pebble v0.0.0-20200618174744-bc7bb07c0a28 h1:OGzpqbaARCNI/VvrKMydw22zClKW3FX2fKDanLlbbXA=
 github.com/cockroachdb/pebble v0.0.0-20200618174744-bc7bb07c0a28/go.mod h1:crLnbSFbwAcQNs9FPfI1avHb5BqVgqZcr4r+IzpJ5FM=
+github.com/cockroachdb/pebble v0.0.0-20200624214307-560ed0b8a18c h1:MQVYGjMEPj6TRGTi05ct75tDhbBKKFoJ0yKvvEZzIZw=
+github.com/cockroachdb/pebble v0.0.0-20200624214307-560ed0b8a18c/go.mod h1:crLnbSFbwAcQNs9FPfI1avHb5BqVgqZcr4r+IzpJ5FM=
 github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3 h1:2+dpIJzYMSbLi0587YXpi8tOJT52qCOI/1I0UNThc/I=
 github.com/cockroachdb/redact v0.0.0-20200622112456-cd282804bbd3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
@@ -713,6 +715,8 @@ golang.org/x/sys v0.0.0-20191120155948-bd437916bb0e/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20200519105757-fe76b779f299 h1:DYfZAGf2WMFjMxbgTjaC+2HC7NkNAQs+6Q8b9WEB/F4=
 golang.org/x/sys v0.0.0-20200519105757-fe76b779f299/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4 h1:5/PjkGUjvEU5Gl6BxmvKRPpqo2uNMv4rcHBMwzk/st8=
+golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 golang.org/x/text v0.3.2 h1:tW2bmiBqwgJj/UpqtC8EpXEZVYOwU0yG4iWbprSVAcs=
 golang.org/x/text v0.3.2/go.mod h1:bEr9sfX3Q8Zfm5fL9x+3itogRgK3+ptLWKqgva+5dAk=
