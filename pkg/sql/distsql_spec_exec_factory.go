@@ -66,12 +66,14 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 		if e.planContexts.distPlanCtx == nil {
 			evalCtx := e.planner.ExtendedEvalContext()
 			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+			e.planContexts.distPlanCtx.planner = e.planner
 		}
 		return e.planContexts.distPlanCtx
 	}
 	if e.planContexts.localPlanCtx == nil {
 		evalCtx := e.planner.ExtendedEvalContext()
 		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+		e.planContexts.localPlanCtx.planner = e.planner
 	}
 	return e.planContexts.localPlanCtx
 }
@@ -154,7 +156,21 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
-		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: virtual table scan")
+		return constructVirtualScan(
+			e, e.planner, table, index, needed, indexConstraint, hardLimit,
+			softLimit, reverse, maxResults, reqOrdering, rowCount, locking,
+			func(d *delayedNode) (exec.Node, error) {
+				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d)
+				if err != nil {
+					return nil, err
+				}
+				physPlan.ResultColumns = d.columns
+				return planMaybePhysical{physPlan: &physicalPlanTop{
+					PhysicalPlan:     physPlan,
+					planNodesToClose: []planNode{d},
+				}}, nil
+			},
+		)
 	}
 
 	p := MakePhysicalPlan(e.gatewayNodeID)
