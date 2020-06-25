@@ -841,7 +841,7 @@ func MakeTimeTZ(precision int32) *T {
 
 // MakeGeometry constructs a new instance of a GEOMETRY type (oid = T_geometry)
 // that has the given shape and SRID.
-func MakeGeometry(shape geopb.Shape, srid geopb.SRID) *T {
+func MakeGeometry(shape geopb.ShapeType, srid geopb.SRID) *T {
 	// Negative values are promoted to 0.
 	if srid < 0 {
 		srid = 0
@@ -851,14 +851,14 @@ func MakeGeometry(shape geopb.Shape, srid geopb.SRID) *T {
 		Oid:    oidext.T_geometry,
 		Locale: &emptyLocale,
 		GeoMetadata: &GeoMetadata{
-			Shape: shape,
-			SRID:  srid,
+			ShapeType: shape,
+			SRID:      srid,
 		},
 	}}
 }
 
 // MakeGeography constructs a new instance of a geography-related type.
-func MakeGeography(shape geopb.Shape, srid geopb.SRID) *T {
+func MakeGeography(shape geopb.ShapeType, srid geopb.SRID) *T {
 	// Negative values are promoted to 0.
 	if srid < 0 {
 		srid = 0
@@ -868,8 +868,8 @@ func MakeGeography(shape geopb.Shape, srid geopb.SRID) *T {
 		Oid:    oidext.T_geography,
 		Locale: &emptyLocale,
 		GeoMetadata: &GeoMetadata{
-			Shape: shape,
-			SRID:  srid,
+			ShapeType: shape,
+			SRID:      srid,
 		},
 	}}
 }
@@ -1814,7 +1814,7 @@ func (t *InternalType) Identical(other *InternalType) bool {
 		return false
 	}
 	if t.GeoMetadata != nil && other.GeoMetadata != nil {
-		if t.GeoMetadata.Shape != other.GeoMetadata.Shape {
+		if t.GeoMetadata.ShapeType != other.GeoMetadata.ShapeType {
 			return false
 		}
 		if t.GeoMetadata.SRID != other.GeoMetadata.SRID {
@@ -2576,13 +2576,13 @@ func (m *GeoMetadata) SQLString() string {
 	// If SRID is available, display both shape and SRID.
 	// If shape is available but not SRID, just display shape.
 	if m.SRID != 0 {
-		shapeName := strings.ToLower(m.Shape.String())
-		if m.Shape == geopb.Shape_Unset {
+		shapeName := strings.ToLower(m.ShapeType.String())
+		if m.ShapeType == geopb.ShapeType_Unset {
 			shapeName = "geometry"
 		}
 		return fmt.Sprintf("(%s,%d)", shapeName, m.SRID)
-	} else if m.Shape != geopb.Shape_Unset {
-		return fmt.Sprintf("(%s)", m.Shape)
+	} else if m.ShapeType != geopb.ShapeType_Unset {
+		return fmt.Sprintf("(%s)", m.ShapeType)
 	}
 	return ""
 }

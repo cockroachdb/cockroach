@@ -39,7 +39,7 @@ func TestParseWKB(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 			"",
@@ -76,7 +76,7 @@ func TestParseEWKB(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4004,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -88,7 +88,7 @@ func TestParseEWKB(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -100,7 +100,7 @@ func TestParseEWKB(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -129,9 +129,9 @@ func TestParseEWKT(t *testing.T) {
 			0,
 			DefaultSRIDIsHint,
 			geopb.SpatialObject{
-				EWKB:  []byte("\x01\x02\x00\x00\x00\x00\x00\x00\x00"),
-				SRID:  0,
-				Shape: geopb.Shape_LineString,
+				EWKB:      []byte("\x01\x02\x00\x00\x00\x00\x00\x00\x00"),
+				SRID:      0,
+				ShapeType: geopb.ShapeType_LineString,
 			},
 		},
 		{
@@ -142,7 +142,7 @@ func TestParseEWKT(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf8\x7f\x00\x00\x00\x00\x00\x00\xf8\x7f"),
 				SRID:        0,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: nil,
 			},
 		},
@@ -152,9 +152,9 @@ func TestParseEWKT(t *testing.T) {
 			0,
 			DefaultSRIDIsHint,
 			geopb.SpatialObject{
-				EWKB:  []byte("\x01\x02\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00"),
-				SRID:  4326,
-				Shape: geopb.Shape_LineString,
+				EWKB:      []byte("\x01\x02\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00"),
+				SRID:      4326,
+				ShapeType: geopb.ShapeType_LineString,
 			},
 		},
 		{
@@ -165,7 +165,7 @@ func TestParseEWKT(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf8\x7f\x00\x00\x00\x00\x00\x00\xf8\x7f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: nil,
 			},
 		},
@@ -177,7 +177,7 @@ func TestParseEWKT(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4004,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -189,7 +189,7 @@ func TestParseEWKT(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -201,7 +201,7 @@ func TestParseEWKT(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -213,7 +213,7 @@ func TestParseEWKT(t *testing.T) {
 			geopb.SpatialObject{
 				EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 				SRID:        4326,
-				Shape:       geopb.Shape_Point,
+				ShapeType:   geopb.ShapeType_Point,
 				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 			},
 		},
@@ -240,7 +240,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        0,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -252,7 +252,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -264,7 +264,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        0,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -276,7 +276,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        0,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -288,7 +288,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4004,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -300,7 +300,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4004,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -312,7 +312,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        0,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -324,7 +324,7 @@ func TestParseGeometry(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        0,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -369,7 +369,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -381,7 +381,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -393,7 +393,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -405,7 +405,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4004,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -417,7 +417,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -430,7 +430,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -442,7 +442,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4004,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -454,7 +454,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -466,7 +466,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4004,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},
@@ -478,7 +478,7 @@ func TestParseGeography(t *testing.T) {
 				spatialObject: geopb.SpatialObject{
 					EWKB:        []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 					SRID:        4326,
-					Shape:       geopb.Shape_Point,
+					ShapeType:   geopb.ShapeType_Point,
 					BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 1, MaxY: 1},
 				},
 			},

@@ -414,7 +414,7 @@ message IntervalDurationField {
 // GeoMetadata contains metadata associated with Geospatial data types.
 message GeoMetadata {
   optional int32 srid = 1 [(gogoproto.nullable)=false,(gogoproto.customname)="SRID",(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/geo/geopb.SRID"];
-  optional geopb.Shape shape = 2 [(gogoproto.nullable)=false];
+  optional geopb.ShapeType shape_type = 2 [(gogoproto.nullable)=false];
 }
 
 // PersistentUserDefinedTypeMetadata contains user defined type metadata
