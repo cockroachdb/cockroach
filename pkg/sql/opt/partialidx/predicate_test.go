@@ -106,7 +106,7 @@ func TestPredicateImplication(t *testing.T) {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
 
-			remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, &f)
+			remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, &f, md, &evalCtx)
 			if !ok {
 				return "false"
 			}
@@ -140,16 +140,16 @@ func BenchmarkPredicateImplication(b *testing.B) {
 			pred:     "@1 >= 10",
 		},
 		{
-			name:     "range-exact-match",
-			varTypes: "int, int",
-			filters:  "@1 >= 10 AND @1 <= 100",
-			pred:     "@1 >= 10 AND @1 <= 100",
+			name:     "single-inexact-match",
+			varTypes: "int",
+			filters:  "@1 >= 10",
+			pred:     "@1 > 5",
 		},
 		{
-			name:     "range-exact-match-reverse",
+			name:     "range-inexact-match",
 			varTypes: "int, int",
-			filters:  "@1 >= 10 AND @1 <= 100",
-			pred:     "@1 >= 10 AND @1 <= 100",
+			filters:  "@1 >= 10 AND @1 <= 90",
+			pred:     "@1 > 0 AND @1 < 100",
 		},
 		{
 			name:     "single-exact-match-extra-filters",
@@ -158,16 +158,10 @@ func BenchmarkPredicateImplication(b *testing.B) {
 			pred:     "@3 >= 10",
 		},
 		{
-			name:     "single-exact-match-extra-filters-with-range",
+			name:     "single-inexact-match-extra-filters",
 			varTypes: "int, int, int, int, int",
-			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @3 <= 100 AND @4 = 4 AND @5 = 5",
-			pred:     "@3 >= 10",
-		},
-		{
-			name:     "range-exact-match-extra-filters",
-			varTypes: "int, int, int, int, int",
-			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @3 <= 100 AND @4 = 4 AND @5 = 5",
-			pred:     "@3 >= 10 AND @3 <= 100",
+			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 5",
+			pred:     "@3 > 0",
 		},
 		{
 			name:     "multi-column-and-exact-match",
@@ -176,34 +170,28 @@ func BenchmarkPredicateImplication(b *testing.B) {
 			pred:     "@1 >= 10 AND @2 = 'foo'",
 		},
 		{
+			name:     "multi-column-and-inexact-match",
+			varTypes: "int, string",
+			filters:  "@1 >= 10 AND @2 = 'foo'",
+			pred:     "@1 >= 0 AND @2 IN ('foo', 'bar')",
+		},
+		{
 			name:     "multi-column-or-exact-match",
 			varTypes: "int, string",
 			filters:  "@1 >= 10 OR @2 = 'foo'",
 			pred:     "@1 >= 10 OR @2 = 'foo'",
 		},
 		{
-			name:     "multi-column-and-exact-match-reverse",
-			varTypes: "int, string",
-			filters:  "@1 >= 10 AND @2 = 'foo'",
-			pred:     "@2 = 'foo' AND @1 >= 10",
-		},
-		{
-			name:     "multi-column-and-exact-match-reverse",
+			name:     "multi-column-or-exact-match-reverse",
 			varTypes: "int, string",
 			filters:  "@1 >= 10 OR @2 = 'foo'",
 			pred:     "@2 = 'foo' OR @1 >= 10",
 		},
 		{
-			name:     "multi-column-and-exact-match-extra-filters",
-			varTypes: "int, int, int, int, string",
-			filters:  "@1 < 0 AND @2 > 0 AND @3 >= 10 AND @4 = 4 AND @5 = 'foo'",
-			pred:     "@2 > 0 AND @5 = 'foo'",
-		},
-		{
-			name:     "multi-column-or-exact-match-extra-predicate",
-			varTypes: "int, int, int, int, string",
-			filters:  "@2 > 0 OR @5 = 'foo'",
-			pred:     "@1 < 0 OR @2 > 0 OR @3 >= 10 OR @4 = 4 OR @5 = 'foo'",
+			name:     "multi-column-or-inexact-match",
+			varTypes: "int, string",
+			filters:  "@1 >= 10 OR @2 = 'foo'",
+			pred:     "@1 > 0 OR @2 IN ('foo', 'bar')",
 		},
 		{
 			name:     "and-filters-do-not-imply-pred",
@@ -221,8 +209,8 @@ func BenchmarkPredicateImplication(b *testing.B) {
 	// Generate a few test cases with many columns to show how performance
 	// scales with respect to the number of columns.
 	for _, n := range []int{10, 100} {
-		var tc testCase
-		tc.name = fmt.Sprintf("many-columns-%d", n)
+		tc := testCase{}
+		tc.name = fmt.Sprintf("many-columns-exact-match%d", n)
 		for i := 1; i <= n; i++ {
 			if i > 1 {
 				tc.varTypes += ", "
@@ -230,8 +218,22 @@ func BenchmarkPredicateImplication(b *testing.B) {
 				tc.pred += " AND "
 			}
 			tc.varTypes += "int"
-			tc.filters += fmt.Sprintf("@%d=%d", i, i)
-			tc.pred += fmt.Sprintf("@%d=%d", i, i)
+			tc.filters += fmt.Sprintf("@%d = %d", i, i)
+			tc.pred += fmt.Sprintf("@%d = %d", i, i)
+		}
+		testCases = append(testCases, tc)
+
+		tc = testCase{}
+		tc.name = fmt.Sprintf("many-columns-inexact-match%d", n)
+		for i := 1; i <= n; i++ {
+			if i > 1 {
+				tc.varTypes += ", "
+				tc.filters += " AND "
+				tc.pred += " AND "
+			}
+			tc.varTypes += "int"
+			tc.filters += fmt.Sprintf("@%d > %d", i, i)
+			tc.pred += fmt.Sprintf("@%d >= %d", i, i)
 		}
 		testCases = append(testCases, tc)
 	}
@@ -270,7 +272,7 @@ func BenchmarkPredicateImplication(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = partialidx.FiltersImplyPredicate(filters, pred, &f)
+				_, _ = partialidx.FiltersImplyPredicate(filters, pred, &f, md, &evalCtx)
 			}
 		})
 	}

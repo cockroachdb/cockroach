@@ -24,8 +24,15 @@ predtest vars=(bool, bool)
 ----
 false
 
-
 # Conjunction filters
+
+predtest vars=(bool)
+@1 AND true
+=>
+true AND @1
+----
+true
+└── remaining filters: none
 
 predtest vars=(bool, bool)
 @1 AND @2
@@ -107,6 +114,14 @@ predtest vars=(int)
 true
 └── remaining filters: none
 
+predtest vars=(int)
+@1 > 20 AND @1 < 80
+=>
+@1 > 10 AND @1 < 100
+----
+true
+└── remaining filters: (@1 > 20) AND (@1 < 80)
+
 predtest vars=(int, bool)
 @1 > 10 AND @2 AND @1 < 100
 =>
@@ -115,10 +130,33 @@ predtest vars=(int, bool)
 true
 └── remaining filters: @2
 
+predtest vars=(int, bool)
+@1 > 20 AND @2 AND @1 < 80
+=>
+@1 > 10 AND @1 < 100
+----
+true
+└── remaining filters: ((@1 > 20) AND (@1 < 80)) AND @2
+
 predtest vars=(int)
 @1 > 10 AND @1 < 90
 =>
 @1 > 0 AND @1 < 100
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 90)
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 20 AND @1 < 80
+----
+false
+
+predtest vars=(int, bool)
+@1 > 10 AND @2 AND @1 < 100
+=>
+@1 > 20 AND @1 < 80
 ----
 false
 
@@ -139,6 +177,14 @@ predtest vars=(bool)
 true
 └── remaining filters: none
 
+predtest vars=(int)
+@1 > 15 OR @1 > 10
+=>
+@1 > 10 AND @1 > 5
+----
+true
+└── remaining filters: (@1 > 15) OR (@1 > 10)
+
 predtest vars=(bool, bool)
 @1 OR @2
 =>
@@ -150,5 +196,22 @@ predtest vars=(bool, bool)
 @1 OR @2
 =>
 @2 AND @1
+----
+false
+
+# Combination conjunction and disjunction filters
+
+predtest vars=(bool, bool, bool, bool)
+@1 AND (@3 OR @4) AND @2
+=>
+@1 AND @2
+----
+true
+└── remaining filters: @3 OR @4
+
+predtest vars=(bool, bool, bool, bool)
+(@1 OR @2) AND (@3 OR @4)
+=>
+@1 AND @3
 ----
 false
