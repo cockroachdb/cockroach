@@ -59,6 +59,9 @@ func DWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
+	if !a.SpatialObject().BoundingBox.Buffer(d).Intersects(b.SpatialObject().BoundingBox.Buffer(d)) {
+		return false, nil
+	}
 	dist, err := minDistanceInternal(a, b, d, geo.EmptyBehaviorError)
 	if err != nil {
 		// In case of any empty geometries return false.
@@ -78,6 +81,9 @@ func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	}
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
+	}
+	if !a.SpatialObject().BoundingBox.Buffer(d).Intersects(b.SpatialObject().BoundingBox.Buffer(d)) {
+		return false, nil
 	}
 	dist, err := maxDistanceInternal(a, b, d, geo.EmptyBehaviorError)
 	if err != nil {

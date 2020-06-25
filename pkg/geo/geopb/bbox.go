@@ -47,3 +47,16 @@ func (b *BoundingBox) Intersects(o *BoundingBox) bool {
 	}
 	return true
 }
+
+// Buffer adds n units to each side of the bounding box.
+func (b *BoundingBox) Buffer(n float64) *BoundingBox {
+	if b == nil {
+		return nil
+	}
+	return &BoundingBox{
+		MinX: b.MinX - n,
+		MaxX: b.MaxX + n,
+		MinY: b.MinY - n,
+		MaxY: b.MaxY + n,
+	}
+}
