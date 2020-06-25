@@ -177,7 +177,7 @@ func NewServerWithInterceptor(
 		grpc.StatsHandler(&ctx.stats),
 	}
 	if !ctx.Config.Insecure {
-		tlsConfig, err := ctx.Config.GetServerTLSConfig()
+		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -369,8 +369,12 @@ func (c *Connection) Health() error {
 }
 
 // Context contains the fields required by the rpc framework.
+//
+// TODO(tbg): rename at the very least the `ctx` receiver, but possibly the whole
+// thing.
 type Context struct {
 	ContextOptions
+	SecurityContext
 
 	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
@@ -453,7 +457,8 @@ func NewContext(opts ContextOptions) *Context {
 	masterCtx, cancel := context.WithCancel(opts.AmbientCtx.AnnotateCtx(context.Background()))
 
 	ctx := &Context{
-		ContextOptions: opts,
+		ContextOptions:  opts,
+		SecurityContext: MakeSecurityContext(opts.Config),
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},
@@ -658,7 +663,7 @@ func (ctx *Context) grpcDialOptions(
 	if ctx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithInsecure())
 	} else {
-		tlsConfig, err := ctx.Config.GetClientTLSConfig()
+		tlsConfig, err := ctx.GetClientTLSConfig()
 		if err != nil {
 			return nil, err
 		}

@@ -8,15 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package base_test
+package rpc
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestClientSSLSettings(t *testing.T) {
@@ -54,10 +58,19 @@ func TestClientSSLSettings(t *testing.T) {
 				// always exists.
 				cfg.SSLCertsDir = "i-do-not-exist"
 			}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+			rpcContext := NewContext(ContextOptions{
+				Clock:    hlc.NewClock(hlc.UnixNano, 1),
+				Stopper:  stopper,
+				Settings: cluster.MakeTestingClusterSettings(),
+				Config:   cfg,
+			})
+
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("expected HTTPRequestScheme=%s, got: %s", tc.requestScheme, cfg.HTTPRequestScheme())
 			}
-			tlsConfig, err := cfg.GetClientTLSConfig()
+			tlsConfig, err := rpcContext.GetClientTLSConfig()
 			if !testutils.IsError(err, tc.configErr) {
 				t.Fatalf("expected err=%s, got err=%v", tc.configErr, err)
 			}
@@ -96,22 +109,32 @@ func TestServerSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
-		if tc.hasCerts {
-			testutils.FillCerts(cfg)
-		}
-		if cfg.HTTPRequestScheme() != tc.requestScheme {
-			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
-		}
-		tlsConfig, err := cfg.GetServerTLSConfig()
-		if (err == nil) != tc.configSuccess {
-			t.Fatalf("#%d: expected GetServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
-		}
-		if err != nil {
-			continue
-		}
-		if (tlsConfig == nil) != tc.nilConfig {
-			t.Fatalf("#%d: expected nil config=%t, got: %+v", tcNum, tc.nilConfig, tlsConfig)
-		}
+		t.Run("", func(t *testing.T) {
+			cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
+			if tc.hasCerts {
+				testutils.FillCerts(cfg)
+			}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.Background())
+			rpcContext := NewContext(ContextOptions{
+				Clock:    hlc.NewClock(hlc.UnixNano, 1),
+				Stopper:  stopper,
+				Settings: cluster.MakeTestingClusterSettings(),
+				Config:   cfg,
+			})
+			if cfg.HTTPRequestScheme() != tc.requestScheme {
+				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
+			}
+			tlsConfig, err := rpcContext.GetServerTLSConfig()
+			if (err == nil) != tc.configSuccess {
+				t.Fatalf("#%d: expected GetServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
+			}
+			if err != nil {
+				return
+			}
+			if (tlsConfig == nil) != tc.nilConfig {
+				t.Fatalf("#%d: expected nil config=%t, got: %+v", tcNum, tc.nilConfig, tlsConfig)
+			}
+		})
 	}
 }
