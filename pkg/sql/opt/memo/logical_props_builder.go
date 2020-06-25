@@ -399,8 +399,8 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 	b.buildJoinProps(join, rel)
 }
 
-func (b *logicalPropsBuilder) buildGeoLookupJoinProps(
-	join *GeoLookupJoinExpr, rel *props.Relational,
+func (b *logicalPropsBuilder) buildInvertedJoinProps(
+	join *InvertedJoinExpr, rel *props.Relational,
 ) {
 	b.buildJoinProps(join, rel)
 }
@@ -1691,11 +1691,9 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 	return relational
 }
 
-// ensureGeoLookupJoinInputProps lazily populates the relational properties
+// ensureInvertedJoinInputProps lazily populates the relational properties
 // that apply to the lookup side of the join, as if it were a Scan operator.
-func ensureGeoLookupJoinInputProps(
-	join *GeoLookupJoinExpr, sb *statisticsBuilder,
-) *props.Relational {
+func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
 		md := join.Memo().Metadata()
@@ -1833,16 +1831,16 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
 
-	case *GeoLookupJoinExpr:
+	case *InvertedJoinExpr:
 		h.leftProps = joinExpr.Child(0).(RelExpr).Relational()
-		ensureGeoLookupJoinInputProps(join, &b.sb)
+		ensureInvertedJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
-		// Geospatial lookup join always has a filter condition on the index keys.
+		// Inverted join always has a filter condition on the index keys.
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
 

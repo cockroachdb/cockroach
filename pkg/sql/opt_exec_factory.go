@@ -19,7 +19,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -355,17 +354,13 @@ func (ef *execFactory) ConstructHashJoin(
 	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 
 	numEqCols := len(leftEqCols)
-	// Save some allocations by putting both sides in the same slice.
-	intBuf := make([]int, 2*numEqCols)
-	pred.leftEqualityIndices = intBuf[:numEqCols:numEqCols]
-	pred.rightEqualityIndices = intBuf[numEqCols:]
+	pred.leftEqualityIndices = leftEqCols
+	pred.rightEqualityIndices = rightEqCols
 	nameBuf := make(tree.NameList, 2*numEqCols)
 	pred.leftColNames = nameBuf[:numEqCols:numEqCols]
 	pred.rightColNames = nameBuf[numEqCols:]
 
 	for i := range leftEqCols {
-		pred.leftEqualityIndices[i] = int(leftEqCols[i])
-		pred.rightEqualityIndices[i] = int(rightEqCols[i])
 		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftEqCols[i]].Name)
 		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightEqCols[i]].Name)
 	}
@@ -400,38 +395,27 @@ func (ef *execFactory) ConstructMergeJoin(
 	reqOrdering exec.OutputOrdering,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 ) (exec.Node, error) {
+	var err error
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
 	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
 	pred.onCond = pred.iVarHelper.Rebind(onCond)
+	node := p.makeJoinNode(leftSrc, rightSrc, pred)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	n := len(leftOrdering)
-	if n == 0 || len(rightOrdering) != n {
-		return nil, errors.Errorf("orderings from the left and right side must be the same non-zero length")
+	pred.leftEqualityIndices, pred.rightEqualityIndices, node.mergeJoinOrdering, err = getEqualityIndicesAndMergeJoinOrdering(leftOrdering, rightOrdering)
+	if err != nil {
+		return nil, err
 	}
-	pred.leftEqualityIndices = make([]int, n)
-	pred.rightEqualityIndices = make([]int, n)
+	n := len(leftOrdering)
 	pred.leftColNames = make(tree.NameList, n)
 	pred.rightColNames = make(tree.NameList, n)
 	for i := 0; i < n; i++ {
 		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
-		pred.leftEqualityIndices[i] = leftColIdx
-		pred.rightEqualityIndices[i] = rightColIdx
 		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftColIdx].Name)
 		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightColIdx].Name)
-	}
-
-	node := p.makeJoinNode(leftSrc, rightSrc, pred)
-	node.mergeJoinOrdering = make(sqlbase.ColumnOrdering, n)
-	for i := 0; i < n; i++ {
-		// The mergeJoinOrdering "columns" are equality column indices.  Because of
-		// the way we constructed the equality indices, the ordering will always be
-		// 0,1,2,3..
-		node.mergeJoinOrdering[i].ColIdx = i
-		node.mergeJoinOrdering[i].Direction = leftOrdering[i].Direction
 	}
 
 	// Set up node.props, which tells the distsql planner to maintain the
@@ -744,13 +728,13 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	return n, nil
 }
 
-func (ef *execFactory) ConstructGeoLookupJoin(
+func (ef *execFactory) ConstructInvertedJoin(
 	joinType sqlbase.JoinType,
-	geoRelationshipType geoindex.RelationshipType,
+	invertedExpr tree.TypedExpr,
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	geoCol exec.NodeColumnOrdinal,
+	inputCol exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
