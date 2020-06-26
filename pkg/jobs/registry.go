@@ -58,7 +58,7 @@ var (
 		"jobs.registry.leniency",
 		"the amount of time to defer any attempts to reschedule a job",
 		defaultLeniencySetting)
-	gcSetting = settings.RegisterDurationSetting(
+	gcSetting = settings.RegisterPublicDurationSetting(
 		"jobs.retention_time",
 		"the amount of time to retain records for completed jobs before",
 		time.Hour*24*14)
