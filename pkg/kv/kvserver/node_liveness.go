@@ -791,14 +791,14 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 }
 
 // updateLiveness does a conditional put on the node liveness record for the
-// node specified by nodeID. In the event that the conditional put fails, and
-// the handleCondFailed callback is not nil, it's invoked with the actual node
-// liveness record; the error returned by the callback replaces the
-// ConditionFailedError as the retval. If handleCondFailed is nil, any
-// conditional put failure is returned as an error to the caller. The
-// conditional put is done as a 1PC transaction with a ModifiedSpanTrigger which
-// indicates the node liveness record that the range leader should gossip on
-// commit.
+// node specified by nodeID. In the event that the conditional put fails, the
+// handleCondFailed callback is invoked with the actual node liveness record;
+// the error returned by the callback replaces the ConditionFailedError as the
+// retval.
+//
+// The conditional put is done as a 1PC transaction with a ModifiedSpanTrigger
+// which indicates the node liveness record that the range leader should gossip
+// on commit.
 //
 // updateLiveness terminates certain errors that are expected to occur
 // sporadically, such as TransactionStatusError (due to the 1PC requirement of
@@ -888,16 +888,14 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		return txn.Run(ctx, b)
 	}); err != nil {
 		if tErr := (*roachpb.ConditionFailedError)(nil); errors.As(err, &tErr) {
-			if handleCondFailed != nil {
-				if tErr.ActualValue == nil {
-					return handleCondFailed(kvserverpb.Liveness{})
-				}
-				var actualLiveness kvserverpb.Liveness
-				if err := tErr.ActualValue.GetProto(&actualLiveness); err != nil {
-					return errors.Wrapf(err, "couldn't update node liveness from CPut actual value")
-				}
-				return handleCondFailed(actualLiveness)
+			if tErr.ActualValue == nil {
+				return handleCondFailed(kvserverpb.Liveness{})
 			}
+			var actualLiveness kvserverpb.Liveness
+			if err := tErr.ActualValue.GetProto(&actualLiveness); err != nil {
+				return errors.Wrapf(err, "couldn't update node liveness from CPut actual value")
+			}
+			return handleCondFailed(actualLiveness)
 		} else if errors.HasType(err, (*roachpb.TransactionStatusError)(nil)) ||
 			errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			return &errRetryLiveness{err}
