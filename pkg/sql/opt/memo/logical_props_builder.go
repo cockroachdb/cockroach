@@ -1525,6 +1525,11 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			// Skip inverted indexes for now.
 			continue
 		}
+		if tab.IsVirtualTable() && i == 0 {
+			// Don't advertise any functional dependencies for virtual table primary
+			// keys, since they are composed of a fake, unusable column.
+			continue
+		}
 
 		// If index has a separate lax key, add a lax key FD. Otherwise, add a
 		// strict key. See the comment for cat.Index.LaxKeyColumnCount.
