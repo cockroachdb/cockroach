@@ -16,7 +16,6 @@ import (
 	"context"
 	gohex "encoding/hex"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -852,50 +850,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 
 	sort.Strings(output)
 	return strings.Join(output, "\n"), nil
-}
-
-var debugTimeSeriesDumpCmd = &cobra.Command{
-	Use:   "tsdump",
-	Short: "dump all the raw timeseries values in a cluster",
-	Long: `
-Dumps all of the raw timeseries values in a cluster.
-`,
-	RunE: MaybeDecorateGRPCError(runTimeSeriesDump),
-}
-
-func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
-	if err != nil {
-		return err
-	}
-	defer finish()
-
-	tsClient := tspb.NewTimeSeriesClient(conn)
-	stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
-	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
-	}
-
-	var name, source string
-	for {
-		data, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if name != data.Name || source != data.Source {
-			name, source = data.Name, data.Source
-			fmt.Printf("%s %s\n", name, source)
-		}
-		for _, d := range data.Datapoints {
-			fmt.Printf("%d %v\n", d.TimestampNanos, d.Value)
-		}
-	}
 }
 
 var debugSyncBenchCmd = &cobra.Command{

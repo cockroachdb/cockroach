@@ -689,7 +689,7 @@ func init() {
 
 	// Commands that print tables.
 	tableOutputCommands := append(
-		[]*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd},
+		[]*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd, debugTimeSeriesDumpCmd},
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
 	tableOutputCommands = append(tableOutputCommands, authCmds...)
