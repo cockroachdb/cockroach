@@ -89,7 +89,7 @@ type anyNotNullBoolOrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []bool
+	col                         coldata.Bools
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      bool
@@ -487,7 +487,7 @@ type anyNotNullDecimalOrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []apd.Decimal
+	col                         coldata.Decimals
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      apd.Decimal
@@ -686,7 +686,7 @@ type anyNotNullInt16OrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []int16
+	col                         coldata.Int16s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      int16
@@ -885,7 +885,7 @@ type anyNotNullInt32OrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []int32
+	col                         coldata.Int32s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      int32
@@ -1084,7 +1084,7 @@ type anyNotNullInt64OrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []int64
+	col                         coldata.Int64s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      int64
@@ -1283,7 +1283,7 @@ type anyNotNullFloat64OrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []float64
+	col                         coldata.Float64s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      float64
@@ -1482,7 +1482,7 @@ type anyNotNullTimestampOrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []time.Time
+	col                         coldata.Times
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      time.Time
@@ -1681,7 +1681,7 @@ type anyNotNullIntervalOrderedAgg struct {
 	allocator                   *colmem.Allocator
 	groups                      []bool
 	vec                         coldata.Vec
-	col                         []duration.Duration
+	col                         coldata.Durations
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      duration.Duration

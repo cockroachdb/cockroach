@@ -13,9 +13,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -25,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -54,15 +51,15 @@ type OrderedSynchronizer struct {
 	outNulls    []*coldata.Nulls
 	// In order to reduce the number of interface conversions, we will get access
 	// to the underlying slice for the output vectors and will use them directly.
-	outBoolCols      [][]bool
+	outBoolCols      []coldata.Bools
 	outBytesCols     []*coldata.Bytes
-	outDecimalCols   [][]apd.Decimal
-	outInt16Cols     [][]int16
-	outInt32Cols     [][]int32
-	outInt64Cols     [][]int64
-	outFloat64Cols   [][]float64
-	outTimestampCols [][]time.Time
-	outIntervalCols  [][]duration.Duration
+	outDecimalCols   []coldata.Decimals
+	outInt16Cols     []coldata.Int16s
+	outInt32Cols     []coldata.Int32s
+	outInt64Cols     []coldata.Int64s
+	outFloat64Cols   []coldata.Float64s
+	outTimestampCols []coldata.Times
+	outIntervalCols  []coldata.Durations
 	outDatumCols     []coldata.DatumVec
 	// outColsMap contains the positions of the corresponding vectors in the
 	// slice for the same types. For example, if we have an output batch with
