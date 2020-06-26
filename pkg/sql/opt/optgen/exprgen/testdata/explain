@@ -87,10 +87,12 @@ explain
       ├── stats: [rows=1000]
       ├── cost: 1279.34569
       ├── ordering: +2
+      ├── interesting orderings: (+1,+2)
       └── scan t.public.abc
            ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
            ├── stats: [rows=1000]
-           └── cost: 1060.02
+           ├── cost: 1060.02
+           └── interesting orderings: (+1,+2)
 
 expr
 (Explain
