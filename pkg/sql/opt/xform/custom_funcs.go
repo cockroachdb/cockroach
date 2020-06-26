@@ -1294,31 +1294,40 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	}
 }
 
-// ScanIsConstrained returns true if the scan operator with the given
-// ScanPrivate is constrained.
-func (c *CustomFuncs) ScanIsConstrained(sp *memo.ScanPrivate) bool {
-	return sp.Constraint != nil
-}
-
 // ScanIsLimited returns true if the scan operator with the given ScanPrivate is
 // limited.
 func (c *CustomFuncs) ScanIsLimited(sp *memo.ScanPrivate) bool {
 	return sp.HardLimit != 0
 }
 
+// ScanIsInverted returns true if the index of the given ScanPrivate is an
+// inverted index.
+func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
+	md := c.e.mem.Metadata()
+	idx := md.Table(sp.Table).Index(sp.Index)
+	return idx.IsInverted()
+}
+
 // SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
 // that each scan over a single key from the original scan's constraints. This
 // is beneficial in cases where the original scan had to scan over many rows but
 // had relatively few keys to scan over.
+// TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
 	limitOrdering physical.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
 ) memo.RelExpr {
 	const maxScanCount = 16
 	const threshold = 4
 
-	keyCtx := constraint.MakeKeyContext(&sp.Constraint.Columns, c.e.evalCtx)
+	cons, ok := c.getKnownScanConstraint(sp)
+	if !ok {
+		// No valid constraint was found.
+		return nil
+	}
+
+	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
 	limitVal := int(*limit.(*tree.DInt))
-	spans := sp.Constraint.Spans
+	spans := cons.Spans
 
 	// Retrieve the number of keys in the spans.
 	keyCount, ok := spans.KeyCount(&keyCtx)
@@ -1373,9 +1382,9 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// Construct a new ScanExpr for each span and union them all together. We
 	// output the old ColumnIDs from each union.
 	oldColList := opt.ColSetToList(scan.Relational().OutputCols)
-	last := c.makeNewScan(sp, newHardLimit, newSpans.Get(0))
+	last := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(0))
 	for i, cnt := 1, newSpans.Count(); i < cnt; i++ {
-		newScan := c.makeNewScan(sp, newHardLimit, newSpans.Get(i))
+		newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(i))
 		last = c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
 			LeftCols:  opt.ColSetToList(last.Relational().OutputCols),
 			RightCols: opt.ColSetToList(newScan.Relational().OutputCols),
@@ -1452,7 +1461,10 @@ func indexHasOrderingSequence(
 // replaced with new ones from the new TableID. All other fields are simply
 // copied from the old ScanPrivate.
 func (c *CustomFuncs) makeNewScan(
-	sp *memo.ScanPrivate, newHardLimit memo.ScanLimit, span *constraint.Span,
+	sp *memo.ScanPrivate,
+	columns constraint.Columns,
+	newHardLimit memo.ScanLimit,
+	span *constraint.Span,
 ) memo.RelExpr {
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 
@@ -1465,12 +1477,39 @@ func (c *CustomFuncs) makeNewScan(
 	var newSpans constraint.Spans
 	newSpans.InitSingleSpan(span)
 	newConstraint := &constraint.Constraint{
-		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
+		Columns: columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   newSpans,
 	}
 	newScanPrivate.Constraint = newConstraint
 
 	return c.e.f.ConstructScan(newScanPrivate)
+}
+
+// getKnownScanConstraint returns a Constraint that is known to hold true for
+// the output of the Scan operator with the given ScanPrivate. If the
+// ScanPrivate has a Constraint, the scan Constraint is returned. Otherwise, an
+// effort is made to retrieve a Constraint from the underlying table's check
+// constraints. getKnownScanConstraint assumes that the scan is not inverted.
+func (c *CustomFuncs) getKnownScanConstraint(
+	sp *memo.ScanPrivate,
+) (cons *constraint.Constraint, found bool) {
+	if sp.Constraint != nil {
+		// The ScanPrivate has a constraint, so return it.
+		cons = sp.Constraint
+	} else {
+		// Build a constraint set with the check constraints of the underlying
+		// table.
+		filters := c.checkConstraintFilters(sp.Table)
+		instance := c.initIdxConstraintForIndex(
+			nil, /* requiredFilters */
+			filters,
+			sp.Table,
+			sp.Index,
+			false, /* isInverted */
+		)
+		cons = instance.Constraint()
+	}
+	return cons, !cons.IsUnconstrained()
 }
 
 // ----------------------------------------------------------------------
