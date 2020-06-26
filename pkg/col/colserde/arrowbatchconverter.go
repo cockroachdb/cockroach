@@ -366,22 +366,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 				switch typ.Width() {
 				case 16:
 					intArr := array.NewInt16Data(d)
-					col = intArr.Int16Values()
+					col = coldata.Int16s(intArr.Int16Values())
 					arr = intArr
 				case 32:
 					intArr := array.NewInt32Data(d)
-					col = intArr.Int32Values()
+					col = coldata.Int32s(intArr.Int32Values())
 					arr = intArr
 				case 0, 64:
 					intArr := array.NewInt64Data(d)
-					col = intArr.Int64Values()
+					col = coldata.Int64s(intArr.Int64Values())
 					arr = intArr
 				default:
 					panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
 				}
 			case types.FloatFamily:
 				floatArr := array.NewFloat64Data(d)
-				col = floatArr.Float64Values()
+				col = coldata.Float64s(floatArr.Float64Values())
 				arr = floatArr
 			default:
 				panic(

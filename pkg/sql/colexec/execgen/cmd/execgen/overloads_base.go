@@ -414,26 +414,36 @@ func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec st
 
 func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
 	switch canonicalTypeFamily {
+	case types.BoolFamily:
+		return "coldata.Bools"
 	case types.BytesFamily:
 		return "*coldata.Bytes"
+	case types.DecimalFamily:
+		return "coldata.Decimals"
 	case types.IntFamily:
 		switch width {
 		case 16:
-			return "[]int16"
+			return "coldata.Int16s"
 		case 32:
-			return "[]int32"
+			return "coldata.Int32s"
 		case 64, anyWidth:
-			return "[]int64"
+			return "coldata.Int64s"
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", width))
 			// This code is unreachable, but the compiler cannot infer that.
 			return ""
 		}
+	case types.IntervalFamily:
+		return "coldata.Durations"
+	case types.FloatFamily:
+		return "coldata.Float64s"
+	case types.TimestampTZFamily:
+		return "coldata.Times"
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return "coldata.DatumVec"
-	default:
-		return "[]" + toPhysicalRepresentation(canonicalTypeFamily, width)
 	}
+	colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+	return ""
 }
 
 func (b *argWidthOverloadBase) GoTypeSliceName() string {

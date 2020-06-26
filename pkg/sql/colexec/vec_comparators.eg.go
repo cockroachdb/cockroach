@@ -13,16 +13,13 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"time"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // vecComparator is a helper for the ordered synchronizer. It stores multiple
@@ -45,7 +42,7 @@ type vecComparator interface {
 }
 
 type BoolVecComparator struct {
-	vecs  [][]bool
+	vecs  []coldata.Bools
 	nulls []*coldata.Nulls
 }
 
@@ -132,7 +129,7 @@ func (c *BytesVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 }
 
 type DecimalVecComparator struct {
-	vecs  [][]apd.Decimal
+	vecs  []coldata.Decimals
 	nulls []*coldata.Nulls
 }
 
@@ -169,7 +166,7 @@ func (c *DecimalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 }
 
 type Int16VecComparator struct {
-	vecs  [][]int16
+	vecs  []coldata.Int16s
 	nulls []*coldata.Nulls
 }
 
@@ -217,7 +214,7 @@ func (c *Int16VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 }
 
 type Int32VecComparator struct {
-	vecs  [][]int32
+	vecs  []coldata.Int32s
 	nulls []*coldata.Nulls
 }
 
@@ -265,7 +262,7 @@ func (c *Int32VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 }
 
 type Int64VecComparator struct {
-	vecs  [][]int64
+	vecs  []coldata.Int64s
 	nulls []*coldata.Nulls
 }
 
@@ -313,7 +310,7 @@ func (c *Int64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 }
 
 type Float64VecComparator struct {
-	vecs  [][]float64
+	vecs  []coldata.Float64s
 	nulls []*coldata.Nulls
 }
 
@@ -369,7 +366,7 @@ func (c *Float64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 }
 
 type TimestampVecComparator struct {
-	vecs  [][]time.Time
+	vecs  []coldata.Times
 	nulls []*coldata.Nulls
 }
 
@@ -413,7 +410,7 @@ func (c *TimestampVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx in
 }
 
 type IntervalVecComparator struct {
-	vecs  [][]duration.Duration
+	vecs  []coldata.Durations
 	nulls []*coldata.Nulls
 }
 
@@ -495,7 +492,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		case -1:
 		default:
 			return &BoolVecComparator{
-				vecs:  make([][]bool, numVecs),
+				vecs:  make([]coldata.Bools, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}
@@ -513,7 +510,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		case -1:
 		default:
 			return &DecimalVecComparator{
-				vecs:  make([][]apd.Decimal, numVecs),
+				vecs:  make([]coldata.Decimals, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}
@@ -521,18 +518,18 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		switch t.Width() {
 		case 16:
 			return &Int16VecComparator{
-				vecs:  make([][]int16, numVecs),
+				vecs:  make([]coldata.Int16s, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		case 32:
 			return &Int32VecComparator{
-				vecs:  make([][]int32, numVecs),
+				vecs:  make([]coldata.Int32s, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		case -1:
 		default:
 			return &Int64VecComparator{
-				vecs:  make([][]int64, numVecs),
+				vecs:  make([]coldata.Int64s, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}
@@ -541,7 +538,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		case -1:
 		default:
 			return &Float64VecComparator{
-				vecs:  make([][]float64, numVecs),
+				vecs:  make([]coldata.Float64s, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}
@@ -550,7 +547,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		case -1:
 		default:
 			return &TimestampVecComparator{
-				vecs:  make([][]time.Time, numVecs),
+				vecs:  make([]coldata.Times, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}
@@ -559,7 +556,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		case -1:
 		default:
 			return &IntervalVecComparator{
-				vecs:  make([][]duration.Duration, numVecs),
+				vecs:  make([]coldata.Durations, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}

@@ -14,9 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -24,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
@@ -380,7 +377,7 @@ func newSingleSorter(
 }
 
 type sortBoolAscWithNullsOp struct {
-	sortCol       []bool
+	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -528,7 +525,7 @@ func (s *sortBytesAscWithNullsOp) Len() int {
 }
 
 type sortDecimalAscWithNullsOp struct {
-	sortCol       []apd.Decimal
+	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -598,7 +595,7 @@ func (s *sortDecimalAscWithNullsOp) Len() int {
 }
 
 type sortInt16AscWithNullsOp struct {
-	sortCol       []int16
+	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -679,7 +676,7 @@ func (s *sortInt16AscWithNullsOp) Len() int {
 }
 
 type sortInt32AscWithNullsOp struct {
-	sortCol       []int32
+	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -760,7 +757,7 @@ func (s *sortInt32AscWithNullsOp) Len() int {
 }
 
 type sortInt64AscWithNullsOp struct {
-	sortCol       []int64
+	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -841,7 +838,7 @@ func (s *sortInt64AscWithNullsOp) Len() int {
 }
 
 type sortFloat64AscWithNullsOp struct {
-	sortCol       []float64
+	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -930,7 +927,7 @@ func (s *sortFloat64AscWithNullsOp) Len() int {
 }
 
 type sortTimestampAscWithNullsOp struct {
-	sortCol       []time.Time
+	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1007,7 +1004,7 @@ func (s *sortTimestampAscWithNullsOp) Len() int {
 }
 
 type sortIntervalAscWithNullsOp struct {
-	sortCol       []duration.Duration
+	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1149,7 +1146,7 @@ func (s *sortDatumAscWithNullsOp) Len() int {
 }
 
 type sortBoolDescWithNullsOp struct {
-	sortCol       []bool
+	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1297,7 +1294,7 @@ func (s *sortBytesDescWithNullsOp) Len() int {
 }
 
 type sortDecimalDescWithNullsOp struct {
-	sortCol       []apd.Decimal
+	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1367,7 +1364,7 @@ func (s *sortDecimalDescWithNullsOp) Len() int {
 }
 
 type sortInt16DescWithNullsOp struct {
-	sortCol       []int16
+	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1448,7 +1445,7 @@ func (s *sortInt16DescWithNullsOp) Len() int {
 }
 
 type sortInt32DescWithNullsOp struct {
-	sortCol       []int32
+	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1529,7 +1526,7 @@ func (s *sortInt32DescWithNullsOp) Len() int {
 }
 
 type sortInt64DescWithNullsOp struct {
-	sortCol       []int64
+	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1610,7 +1607,7 @@ func (s *sortInt64DescWithNullsOp) Len() int {
 }
 
 type sortFloat64DescWithNullsOp struct {
-	sortCol       []float64
+	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1699,7 +1696,7 @@ func (s *sortFloat64DescWithNullsOp) Len() int {
 }
 
 type sortTimestampDescWithNullsOp struct {
-	sortCol       []time.Time
+	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1776,7 +1773,7 @@ func (s *sortTimestampDescWithNullsOp) Len() int {
 }
 
 type sortIntervalDescWithNullsOp struct {
-	sortCol       []duration.Duration
+	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1918,7 +1915,7 @@ func (s *sortDatumDescWithNullsOp) Len() int {
 }
 
 type sortBoolAscOp struct {
-	sortCol       []bool
+	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2046,7 +2043,7 @@ func (s *sortBytesAscOp) Len() int {
 }
 
 type sortDecimalAscOp struct {
-	sortCol       []apd.Decimal
+	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2106,7 +2103,7 @@ func (s *sortDecimalAscOp) Len() int {
 }
 
 type sortInt16AscOp struct {
-	sortCol       []int16
+	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2177,7 +2174,7 @@ func (s *sortInt16AscOp) Len() int {
 }
 
 type sortInt32AscOp struct {
-	sortCol       []int32
+	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2248,7 +2245,7 @@ func (s *sortInt32AscOp) Len() int {
 }
 
 type sortInt64AscOp struct {
-	sortCol       []int64
+	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2319,7 +2316,7 @@ func (s *sortInt64AscOp) Len() int {
 }
 
 type sortFloat64AscOp struct {
-	sortCol       []float64
+	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2398,7 +2395,7 @@ func (s *sortFloat64AscOp) Len() int {
 }
 
 type sortTimestampAscOp struct {
-	sortCol       []time.Time
+	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2465,7 +2462,7 @@ func (s *sortTimestampAscOp) Len() int {
 }
 
 type sortIntervalAscOp struct {
-	sortCol       []duration.Duration
+	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2587,7 +2584,7 @@ func (s *sortDatumAscOp) Len() int {
 }
 
 type sortBoolDescOp struct {
-	sortCol       []bool
+	sortCol       coldata.Bools
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2715,7 +2712,7 @@ func (s *sortBytesDescOp) Len() int {
 }
 
 type sortDecimalDescOp struct {
-	sortCol       []apd.Decimal
+	sortCol       coldata.Decimals
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2775,7 +2772,7 @@ func (s *sortDecimalDescOp) Len() int {
 }
 
 type sortInt16DescOp struct {
-	sortCol       []int16
+	sortCol       coldata.Int16s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2846,7 +2843,7 @@ func (s *sortInt16DescOp) Len() int {
 }
 
 type sortInt32DescOp struct {
-	sortCol       []int32
+	sortCol       coldata.Int32s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2917,7 +2914,7 @@ func (s *sortInt32DescOp) Len() int {
 }
 
 type sortInt64DescOp struct {
-	sortCol       []int64
+	sortCol       coldata.Int64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2988,7 +2985,7 @@ func (s *sortInt64DescOp) Len() int {
 }
 
 type sortFloat64DescOp struct {
-	sortCol       []float64
+	sortCol       coldata.Float64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -3067,7 +3064,7 @@ func (s *sortFloat64DescOp) Len() int {
 }
 
 type sortTimestampDescOp struct {
-	sortCol       []time.Time
+	sortCol       coldata.Times
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -3134,7 +3131,7 @@ func (s *sortTimestampDescOp) Len() int {
 }
 
 type sortIntervalDescOp struct {
-	sortCol       []duration.Duration
+	sortCol       coldata.Durations
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker

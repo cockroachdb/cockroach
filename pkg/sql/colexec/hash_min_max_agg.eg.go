@@ -99,7 +99,7 @@ type minBoolHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg bool
 	// col points to the output vector we are updating.
-	col []bool
+	col coldata.Bools
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -537,7 +537,7 @@ type minDecimalHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -738,7 +738,7 @@ type minInt16HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -983,7 +983,7 @@ type minInt32HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -1228,7 +1228,7 @@ type minInt64HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -1473,7 +1473,7 @@ type minFloat64HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg float64
 	// col points to the output vector we are updating.
-	col []float64
+	col coldata.Float64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -1750,7 +1750,7 @@ type minTimestampHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg time.Time
 	// col points to the output vector we are updating.
-	col []time.Time
+	col coldata.Times
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -1979,7 +1979,7 @@ type minIntervalHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg duration.Duration
 	// col points to the output vector we are updating.
-	col []duration.Duration
+	col coldata.Durations
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -2389,7 +2389,7 @@ type maxBoolHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg bool
 	// col points to the output vector we are updating.
-	col []bool
+	col coldata.Bools
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -2827,7 +2827,7 @@ type maxDecimalHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg apd.Decimal
 	// col points to the output vector we are updating.
-	col []apd.Decimal
+	col coldata.Decimals
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -3028,7 +3028,7 @@ type maxInt16HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -3273,7 +3273,7 @@ type maxInt32HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -3518,7 +3518,7 @@ type maxInt64HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -3763,7 +3763,7 @@ type maxFloat64HashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg float64
 	// col points to the output vector we are updating.
-	col []float64
+	col coldata.Float64s
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -4040,7 +4040,7 @@ type maxTimestampHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg time.Time
 	// col points to the output vector we are updating.
-	col []time.Time
+	col coldata.Times
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
@@ -4269,7 +4269,7 @@ type maxIntervalHashAgg struct {
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
 	curAgg duration.Duration
 	// col points to the output vector we are updating.
-	col []duration.Duration
+	col coldata.Durations
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
 	// nulls points to the output null vector that we are updating.
