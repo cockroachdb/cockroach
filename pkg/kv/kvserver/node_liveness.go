@@ -793,8 +793,9 @@ func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 // updateLiveness does a conditional put on the node liveness record for the
 // node specified by nodeID. In the event that the conditional put fails, and
 // the handleCondFailed callback is not nil, it's invoked with the actual node
-// liveness record and nil is returned for an error. If handleCondFailed is nil,
-// any conditional put failure is returned as an error to the caller. The
+// liveness record; the error returned by the callback replaces the
+// ConditionFailedError as the retval. If handleCondFailed is nil, any
+// conditional put failure is returned as an error to the caller. The
 // conditional put is done as a 1PC transaction with a ModifiedSpanTrigger which
 // indicates the node liveness record that the range leader should gossip on
 // commit.
