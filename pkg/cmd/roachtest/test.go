@@ -234,21 +234,21 @@ func (t *test) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }
 
-// Skip records msg into t.spec.Skip and calls runtime.Goexit() - thus
+// Skip records msg into t.spec.Skip and calls panic(errGoexit) - thus
 // interrupting the running of the test.
 func (t *test) Skip(msg string, details string) {
 	t.spec.Skip = msg
 	t.spec.SkipDetails = details
-	runtime.Goexit()
+	panic(errGoexit)
 }
 
 // Fatal marks the test as failed, prints the args to t.l, and calls
-// runtime.GoExit(). It can be called multiple times.
+// panic(errGoexit). It can be called multiple times.
 //
 // If the only argument is an error, it is formatted by "%+v", so it will show
 // stack traces and such.
 //
-// ATTENTION: Since this calls runtime.GoExit(), it should only be called from a
+// ATTENTION: Since this calls panic(errGoexit), it should only be called from a
 // test's closure. The test runner itself should never call this.
 func (t *test) Fatal(args ...interface{}) {
 	t.fatalfInner("" /* format */, args...)
@@ -276,7 +276,7 @@ func (t *test) fatalfInner(format string, args ...interface{}) {
 	} else {
 		t.printAndFail(2 /* skip */, args...)
 	}
-	runtime.Goexit()
+	panic(errGoexit)
 }
 
 // FatalIfErr calls t.Fatal() if err != nil.

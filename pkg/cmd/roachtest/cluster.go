@@ -2426,22 +2426,15 @@ var errGoexit = errors.New("Goexit() was called")
 
 func (m *monitor) Go(fn func(context.Context) error) {
 	m.g.Go(func() (err error) {
-		var returned bool
 		defer func() {
-			if returned {
-				return
-			}
-			if r := recover(); r != errGoexit && r != nil {
-				// Pass any regular panics through.
-				panic(r)
-			} else {
-				// If the invoked method called runtime.Goexit (such as it
-				// happens when it calls t.Fatal), exit with a sentinel error
-				// here so that the wrapped errgroup cancels itself.
-				//
-				// Note that the trick here is that we panicked explicitly below,
-				// which somehow "overrides" the Goexit which is supposed to be
-				// un-recoverable, but we do need to recover to return an error.
+			if r := recover(); r != nil {
+				if r != errGoexit {
+					// Pass any regular panics through.
+					panic(r)
+				}
+				// t.{Skip,Fatal} perform a panic(errGoexit). If we've caught the
+				// errGoexit sentinel we transform the panic into an error return so
+				// that the wrapped errgroup cancels itself.
 				err = errGoexit
 			}
 		}()
@@ -2449,17 +2442,7 @@ func (m *monitor) Go(fn func(context.Context) error) {
 			// Automatically clear the worker status message when the goroutine exits.
 			defer impl.WorkerStatus()
 		}
-		defer func() {
-			if !returned {
-				if r := recover(); r != nil {
-					panic(r)
-				}
-				panic(errGoexit)
-			}
-		}()
-		err = fn(m.ctx)
-		returned = true
-		return err
+		return fn(m.ctx)
 	})
 }
 

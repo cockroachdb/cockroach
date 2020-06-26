@@ -593,7 +593,7 @@ func (r *testRunner) runTest(
 	defer func() {
 		t.end = timeutil.Now()
 
-		if err := recover(); err != nil {
+		if err := recover(); err != nil && err != errGoexit {
 			t.mu.Lock()
 			t.mu.failed = true
 			t.mu.output = append(t.mu.output, t.decorate(0 /* skip */, fmt.Sprint(err))...)
@@ -744,7 +744,7 @@ func (r *testRunner) runTest(
 
 		// This is the call to actually run the test.
 		defer func() {
-			if r := recover(); r != nil {
+			if r := recover(); r != nil && r != errGoexit {
 				// TODO(andreimatei): prevent the cluster from being reused.
 				t.Fatalf("test panicked: %v", r)
 			}
