@@ -2579,6 +2579,32 @@ func (c *CustomFuncs) IsSimpleEquality(filters memo.FiltersExpr) bool {
 	return true
 }
 
+// ConvertIndexToLookupJoinPrivate constructs a new LookupJoinPrivate using the
+// given IndexJoinPrivate with the given output columns.
+func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
+	indexPrivate *memo.IndexJoinPrivate, outCols opt.ColSet,
+) *memo.LookupJoinPrivate {
+	// Retrieve an ordered list of primary key columns from the lookup table;
+	// these will form the lookup key.
+	md := c.e.mem.Metadata()
+	primaryIndex := md.Table(indexPrivate.Table).Index(cat.PrimaryIndex)
+	lookupCols := make(opt.ColList, primaryIndex.KeyColumnCount())
+	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+		lookupCols[i] = indexPrivate.Table.ColumnID(primaryIndex.Column(i).Ordinal)
+	}
+
+	return &memo.LookupJoinPrivate{
+		JoinType:              opt.InnerJoinOp,
+		Table:                 indexPrivate.Table,
+		Index:                 cat.PrimaryIndex,
+		KeyCols:               lookupCols,
+		Cols:                  outCols,
+		LookupColsAreTableKey: true,
+		ConstFilters:          nil,
+		JoinPrivate:           memo.JoinPrivate{},
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules
