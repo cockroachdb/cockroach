@@ -138,6 +138,13 @@ func (c *Columns) RemapColumns(from, to opt.TableID) Columns {
 	return newColumns
 }
 
+// ToOrdering returns an ordering with the OrderingColumns of this Columns
+// object.
+func (c *Columns) ToOrdering() opt.Ordering {
+	ordering := opt.Ordering{c.firstCol}
+	return append(ordering, c.otherCols...)
+}
+
 // ColSet returns the columns as a ColSet.
 func (c *Columns) ColSet() opt.ColSet {
 	var r opt.ColSet

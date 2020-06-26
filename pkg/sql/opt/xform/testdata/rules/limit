@@ -12,6 +12,27 @@ CREATE TABLE a
 ----
 
 exec-ddl
+CREATE TABLE ab
+(
+    a INT NOT NULL,
+    b INT,
+    PRIMARY KEY (a, b),
+    CHECK (a = 1 OR a = 5 OR a = 10)
+)
+----
+
+exec-ddl
+ALTER TABLE ab INJECT STATISTICS '[
+  {
+			"columns": ["a"],
+			"created_at": "2018-01-01 1:00:00.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
 CREATE TABLE index_tab
 (
     id INT PRIMARY KEY,
@@ -739,6 +760,41 @@ index-join index_tab
       │              ├── constraint: /17/20/21/15: [/'US_WEST' - /'US_WEST']
       │              └── limit: 10
       └── 10
+
+# Case where check constraints are used.
+opt expect=SplitScanIntoUnionScans format=hide-all
+SELECT * FROM ab ORDER BY b LIMIT 5
+----
+limit
+ ├── sort
+ │    └── union
+ │         ├── union
+ │         │    ├── scan ab
+ │         │    │    ├── constraint: /3: [/1 - /1]
+ │         │    │    └── limit: 5
+ │         │    └── scan ab
+ │         │         ├── constraint: /5: [/5 - /5]
+ │         │         └── limit: 5
+ │         └── scan ab
+ │              ├── constraint: /7: [/10 - /10]
+ │              └── limit: 5
+ └── 5
+
+# Check constraints are not used because the scan is already constrained (the
+# Scan's constraint is used instead).
+opt expect=SplitScanIntoUnionScans format=hide-all
+SELECT * FROM (SELECT * FROM ab WHERE a = 1 OR a = 5) ORDER BY b LIMIT 5
+----
+limit
+ ├── sort
+ │    └── union
+ │         ├── scan ab
+ │         │    ├── constraint: /3/4: [/1 - /1]
+ │         │    └── limit: 5
+ │         └── scan ab
+ │              ├── constraint: /5/6: [/5 - /5]
+ │              └── limit: 5
+ └── 5
 
 # No-op case because the multi-key span isn't countable.
 opt expect-not=SplitScanIntoUnionScans format=hide-all

@@ -1294,12 +1294,6 @@ func (c *CustomFuncs) GenerateLimitedScans(
 	}
 }
 
-// ScanIsConstrained returns true if the scan operator with the given
-// ScanPrivate is constrained.
-func (c *CustomFuncs) ScanIsConstrained(sp *memo.ScanPrivate) bool {
-	return sp.Constraint != nil
-}
-
 // ScanIsLimited returns true if the scan operator with the given ScanPrivate is
 // limited.
 func (c *CustomFuncs) ScanIsLimited(sp *memo.ScanPrivate) bool {
@@ -1316,9 +1310,20 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	const maxScanCount = 16
 	const threshold = 4
 
-	keyCtx := constraint.MakeKeyContext(&sp.Constraint.Columns, c.e.evalCtx)
+	constraints := c.getKnownScanConstraints(sp)
+	if constraints == nil {
+		// No constraints were found.
+		return nil
+	}
+	cons := c.getConstraintThatSatisfiesIndex(constraints, sp.Index, sp.Table)
+	if cons == nil {
+		// No valid constraint was found.
+		return nil
+	}
+
+	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
 	limitVal := int(*limit.(*tree.DInt))
-	spans := sp.Constraint.Spans
+	spans := cons.Spans
 
 	// Retrieve the number of keys in the spans.
 	keyCount, ok := spans.KeyCount(&keyCtx)
@@ -1373,9 +1378,9 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// Construct a new ScanExpr for each span and union them all together. We
 	// output the old ColumnIDs from each union.
 	oldColList := opt.ColSetToList(scan.Relational().OutputCols)
-	last := c.makeNewScan(sp, newHardLimit, newSpans.Get(0))
+	last := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(0))
 	for i, cnt := 1, newSpans.Count(); i < cnt; i++ {
-		newScan := c.makeNewScan(sp, newHardLimit, newSpans.Get(i))
+		newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(i))
 		last = c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
 			LeftCols:  opt.ColSetToList(last.Relational().OutputCols),
 			RightCols: opt.ColSetToList(newScan.Relational().OutputCols),
@@ -1452,7 +1457,10 @@ func indexHasOrderingSequence(
 // replaced with new ones from the new TableID. All other fields are simply
 // copied from the old ScanPrivate.
 func (c *CustomFuncs) makeNewScan(
-	sp *memo.ScanPrivate, newHardLimit memo.ScanLimit, span *constraint.Span,
+	sp *memo.ScanPrivate,
+	columns constraint.Columns,
+	newHardLimit memo.ScanLimit,
+	span *constraint.Span,
 ) memo.RelExpr {
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 
@@ -1465,12 +1473,81 @@ func (c *CustomFuncs) makeNewScan(
 	var newSpans constraint.Spans
 	newSpans.InitSingleSpan(span)
 	newConstraint := &constraint.Constraint{
-		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
+		Columns: columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   newSpans,
 	}
 	newScanPrivate.Constraint = newConstraint
 
 	return c.e.f.ConstructScan(newScanPrivate)
+}
+
+// GetKnownScanConstraints returns a set of constraints that are known to apply
+// to the output of the Scan operator with the given ScanPrivate. If available,
+// the ScanPrivate's Constraint field will be returned. Otherwise, an attempt
+// will be made to retrieve constraints from any check constraints and computed
+// columns of the underlying table.
+func (c *CustomFuncs) getKnownScanConstraints(sp *memo.ScanPrivate) *constraint.Set {
+	if sp.Constraint != nil {
+		// The ScanPrivate has a constraint, so return it.
+		return constraint.SingleConstraint(sp.Constraint)
+	}
+	// Build a constraint set with the check constraints and computed columns of
+	// the underlying table.
+	var constraints *constraint.Set
+	filters := c.checkConstraintFilters(sp.Table)
+	filters = append(filters, c.computedColFilters(sp.Table, filters, memo.FiltersExpr{})...)
+	for i := range filters {
+		if constraints == nil {
+			constraints = filters[i].ScalarProps().Constraints
+		} else {
+			constraints.Union(c.e.evalCtx, filters[i].ScalarProps().Constraints)
+		}
+	}
+	return constraints
+}
+
+// getConstraintThatSatisfiesIndex returns the first constraint in the given
+// constraint set with ordering columns that (1) are a prefix of the index key
+// columns and (2) are either all in the same direction as the index columns or
+// are all in the reverse direction. Examples:
+//
+//    Index: 1/2/3, Constraint: 1/2 => return Constraint
+//    Index: 1/2/3, Constraint: -1/-2 => return Constraint
+//    Index: 1/2/3, Constraint: 1/-2 => return nil
+//    Index: 1/2/3, Constraint: 1/2/3/4 => return nil
+//
+func (c *CustomFuncs) getConstraintThatSatisfiesIndex(
+	constraints *constraint.Set, indexOrd cat.IndexOrdinal, tableID opt.TableID,
+) *constraint.Constraint {
+	md := c.e.mem.Metadata()
+	table := md.Table(tableID)
+	index := table.Index(indexOrd)
+
+	// Make orderings for the default and reversed versions of the index.
+	var defOrdering, revOrdering opt.Ordering
+	for i, cnt := 0, index.KeyColumnCount(); i < cnt; i++ {
+		indexCol := index.Column(i)
+		colID := tableID.ColumnID(indexCol.Ordinal)
+		defOrdering = append(defOrdering, opt.MakeOrderingColumn(colID, indexCol.Descending))
+		revOrdering = append(revOrdering, opt.MakeOrderingColumn(colID, !indexCol.Descending))
+	}
+
+	if defOrdering == nil || revOrdering == nil {
+		return nil
+	}
+
+	for i, cnt := 0, constraints.Length(); i < cnt; i++ {
+		// Make an ordering for the constraint Columns field. If the ordering is
+		// provided by one of the index orderings, we know that the constraint
+		// ordering forms a prefix of the index ordering with either all columns in
+		// the same direction or all columns reversed.
+		consOrdering := constraints.Constraint(i).Columns.ToOrdering()
+		if defOrdering.Provides(consOrdering) || revOrdering.Provides(consOrdering) {
+			return constraints.Constraint(i)
+		}
+	}
+
+	return nil
 }
 
 // ----------------------------------------------------------------------

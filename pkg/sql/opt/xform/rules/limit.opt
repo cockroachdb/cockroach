@@ -70,12 +70,10 @@
 #    ORDER BY data
 #    LIMIT 1;
 #
-# See the SplitScanIntoUnionScans comment in xform/custom_funcs for details.
+# See the SplitScanIntoUnionScans function in xform/custom_funcs for details.
 [SplitScanIntoUnionScans, Explore]
 (Limit
-    $scan:(Scan $scanPrivate:*) &
-        (ScanIsConstrained $scanPrivate) &
-        ^(ScanIsLimited $scanPrivate)
+    $scan:(Scan $scanPrivate:*) & ^(ScanIsLimited $scanPrivate)
     $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
     $ordering:* &
         (Succeeded
