@@ -229,36 +229,39 @@ index-join kuv
       ├── fd: (1)-->(2)
       └── ordering: +2
 
-# Verify we don't push the limit if the ordering depends on a column not in the
-# input index.
 opt
 SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
 ----
-limit
+sort
  ├── columns: k:1!null u:2!null v:3
- ├── internal-ordering: +2,+3
  ├── cardinality: [0 - 5]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2,+3
- ├── sort (segmented)
- │    ├── columns: k:1!null u:2!null v:3
- │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
- │    ├── ordering: +2,+3
- │    ├── limit hint: 5.00
- │    └── index-join kuv
- │         ├── columns: k:1!null u:2!null v:3
- │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── ordering: +2
- │         └── scan kuv@secondary
- │              ├── columns: k:1!null u:2!null
- │              ├── constraint: /2/1: [/2 - /9]
- │              ├── key: (1)
- │              ├── fd: (1)-->(2)
- │              └── ordering: +2
- └── 5
+ └── index-join kuv
+      ├── columns: k:1!null u:2!null v:3
+      ├── cardinality: [0 - 5]
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      └── limit
+           ├── columns: k:1!null u:2!null
+           ├── internal-ordering: +2,+3
+           ├── cardinality: [0 - 5]
+           ├── key: (1)
+           ├── fd: (1)-->(2)
+           ├── sort (segmented)
+           │    ├── columns: k:1!null u:2!null
+           │    ├── key: (1)
+           │    ├── fd: (1)-->(2)
+           │    ├── ordering: +2,+3
+           │    ├── limit hint: 5.00
+           │    └── scan kuv@secondary
+           │         ├── columns: k:1!null u:2!null
+           │         ├── constraint: /2/1: [/2 - /9]
+           │         ├── key: (1)
+           │         ├── fd: (1)-->(2)
+           │         └── ordering: +2
+           └── 5
 
 exec-ddl
 CREATE TABLE abcd (
@@ -719,6 +722,24 @@ limit
  │              └── limit: 10
  └── 10
 
+# Case with index join.
+opt expect=SplitScanIntoUnionScans format=hide-all
+SELECT *
+FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
+ORDER BY data1 LIMIT 10
+----
+index-join index_tab
+ └── limit
+      ├── sort
+      │    └── union
+      │         ├── scan index_tab@c
+      │         │    ├── constraint: /10/13/14/8: [/'US_EAST' - /'US_EAST']
+      │         │    └── limit: 10
+      │         └── scan index_tab@c
+      │              ├── constraint: /17/20/21/15: [/'US_WEST' - /'US_WEST']
+      │              └── limit: 10
+      └── 10
+
 # No-op case because the multi-key span isn't countable.
 opt expect-not=SplitScanIntoUnionScans format=hide-all
 SELECT max(data1) FROM index_tab WHERE region > 'US_EAST' AND region < 'US_WEST'
@@ -793,19 +814,3 @@ scalar-group-by
  └── aggregations
       └── max
            └── data1
-
-# No-op case because the limit input is an index-join. TODO(drewk): modify
-# the rule to push limits through index joins.
-opt expect-not=SplitScanIntoUnionScans format=hide-all
-SELECT *
-FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
-ORDER BY data1 LIMIT 10
-----
-limit
- ├── sort
- │    └── index-join index_tab
- │         └── scan index_tab@c
- │              └── constraint: /3/6/7/1
- │                   ├── [/'US_EAST' - /'US_EAST']
- │                   └── [/'US_WEST' - /'US_WEST']
- └── 10
