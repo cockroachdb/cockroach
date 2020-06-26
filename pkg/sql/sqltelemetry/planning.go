@@ -113,6 +113,10 @@ var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-sta
 // collection is explicitly disabled.
 var TurnAutoStatsOffUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.disabled")
 
+// StatsHistogramOOMCounter is to be incremented whenever statistics histogram
+// generation is disabled due to an out of memory error.
+var StatsHistogramOOMCounter = telemetry.GetCounterOnce("sql.plan.stats.histogram-oom")
+
 // JoinAlgoHashUseCounter is to be incremented whenever a hash join node is
 // planned.
 var JoinAlgoHashUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.hash")
