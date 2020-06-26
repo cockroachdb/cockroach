@@ -238,3 +238,30 @@
     (SortFilters (ExtractUnboundConditions $newOn $cols))
     (EmptyJoinPrivate)
 )
+
+# PushJoinIntoIndexJoin pushes an InnerJoin or LeftJoin into an IndexJoin. The
+# IndexJoin is replaced with a LookupJoin, since it now must output columns from
+# the right side of the join as well as from the original lookup table.
+# Matching conditions:
+# 1. The IndexJoin is the left input of the non-index join (push-down would be
+#    invalid for a LeftJoin, and an InnerJoin will simply be commuted).
+# 2. The right input of the non-index join does not have outer columns.
+# 3. The ON condition of the non-index join only references columns
+#    from its right input and the input of the index join.
+# 4. The non-index join does not have any join hints.
+[PushJoinIntoIndexJoin, Explore]
+(InnerJoin | LeftJoin
+    $left:(IndexJoin $indexInput:* $indexPrivate:*)
+    $right:* & ^(HasOuterCols $right)
+    $on:* & (FiltersBoundBy $on (OutputCols2 $indexInput $right))
+    $joinPrivate:* & (NoJoinHints $joinPrivate)
+)
+=>
+(LookupJoin
+    (InnerJoin $indexInput $right $on $joinPrivate)
+    []
+    (ConvertIndexToLookupPrivate
+        $indexPrivate
+        (OutputCols2 $left $right)
+    )
+)
