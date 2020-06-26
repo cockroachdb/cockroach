@@ -39,10 +39,17 @@
 (Limit
     (IndexJoin $input:* $indexJoinPrivate:*)
     $limitExpr:(Const $limit:* & (IsPositiveInt $limit))
-    $ordering:*
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
 )
 =>
-(IndexJoin (Limit $input $limitExpr $ordering) $indexJoinPrivate)
+(IndexJoin
+    (Limit $input $limitExpr (PruneOrdering $ordering $cols))
+    $indexJoinPrivate
+)
 
 # SplitScanIntoUnionScans splits a scan under a limit into a union of limited
 # scans. Example:
