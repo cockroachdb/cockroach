@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1572,6 +1573,11 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 
 		if index.IsInverted() {
 			// Skip inverted indexes for now.
+			continue
+		}
+		if tab.IsVirtualTable() && i == cat.PrimaryIndex {
+			// Don't advertise any functional dependencies for virtual table primary
+			// keys, since they are composed of a fake, unusable column.
 			continue
 		}
 
