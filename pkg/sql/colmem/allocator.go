@@ -238,6 +238,11 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	a.AdjustMemoryUsage(after - before)
 }
 
+// GetAccount returns the memory account that this allocator is working with.
+func (a *Allocator) GetAccount() *mon.BoundAccount {
+	return a.acc
+}
+
 // Used returns the number of bytes currently allocated through this allocator.
 func (a *Allocator) Used() int64 {
 	return a.acc.Used()

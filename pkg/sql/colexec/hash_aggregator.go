@@ -61,6 +61,8 @@ type hashAggregator struct {
 	aggTypes [][]*types.T
 	aggFuncs []execinfrapb.AggregatorSpec_Func
 
+	aggHelper hashAggregatorHelper
+
 	inputTypes  []*types.T
 	outputTypes []*types.T
 
@@ -177,6 +179,8 @@ func NewHashAggregator(
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	aggDistinct []bool,
+	aggFilter []int,
 ) (colexecbase.Operator, error) {
 	aggTyps := extractAggTypes(aggCols, typs)
 	outputTypes, err := MakeAggregateFuncsOutputTypes(aggTyps, aggFns)
@@ -214,6 +218,7 @@ func NewHashAggregator(
 		hashAlloc:   hashAggFuncsAlloc{allocator: allocator},
 	}
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
+	hashAgg.aggHelper = newHashAggregatorHelper(allocator, typs, groupCols, aggCols, aggDistinct, aggFilter, &hashAgg.datumAlloc)
 	return hashAgg, err
 }
 
@@ -243,7 +248,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 				continue
 			}
 			op.buildSelectionForEachHashCode(ctx, b)
-			op.onlineAgg(b)
+			op.onlineAgg(ctx, b)
 		case hashAggregatorOutputting:
 			curOutputIdx := 0
 			op.output.ResetInternalBatch()
@@ -335,7 +340,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b c
 // onlineAgg probes aggFuncMap using the built sels map and lazily creates
 // aggFunctions for each group if it doesn't not exist. Then it calls Compute()
 // on each aggregation function to perform aggregation.
-func (op *hashAggregator) onlineAgg(b coldata.Batch) {
+func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	for selsSlot, hashCode := range op.scratch.hashCodeForSelsSlot {
 		remaining := op.scratch.sels[selsSlot]
 
@@ -356,7 +361,7 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 					op.scratch.diff[:len(remaining)], false, /* firstDefiniteMatch */
 				)
 				if anyMatched {
-					aggFunc.compute(b, op.aggCols)
+					op.aggHelper.performAggregation(ctx, b, aggFunc.fns)
 				}
 			}
 		} else {
@@ -403,10 +408,8 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 				op.scratch.diff[:len(remaining)], true, /* firstDefiniteMatch */
 			)
 
-			// aggFunc knows that all selected tuples in b belong to the same
-			// single group, so we can pass 'nil' for the first argument.
-			aggFunc.init(nil /* group */, op.output.Batch)
-			aggFunc.compute(b, op.aggCols)
+			aggFunc.init(op.output.Batch)
+			op.aggHelper.performAggregation(ctx, b, aggFunc.fns)
 		}
 
 		// We have processed all tuples with this hashCode, so we should reset
@@ -453,15 +456,11 @@ const (
 // we might hold off with fixing the accounting until then.
 type hashAggFuncMap map[uint64][]*hashAggFuncs
 
-func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
+func (v *hashAggFuncs) init(b coldata.Batch) {
 	for fnIdx, fn := range v.fns {
-		fn.Init(group, b.ColVec(fnIdx))
-	}
-}
-
-func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
-	for fnIdx, fn := range v.fns {
-		fn.Compute(b, aggCols[fnIdx])
+		// We know that all selected tuples in b belong to the same single
+		// group, so we can pass 'nil' for the first argument.
+		fn.Init(nil /* groups */, b.ColVec(fnIdx))
 	}
 }
 

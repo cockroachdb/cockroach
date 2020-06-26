@@ -241,7 +241,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		colOpErr := colOpMetas[0].Err.Error()
 		if procErr != colOpErr {
 			return errors.Errorf("different errors returned:\n"+
-				"processor return\n%+v\ncolumnar operator returned\n%+v",
+				"processor returned\n%+v\ncolumnar operator returned\n%+v",
 				procMetas[0].Err, colOpMetas[0].Err)
 		}
 		// The errors are the same, so the rows that were returned do not matter.

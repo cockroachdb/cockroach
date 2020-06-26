@@ -202,8 +202,8 @@ func newAggregateFuncsAlloc(
 }
 
 // sizeOfAggregateFunc is the size of some aggregateFunc implementation.
-// countAgg was chosen arbitrarily, but it's important that we use a pointer to
-// the aggregate function struct.
+// countHashAgg was chosen arbitrarily, but it's important that we use a
+// pointer to the aggregate function struct.
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(&countHashAgg{}))
 
 func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
@@ -213,7 +213,7 @@ func (a *aggregateFuncsAlloc) makeAggregateFuncs() []aggregateFunc {
 		// of 'allocSize x number of funcs in schema' length. Every
 		// aggFuncAlloc will allocate allocSize of objects on the newAggFunc
 		// call below.
-		a.allocator.AdjustMemoryUsage(sizeOfAggregateFunc * a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfAggregateFunc * int64(len(a.aggFuncAllocs)) * a.allocSize)
 		a.returnFuncs = make([]aggregateFunc, len(a.aggFuncAllocs)*int(a.allocSize))
 	}
 	funcs := a.returnFuncs[:len(a.aggFuncAllocs)]
