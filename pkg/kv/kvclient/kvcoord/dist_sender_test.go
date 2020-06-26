@@ -3637,3 +3637,143 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 		require.Equal(t, exp, act)
 	}
 }
+
+// Test the following scenario: the DistSender sends a request that results in a
+// sendError, meaning that the descriptor is probably stale. The descriptor is
+// the refreshed, and it turns out that the range had split in the meantime.
+// Thus, the request now needs to be divided. The test checks that the request
+// is divided before being sent to the new descriptor. This acts as a
+// regression, since we used to blindly try the non-divided request against the
+// smaller range, only to get an entirely predictable RangeKeyMismatchError.
+func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	// First request will be sent to an unsplit descriptor.
+	var initialDesc = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	// But the 2nd attempt will use the split ones.
+	splitKey := roachpb.RKey("b")
+	splitDescs := []roachpb.RangeDescriptor{{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 2,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     splitKey,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}, {
+		RangeID:    roachpb.RangeID(2),
+		Generation: 2,
+		StartKey:   splitKey,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}}
+
+	initialRDB := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		return []roachpb.RangeDescriptor{initialDesc}, nil, nil
+	})
+	splitRDB := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		if key.Less(splitKey) {
+			return splitDescs[0:1], nil, nil
+		}
+		return splitDescs[1:], nil, nil
+	})
+
+	returnErr := true
+	var switchToSplitDesc func()
+	var transportFn = func(
+		_ context.Context,
+		opts SendOptions,
+		replicas ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		if returnErr {
+			// First time around we return an RPC error. Next time around, make sure
+			// the DistSender tries gets the split descriptors.
+			if len(ba.Requests) != 2 {
+				// Sanity check - first attempt should have the unsplit batch.
+				rep := ba.CreateReply()
+				rep.Error = roachpb.NewErrorf("expected divided batches with one request each, got: %s", ba)
+				return rep, nil
+			}
+			switchToSplitDesc()
+			returnErr = false
+			return nil, errors.New("boom")
+		}
+		rep := ba.CreateReply()
+		if len(ba.Requests) != 1 {
+			rep.Error = roachpb.NewErrorf("expected divided batches with one request each, got: %s", ba)
+		}
+		return rep, nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:             clock,
+		NodeDescs:         g,
+		RPCContext:        rpcContext,
+		RangeDescriptorDB: initialRDB,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transportFn),
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+
+	ds := NewDistSender(cfg)
+	switchToSplitDesc = func() {
+		ds.rangeCache.db = splitRDB
+	}
+
+	// We're going to send a batch with two gets, on different sides of the split.
+	// The DistSender will first use the unsplit descriptor, and we'll inject an RPC error which will
+	// cause the eviction of the descriptor from the cache.
+	// Then, we'll switch the descriptor db that the DistSender uses to the
+	// version that returns a split descriptor (see switchToSplitDesc). From this
+	// moment on, we check that the sent batches only consist of single requests -
+	// which proves that the original batch was split.
+
+	var ba roachpb.BatchRequest
+	get := &roachpb.GetRequest{}
+	get.Key = roachpb.Key("a")
+	ba.Add(get)
+	get = &roachpb.GetRequest{}
+	get.Key = roachpb.Key("c")
+	ba.Add(get)
+	// Inconsistent read because otherwise the batch will ask to be re-sent in a
+	// txn when split.
+	ba.ReadConsistency = roachpb.INCONSISTENT
+
+	if _, pErr := ds.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+}
