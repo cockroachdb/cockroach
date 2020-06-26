@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -102,8 +103,20 @@ func NewOrderedAggregator(
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	aggDistinct []bool,
+	aggFilter []int,
 	isScalar bool,
 ) (colexecbase.Operator, error) {
+	for _, isDistinct := range aggDistinct {
+		if isDistinct {
+			return nil, errors.AssertionFailedf("distinct ordered aggregation is not supported")
+		}
+	}
+	for _, filterColIdx := range aggFilter {
+		if filterColIdx != tree.NoColumnIdx {
+			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
+		}
+	}
 	if len(aggFns) != len(aggCols) {
 		return nil,
 			errors.Errorf(

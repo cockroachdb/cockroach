@@ -842,7 +842,7 @@ EXPLAIN (VEC) SELECT p_brand, p_type, p_size, count(distinct ps_suppkey) AS supp
 │
 └ Node 1
   └ *colexec.sortOp
-    └ *rowexec.hashAggregator
+    └ *colexec.hashAggregator
       └ *colexec.hashJoiner
         ├ *colexec.mergeJoinLeftAntiOp
         │ ├ *colfetcher.colBatchScan

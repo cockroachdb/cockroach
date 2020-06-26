@@ -46,6 +46,8 @@ type aggregatorTestCase struct {
 	aggFns         []execinfrapb.AggregatorSpec_Func
 	groupCols      []uint32
 	aggCols        [][]uint32
+	aggDistinct    []bool
+	aggFilter      []int
 	input          tuples
 	unorderedInput bool
 	expected       tuples
@@ -71,6 +73,8 @@ type aggType struct {
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
+		aggDistinct []bool,
+		aggFilter []int,
 		isScalar bool,
 	) (colexecbase.Operator, error)
 	name string
@@ -87,10 +91,11 @@ var aggTypes = []aggType{
 			aggFns []execinfrapb.AggregatorSpec_Func,
 			groupCols []uint32,
 			aggCols [][]uint32,
+			aggDistinct []bool,
+			aggFilter []int,
 			_ bool,
 		) (colexecbase.Operator, error) {
-			return NewHashAggregator(
-				allocator, input, typs, aggFns, groupCols, aggCols)
+			return NewHashAggregator(allocator, input, typs, aggFns, groupCols, aggCols, aggDistinct, aggFilter)
 		},
 		name: "hash",
 	},
@@ -311,6 +316,8 @@ func TestAggregatorOneFunc(t *testing.T) {
 					tc.aggFns,
 					tc.groupCols,
 					tc.aggCols,
+					tc.aggDistinct,
+					tc.aggFilter,
 					false, /* isScalar */
 				)
 				if err != nil {
@@ -344,6 +351,8 @@ func TestAggregatorOneFunc(t *testing.T) {
 									tc.aggFns,
 									tc.groupCols,
 									tc.aggCols,
+									tc.aggDistinct,
+									tc.aggFilter,
 									false, /* isScalar */
 								)
 							})
@@ -536,7 +545,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				}
 				runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, tc.aggDistinct, tc.aggFilter, false /* isScalar */)
 					})
 			})
 		}
@@ -611,6 +620,122 @@ func TestAggregatorAllFunctions(t *testing.T) {
 			},
 			convToDecimal: true,
 		},
+
+		// Test DISTINCT aggregation.
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_SUM_INT,
+				execinfrapb.AggregatorSpec_SUM_INT,
+			},
+			aggCols:     [][]uint32{{0}, {1}, {1}, {1}, {1}},
+			aggDistinct: []bool{false, false, true, false, true},
+			typs:        []*types.T{types.Int, types.Int},
+			input: tuples{
+				{0, 1},
+				{0, 2},
+				{0, 2},
+				{0, nil},
+				{0, 1},
+				{0, nil},
+				{1, 1},
+				{1, 2},
+				{1, 2},
+			},
+			expected: tuples{
+				{0, 4, 2, 6, 3},
+				{1, 3, 2, 5, 3},
+			},
+		},
+
+		// Test aggregation with FILTERs.
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_COUNT_ROWS,
+				execinfrapb.AggregatorSpec_SUM_INT,
+			},
+			aggCols:   [][]uint32{{0}, {}, {1}},
+			aggFilter: []int{tree.NoColumnIdx, 2, 2},
+			typs:      []*types.T{types.Int, types.Int, types.Bool},
+			input: tuples{
+				{0, 1, false},
+				{0, 2, true},
+				{0, 2, true},
+				{0, nil, nil},
+				{0, 1, nil},
+				{0, nil, true},
+				{1, 1, true},
+				{1, 2, nil},
+				{1, 2, true},
+			},
+			expected: tuples{
+				{0, 3, 4},
+				{1, 2, 3},
+			},
+		},
+
+		// Test aggregation with FILTERs when the whole groups are filtered out.
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_COUNT_ROWS,
+				execinfrapb.AggregatorSpec_SUM_INT,
+			},
+			aggCols:   [][]uint32{{0}, {}, {1}},
+			aggFilter: []int{tree.NoColumnIdx, 2, 2},
+			typs:      []*types.T{types.Int, types.Int, types.Bool},
+			input: tuples{
+				{0, 1, false},
+				{0, nil, nil},
+				{0, 2, false},
+				{1, 1, true},
+				{1, 2, nil},
+				{1, 2, true},
+				{2, 1, false},
+				{2, nil, nil},
+				{2, 2, nil},
+			},
+			expected: tuples{
+				{0, 0, nil},
+				{1, 2, 3},
+				{2, 0, nil},
+			},
+		},
+
+		// Test aggregation with FILTERs and DISTINCTs intertwined.
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_COUNT,
+				execinfrapb.AggregatorSpec_SUM_INT,
+				execinfrapb.AggregatorSpec_SUM_INT,
+				execinfrapb.AggregatorSpec_SUM_INT,
+			},
+			aggCols:     [][]uint32{{0}, {1}, {1}, {1}, {1}, {1}, {1}},
+			aggDistinct: []bool{false, false, true, true, false, true, true},
+			aggFilter:   []int{tree.NoColumnIdx, 2, tree.NoColumnIdx, 2, 2, tree.NoColumnIdx, 2},
+			typs:        []*types.T{types.Int, types.Int, types.Bool},
+			input: tuples{
+				{0, 1, false},
+				{0, 2, true},
+				{0, 2, true},
+				{0, nil, nil},
+				{0, 1, nil},
+				{0, nil, true},
+				{1, 1, true},
+				{1, 2, nil},
+				{1, 2, true},
+			},
+			expected: tuples{
+				{0, 2, 2, 1, 4, 3, 2},
+				{1, 2, 2, 2, 3, 3, 3},
+			},
+		},
 	}
 
 	for _, agg := range aggTypes {
@@ -622,6 +747,12 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				verifier := orderedVerifier
 				if strings.Contains(agg.name, "hash") {
 					verifier = unorderedVerifier
+				} else {
+					// We currently don't support ordered aggregation with
+					// DISTINCT or FILTER, so we'll skip such config.
+					if tc.aggDistinct != nil || tc.aggFilter != nil {
+						return
+					}
 				}
 				runTestsWithTyps(
 					t,
@@ -630,7 +761,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					tc.expected,
 					verifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, tc.aggDistinct, tc.aggFilter, false /* isScalar */)
 					})
 			})
 		}
@@ -733,6 +864,8 @@ func TestAggregatorRandom(t *testing.T) {
 									execinfrapb.AggregatorSpec_AVG},
 								[]uint32{0},
 								[][]uint32{{}, {1}, {1}, {1}, {1}, {1}},
+								nil,   /* aggDistinct */
+								nil,   /* aggFilter */
 								false, /* isScalar */
 							)
 							if err != nil {
@@ -844,6 +977,8 @@ func BenchmarkAggregator(b *testing.B) {
 											[]execinfrapb.AggregatorSpec_Func{aggFn},
 											[]uint32{0},
 											[][]uint32{[]uint32{1}[:nCols]},
+											nil,   /* aggDistinct */
+											nil,   /* aggFilter */
 											false, /* isScalar */
 										)
 										if err != nil {
@@ -1115,7 +1250,7 @@ func TestHashAggregator(t *testing.T) {
 			}
 			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
 				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-					a, err := NewHashAggregator(testAllocator, sources[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols)
+					a, err := NewHashAggregator(testAllocator, sources[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, tc.aggDistinct, tc.aggFilter)
 					a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
 					return a, err
 				})
