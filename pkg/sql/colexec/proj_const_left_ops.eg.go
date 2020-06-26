@@ -48,7 +48,7 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -133,7 +133,7 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -218,7 +218,7 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -303,7 +303,7 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -388,7 +388,7 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -473,7 +473,7 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -558,7 +558,7 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -643,7 +643,7 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -728,7 +728,7 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -914,7 +914,7 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -999,7 +999,7 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1084,7 +1084,7 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1169,7 +1169,7 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1254,7 +1254,7 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1339,7 +1339,7 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1424,7 +1424,7 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1509,7 +1509,7 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1594,7 +1594,7 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1780,7 +1780,7 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1865,7 +1865,7 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -1950,7 +1950,7 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2035,7 +2035,7 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2120,7 +2120,7 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2205,7 +2205,7 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2290,7 +2290,7 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2375,7 +2375,7 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2460,7 +2460,7 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2646,7 +2646,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2759,7 +2759,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2872,7 +2872,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -2985,7 +2985,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3094,7 +3094,7 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3203,7 +3203,7 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3312,7 +3312,7 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3421,7 +3421,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3663,7 +3663,7 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3772,7 +3772,7 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3881,7 +3881,7 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -3990,7 +3990,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4232,7 +4232,7 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4341,7 +4341,7 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4450,7 +4450,7 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4559,7 +4559,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4801,7 +4801,7 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4898,7 +4898,7 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -4975,7 +4975,7 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5052,7 +5052,7 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5254,7 +5254,7 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5371,7 +5371,7 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5488,7 +5488,7 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5605,7 +5605,7 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5722,7 +5722,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5835,7 +5835,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -5948,7 +5948,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6061,7 +6061,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6170,7 +6170,7 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6279,7 +6279,7 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6388,7 +6388,7 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6497,7 +6497,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6739,7 +6739,7 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6848,7 +6848,7 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -6957,7 +6957,7 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7066,7 +7066,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7308,7 +7308,7 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7417,7 +7417,7 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7526,7 +7526,7 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7635,7 +7635,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7877,7 +7877,7 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -7974,7 +7974,7 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -8063,7 +8063,7 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -8140,7 +8140,7 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -8443,7 +8443,7 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -8681,7 +8681,7 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -8798,7 +8798,7 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -8915,7 +8915,7 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9032,7 +9032,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9145,7 +9145,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9258,7 +9258,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9371,7 +9371,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9480,7 +9480,7 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9577,7 +9577,7 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9718,7 +9718,7 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -9859,7 +9859,7 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10000,7 +10000,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10117,7 +10117,7 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10194,7 +10194,7 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10335,7 +10335,7 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10476,7 +10476,7 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10617,7 +10617,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10734,7 +10734,7 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10811,7 +10811,7 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -10952,7 +10952,7 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11093,7 +11093,7 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11234,7 +11234,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11351,7 +11351,7 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11428,7 +11428,7 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11525,7 +11525,7 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11602,7 +11602,7 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11679,7 +11679,7 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11756,7 +11756,7 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11833,7 +11833,7 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -11910,7 +11910,7 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12007,7 +12007,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12136,7 +12136,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12265,7 +12265,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12394,7 +12394,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12519,7 +12519,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12644,7 +12644,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12769,7 +12769,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -12894,7 +12894,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13027,7 +13027,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13152,7 +13152,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13277,7 +13277,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13402,7 +13402,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13535,7 +13535,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13660,7 +13660,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13785,7 +13785,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -13910,7 +13910,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14043,7 +14043,7 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14156,7 +14156,7 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14249,7 +14249,7 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14342,7 +14342,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14471,7 +14471,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14600,7 +14600,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14729,7 +14729,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14854,7 +14854,7 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -14959,7 +14959,7 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15064,7 +15064,7 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15169,7 +15169,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15302,7 +15302,7 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15407,7 +15407,7 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15512,7 +15512,7 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15617,7 +15617,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15750,7 +15750,7 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15855,7 +15855,7 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -15960,7 +15960,7 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16065,7 +16065,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16198,7 +16198,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16311,7 +16311,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16440,7 +16440,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16569,7 +16569,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16698,7 +16698,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16823,7 +16823,7 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -16928,7 +16928,7 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17033,7 +17033,7 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17138,7 +17138,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17271,7 +17271,7 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17376,7 +17376,7 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17481,7 +17481,7 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17586,7 +17586,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17719,7 +17719,7 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17824,7 +17824,7 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -17929,7 +17929,7 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18034,7 +18034,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18167,7 +18167,7 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18280,7 +18280,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18393,7 +18393,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18506,7 +18506,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18619,7 +18619,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18728,7 +18728,7 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18861,7 +18861,7 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -18994,7 +18994,7 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19127,7 +19127,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19244,7 +19244,7 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19377,7 +19377,7 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19510,7 +19510,7 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19643,7 +19643,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19760,7 +19760,7 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -19893,7 +19893,7 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20026,7 +20026,7 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20159,7 +20159,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20276,7 +20276,7 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20583,7 +20583,7 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20692,7 +20692,7 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20801,7 +20801,7 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -20910,7 +20910,7 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21019,7 +21019,7 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21128,7 +21128,7 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21237,7 +21237,7 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21346,7 +21346,7 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21455,7 +21455,7 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21564,7 +21564,7 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21681,7 +21681,7 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21798,7 +21798,7 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -21915,7 +21915,7 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22024,7 +22024,7 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22133,7 +22133,7 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22242,7 +22242,7 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22351,7 +22351,7 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22460,7 +22460,7 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22569,7 +22569,7 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22678,7 +22678,7 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22787,7 +22787,7 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -22896,7 +22896,7 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23013,7 +23013,7 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23130,7 +23130,7 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23368,7 +23368,7 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23485,7 +23485,7 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23602,7 +23602,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23719,7 +23719,7 @@ func (p projEQBoolConstBoolOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []bool
+	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -23957,7 +23957,7 @@ func (p projEQDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24082,7 +24082,7 @@ func (p projEQDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24207,7 +24207,7 @@ func (p projEQDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24332,7 +24332,7 @@ func (p projEQDecimalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24465,7 +24465,7 @@ func (p projEQDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24566,7 +24566,7 @@ func (p projEQInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24711,7 +24711,7 @@ func (p projEQInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -24856,7 +24856,7 @@ func (p projEQInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25001,7 +25001,7 @@ func (p projEQInt16ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25178,7 +25178,7 @@ func (p projEQInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25303,7 +25303,7 @@ func (p projEQInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25448,7 +25448,7 @@ func (p projEQInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25593,7 +25593,7 @@ func (p projEQInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25738,7 +25738,7 @@ func (p projEQInt32ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -25915,7 +25915,7 @@ func (p projEQInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26040,7 +26040,7 @@ func (p projEQInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26185,7 +26185,7 @@ func (p projEQInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26330,7 +26330,7 @@ func (p projEQInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26475,7 +26475,7 @@ func (p projEQInt64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26652,7 +26652,7 @@ func (p projEQInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26777,7 +26777,7 @@ func (p projEQFloat64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -26954,7 +26954,7 @@ func (p projEQFloat64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -27131,7 +27131,7 @@ func (p projEQFloat64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -27308,7 +27308,7 @@ func (p projEQFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -27485,7 +27485,7 @@ func (p projEQFloat64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -27618,7 +27618,7 @@ func (p projEQTimestampConstTimestampOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -27747,7 +27747,7 @@ func (p projEQIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -27957,7 +27957,7 @@ func (p projNEBoolConstBoolOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []bool
+	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28195,7 +28195,7 @@ func (p projNEDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28320,7 +28320,7 @@ func (p projNEDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28445,7 +28445,7 @@ func (p projNEDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28570,7 +28570,7 @@ func (p projNEDecimalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28703,7 +28703,7 @@ func (p projNEDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28804,7 +28804,7 @@ func (p projNEInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -28949,7 +28949,7 @@ func (p projNEInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29094,7 +29094,7 @@ func (p projNEInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29239,7 +29239,7 @@ func (p projNEInt16ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29416,7 +29416,7 @@ func (p projNEInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29541,7 +29541,7 @@ func (p projNEInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29686,7 +29686,7 @@ func (p projNEInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29831,7 +29831,7 @@ func (p projNEInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -29976,7 +29976,7 @@ func (p projNEInt32ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -30153,7 +30153,7 @@ func (p projNEInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -30278,7 +30278,7 @@ func (p projNEInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -30423,7 +30423,7 @@ func (p projNEInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -30568,7 +30568,7 @@ func (p projNEInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -30713,7 +30713,7 @@ func (p projNEInt64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -30890,7 +30890,7 @@ func (p projNEInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31015,7 +31015,7 @@ func (p projNEFloat64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31192,7 +31192,7 @@ func (p projNEFloat64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31369,7 +31369,7 @@ func (p projNEFloat64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31546,7 +31546,7 @@ func (p projNEFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31723,7 +31723,7 @@ func (p projNEFloat64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31856,7 +31856,7 @@ func (p projNETimestampConstTimestampOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -31985,7 +31985,7 @@ func (p projNEIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -32195,7 +32195,7 @@ func (p projLTBoolConstBoolOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []bool
+	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -32433,7 +32433,7 @@ func (p projLTDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -32558,7 +32558,7 @@ func (p projLTDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -32683,7 +32683,7 @@ func (p projLTDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -32808,7 +32808,7 @@ func (p projLTDecimalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -32941,7 +32941,7 @@ func (p projLTDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33042,7 +33042,7 @@ func (p projLTInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33187,7 +33187,7 @@ func (p projLTInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33332,7 +33332,7 @@ func (p projLTInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33477,7 +33477,7 @@ func (p projLTInt16ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33654,7 +33654,7 @@ func (p projLTInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33779,7 +33779,7 @@ func (p projLTInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -33924,7 +33924,7 @@ func (p projLTInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34069,7 +34069,7 @@ func (p projLTInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34214,7 +34214,7 @@ func (p projLTInt32ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34391,7 +34391,7 @@ func (p projLTInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34516,7 +34516,7 @@ func (p projLTInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34661,7 +34661,7 @@ func (p projLTInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34806,7 +34806,7 @@ func (p projLTInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -34951,7 +34951,7 @@ func (p projLTInt64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -35128,7 +35128,7 @@ func (p projLTInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -35253,7 +35253,7 @@ func (p projLTFloat64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -35430,7 +35430,7 @@ func (p projLTFloat64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -35607,7 +35607,7 @@ func (p projLTFloat64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -35784,7 +35784,7 @@ func (p projLTFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -35961,7 +35961,7 @@ func (p projLTFloat64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -36094,7 +36094,7 @@ func (p projLTTimestampConstTimestampOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -36223,7 +36223,7 @@ func (p projLTIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -36433,7 +36433,7 @@ func (p projLEBoolConstBoolOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []bool
+	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -36671,7 +36671,7 @@ func (p projLEDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -36796,7 +36796,7 @@ func (p projLEDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -36921,7 +36921,7 @@ func (p projLEDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37046,7 +37046,7 @@ func (p projLEDecimalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37179,7 +37179,7 @@ func (p projLEDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37280,7 +37280,7 @@ func (p projLEInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37425,7 +37425,7 @@ func (p projLEInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37570,7 +37570,7 @@ func (p projLEInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37715,7 +37715,7 @@ func (p projLEInt16ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -37892,7 +37892,7 @@ func (p projLEInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38017,7 +38017,7 @@ func (p projLEInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38162,7 +38162,7 @@ func (p projLEInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38307,7 +38307,7 @@ func (p projLEInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38452,7 +38452,7 @@ func (p projLEInt32ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38629,7 +38629,7 @@ func (p projLEInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38754,7 +38754,7 @@ func (p projLEInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -38899,7 +38899,7 @@ func (p projLEInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -39044,7 +39044,7 @@ func (p projLEInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -39189,7 +39189,7 @@ func (p projLEInt64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -39366,7 +39366,7 @@ func (p projLEInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -39491,7 +39491,7 @@ func (p projLEFloat64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -39668,7 +39668,7 @@ func (p projLEFloat64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -39845,7 +39845,7 @@ func (p projLEFloat64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -40022,7 +40022,7 @@ func (p projLEFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -40199,7 +40199,7 @@ func (p projLEFloat64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -40332,7 +40332,7 @@ func (p projLETimestampConstTimestampOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -40461,7 +40461,7 @@ func (p projLEIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -40671,7 +40671,7 @@ func (p projGTBoolConstBoolOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []bool
+	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -40909,7 +40909,7 @@ func (p projGTDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41034,7 +41034,7 @@ func (p projGTDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41159,7 +41159,7 @@ func (p projGTDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41284,7 +41284,7 @@ func (p projGTDecimalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41417,7 +41417,7 @@ func (p projGTDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41518,7 +41518,7 @@ func (p projGTInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41663,7 +41663,7 @@ func (p projGTInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41808,7 +41808,7 @@ func (p projGTInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -41953,7 +41953,7 @@ func (p projGTInt16ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42130,7 +42130,7 @@ func (p projGTInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42255,7 +42255,7 @@ func (p projGTInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42400,7 +42400,7 @@ func (p projGTInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42545,7 +42545,7 @@ func (p projGTInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42690,7 +42690,7 @@ func (p projGTInt32ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42867,7 +42867,7 @@ func (p projGTInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -42992,7 +42992,7 @@ func (p projGTInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -43137,7 +43137,7 @@ func (p projGTInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -43282,7 +43282,7 @@ func (p projGTInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -43427,7 +43427,7 @@ func (p projGTInt64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -43604,7 +43604,7 @@ func (p projGTInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -43729,7 +43729,7 @@ func (p projGTFloat64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -43906,7 +43906,7 @@ func (p projGTFloat64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -44083,7 +44083,7 @@ func (p projGTFloat64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -44260,7 +44260,7 @@ func (p projGTFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -44437,7 +44437,7 @@ func (p projGTFloat64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -44570,7 +44570,7 @@ func (p projGTTimestampConstTimestampOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -44699,7 +44699,7 @@ func (p projGTIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -44909,7 +44909,7 @@ func (p projGEBoolConstBoolOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []bool
+	var col coldata.Bools
 	col = vec.Bool()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45147,7 +45147,7 @@ func (p projGEDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45272,7 +45272,7 @@ func (p projGEDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45397,7 +45397,7 @@ func (p projGEDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45522,7 +45522,7 @@ func (p projGEDecimalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45655,7 +45655,7 @@ func (p projGEDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45756,7 +45756,7 @@ func (p projGEInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -45901,7 +45901,7 @@ func (p projGEInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46046,7 +46046,7 @@ func (p projGEInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46191,7 +46191,7 @@ func (p projGEInt16ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46368,7 +46368,7 @@ func (p projGEInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46493,7 +46493,7 @@ func (p projGEInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46638,7 +46638,7 @@ func (p projGEInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46783,7 +46783,7 @@ func (p projGEInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -46928,7 +46928,7 @@ func (p projGEInt32ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47105,7 +47105,7 @@ func (p projGEInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47230,7 +47230,7 @@ func (p projGEInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47375,7 +47375,7 @@ func (p projGEInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47520,7 +47520,7 @@ func (p projGEInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47665,7 +47665,7 @@ func (p projGEInt64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47842,7 +47842,7 @@ func (p projGEInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -47967,7 +47967,7 @@ func (p projGEFloat64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int16
+	var col coldata.Int16s
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -48144,7 +48144,7 @@ func (p projGEFloat64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int32
+	var col coldata.Int32s
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -48321,7 +48321,7 @@ func (p projGEFloat64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []int64
+	var col coldata.Int64s
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -48498,7 +48498,7 @@ func (p projGEFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []float64
+	var col coldata.Float64s
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -48675,7 +48675,7 @@ func (p projGEFloat64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []apd.Decimal
+	var col coldata.Decimals
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -48808,7 +48808,7 @@ func (p projGETimestampConstTimestampOp) Next(ctx context.Context) coldata.Batch
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []time.Time
+	var col coldata.Times
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -48937,7 +48937,7 @@ func (p projGEIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
-	var col []duration.Duration
+	var col coldata.Durations
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {

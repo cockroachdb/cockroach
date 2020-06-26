@@ -88,7 +88,7 @@ func newAnyNotNullHashAggAlloc(
 type anyNotNullBoolHashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []bool
+	col                         coldata.Bools
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      bool
@@ -432,7 +432,7 @@ func (a *anyNotNullBytesHashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullDecimalHashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []apd.Decimal
+	col                         coldata.Decimals
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      apd.Decimal
@@ -604,7 +604,7 @@ func (a *anyNotNullDecimalHashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullInt16HashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []int16
+	col                         coldata.Int16s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      int16
@@ -776,7 +776,7 @@ func (a *anyNotNullInt16HashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullInt32HashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []int32
+	col                         coldata.Int32s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      int32
@@ -948,7 +948,7 @@ func (a *anyNotNullInt32HashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullInt64HashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []int64
+	col                         coldata.Int64s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      int64
@@ -1120,7 +1120,7 @@ func (a *anyNotNullInt64HashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullFloat64HashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []float64
+	col                         coldata.Float64s
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      float64
@@ -1292,7 +1292,7 @@ func (a *anyNotNullFloat64HashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullTimestampHashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []time.Time
+	col                         coldata.Times
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      time.Time
@@ -1464,7 +1464,7 @@ func (a *anyNotNullTimestampHashAggAlloc) newAggFunc() aggregateFunc {
 type anyNotNullIntervalHashAgg struct {
 	allocator                   *colmem.Allocator
 	vec                         coldata.Vec
-	col                         []duration.Duration
+	col                         coldata.Durations
 	nulls                       *coldata.Nulls
 	curIdx                      int
 	curAgg                      duration.Duration

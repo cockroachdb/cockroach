@@ -413,7 +413,7 @@ func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool, error)
 }
 
 func cmpInBool(
-	targetElem bool, targetCol []bool, filterRow []bool, hasNulls bool,
+	targetElem bool, targetCol coldata.Bools, filterRow []bool, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -883,7 +883,7 @@ func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bo
 }
 
 func cmpInDecimal(
-	targetElem apd.Decimal, targetCol []apd.Decimal, filterRow []apd.Decimal, hasNulls bool,
+	targetElem apd.Decimal, targetCol coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -1112,7 +1112,7 @@ func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool, erro
 }
 
 func cmpInInt16(
-	targetElem int16, targetCol []int16, filterRow []int16, hasNulls bool,
+	targetElem int16, targetCol coldata.Int16s, filterRow []int16, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -1352,7 +1352,7 @@ func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool, erro
 }
 
 func cmpInInt32(
-	targetElem int32, targetCol []int32, filterRow []int32, hasNulls bool,
+	targetElem int32, targetCol coldata.Int32s, filterRow []int32, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -1592,7 +1592,7 @@ func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool, erro
 }
 
 func cmpInInt64(
-	targetElem int64, targetCol []int64, filterRow []int64, hasNulls bool,
+	targetElem int64, targetCol coldata.Int64s, filterRow []int64, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -1832,7 +1832,7 @@ func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool, 
 }
 
 func cmpInFloat64(
-	targetElem float64, targetCol []float64, filterRow []float64, hasNulls bool,
+	targetElem float64, targetCol coldata.Float64s, filterRow []float64, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -2080,7 +2080,7 @@ func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bo
 }
 
 func cmpInTimestamp(
-	targetElem time.Time, targetCol []time.Time, filterRow []time.Time, hasNulls bool,
+	targetElem time.Time, targetCol coldata.Times, filterRow []time.Time, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
@@ -2316,7 +2316,7 @@ func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Durat
 }
 
 func cmpInInterval(
-	targetElem duration.Duration, targetCol []duration.Duration, filterRow []duration.Duration, hasNulls bool,
+	targetElem duration.Duration, targetCol coldata.Durations, filterRow []duration.Duration, hasNulls bool,
 ) comparisonResult {
 	for i := range filterRow {
 		var cmp bool
