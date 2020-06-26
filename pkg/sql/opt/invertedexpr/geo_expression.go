@@ -42,8 +42,8 @@ func geoKeyToEncInvertedVal(k geoindex.Key, end bool) EncInvertedVal {
 
 func geoToSpan(span geoindex.KeySpan) InvertedSpan {
 	return InvertedSpan{
-		start: geoKeyToEncInvertedVal(span.Start, false),
-		end:   geoKeyToEncInvertedVal(span.End, true),
+		Start: geoKeyToEncInvertedVal(span.Start, false),
+		End:   geoKeyToEncInvertedVal(span.End, true),
 	}
 }
 
