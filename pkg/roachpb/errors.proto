@@ -562,7 +562,7 @@ message Error {
   // message is a human-readable error message.
   optional string message = 1 [(gogoproto.nullable) = false];
 
-  // If transaction_restart is not ABORT, the error condition may be handled by
+  // If transaction_restart is not NONE, the error condition may be handled by
   // restarting the transaction.
   optional TransactionRestart transaction_restart = 3 [(gogoproto.nullable) = false];
 
