@@ -26149,7 +26149,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -26273,7 +26273,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -26334,7 +26334,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -26392,7 +26392,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								}
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -26451,7 +26451,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -26513,7 +26513,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -26575,7 +26575,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -26637,7 +26637,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -26767,7 +26767,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -26885,7 +26885,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -26943,7 +26943,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -26998,7 +26998,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								}
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -27054,7 +27054,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -27113,7 +27113,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -27172,7 +27172,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -27231,7 +27231,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -27357,7 +27357,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -27479,7 +27479,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -27539,7 +27539,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -27596,7 +27596,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								}
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -27654,7 +27654,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -27715,7 +27715,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -27776,7 +27776,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -27837,7 +27837,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -27965,7 +27965,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -28081,7 +28081,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -28138,7 +28138,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -28192,7 +28192,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								}
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -28247,7 +28247,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 								o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -28305,7 +28305,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -28363,7 +28363,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -28421,7 +28421,7 @@ func (o *mergeJoinLeftSemiOp) buildLeftGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -29156,7 +29156,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -29292,7 +29292,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -29359,7 +29359,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -29423,7 +29423,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								}
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -29488,7 +29488,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -29556,7 +29556,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -29624,7 +29624,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -29692,7 +29692,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -29834,7 +29834,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -29966,7 +29966,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -30031,7 +30031,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -30093,7 +30093,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								}
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -30156,7 +30156,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -30222,7 +30222,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -30288,7 +30288,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -30354,7 +30354,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -30494,7 +30494,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -30630,7 +30630,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -30697,7 +30697,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -30761,7 +30761,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								}
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -30826,7 +30826,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -30894,7 +30894,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -30962,7 +30962,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -31030,7 +31030,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
@@ -31172,7 +31172,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []bool
+								var srcCol coldata.Bools
 								if src != nil {
 									srcCol = src.Bool()
 								}
@@ -31304,7 +31304,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []apd.Decimal
+								var srcCol coldata.Decimals
 								if src != nil {
 									srcCol = src.Decimal()
 								}
@@ -31369,7 +31369,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 						case types.IntFamily:
 							switch input.sourceTypes[colIdx].Width() {
 							case 16:
-								var srcCol []int16
+								var srcCol coldata.Int16s
 								if src != nil {
 									srcCol = src.Int16()
 								}
@@ -31431,7 +31431,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								}
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case 32:
-								var srcCol []int32
+								var srcCol coldata.Int32s
 								if src != nil {
 									srcCol = src.Int32()
 								}
@@ -31494,7 +31494,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 								o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 							case -1:
 							default:
-								var srcCol []int64
+								var srcCol coldata.Int64s
 								if src != nil {
 									srcCol = src.Int64()
 								}
@@ -31560,7 +31560,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []float64
+								var srcCol coldata.Float64s
 								if src != nil {
 									srcCol = src.Float64()
 								}
@@ -31626,7 +31626,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []time.Time
+								var srcCol coldata.Times
 								if src != nil {
 									srcCol = src.Timestamp()
 								}
@@ -31692,7 +31692,7 @@ func (o *mergeJoinLeftSemiOp) buildRightGroupsFromBatch(
 							switch input.sourceTypes[colIdx].Width() {
 							case -1:
 							default:
-								var srcCol []duration.Duration
+								var srcCol coldata.Durations
 								if src != nil {
 									srcCol = src.Interval()
 								}
