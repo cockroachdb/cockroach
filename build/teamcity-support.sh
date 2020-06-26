@@ -113,7 +113,13 @@ function run_text_test() {
   shift
   echo "# ${pkg}"
   echo "$@"
-  "$@" 2>&1 | go tool test2json -t -p "${pkg}" | run_json_test cat
+  run_counter=$((run_counter+1))
+
+  # test2json may fail to convert tests to json if there is a panic.
+  # log both the raw text and json.
+  tmpfile="artifacts/raw.${run_counter}.txt"
+  mkdir -p artifacts
+  "$@" 2>&1 | tee "${tmpfile}" | go tool test2json -t -p "${pkg}" | run_json_test cat
 }
 
 function maybe_stress() {
