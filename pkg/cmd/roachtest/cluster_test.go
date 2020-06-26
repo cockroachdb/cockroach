@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"runtime"
 	"testing"
 	"time"
 
@@ -243,10 +242,9 @@ func TestClusterMonitor(t *testing.T) {
 			// In reality t.Fatal adds text that is returned when the test fails,
 			// so the failing goroutine will be referenced (not like in the expected
 			// error below, where all you see is the other one being canceled).
-			runtime.Goexit()
-			return errors.New("unreachable")
+			panic(errTestFatal)
 		})
-		expectedErr := regexp.QuoteMeta(`Goexit() was called`)
+		expectedErr := regexp.QuoteMeta(`t.Fatal() was called`)
 		if err := m.wait("sleep", "100"); !testutils.IsError(err, expectedErr) {
 			t.Logf("error details: %+v", err)
 			t.Error(err)
