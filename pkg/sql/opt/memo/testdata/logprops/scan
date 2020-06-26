@@ -121,7 +121,7 @@ index-join t
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,4)
  ├── prune: (4)
- ├── interesting orderings: (+1,+2) (+2,+3,+1) (-1,+2)
+ ├── interesting orderings: (+1,+2) (+2,+3,+1) (+4,+3,+1,+2) (-1,+2)
  └── scan t@bc
       ├── columns: a:1(int!null) b:2(char!null) c:3(int!null)
       ├── constraint: /2/3/1

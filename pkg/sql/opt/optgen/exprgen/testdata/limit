@@ -40,15 +40,17 @@ limit
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 1279.45569
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1279.34569
  │    ├── ordering: +1
  │    ├── limit hint: 10.00
+ │    ├── interesting orderings: (+1,+2)
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │         ├── stats: [rows=1000]
- │         └── cost: 1060.02
+ │         ├── cost: 1060.02
+ │         └── interesting orderings: (+1,+2)
  └── const: 10 [type=int]

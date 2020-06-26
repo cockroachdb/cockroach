@@ -610,6 +610,9 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 // Fills in lazily-derived properties (for display).
 func fillInLazyProps(e opt.Expr) {
 	if rel, ok := e.(memo.RelExpr); ok {
+		// These properties are derived from the normalized expression.
+		rel = rel.FirstExpr()
+
 		// Derive columns that are candidates for pruning.
 		norm.DerivePruneCols(rel)
 
