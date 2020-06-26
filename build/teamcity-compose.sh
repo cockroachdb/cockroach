@@ -22,9 +22,7 @@ run build/builder.sh mkrelease "$type" -Otarget testbuild PKG=./pkg/compose TAGS
 tc_end_block "Compile compose tests"
 
 tc_start_block "Run compose tests"
-run cd pkg/compose
-# run_text_test needs ./artifacts to be the artifacts folder.
-ln -s ../../artifacts artifacts
-run_text_test github.com/cockroachdb/cockroach/pkg/compose ./compose.test -test.v -test.timeout 30m
-run cd ../..
+# NB: we're cheating go test into invoking our `compose.test` over the one it
+# builds itself.
+run_json_test go test -json -v -timeout 30m -exec ../../build/go-test-precompiled.sh ./compose.test ./pkg/compose
 tc_end_block "Run compose tests"
