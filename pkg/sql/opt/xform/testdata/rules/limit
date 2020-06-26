@@ -12,6 +12,32 @@ CREATE TABLE a
 ----
 
 exec-ddl
+CREATE TABLE pqrs
+(
+    p INT NOT NULL,
+    q INT NOT NULL,
+    r INT NOT NULL,
+    s INT NOT NULL,
+    PRIMARY KEY (p, q),
+    CHECK (p = 1 OR p = 5 OR p = 10),
+    INDEX (r, s),
+    CHECK (r > 0),
+    CHECK (r < 3)
+)
+----
+
+exec-ddl
+ALTER TABLE pqrs INJECT STATISTICS '[
+  {
+    "columns": ["p"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
 CREATE TABLE index_tab
 (
     id INT PRIMARY KEY,
@@ -739,6 +765,56 @@ index-join index_tab
       │              ├── constraint: /17/20/21/15: [/'US_WEST' - /'US_WEST']
       │              └── limit: 10
       └── 10
+
+# Case where check constraints are used.
+opt expect=SplitScanIntoUnionScans format=hide-all
+SELECT * FROM pqrs ORDER BY q LIMIT 5
+----
+limit
+ ├── sort
+ │    └── union
+ │         ├── union
+ │         │    ├── scan pqrs
+ │         │    │    ├── constraint: /5/6: [/1 - /1]
+ │         │    │    └── limit: 5
+ │         │    └── scan pqrs
+ │         │         ├── constraint: /9/10: [/5 - /5]
+ │         │         └── limit: 5
+ │         └── scan pqrs
+ │              ├── constraint: /13/14: [/10 - /10]
+ │              └── limit: 5
+ └── 5
+
+# Case where multiple check constraints are combined into one constraint.
+opt expect=SplitScanIntoUnionScans format=hide-all
+SELECT * FROM pqrs ORDER BY s LIMIT 10
+----
+limit
+ ├── sort
+ │    └── union
+ │         ├── scan pqrs@secondary
+ │         │    ├── constraint: /7/8/5/6: [/1 - /1]
+ │         │    └── limit: 10
+ │         └── scan pqrs@secondary
+ │              ├── constraint: /11/12/9/10: [/2 - /2]
+ │              └── limit: 10
+ └── 10
+
+# Check constraints are not used because the scan is already constrained (the
+# Scan's constraint is used instead).
+opt expect=SplitScanIntoUnionScans format=hide-all
+SELECT * FROM (SELECT * FROM pqrs WHERE p = 1 OR p = 5) ORDER BY q LIMIT 5
+----
+limit
+ ├── sort
+ │    └── union
+ │         ├── scan pqrs
+ │         │    ├── constraint: /5/6: [/1 - /1]
+ │         │    └── limit: 5
+ │         └── scan pqrs
+ │              ├── constraint: /9/10: [/5 - /5]
+ │              └── limit: 5
+ └── 5
 
 # No-op case because the multi-key span isn't countable.
 opt expect-not=SplitScanIntoUnionScans format=hide-all
