@@ -1095,3 +1095,49 @@ DROP SEQUENCE seq_50649
 
 statement ok
 DROP TABLE t_50649
+
+# previously, changing ownership of a sequence between columns of the same table
+# was causing the sequenceID to appear in multiple column's ownedSequences list.
+# This makes it impossible to drop the affected columns/table once the sequence
+# has been dropped. This tests for these scenarios and ensures the table/columns
+# remain drop-able.
+subtest regression_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+DROP TABLE t_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN a
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN b
