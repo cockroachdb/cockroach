@@ -93,7 +93,7 @@ Run `go get -u <dependency>`. To get a specific version, run `go get -u <depende
 When updating a dependency, you should run `go mod tidy` after `go get` to ensure the old entries
 are removed from go.sum.
 
-You must then run `make -k vendor_rebuild` to ensure the modules are installed. These changes must
+You must then run `make vendor_rebuild` to ensure the modules are installed. These changes must
 then be committed in the submodule directory (see Working with Submodules).
 
 Programs can then be run using `go build -mod=vendor ...` or `go test -mod=vendor ...`.
