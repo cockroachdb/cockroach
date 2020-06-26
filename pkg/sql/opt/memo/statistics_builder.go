@@ -1430,11 +1430,15 @@ func (sb *statisticsBuilder) colStatFromJoinLeft(
 func (sb *statisticsBuilder) colStatFromJoinRight(
 	cols opt.ColSet, join RelExpr,
 ) *props.ColumnStatistic {
-	if join.Op() == opt.ZigzagJoinOp {
+	switch join.Op() {
+	case opt.ZigzagJoinOp:
 		return sb.colStatTable(join.Private().(*ZigzagJoinPrivate).RightTable, cols)
-	} else if join.Op() == opt.LookupJoinOp {
+	case opt.LookupJoinOp:
 		lookupPrivate := join.Private().(*LookupJoinPrivate)
 		return sb.colStatTable(lookupPrivate.Table, cols)
+	case opt.InvertedJoinOp:
+		invertedJoinPrivate := join.Private().(*InvertedJoinPrivate)
+		return sb.colStatTable(invertedJoinPrivate.Table, cols)
 	}
 	return sb.colStatFromChild(cols, join, 1 /* childIdx */)
 }
