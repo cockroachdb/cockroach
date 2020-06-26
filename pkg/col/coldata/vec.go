@@ -62,26 +62,24 @@ type Vec interface {
 	// this Vec.
 	CanonicalTypeFamily() types.Family
 
-	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
-	Bool() []bool
+	Bool() Bools
 	// Int16 returns an int16 slice.
-	Int16() []int16
+	Int16() Int16s
 	// Int32 returns an int32 slice.
-	Int32() []int32
+	Int32() Int32s
 	// Int64 returns an int64 slice.
-	Int64() []int64
+	Int64() Int64s
 	// Float64 returns a float64 slice.
-	Float64() []float64
+	Float64() Float64s
 	// Bytes returns a flat Bytes representation.
 	Bytes() *Bytes
-	// TODO(jordan): should this be [][]byte?
 	// Decimal returns an apd.Decimal slice.
-	Decimal() []apd.Decimal
+	Decimal() Decimals
 	// Timestamp returns a time.Time slice.
-	Timestamp() []time.Time
+	Timestamp() Times
 	// Interval returns a duration.Duration slice.
-	Interval() []duration.Duration
+	Interval() Durations
 	// Datum returns a vector of Datums.
 	Datum() DatumVec
 
@@ -166,28 +164,28 @@ var StandardColumnFactory ColumnFactory = &defaultColumnFactory{}
 func (cf *defaultColumnFactory) MakeColumn(t *types.T, n int) Column {
 	switch canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()); canonicalTypeFamily {
 	case types.BoolFamily:
-		return make([]bool, n)
+		return make(Bools, n)
 	case types.BytesFamily:
 		return NewBytes(n)
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
-			return make([]int16, n)
+			return make(Int16s, n)
 		case 32:
-			return make([]int32, n)
+			return make(Int32s, n)
 		case 0, 64:
-			return make([]int64, n)
+			return make(Int64s, n)
 		default:
 			panic(fmt.Sprintf("unexpected integer width: %d", t.Width()))
 		}
 	case types.FloatFamily:
-		return make([]float64, n)
+		return make(Float64s, n)
 	case types.DecimalFamily:
-		return make([]apd.Decimal, n)
+		return make(Decimals, n)
 	case types.TimestampTZFamily:
-		return make([]time.Time, n)
+		return make(Times, n)
 	case types.IntervalFamily:
-		return make([]duration.Duration, n)
+		return make(Durations, n)
 	default:
 		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
 	}
@@ -216,40 +214,40 @@ func (m *memColumn) SetCol(col interface{}) {
 	m.col = col
 }
 
-func (m *memColumn) Bool() []bool {
-	return m.col.([]bool)
+func (m *memColumn) Bool() Bools {
+	return m.col.(Bools)
 }
 
-func (m *memColumn) Int16() []int16 {
-	return m.col.([]int16)
+func (m *memColumn) Int16() Int16s {
+	return m.col.(Int16s)
 }
 
-func (m *memColumn) Int32() []int32 {
-	return m.col.([]int32)
+func (m *memColumn) Int32() Int32s {
+	return m.col.(Int32s)
 }
 
-func (m *memColumn) Int64() []int64 {
-	return m.col.([]int64)
+func (m *memColumn) Int64() Int64s {
+	return m.col.(Int64s)
 }
 
-func (m *memColumn) Float64() []float64 {
-	return m.col.([]float64)
+func (m *memColumn) Float64() Float64s {
+	return m.col.(Float64s)
 }
 
 func (m *memColumn) Bytes() *Bytes {
 	return m.col.(*Bytes)
 }
 
-func (m *memColumn) Decimal() []apd.Decimal {
-	return m.col.([]apd.Decimal)
+func (m *memColumn) Decimal() Decimals {
+	return m.col.(Decimals)
 }
 
-func (m *memColumn) Timestamp() []time.Time {
-	return m.col.([]time.Time)
+func (m *memColumn) Timestamp() Times {
+	return m.col.(Times)
 }
 
-func (m *memColumn) Interval() []duration.Duration {
-	return m.col.([]duration.Duration)
+func (m *memColumn) Interval() Durations {
+	return m.col.(Durations)
 }
 
 func (m *memColumn) Datum() DatumVec {
