@@ -338,7 +338,7 @@ func (p *planner) initiateDropTable(
 	drainName bool,
 ) error {
 	if tableDesc.Dropped() {
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+		return fmt.Errorf("table %q is already being dropped", tableDesc.Name)
 	}
 
 	// If the table is not interleaved , use the delayed GC mechanism to
