@@ -420,6 +420,7 @@ is-cross-compile := 1
 endif
 
 target-is-windows := $(findstring w64,$(TARGET_TRIPLE))
+target-is-macos := $(findstring darwin,$(TARGET_TRIPLE))
 
 # CMAKE_TARGET_MESSAGES=OFF prevents CMake from printing progress messages
 # whenever a target is fully built to prevent spammy output from make when
@@ -500,16 +501,19 @@ PROTOC      := $(PROTOC_DIR)/protoc
 
 DYN_LIB_DIR := lib
 DYN_EXT     := so
-ifdef host-is-macos
+ifdef target-is-macos
 DYN_EXT     := dylib
+endif
+ifdef target-is-windows
+DYN_EXT     := dll
 endif
 
 LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT)
 
 C_LIBS_COMMON = \
 	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
-	$(if $(target-is-windows),,$(LIBEDIT) $(LIBGEOS)) \
-	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB) $(LIBPROJ)
+	$(if $(target-is-windows),,$(LIBEDIT)) \
+	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB) $(LIBPROJ) $(LIBGEOS)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
 C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
 
