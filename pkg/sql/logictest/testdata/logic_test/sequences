@@ -1084,3 +1084,135 @@ DROP SEQUENCE seq_50649
 
 statement ok
 DROP TABLE t_50649
+
+subtest regression_50712
+
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the table is lexicographically less than the
+# sequence, which results in drop database dropping the table before the
+# sequence.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.a_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the db is switched as the current db
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+SET DATABASE = db_50712
+
+statement ok
+CREATE TABLE a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY a_50712.a
+
+statement ok
+DROP DATABASE db_50712
+
+statement ok
+SET DATABASE = test
+
+# Tests db drop.
+# Sequence: outside db.
+# Owner: inside db.
+# The sequence should be automatically dropped.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+statement error pq: relation "seq_50712" does not exist
+SELECT * FROM seq_50712
+
+# Tests db drop.
+# Sequence: inside db
+# Owner: outside db
+# It should be possible to drop the table later.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+statement ok
+DROP TABLE t_50712
+
+# previously, changing ownership of a sequence between columns of the same table
+# was causing the sequenceID to appear in multiple column's ownedSequences list.
+# This makes it impossible to drop the affected columns/table once the sequence
+# has been dropped. This tests for these scenarios and ensures the table/columns
+# remain drop-able.
+subtest regression_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+DROP TABLE t_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN a
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN b

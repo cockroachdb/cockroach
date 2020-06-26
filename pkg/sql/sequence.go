@@ -290,7 +290,7 @@ func assignSequenceOptions(
 					if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
 						return err
 					}
-					err := addSequenceOwner(params.ctx, params.p, tableDesc, col, sequenceID, opts)
+					err := addSequenceOwner(params.ctx, params.p, option.ColumnItemVal, sequenceID, opts)
 					if err != nil {
 						return err
 					}
@@ -384,11 +384,15 @@ func resolveColumnItemToDescriptors(
 func addSequenceOwner(
 	ctx context.Context,
 	p *planner,
-	tableDesc *MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	columnItemVal *tree.ColumnItem,
 	sequenceID sqlbase.ID,
 	opts *sqlbase.TableDescriptor_SequenceOpts,
 ) error {
+	tableDesc, col, err := resolveColumnItemToDescriptors(ctx, p, columnItemVal)
+	if err != nil {
+		return err
+	}
+
 	col.OwnsSequenceIds = append(col.OwnsSequenceIds, sequenceID)
 
 	opts.SequenceOwner.OwnerColumnID = col.ID
