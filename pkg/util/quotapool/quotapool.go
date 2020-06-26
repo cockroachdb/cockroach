@@ -37,12 +37,12 @@ import (
 // internally the *IntAlloc is used as a resource.
 type Resource interface {
 
-	// Merge combines other into the current resource.
-	// After a Resource (other) is passed to Merge, the QuotaPool will never use
+	// Merge combines val into the current resource.
+	// After val is passed to Merge, the QuotaPool will never use
 	// that Resource again. This behavior allows clients to pool instances of
 	// Resources by creating Resource during Acquisition and destroying them in
 	// Merge.
-	Merge(other Resource)
+	Merge(val interface{})
 }
 
 // Request is an interface used to acquire quota from the pool.
@@ -54,18 +54,8 @@ type Request interface {
 	// Resource.
 	//
 	// If it is not fulfilled it must not modify or retain the passed alloc.
-	// If it is fulfilled, it should return any portion of the Alloc it does
-	// not intend to use.
-	//
-	// It is up to the implementer to decide if it makes sense to return a
-	// zero-valued, non-nil Resource or nil as unused when acquiring all of the
-	// passed Resource. If nil is returned and there is a notion of acquiring a
-	// zero-valued Resource unit from the pool then those acquisitions may need to
-	// wait until the pool is non-empty before proceeding. Those zero-valued
-	// acquisitions will still need to wait to be at the front of the queue. It
-	// may make sense for implementers to special case zero-valued acquisitions
-	// entirely as IntPool does.
-	Acquire(context.Context, Resource) (fulfilled bool, unused Resource)
+	// If it is fulfilled, it should modify the Resource value accordingly.
+	Acquire(context.Context, Resource) (fulfilled bool)
 
 	// ShouldWait indicates whether this request should be queued. If this method
 	// returns false and there is insufficient capacity in the pool when the
@@ -185,17 +175,14 @@ func (qp *QuotaPool) Close(reason string) {
 // the existing resources in the QuotaPool if there are any.
 //
 // Safe for concurrent use.
-func (qp *QuotaPool) Add(v Resource) {
+func (qp *QuotaPool) Add(val interface{}) {
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
-	qp.addLocked(v)
+	qp.addLocked(val)
 }
 
-func (qp *QuotaPool) addLocked(r Resource) {
-	if qp.mu.quota != nil {
-		r.Merge(qp.mu.quota)
-	}
-	qp.mu.quota = r
+func (qp *QuotaPool) addLocked(val interface{}) {
+	qp.mu.quota.Merge(val)
 	// Notify the head of the queue if there is one waiting.
 	if n := qp.mu.q.peek(); n != nil && n.c != nil {
 		select {
@@ -278,8 +265,7 @@ func (qp *QuotaPool) acquireFastPath(
 		return false, nil, qp.closeErr
 	}
 	if qp.mu.q.len == 0 {
-		if fulfilled, unused := r.Acquire(ctx, qp.mu.quota); fulfilled {
-			qp.mu.quota = unused
+		if fulfilled := r.Acquire(ctx, qp.mu.quota); fulfilled {
 			return true, nil, nil
 		}
 	}
@@ -309,10 +295,8 @@ func (qp *QuotaPool) tryAcquireOnNotify(
 	if len(n.c) > 0 {
 		<-n.c
 	}
-	var unused Resource
-	if fulfilled, unused = r.Acquire(ctx, qp.mu.quota); fulfilled {
+	if fulfilled = r.Acquire(ctx, qp.mu.quota); fulfilled {
 		n.c = nil
-		qp.mu.quota = unused
 		qp.notifyNextLocked()
 	}
 	return fulfilled

@@ -109,8 +109,8 @@ func (ia *IntAlloc) from(p *IntPool) bool {
 type intAlloc IntAlloc
 
 // Merge makes intAlloc a Resource.
-func (ia *intAlloc) Merge(other Resource) {
-	(*IntAlloc)(ia).Merge((*IntAlloc)(other.(*intAlloc)))
+func (ia *intAlloc) Merge(val interface{}) {
+	(*IntAlloc)(ia).Merge((*IntAlloc)(val.(*intAlloc)))
 }
 
 // NewIntPool creates a new named IntPool.
@@ -449,24 +449,22 @@ type intRequest struct {
 	want uint64
 }
 
-func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
+func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool) {
 	ia := v.(*intAlloc)
 	want := min(int64(r.want), int64(ia.p.Capacity()))
 	if ia.alloc < want {
-		return false, nil
+		return false
 	}
 	r.want = uint64(want)
 	ia.alloc -= want
-	return true, ia
+	return true
 }
 
 func (r *intRequest) ShouldWait() bool { return true }
 
 type intRequestNoWait intRequest
 
-func (r *intRequestNoWait) Acquire(
-	ctx context.Context, v Resource,
-) (fulfilled bool, extra Resource) {
+func (r *intRequestNoWait) Acquire(ctx context.Context, v Resource) (fulfilled bool) {
 	return (*intRequest)(r).Acquire(ctx, v)
 }
 
@@ -482,7 +480,7 @@ type intFuncRequest struct {
 	err error
 }
 
-func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
+func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool) {
 	ia := v.(*intAlloc)
 	pi := PoolInfo{
 		Available: uint64(max(0, ia.alloc)),
@@ -494,18 +492,18 @@ func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled boo
 			panic(fmt.Sprintf("IntRequestFunc returned both took: %d and err: %s", took, err))
 		}
 		if errors.Is(err, ErrNotEnoughQuota) {
-			return false, nil
+			return false
 		}
 		r.err = err
 		// Take the request out of the queue and put all the quota back.
-		return true, ia
+		return true
 	}
 	if took > math.MaxInt64 || int64(took) > ia.alloc {
 		panic(errors.Errorf("took %d quota > %d allocated", took, ia.alloc))
 	}
 	r.took = took
 	ia.alloc -= int64(took)
-	return true, ia
+	return true
 }
 
 func min(a, b int64) (v int64) {
@@ -526,9 +524,7 @@ func (r *intFuncRequest) ShouldWait() bool { return true }
 
 type intFuncRequestNoWait intFuncRequest
 
-func (r *intFuncRequestNoWait) Acquire(
-	ctx context.Context, v Resource,
-) (fulfilled bool, extra Resource) {
+func (r *intFuncRequestNoWait) Acquire(ctx context.Context, v Resource) (fulfilled bool) {
 	return (*intFuncRequest)(r).Acquire(ctx, v)
 }
 
