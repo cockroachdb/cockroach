@@ -210,58 +210,57 @@ scan a@s_idx
 # --------------------------------------------------
 
 exec-ddl
-CREATE TABLE kuv (k INT PRIMARY KEY, u INT, v INT, INDEX (u))
+CREATE TABLE kuv (k INT, u INT, v INT, INDEX (k, u))
 ----
 
-opt
-SELECT * FROM kuv ORDER BY u LIMIT 5
+opt expect=PushLimitIntoIndexJoin
+SELECT * FROM kuv WHERE k = 1 OR k = 2 ORDER BY u LIMIT 5
 ----
 index-join kuv
  ├── columns: k:1!null u:2 v:3
  ├── cardinality: [0 - 5]
- ├── key: (1)
- ├── fd: (1)-->(2,3)
  ├── ordering: +2
- └── scan kuv@secondary
-      ├── columns: k:1!null u:2
-      ├── limit: 5
-      ├── key: (1)
-      ├── fd: (1)-->(2)
-      └── ordering: +2
+ └── limit
+      ├── columns: k:1!null u:2 rowid:4!null
+      ├── internal-ordering: +2
+      ├── cardinality: [0 - 5]
+      ├── key: (4)
+      ├── fd: (4)-->(1,2)
+      ├── ordering: +2
+      ├── sort
+      │    ├── columns: k:1!null u:2 rowid:4!null
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(1,2)
+      │    ├── ordering: +2
+      │    ├── limit hint: 5.00
+      │    └── scan kuv@secondary
+      │         ├── columns: k:1!null u:2 rowid:4!null
+      │         ├── constraint: /1/2/4: [/1 - /2]
+      │         ├── key: (4)
+      │         └── fd: (4)-->(1,2)
+      └── 5
 
-opt
+# Ensure that the limit is not pushed down when the ordering requires columns
+# produced by the IndexJoin.
+opt expect-not=PushLimitIntoIndexJoin
 SELECT * FROM kuv WHERE u > 1 AND u < 10 ORDER BY u, v LIMIT 5
 ----
-sort
- ├── columns: k:1!null u:2!null v:3
+limit
+ ├── columns: k:1 u:2!null v:3
+ ├── internal-ordering: +2,+3
  ├── cardinality: [0 - 5]
- ├── key: (1)
- ├── fd: (1)-->(2,3)
  ├── ordering: +2,+3
- └── index-join kuv
-      ├── columns: k:1!null u:2!null v:3
-      ├── cardinality: [0 - 5]
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      └── limit
-           ├── columns: k:1!null u:2!null
-           ├── internal-ordering: +2,+3
-           ├── cardinality: [0 - 5]
-           ├── key: (1)
-           ├── fd: (1)-->(2)
-           ├── sort (segmented)
-           │    ├── columns: k:1!null u:2!null
-           │    ├── key: (1)
-           │    ├── fd: (1)-->(2)
-           │    ├── ordering: +2,+3
-           │    ├── limit hint: 5.00
-           │    └── scan kuv@secondary
-           │         ├── columns: k:1!null u:2!null
-           │         ├── constraint: /2/1: [/2 - /9]
-           │         ├── key: (1)
-           │         ├── fd: (1)-->(2)
-           │         └── ordering: +2
-           └── 5
+ ├── sort
+ │    ├── columns: k:1 u:2!null v:3
+ │    ├── ordering: +2,+3
+ │    ├── limit hint: 5.00
+ │    └── select
+ │         ├── columns: k:1 u:2!null v:3
+ │         ├── scan kuv
+ │         │    └── columns: k:1 u:2 v:3
+ │         └── filters
+ │              └── (u:2 > 1) AND (u:2 < 10) [outer=(2), constraints=(/2: [/2 - /9]; tight)]
+ └── 5
 
 exec-ddl
 CREATE TABLE abcd (
@@ -601,21 +600,22 @@ offset
 opt
 SELECT * FROM kuv ORDER BY u LIMIT 5 FOR UPDATE
 ----
-index-join kuv
- ├── columns: k:1!null u:2 v:3
+limit
+ ├── columns: k:1 u:2 v:3
+ ├── internal-ordering: +2
  ├── cardinality: [0 - 5]
  ├── volatile
- ├── key: (1)
- ├── fd: (1)-->(2,3)
  ├── ordering: +2
- └── scan kuv@secondary
-      ├── columns: k:1!null u:2
-      ├── limit: 5
-      ├── locking: for-update
-      ├── volatile
-      ├── key: (1)
-      ├── fd: (1)-->(2)
-      └── ordering: +2
+ ├── sort
+ │    ├── columns: k:1 u:2 v:3
+ │    ├── volatile
+ │    ├── ordering: +2
+ │    ├── limit hint: 5.00
+ │    └── scan kuv
+ │         ├── columns: k:1 u:2 v:3
+ │         ├── locking: for-update
+ │         └── volatile
+ └── 5
 
 # -------------------------
 # SplitScanIntoUnionScans
