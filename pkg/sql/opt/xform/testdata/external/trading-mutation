@@ -579,7 +579,7 @@ project
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:7!null cardid:8!null version:15!null
       │         ├── constraint: /7/15: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=6.35833333e-05, distinct(7)=6.35833333e-05, null(7)=0, distinct(15)=6.35833333e-05, null(15)=0, distinct(7,15)=6.35833333e-05, null(7,15)=0]
+      │         ├── stats: [rows=6.35833333e-05, distinct(7)=6.35833333e-05, null(7)=0, distinct(8)=6.35833333e-05, null(8)=0, distinct(15)=6.35833333e-05, null(15)=0, distinct(7,15)=6.35833333e-05, null(7,15)=0]
       │         │   histogram(15)=
       │         ├── key: (8)
       │         └── fd: ()-->(7), (8)-->(15), (15)-->(8)
@@ -704,40 +704,43 @@ project
       ├── key: (5,13)
       ├── fd: ()-->(1,2,4,11,12), (3,5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3)
       ├── ordering: -(3|13) opt(1,2,4,11,12) [actual: -3]
-      ├── inner-join (lookup transactions)
+      ├── inner-join (lookup transactiondetails)
       │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
-      │    ├── key columns: [20 21 3] = [11 12 13]
+      │    ├── key columns: [1 2 3 4 5] = [1 2 3 4 5]
       │    ├── lookup columns are key
       │    ├── stats: [rows=478.646617, distinct(3)=478.646617, null(3)=0, distinct(13)=478.646617, null(13)=0]
       │    ├── key: (5,13)
       │    ├── fd: ()-->(1,2,4,11,12), (3,5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3)
       │    ├── ordering: -(3|13) opt(1,2,4,11,12) [actual: -3]
       │    ├── limit hint: 20.00
-      │    ├── project
-      │    │    ├── columns: "project_const_col_@11":20!null "project_const_col_@12":21!null transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
-      │    │    ├── stats: [rows=478.646617]
-      │    │    ├── key: (3,5)
-      │    │    ├── fd: ()-->(1,2,4,20,21), (3,5)-->(6,7)
-      │    │    ├── ordering: -3 opt(1,2,4) [actual: -3]
+      │    ├── inner-join (lookup transactions)
+      │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
+      │    │    ├── key columns: [23 24 3] = [11 12 13]
+      │    │    ├── lookup columns are key
+      │    │    ├── stats: [rows=478.646617, distinct(3)=478.646617, null(3)=0, distinct(13)=478.646617, null(13)=0]
+      │    │    ├── key: (5,13)
+      │    │    ├── fd: ()-->(1,2,4,11,12), (13)-->(14,15), (3)==(13), (13)==(3)
+      │    │    ├── ordering: -(3|13) opt(1,2,4,11,12) [actual: -3]
       │    │    ├── limit hint: 100.00
-      │    │    ├── index-join transactiondetails
-      │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
-      │    │    │    ├── stats: [rows=478.646617, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.646617, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=478.640889, null(5)=0, distinct(6)=478.640889, null(6)=0, distinct(7)=478.640889, null(7)=0, distinct(1,2,4)=1, null(1,2,4)=0]
+      │    │    ├── project
+      │    │    │    ├── columns: "project_const_col_@11":23!null "project_const_col_@12":24!null transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
+      │    │    │    ├── stats: [rows=478.646617]
       │    │    │    ├── key: (3,5)
-      │    │    │    ├── fd: ()-->(1,2,4), (3,5)-->(6,7)
+      │    │    │    ├── fd: ()-->(1,2,4,23,24)
       │    │    │    ├── ordering: -3 opt(1,2,4) [actual: -3]
       │    │    │    ├── limit hint: 100.00
-      │    │    │    └── scan transactiondetails@detailscardidindex,rev
-      │    │    │         ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
-      │    │    │         ├── constraint: /1/2/4/3/5: [/1/false/21953 - /1/false/21953]
-      │    │    │         ├── stats: [rows=478.646617, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=1, null(4)=0, distinct(1,2,4)=1, null(1,2,4)=0]
-      │    │    │         ├── key: (3,5)
-      │    │    │         ├── fd: ()-->(1,2,4)
-      │    │    │         ├── ordering: -3 opt(1,2,4) [actual: -3]
-      │    │    │         └── limit hint: 100.00
-      │    │    └── projections
-      │    │         ├── 1 [as="project_const_col_@11":20]
-      │    │         └── false [as="project_const_col_@12":21]
+      │    │    │    ├── scan transactiondetails@detailscardidindex,rev
+      │    │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
+      │    │    │    │    ├── constraint: /1/2/4/3/5: [/1/false/21953 - /1/false/21953]
+      │    │    │    │    ├── stats: [rows=478.646617, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.646617, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=478.640889, null(5)=0, distinct(1,2,4)=1, null(1,2,4)=0]
+      │    │    │    │    ├── key: (3,5)
+      │    │    │    │    ├── fd: ()-->(1,2,4)
+      │    │    │    │    ├── ordering: -3 opt(1,2,4) [actual: -3]
+      │    │    │    │    └── limit hint: 100.00
+      │    │    │    └── projections
+      │    │    │         ├── 1 [as="project_const_col_@11":23]
+      │    │    │         └── false [as="project_const_col_@12":24]
+      │    │    └── filters (true)
       │    └── filters (true)
       └── 20
 
