@@ -1407,6 +1407,21 @@ func (ds *DistSender) sendPartialBatch(
 				pErr = roachpb.NewError(err)
 				continue
 			}
+
+			// See if the range shrunk. If it has, we need to to sub-divide the
+			// request. Note that for the resending, we use the already truncated
+			// batch, so that we know that the response to it matches the positions
+			// into our batch (using the full batch here would give a potentially
+			// larger response slice with unknown mapping to our truncated reply).
+			intersection, err := rs.Intersect(desc)
+			if err != nil {
+				return response{pErr: roachpb.NewError(err)}
+			}
+			if !intersection.Equal(rs) {
+				log.Eventf(ctx, "range shrunk; sub-dividing the request")
+				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
+				return response{reply: reply, positions: positions, pErr: pErr}
+			}
 		}
 
 		reply, err = ds.sendToReplicas(ctx, ba, desc, withCommit)
@@ -1474,31 +1489,36 @@ func (ds *DistSender) sendPartialBatch(
 			// likely the result of a range split. If we have new range
 			// descriptors, insert them instead as long as they are different
 			// from the last descriptor to avoid endless loops.
-			var replacements []roachpb.RangeDescriptor
-			different := func(rd *roachpb.RangeDescriptor) bool {
-				return !desc.RSpan().Equal(rd.RSpan())
-			}
-			if different(&tErr.MismatchedRange) {
-				replacements = append(replacements, tErr.MismatchedRange)
-			}
-			if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
-				if includesFrontOfCurSpan(isReverse, tErr.SuggestedRange, rs) {
-					replacements = append(replacements, *tErr.SuggestedRange)
+
+			// Sanity check that we got the different descriptors. Getting the same
+			// descriptor and putting it in the cache would be bad, as we'd go through
+			// an infinite loops of retries.
+			{
+				different := func(rd *roachpb.RangeDescriptor) bool {
+					return !desc.RSpan().Equal(rd.RSpan())
 				}
+				if !different(&tErr.MismatchedRange) {
+					return response{pErr: roachpb.NewError(errors.AssertionFailedf(
+						"MismatchedRange not different from original desc. desc: %s. suggested: %s",
+						desc, tErr.MismatchedRange))}
+				}
+				if (tErr.SuggestedRange != nil) && !different(tErr.SuggestedRange) {
+					return response{pErr: roachpb.NewError(errors.AssertionFailedf(
+						"SuggestedRange not different from original desc. desc: %s. suggested: %s",
+						desc, tErr.SuggestedRange))}
+				}
+			}
+
+			replacements := make([]roachpb.RangeDescriptor, 0, 2)
+			replacements = append(replacements, tErr.MismatchedRange)
+			if tErr.SuggestedRange != nil {
+				replacements = append(replacements, *tErr.SuggestedRange)
 			}
 			// Same as Evict() if replacements is empty.
 			evictToken.EvictAndReplace(ctx, replacements...)
-			// On addressing errors (likely a split), we need to re-invoke
-			// the range descriptor lookup machinery, so we recurse by
-			// sending batch to just the partial span this descriptor was
-			// supposed to cover. Note that for the resending, we use the
-			// already truncated batch, so that we know that the response
-			// to it matches the positions into our batch (using the full
-			// batch here would give a potentially larger response slice
-			// with unknown mapping to our truncated reply).
-			log.VEventf(ctx, 1, "likely split; resending batch to span: %s", tErr)
-			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
-			return response{reply: reply, positions: positions, pErr: pErr}
+			// Clear desc to reload on the next attempt.
+			desc = nil
+			continue
 		}
 		break
 	}
@@ -1527,13 +1547,6 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
 	default:
 	}
 	return nil
-}
-
-func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roachpb.RSpan) bool {
-	if isReverse {
-		return rd.ContainsKeyInverted(rs.EndKey)
-	}
-	return rd.ContainsKey(rs.Key)
 }
 
 // fillSkippedResponses fills in responses and ResumeSpans for requests
