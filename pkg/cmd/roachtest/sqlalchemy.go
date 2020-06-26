@@ -19,7 +19,7 @@ import (
 	"strings"
 )
 
-var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>.*)$`)
+var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
 var supportedSQLAlchemyTag = "rel_1_3_17"
@@ -165,7 +165,7 @@ func registerSQLAlchemy(r *testRegistry) {
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		rawResults, _ := c.RunWithBuffer(ctx, t.l, node,
-			`cd /mnt/data1/sqlalchemy/ && pytest -s --maxfail=0 `+
+			`cd /mnt/data1/sqlalchemy/ && pytest --maxfail=0 `+
 				`--requirements=cockroachdb.sqlalchemy.test_requirements:Requirements `+
 				`--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable `+
 				`test/dialect/test_suite.py`)
@@ -222,7 +222,7 @@ func registerSQLAlchemy(r *testRegistry) {
 		}
 
 		results.summarizeAll(
-			t, "sqlalchemy" /* ormName */, blocklistName, expectedFailures, version, latestTag)
+			t, "sqlalchemy" /* ormName */, blocklistName, expectedFailures, version, supportedSQLAlchemyTag)
 	}
 
 	r.Add(testSpec{
