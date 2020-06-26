@@ -93,14 +93,14 @@ Run `go get -u <dependency>`. To get a specific version, run `go get -u <depende
 When updating a dependency, you should run `go mod tidy` after `go get` to ensure the old entries
 are removed from go.sum.
 
-You must then run `make -k vendor_rebuild` to ensure the modules are installed. These changes must
+You must then run `make vendor_rebuild` to ensure the modules are installed. These changes must
 then be committed in the submodule directory (see Working with Submodules).
 
 Programs can then be run using `go build -mod=vendor ...` or `go test -mod=vendor ...`.
 
 ### Removing a dependency
 
-When a dependency has been removed, run `go mod tidy` and then `make -k vendor_rebuild`. Then follow
+When a dependency has been removed, run `go mod tidy` and then `make vendor_rebuild`. Then follow
 the Working with Submodules steps below.
 
 ### Requiring a new tool
@@ -159,7 +159,7 @@ ref remains reachable and thus is never garbage collected.
 The canonical linearization of history is always the main repo. In the event
 of concurrent changes to `vendor`, the first should cause the second to see a
 conflict on the `vendor` submodule pointer. When resolving that conflict, it
-is important to re-run `go mod tidy `and `make -k vendor_rebuild`
+is important to re-run `go mod tidy `and `make vendor_rebuild`
 against the fetched, updated `vendor` ref, thus generating a new commit in
 the submodule that has as its parent the one from the earlier change.
 
