@@ -1,0 +1,73 @@
+exec-ddl
+CREATE TABLE ltable(
+  k int primary key,
+  geom geometry
+)
+----
+
+exec-ddl
+CREATE TABLE rtable(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+----
+
+opt
+SELECT ltable.k, rtable.k FROM ltable JOIN rtable ON ST_Intersects(ltable.geom, rtable.geom)
+----
+project
+ ├── columns: k:1(int!null) k:3(int!null)
+ ├── immutable
+ ├── stats: [rows=333333.333]
+ ├── key: (1,3)
+ └── inner-join (cross)
+      ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:3(int!null) rtable.geom:4(geometry)
+      ├── immutable
+      ├── stats: [rows=333333.333]
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (3)-->(4)
+      ├── scan ltable
+      │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry)
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan rtable
+      │    ├── columns: rtable.k:3(int!null) rtable.geom:4(geometry)
+      │    ├── stats: [rows=1000, distinct(3)=1000, null(3)=0]
+      │    ├── key: (3)
+      │    └── fd: (3)-->(4)
+      └── filters
+           └── st_intersects(ltable.geom:2, rtable.geom:4) [type=bool, outer=(2,4), immutable]
+
+opt
+SELECT ltable.k, rtable.k FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)
+----
+project
+ ├── columns: k:1(int!null) k:3(int!null)
+ ├── immutable
+ ├── stats: [rows=333333.333]
+ ├── key: (1,3)
+ └── inner-join (lookup rtable)
+      ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:3(int!null) rtable.geom:4(geometry)
+      ├── key columns: [3] = [3]
+      ├── lookup columns are key
+      ├── immutable
+      ├── stats: [rows=333333.333]
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (3)-->(4)
+      ├── inner-join (inverted-lookup rtable@geom_index)
+      │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:3(int!null)
+      │    ├── inverted-expr
+      │    │    └── st_intersects(ltable.geom:2, rtable.geom:4) [type=bool]
+      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(3)=999.956829, null(3)=0]
+      │    ├── key: (1,3)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan ltable
+      │    │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry)
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── filters (true)
+      └── filters
+           └── st_intersects(ltable.geom:2, rtable.geom:4) [type=bool, outer=(2,4), immutable]
