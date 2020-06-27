@@ -920,7 +920,7 @@ func tableOrdinal(
 // toTableOrdinals returns a mapping from column ordinals in cols to table
 // reader column ordinals.
 func toTableOrdinals(
-	cols []sqlbase.ColumnDescriptor,
+	cols []*sqlbase.ColumnDescriptor,
 	desc *sqlbase.ImmutableTableDescriptor,
 	visibility execinfrapb.ScanVisibility,
 ) []int {
@@ -934,17 +934,17 @@ func toTableOrdinals(
 // getOutputColumnsFromColsForScan returns the indices of the columns that are
 // returned by a scanNode or a tableReader.
 // If remap is not nil, the column ordinals are remapped accordingly.
-func getOutputColumnsFromColsForScan(cols []sqlbase.ColumnDescriptor, remap []int) []uint32 {
-	outputColumns := make([]uint32, 0, len(cols))
+func getOutputColumnsFromColsForScan(cols []*sqlbase.ColumnDescriptor, remap []int) []uint32 {
+	outputColumns := make([]uint32, len(cols))
 	// TODO(radu): if we have a scan with a filter, cols will include the
 	// columns needed for the filter, even if they aren't needed for the next
 	// stage.
-	for i := 0; i < len(cols); i++ {
+	for i := range outputColumns {
 		colIdx := i
 		if remap != nil {
 			colIdx = remap[i]
 		}
-		outputColumns = append(outputColumns, uint32(colIdx))
+		outputColumns[i] = uint32(colIdx)
 	}
 	return outputColumns
 }
@@ -1085,7 +1085,7 @@ type tableReaderPlanningInfo struct {
 	maxResults             uint64
 	estimatedRowCount      uint64
 	reqOrdering            ReqOrdering
-	cols                   []sqlbase.ColumnDescriptor
+	cols                   []*sqlbase.ColumnDescriptor
 	colsToTableOrdrinalMap []int
 }
 
