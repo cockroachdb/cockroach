@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -124,7 +125,7 @@ func (w *workloadReader) readFiles(
 		if err != nil {
 			return err
 		}
-		conf, err := cloud.ParseWorkloadConfig(file)
+		conf, err := cloudimpl.ParseWorkloadConfig(file)
 		if err != nil {
 			return err
 		}
