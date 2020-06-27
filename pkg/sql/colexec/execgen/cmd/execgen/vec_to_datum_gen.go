@@ -20,12 +20,15 @@ const vecToDatumTmpl = "pkg/sql/colexec/vec_to_datum_tmpl.go"
 
 func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
+		"_HAS_NULLS", "$.HasNulls",
 		"_HAS_SEL", "$.HasSel",
 	)
 	s := r.Replace(inputFileContents)
 
 	setTupleIdx := makeFunctionRegex("_SET_TUPLE_IDX", 4)
 	s = setTupleIdx.ReplaceAllString(s, `{{template "setTupleIdx" buildDict "HasSel" $4}}`)
+	typedSliceToDatum := makeFunctionRegex("_TYPED_SLICE_TO_DATUM", 6)
+	s = typedSliceToDatum.ReplaceAllString(s, `{{template "typedSliceToDatum" buildDict "HasNulls" $5 "HasSel" $6}}`)
 	vecToDatum := makeFunctionRegex("_VEC_TO_DATUM", 7)
 	s = vecToDatum.ReplaceAllString(s, `{{template "vecToDatum" buildDict "HasNulls" $6 "HasSel" $7}}`)
 

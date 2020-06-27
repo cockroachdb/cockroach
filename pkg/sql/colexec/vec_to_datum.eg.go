@@ -94,95 +94,121 @@ func PhysicalTypeColVecToDatum(
 		nulls := col.Nulls()
 		if sel != nil {
 			sel = sel[:length]
-			var idx, tupleIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.BoolFamily:
 				bools := col.Bool()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					if bools[tupleIdx] {
+						return tree.DBoolTrue
+					}
+					return tree.DBoolFalse
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					if bools[tupleIdx] {
-						converted[idx] = tree.DBoolTrue
-					} else {
-						converted[idx] = tree.DBoolFalse
-					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntFamily:
 				switch ct.Width() {
 				case 16:
 					int16s := col.Int16()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int16s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(int16s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				case 32:
 					int32s := col.Int32()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int32s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(int32s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				default:
 					int64s := col.Int64()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int64s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(int64s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
 			case types.FloatFamily:
 				floats := col.Float64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.DecimalFamily:
 				decimals := col.Decimal()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = sel[idx]
-					if nulls.NullAt(tupleIdx) {
-						converted[idx] = tree.DNull
-						continue
-					}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					d := da.NewDDecimal(tree.DDecimal{Decimal: decimals[tupleIdx]})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
 					d.Coeff = big.Int{}
 					d.Coeff.Set(&decimals[tupleIdx].Coeff)
-					converted[idx] = d
+					return d
 				}
-				return
-			case types.DateFamily:
-				int64s := col.Int64()
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+					converted[idx] = _CONVERTER(tupleIdx)
+				}
+				return
+			case types.DateFamily:
+				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = sel[idx]
+					if nulls.NullAt(tupleIdx) {
+						converted[idx] = tree.DNull
+						continue
+					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.StringFamily:
@@ -190,201 +216,263 @@ func PhysicalTypeColVecToDatum(
 				// that.
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.BytesFamily:
 				// Note that there is no need for a copy since DBytes uses a string as
 				// underlying storage, which will perform the copy for us.
 				bytes := col.Bytes()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.OidFamily:
 				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.UuidFamily:
 				// Note that there is no need for a copy because uuid.FromBytes will perform
 				// a copy.
 				bytes := col.Bytes()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = sel[idx]
-					if nulls.NullAt(tupleIdx) {
-						converted[idx] = tree.DNull
-						continue
-					}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					id, err := uuid.FromBytes(bytes.Get(tupleIdx))
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+					return da.NewDUuid(tree.DUuid{UUID: id})
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = sel[idx]
+					if nulls.NullAt(tupleIdx) {
+						converted[idx] = tree.DNull
+						continue
+					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampTZFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntervalFamily:
 				intervals := col.Interval()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			default:
 				datumVec := col.Datum()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			}
 		} else {
-			var idx, tupleIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.BoolFamily:
 				bools := col.Bool()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					if bools[tupleIdx] {
+						return tree.DBoolTrue
+					}
+					return tree.DBoolFalse
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					if bools[tupleIdx] {
-						converted[idx] = tree.DBoolTrue
-					} else {
-						converted[idx] = tree.DBoolFalse
-					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntFamily:
 				switch ct.Width() {
 				case 16:
 					int16s := col.Int16()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int16s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(int16s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				case 32:
 					int32s := col.Int32()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int32s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(int32s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				default:
 					int64s := col.Int64()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int64s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDInt(tree.DInt(int64s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
 			case types.FloatFamily:
 				floats := col.Float64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.DecimalFamily:
 				decimals := col.Decimal()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = idx
-					if nulls.NullAt(tupleIdx) {
-						converted[idx] = tree.DNull
-						continue
-					}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					d := da.NewDDecimal(tree.DDecimal{Decimal: decimals[tupleIdx]})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
 					d.Coeff = big.Int{}
 					d.Coeff.Set(&decimals[tupleIdx].Coeff)
-					converted[idx] = d
+					return d
 				}
-				return
-			case types.DateFamily:
-				int64s := col.Int64()
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+					converted[idx] = _CONVERTER(tupleIdx)
+				}
+				return
+			case types.DateFamily:
+				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = idx
+					if nulls.NullAt(tupleIdx) {
+						converted[idx] = tree.DNull
+						continue
+					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.StringFamily:
@@ -392,108 +480,144 @@ func PhysicalTypeColVecToDatum(
 				// that.
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
 						if nulls.NullAt(tupleIdx) {
 							converted[idx] = tree.DNull
 							continue
 						}
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.BytesFamily:
 				// Note that there is no need for a copy since DBytes uses a string as
 				// underlying storage, which will perform the copy for us.
 				bytes := col.Bytes()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.OidFamily:
 				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.UuidFamily:
 				// Note that there is no need for a copy because uuid.FromBytes will perform
 				// a copy.
 				bytes := col.Bytes()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = idx
-					if nulls.NullAt(tupleIdx) {
-						converted[idx] = tree.DNull
-						continue
-					}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					id, err := uuid.FromBytes(bytes.Get(tupleIdx))
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+					return da.NewDUuid(tree.DUuid{UUID: id})
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = idx
+					if nulls.NullAt(tupleIdx) {
+						converted[idx] = tree.DNull
+						continue
+					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampTZFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntervalFamily:
 				intervals := col.Interval()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			default:
 				datumVec := col.Datum()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
 					if nulls.NullAt(tupleIdx) {
 						converted[idx] = tree.DNull
 						continue
 					}
-					converted[idx] = datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			}
@@ -501,67 +625,93 @@ func PhysicalTypeColVecToDatum(
 	} else {
 		if sel != nil {
 			sel = sel[:length]
-			var idx, tupleIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.BoolFamily:
 				bools := col.Bool()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					if bools[tupleIdx] {
+						return tree.DBoolTrue
+					}
+					return tree.DBoolFalse
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					if bools[tupleIdx] {
-						converted[idx] = tree.DBoolTrue
-					} else {
-						converted[idx] = tree.DBoolFalse
-					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntFamily:
 				switch ct.Width() {
 				case 16:
 					int16s := col.Int16()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int16s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInt(tree.DInt(int16s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				case 32:
 					int32s := col.Int32()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int32s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInt(tree.DInt(int32s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				default:
 					int64s := col.Int64()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int64s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
-						converted[idx] = da.NewDInt(tree.DInt(int64s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
 			case types.FloatFamily:
 				floats := col.Float64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.DecimalFamily:
 				decimals := col.Decimal()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = sel[idx]
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					d := da.NewDDecimal(tree.DDecimal{Decimal: decimals[tupleIdx]})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
 					d.Coeff = big.Int{}
 					d.Coeff.Set(&decimals[tupleIdx].Coeff)
-					converted[idx] = d
+					return d
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = sel[idx]
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.DateFamily:
 				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.StringFamily:
@@ -569,137 +719,199 @@ func PhysicalTypeColVecToDatum(
 				// that.
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = sel[idx]
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.BytesFamily:
 				// Note that there is no need for a copy since DBytes uses a string as
 				// underlying storage, which will perform the copy for us.
 				bytes := col.Bytes()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.OidFamily:
 				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.UuidFamily:
 				// Note that there is no need for a copy because uuid.FromBytes will perform
 				// a copy.
 				bytes := col.Bytes()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = sel[idx]
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					id, err := uuid.FromBytes(bytes.Get(tupleIdx))
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+					return da.NewDUuid(tree.DUuid{UUID: id})
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = sel[idx]
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampTZFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntervalFamily:
 				intervals := col.Interval()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			default:
 				datumVec := col.Datum()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = sel[idx]
-					converted[idx] = datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			}
 		} else {
-			var idx, tupleIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.BoolFamily:
 				bools := col.Bool()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					if bools[tupleIdx] {
+						return tree.DBoolTrue
+					}
+					return tree.DBoolFalse
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					if bools[tupleIdx] {
-						converted[idx] = tree.DBoolTrue
-					} else {
-						converted[idx] = tree.DBoolFalse
-					}
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntFamily:
 				switch ct.Width() {
 				case 16:
 					int16s := col.Int16()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int16s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
-						converted[idx] = da.NewDInt(tree.DInt(int16s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				case 32:
 					int32s := col.Int32()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int32s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
-						converted[idx] = da.NewDInt(tree.DInt(int32s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				default:
 					int64s := col.Int64()
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDInt(tree.DInt(int64s[tupleIdx]))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
-						converted[idx] = da.NewDInt(tree.DInt(int64s[tupleIdx]))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
 			case types.FloatFamily:
 				floats := col.Float64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.DecimalFamily:
 				decimals := col.Decimal()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = idx
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					d := da.NewDDecimal(tree.DDecimal{Decimal: decimals[tupleIdx]})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
 					d.Coeff = big.Int{}
 					d.Coeff.Set(&decimals[tupleIdx].Coeff)
-					converted[idx] = d
+					return d
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = idx
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.DateFamily:
 				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.StringFamily:
@@ -707,72 +919,108 @@ func PhysicalTypeColVecToDatum(
 				// that.
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
+					_CONVERTER := func(tupleIdx int) tree.Datum {
+						return da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+					}
+					var idx, tupleIdx int
 					for idx = 0; idx < length; idx++ {
 						tupleIdx = idx
-						converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+						converted[idx] = _CONVERTER(tupleIdx)
 					}
 					return
 				}
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.BytesFamily:
 				// Note that there is no need for a copy since DBytes uses a string as
 				// underlying storage, which will perform the copy for us.
 				bytes := col.Bytes()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.OidFamily:
 				int64s := col.Int64()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.UuidFamily:
 				// Note that there is no need for a copy because uuid.FromBytes will perform
 				// a copy.
 				bytes := col.Bytes()
-				for idx = 0; idx < length; idx++ {
-					tupleIdx = idx
+				_CONVERTER := func(tupleIdx int) tree.Datum {
 					id, err := uuid.FromBytes(bytes.Get(tupleIdx))
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+					return da.NewDUuid(tree.DUuid{UUID: id})
+				}
+				var idx, tupleIdx int
+				for idx = 0; idx < length; idx++ {
+					tupleIdx = idx
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.TimestampTZFamily:
 				timestamps := col.Timestamp()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			case types.IntervalFamily:
 				intervals := col.Interval()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			default:
 				datumVec := col.Datum()
+				_CONVERTER := func(tupleIdx int) tree.Datum {
+					return datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+				}
+				var idx, tupleIdx int
 				for idx = 0; idx < length; idx++ {
 					tupleIdx = idx
-					converted[idx] = datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+					converted[idx] = _CONVERTER(tupleIdx)
 				}
 				return
 			}

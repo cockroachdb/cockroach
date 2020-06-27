@@ -131,12 +131,48 @@ func _SET_TUPLE_IDX(tupleIdx, idx int, sel []int, _HAS_SEL bool) { // */}}
 } // */}}
 
 // {{/*
+// This code snippet converts all selected tuples using the provided converter
+// to the corresponding tree.Datum representation that is assigned to
+// converted. length determines how many columnar values need to be converted
+// and sel is an optional selection vector.
+// NOTE: if sel is non-nil, this code snippet performs the deselection step
+// meaning that it densely populates converted with only values that are
+// selected according to sel.
+// NOTE: this snippet assumes that there is a function named "_CONVERTER" in
+// the scope with the appropriate signature.
+// Note: len(converted) must be no less than length.
+func _TYPED_SLICE_TO_DATUM(
+	converted []tree.Datum,
+	length int,
+	sel []int,
+	_CONVERTER func(tupleIdx int) tree.Datum,
+	_HAS_NULLS bool,
+	_HAS_SEL bool,
+) { // */}}
+	// {{define "typedSliceToDatum" -}}
+	var idx, tupleIdx int
+	for idx = 0; idx < length; idx++ {
+		_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
+		// {{if .HasNulls}}
+		if nulls.NullAt(tupleIdx) {
+			converted[idx] = tree.DNull
+			continue
+		}
+		// {{end}}
+		converted[idx] = _CONVERTER(tupleIdx)
+	}
+	return
+	// {{end}}
+	// {{/*
+} // */}}
+
+// {{/*
 // This code snippet converts the columnar data in col to the corresponding
 // tree.Datum representation that is assigned to converted. length determines
 // how many columnar values need to be converted and sel is an optional
 // selection vector.
 // NOTE: if sel is non-nil, this code snippet performs the deselection step
-// meaning that it densely populated converted with only values that are
+// meaning that it densely populates converted with only values that are
 // selected according to sel.
 // Note: len(converted) must be no less than length.
 func _VEC_TO_DATUM(
@@ -152,238 +188,124 @@ func _VEC_TO_DATUM(
 	// {{if .HasSel}}
 	sel = sel[:length]
 	// {{end}}
-	var idx, tupleIdx int
 	switch ct := col.Type(); ct.Family() {
 	case types.BoolFamily:
 		bools := col.Bool()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
+		_CONVERTER := func(tupleIdx int) tree.Datum {
 			if bools[tupleIdx] {
-				converted[idx] = tree.DBoolTrue
-			} else {
-				converted[idx] = tree.DBoolFalse
+				return tree.DBoolTrue
 			}
+			return tree.DBoolFalse
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.IntFamily:
 		switch ct.Width() {
 		case 16:
 			int16s := col.Int16()
-			for idx = 0; idx < length; idx++ {
-				_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-				// {{if .HasNulls}}
-				if nulls.NullAt(tupleIdx) {
-					converted[idx] = tree.DNull
-					continue
-				}
-				// {{end}}
-				converted[idx] = da.NewDInt(tree.DInt(int16s[tupleIdx]))
+			_CONVERTER := func(tupleIdx int) tree.Datum {
+				return da.NewDInt(tree.DInt(int16s[tupleIdx]))
 			}
-			return
+			_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 		case 32:
 			int32s := col.Int32()
-			for idx = 0; idx < length; idx++ {
-				_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-				// {{if .HasNulls}}
-				if nulls.NullAt(tupleIdx) {
-					converted[idx] = tree.DNull
-					continue
-				}
-				// {{end}}
-				converted[idx] = da.NewDInt(tree.DInt(int32s[tupleIdx]))
+			_CONVERTER := func(tupleIdx int) tree.Datum {
+				return da.NewDInt(tree.DInt(int32s[tupleIdx]))
 			}
-			return
+			_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 		default:
 			int64s := col.Int64()
-			for idx = 0; idx < length; idx++ {
-				_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-				// {{if .HasNulls}}
-				if nulls.NullAt(tupleIdx) {
-					converted[idx] = tree.DNull
-					continue
-				}
-				// {{end}}
-				converted[idx] = da.NewDInt(tree.DInt(int64s[tupleIdx]))
+			_CONVERTER := func(tupleIdx int) tree.Datum {
+				return da.NewDInt(tree.DInt(int64s[tupleIdx]))
 			}
-			return
+			_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 		}
 	case types.FloatFamily:
 		floats := col.Float64()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDFloat(tree.DFloat(floats[tupleIdx]))
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDFloat(tree.DFloat(floats[tupleIdx]))
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.DecimalFamily:
 		decimals := col.Decimal()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
+		_CONVERTER := func(tupleIdx int) tree.Datum {
 			d := da.NewDDecimal(tree.DDecimal{Decimal: decimals[tupleIdx]})
 			// Clear the Coeff so that the Set below allocates a new slice for the
 			// Coeff.abs field.
 			d.Coeff = big.Int{}
 			d.Coeff.Set(&decimals[tupleIdx].Coeff)
-			converted[idx] = d
+			return d
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.DateFamily:
 		int64s := col.Int64()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(int64s[tupleIdx])})
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.StringFamily:
 		// Note that there is no need for a copy since casting to a string will do
 		// that.
 		bytes := col.Bytes()
 		if ct.Oid() == oid.T_name {
-			for idx = 0; idx < length; idx++ {
-				_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-				// {{if .HasNulls}}
-				if nulls.NullAt(tupleIdx) {
-					converted[idx] = tree.DNull
-					continue
-				}
-				// {{end}}
-				converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+			_CONVERTER := func(tupleIdx int) tree.Datum {
+				return da.NewDName(tree.DString(bytes.Get(tupleIdx)))
 			}
-			return
+			_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 		}
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDString(tree.DString(bytes.Get(tupleIdx)))
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.BytesFamily:
 		// Note that there is no need for a copy since DBytes uses a string as
 		// underlying storage, which will perform the copy for us.
 		bytes := col.Bytes()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDBytes(tree.DBytes(bytes.Get(tupleIdx)))
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.OidFamily:
 		int64s := col.Int64()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDOid(tree.MakeDOid(tree.DInt(int64s[tupleIdx])))
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.UuidFamily:
 		// Note that there is no need for a copy because uuid.FromBytes will perform
 		// a copy.
 		bytes := col.Bytes()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
+		_CONVERTER := func(tupleIdx int) tree.Datum {
 			id, err := uuid.FromBytes(bytes.Get(tupleIdx))
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
-			converted[idx] = da.NewDUuid(tree.DUuid{UUID: id})
+			return da.NewDUuid(tree.DUuid{UUID: id})
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.TimestampFamily:
 		timestamps := col.Timestamp()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDTimestamp(tree.DTimestamp{Time: timestamps[tupleIdx]})
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.TimestampTZFamily:
 		timestamps := col.Timestamp()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDTimestampTZ(tree.DTimestampTZ{Time: timestamps[tupleIdx]})
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	case types.IntervalFamily:
 		intervals := col.Interval()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return da.NewDInterval(tree.DInterval{Duration: intervals[tupleIdx]})
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	default:
 		datumVec := col.Datum()
-		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
-			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
-				continue
-			}
-			// {{end}}
-			converted[idx] = datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
+		_CONVERTER := func(tupleIdx int) tree.Datum {
+			return datumVec.Get(tupleIdx).(*coldataext.Datum).Datum
 		}
-		return
+		_TYPED_SLICE_TO_DATUM(converted, length, sel, _CONVERTER, _HAS_NULLS, _HAS_SEL)
 	}
 	// {{end}}
 	// {{/*
