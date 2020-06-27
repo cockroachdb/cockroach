@@ -186,16 +186,17 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode: NewOneInputNode(source),
-		allocator:    testAllocator,
-		evalCtx:      tctx,
-		funcExpr:     typedExpr.(*tree.FuncExpr),
-		outputIdx:    outputIdx,
-		columnTypes:  typs,
-		outputType:   types.String,
-		converter:    GetDatumToPhysicalFn(types.String),
-		row:          make(tree.Datums, outputIdx),
-		argumentCols: inputCols,
+		OneInputNode:        NewOneInputNode(source),
+		allocator:           testAllocator,
+		evalCtx:             tctx,
+		funcExpr:            typedExpr.(*tree.FuncExpr),
+		outputIdx:           outputIdx,
+		columnTypes:         typs,
+		outputType:          types.String,
+		toDatumConverter:    newVecToDatumConverter(len(typs), inputCols),
+		datumToVecConverter: GetDatumToPhysicalFn(types.String),
+		row:                 make(tree.Datums, outputIdx),
+		argumentCols:        inputCols,
 	}
 	defaultOp.Init()
 
