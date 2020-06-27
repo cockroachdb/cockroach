@@ -566,7 +566,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
-%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
@@ -2020,6 +2020,7 @@ alter_attribute_action:
 // Options:
 //    revision_history: enable revision history
 //    encryption_passphrase="secret": encrypt backups
+//    detached: execute backup job asynchronously, without waiting for its completion.
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2092,6 +2093,10 @@ backup_options:
 | REVISION_HISTORY
   {
     $$.val = &tree.BackupOptions{CaptureRevisionHistory: true}
+  }
+| DETACHED
+  {
+    $$.val = &tree.BackupOptions{Detached: true}
   }
 
 // %Help: RESTORE - restore data from external storage
@@ -10349,6 +10354,7 @@ unreserved_keyword:
 | DELETE
 | DEFAULTS
 | DEFERRED
+| DETACHED
 | DISCARD
 | DOMAIN
 | DOUBLE

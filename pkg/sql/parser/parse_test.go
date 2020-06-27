@@ -1470,7 +1470,7 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
 
-		{`BACKUP TABLE foo TO 'bar' WITH revision_history`},
+		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
@@ -2138,8 +2138,8 @@ $function$`,
 			`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 		{`BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history`,
 			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret'`},
-		{`BACKUP foo TO 'bar' WITH OPTIONS (ENCRYPTION_PASSPHRASE = 'secret', revision_history)`,
-			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret'`},
+		{`BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret', detached`},
 		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`,
 			`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 		{`CREATE CHANGEFEED FOR foo INTO 'sink'`, `CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
@@ -2991,6 +2991,12 @@ HINT: try \h BACKUP`,
 DETAIL: source SQL:
 BACKUP foo TO 'bar' WITH revision_history, revision_history
                                            ^`,
+		},
+		{`BACKUP foo TO 'bar' WITH detached, revision_history, detached`,
+			`at or near "detached": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH detached, revision_history, detached
+                                                     ^`,
 		},
 	}
 	for _, d := range testData {
