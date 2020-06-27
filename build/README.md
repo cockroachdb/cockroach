@@ -66,10 +66,14 @@ which may or may not work (and are not officially supported).
 Please copy this checklist (based on [Basic Process](#basic-process)) into the relevant commit message, with a link
 back to this document and perform these steps:
 
+* [ ] Adjust the Pebble tests to run in 1.14.
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L199-L200)).
-* [ ] Rebuild the Docker image and bump the `version` in `builder.sh` accordingly ([source](./builder.sh#L6)).
+* [ ] Rebuild and push the Docker image (following [Basic Process](#basic-process))
+* [ ] Bump the version in `builder.sh` accordingly ([source](./builder.sh#L6)).
 * [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
+* [ ] Bump the go version in `go.mod`. You may also need to rerun `make vendor_rebuild` if vendoring has changed.
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
+* [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
 * [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
 
 You can test the new builder image in TeamCity by using the custom parameters
@@ -94,14 +98,14 @@ When updating a dependency, you should run `go mod tidy` after `go get` to ensur
 are removed from go.sum.
 
 You must then run `make vendor_rebuild` to ensure the modules are installed. These changes must
-then be committed in the submodule directory (see Working with Submodules).
+then be committed in the submodule directory (see [Working with Submodules](#working-with-submodules)).
 
 Programs can then be run using `go build -mod=vendor ...` or `go test -mod=vendor ...`.
 
 ### Removing a dependency
 
-When a dependency has been removed, run `go mod tidy` and then `make vendor_rebuild`. Then follow
-the Working with Submodules steps below.
+When a dependency has been removed, run `go mod tidy` and then `make vendor_rebuild`.
+Then follow the [Working with Submodules](#working-with-submodules) steps.
 
 ### Requiring a new tool
 
