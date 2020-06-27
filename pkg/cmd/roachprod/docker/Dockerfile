@@ -1,4 +1,4 @@
-FROM golang:1.13
+FROM golang:1.14
 WORKDIR /build
 COPY . .
 RUN ["/build/build.sh"]

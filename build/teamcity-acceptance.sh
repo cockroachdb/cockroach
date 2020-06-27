@@ -33,6 +33,6 @@ run cd pkg/acceptance
 ln -s ../../artifacts artifacts
 # NB: json has to be enabled when building the test binary,
 # which makes this harder to get right than is worth it.
-run_text_test github.com/cockroachdb/cockroach/pkg/acceptance env TZ=America/New_York stdbuf -eL -oL ./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m
+run_text_test github.com/cockroachdb/cockroach/pkg/acceptance env TZ=America/New_York GOROOT=/home/agent/work/.go stdbuf -eL -oL ./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m
 run cd ../..
 tc_end_block "Run acceptance tests"

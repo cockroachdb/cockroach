@@ -130,7 +130,7 @@ func cStringToGoString(s C.DBString) string {
 		return ""
 	}
 	// Reinterpret the string as a slice, then cast to string which does a copy.
-	result := string(cSliceToUnsafeGoBytes(C.DBSlice{s.data, s.len}))
+	result := string(cSliceToUnsafeGoBytes(C.DBSlice(s)))
 	C.free(unsafe.Pointer(s.data))
 	return result
 }
