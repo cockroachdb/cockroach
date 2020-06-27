@@ -361,7 +361,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 					op.scratch.diff[:len(remaining)], false, /* firstDefiniteMatch */
 				)
 				if anyMatched {
-					op.aggHelper.performAggregation(ctx, b, aggFunc.fns)
+					op.aggHelper.performAggregation(ctx, b, aggFunc.fns, aggFunc.encodedGroupCols)
 				}
 			}
 		} else {
@@ -409,7 +409,8 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			)
 
 			aggFunc.init(op.output.Batch)
-			op.aggHelper.performAggregation(ctx, b, aggFunc.fns)
+			aggFunc.encodedGroupCols = op.aggHelper.encodeGroupCols(ctx, b)
+			op.aggHelper.performAggregation(ctx, b, aggFunc.fns, aggFunc.encodedGroupCols)
 		}
 
 		// We have processed all tuples with this hashCode, so we should reset
@@ -444,6 +445,9 @@ type hashAggFuncs struct {
 	keyIdx int
 
 	fns []aggregateFunc
+	// encodedGroupCols contains the encoded "signature" of the corresponding
+	// aggregating group. It should not be modified once set.
+	encodedGroupCols []byte
 }
 
 const (
