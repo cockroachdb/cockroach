@@ -364,24 +364,24 @@ render     ·             ·                                                    
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END AS r FROM t
 ----
-·          distribution  local                       ·    ·
-·          vectorized    true                        ·    ·
-render     ·             ·                           (r)  ·
- │         render 0      CASE WHEN a = 2 THEN 1 END  ·    ·
- └── scan  ·             ·                           (a)  ·
-·          table         t@primary                   ·    ·
-·          spans         FULL SCAN                   ·    ·
+·          distribution  local                                               ·    ·
+·          vectorized    true                                                ·    ·
+render     ·             ·                                                   (r)  ·
+ │         render 0      CASE WHEN a = 2 THEN 1 ELSE CAST(NULL AS INT8) END  ·    ·
+ └── scan  ·             ·                                                   (a)  ·
+·          table         t@primary                                           ·    ·
+·          spans         FULL SCAN                                           ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END AS r FROM t
 ----
-·          distribution  local                     ·    ·
-·          vectorized    true                      ·    ·
-render     ·             ·                         (r)  ·
- │         render 0      CASE a WHEN 2 THEN 1 END  ·    ·
- └── scan  ·             ·                         (a)  ·
-·          table         t@primary                 ·    ·
-·          spans         FULL SCAN                 ·    ·
+·          distribution  local                                             ·    ·
+·          vectorized    true                                              ·    ·
+render     ·             ·                                                 (r)  ·
+ │         render 0      CASE a WHEN 2 THEN 1 ELSE CAST(NULL AS INT8) END  ·    ·
+ └── scan  ·             ·                                                 (a)  ·
+·          table         t@primary                                         ·    ·
+·          spans         FULL SCAN                                         ·    ·
 
 # TODO(radu): IS OF not supported yet.
 #query TTTTT

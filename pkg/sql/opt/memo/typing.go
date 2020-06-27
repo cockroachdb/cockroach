@@ -67,16 +67,17 @@ func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 //     [ WHEN <condval2> THEN <expr2> ] ...
 //     [ ELSE <expr> ]
 //   END
-// The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
-// the type of the ELSE <expr> value if all the previous types are unknown.
+// All possible values should have the same type, and that is the type of the
+// case.
 func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) *types.T {
+	result := orElse.DataType()
+	// Sanity check.
 	for _, when := range whens {
-		childType := when.DataType()
-		if childType.Family() != types.UnknownFamily {
-			return childType
+		if !result.Equivalent(when.DataType()) {
+			panic(errors.AssertionFailedf("inconsistent Case return types %s %s", when.DataType(), result))
 		}
 	}
-	return orElse.DataType()
+	return result
 }
 
 // BinaryOverloadExists returns true if the given binary operator exists with the
