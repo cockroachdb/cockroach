@@ -155,4 +155,6 @@ const (
 	// VerifyProtectedTimestamp determines whether the specified protection record
 	// will be respected by this Range.
 	AdminVerifyProtectedTimestamp
+	// NumMethods represents the total number of API methods.
+	NumMethods
 )
