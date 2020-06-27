@@ -134,4 +134,4 @@ project
       ├── NULL [as=type_cat:71]
       ├── CASE WHEN t.typtype:7 = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [as=data_type:72, outer=(7)]
       ├── obj_description(t.oid:1, 'pg_type') [as=remarks:73, outer=(1), stable]
-      └── CASE WHEN t.typtype:7 = 'd' THEN case:70 END [as=base_type:74, outer=(7,70)]
+      └── CASE WHEN t.typtype:7 = 'd' THEN case:70 ELSE CAST(NULL AS STRING) END [as=base_type:74, outer=(7,70)]
