@@ -1120,9 +1120,19 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.State != nil {
+		if newLease := rResult.State.Lease; newLease != nil {
+			sm.r.handleLeaseResult(ctx, newLease)
+			rResult.State.Lease = nil
+		}
+
 		if rResult.State.TruncatedState != nil {
 			rResult.RaftLogDelta += sm.r.handleTruncatedStateResult(ctx, rResult.State.TruncatedState)
 			rResult.State.TruncatedState = nil
+		}
+
+		if newThresh := rResult.State.GCThreshold; newThresh != nil {
+			sm.r.handleGCThresholdResult(ctx, newThresh)
+			rResult.State.GCThreshold = nil
 		}
 
 		if (*rResult.State == kvserverpb.ReplicaState{}) {
@@ -1162,16 +1172,6 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		if newDesc := rResult.State.Desc; newDesc != nil {
 			sm.r.handleDescResult(ctx, newDesc)
 			rResult.State.Desc = nil
-		}
-
-		if newLease := rResult.State.Lease; newLease != nil {
-			sm.r.handleLeaseResult(ctx, newLease)
-			rResult.State.Lease = nil
-		}
-
-		if newThresh := rResult.State.GCThreshold; newThresh != nil {
-			sm.r.handleGCThresholdResult(ctx, newThresh)
-			rResult.State.GCThreshold = nil
 		}
 
 		if rResult.State.UsingAppliedStateKey {
