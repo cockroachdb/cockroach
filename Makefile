@@ -1126,8 +1126,9 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) execgen $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+	$(MAKE) execgen
 
 lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
 
@@ -1567,41 +1568,9 @@ ifneq ($(build-with-dep-files),)
 -include bin/execgen_out.d
 endif
 
-# Generate the colexec files.
-#
-# Note how the dependency work is complete after the cmp/rm/mv
-# dance to write to the output.
-# However, because it does not always change the timestamp of the
-# target file, it is possible to get a situation where the target is
-# older than both bin/execgen and the _tmpl.go file, but does not get
-# changed by this rule. This happens e.g. after a 'git checkout' to a
-# different branch, when the execgen binary and templates do not
-# change across branches.
-#
-# In order to prevent the rule from kicking again in every
-# make invocation, we tweak the timestamp of the output file
-# to be the latest of either bin/execgen or the input template.
-# This makes it just new enough that 'make' will be satisfied
-# that it does not need an update any more.
-#
-# Note that we don't want to ratchet the timestamp all the way
-# to the present, because then it will becomes newer
-# than all the other produced artifacts downstream and force
-# them to rebuild too.
-$(EXECGEN_TARGETS): bin/execgen
-	@echo EXECGEN $@
-	@execgen -fmt=false $@ > $@.tmp || { rm -f $@.tmp; exit 1; }
-	@mv -f $@.tmp $@
-	@set -e; \
-	  depfile=$$(execgen -M $@ | cut -d: -f2); \
-	  target_timestamp_file=$${depfile:-bin/execgen}; \
-	  if test bin/execgen -nt $$target_timestamp_file; then \
-	    target_timestamp_file=bin/execgen; \
-	  fi; \
-	  touch -r $$target_timestamp_file $@
-
 .PHONY: execgen
-execgen: $(EXECGEN_TARGETS)
+execgen: $(EXECGEN_TARGETS) bin/execgen
+	for i in $(EXECGEN_TARGETS); do echo EXECGEN $$i && ./bin/execgen -fmt=false $$i > $$i; done
 	goimports -w $(EXECGEN_TARGETS)
 
 # Add a catch-all rule for any non-existent execgen generated
