@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 )
 
@@ -29,8 +31,19 @@ type hashAggregatorHelper interface {
 	// performAggregation performs aggregation of all functions in fns on all
 	// tuples in batch that are relevant for each function (meaning that only
 	// tuples that pass the criteria - like DISTINCT and/or FILTER will be
-	// aggregated).
-	performAggregation(ctx context.Context, batch coldata.Batch, fns []aggregateFunc)
+	// aggregated). encodedGroupCols is an optional argument that contains the
+	// encoding of the grouping columns and *must not* be modified by the
+	// implementations. (Note that we can have a single encoded argument for
+	// the whole batch because the hash aggregator itself ensures that only
+	// tuples from the same group are in the batch.)
+	performAggregation(ctx context.Context, batch coldata.Batch, fns []aggregateFunc, encodedGroupCols []byte)
+	// encodeGroupCols encodes the grouping columns of the first tuple in the
+	// batch. It assumes that batch has non-zero length. Note that this returns
+	// a byte slice and not a string to avoid incurring extra conversions when
+	// used later, but the return value *must not* be modified once returned.
+	// This method is a noop if the helper doesn't perform DISTINCT
+	// aggregation.
+	encodeGroupCols(ctx context.Context, batch coldata.Batch) []byte
 }
 
 // newHashAggregatorHelper creates a new hashAggregatorHelper based on provided
@@ -73,6 +86,9 @@ func newHashAggregatorHelper(
 	if !hasDistinctAgg && !hasFilterAgg {
 		return newDefaultHashAggregatorHelper(aggCols)
 	}
+	if hasDistinctAgg && !hasFilterAgg {
+		return newDistinctHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, aggDistinct, datumAlloc)
+	}
 	filters := make([]*filteringHashAggHelper, len(aggCols))
 	for i, filterIdx := range aggFilter {
 		filters[i] = newFilteringHashAggHelper(filterIdx)
@@ -80,7 +96,7 @@ func newHashAggregatorHelper(
 	if !hasDistinctAgg {
 		return newFilteringHashAggregatorHelper(aggCols, filters)
 	}
-	return newCustomHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, aggDistinct, filters, datumAlloc)
+	return newFilteringDistinctHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, aggDistinct, filters, datumAlloc)
 }
 
 // defaultHashAggregatorHelper is the default hashAggregatorHelper for the case
@@ -96,11 +112,15 @@ func newDefaultHashAggregatorHelper(aggCols [][]uint32) hashAggregatorHelper {
 }
 
 func (h *defaultHashAggregatorHelper) performAggregation(
-	_ context.Context, batch coldata.Batch, fns []aggregateFunc,
+	_ context.Context, batch coldata.Batch, fns []aggregateFunc, _ []byte,
 ) {
 	for fnIdx, fn := range fns {
 		fn.Compute(batch, h.aggCols[fnIdx])
 	}
+}
+
+func (h *defaultHashAggregatorHelper) encodeGroupCols(context.Context, coldata.Batch) []byte {
+	return nil
 }
 
 // hashAggregatorHelperBase is a utility struct that provides non-default
@@ -162,16 +182,17 @@ func newFilteringHashAggHelper(filterIdx int) *filteringHashAggHelper {
 }
 
 // applyFilter updates the selection vector of batch to include only those
-// tuples for which filtering column has 'true' value set.
+// tuples for which filtering column has 'true' value set. It also returns
+// whether batch might have been modified.
 func (h *filteringHashAggHelper) applyFilter(
 	ctx context.Context, batch coldata.Batch,
-) coldata.Batch {
+) (_ coldata.Batch, maybeModified bool) {
 	if h.filter == nil {
-		return batch
+		return batch, false
 	}
 	h.filterInput.reset(batch)
 	newBatch := h.filter.Next(ctx)
-	return newBatch
+	return newBatch, true
 }
 
 // filteringHashAggregatorHelper is a hashAggregatorHelper that handles the
@@ -196,55 +217,49 @@ func newFilteringHashAggregatorHelper(
 }
 
 func (h *filteringHashAggregatorHelper) performAggregation(
-	ctx context.Context, batch coldata.Batch, fns []aggregateFunc,
+	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, _ []byte,
 ) {
 	h.saveBatch(batch)
 	for fnIdx, fn := range fns {
-		batchToComputeOn := h.filters[fnIdx].applyFilter(ctx, batch)
+		batchToComputeOn, maybeModified := h.filters[fnIdx].applyFilter(ctx, batch)
 		if batchToComputeOn.Length() > 0 {
 			// It is possible that all tuples to aggregate have been filtered
 			// out, so we need to check the length.
 			fn.Compute(batchToComputeOn, h.aggCols[fnIdx])
 		}
-		// Restore the batch so that the next iteration (or the caller of this
-		// function) sees the batch with the original selection vector and
-		// length.
-		h.restoreBatch(batch)
+		if maybeModified {
+			// Restore the batch so that the next iteration (or the caller of this
+			// function) sees the batch with the original selection vector and
+			// length.
+			h.restoreBatch(batch)
+		}
 	}
 }
 
-// customHashAggregatorHelper is a hashAggregatorHelper that is able to handle
-// the aggregate function with any number of DISTINCT and FILTER clauses. The
-// helper should be shared among all groups for aggregation. The filtering is
-// delegated to filteringHashAggHelpers, and this struct handles the
-// "distinctness" of aggregation.
-//
-// Note that the "distinctness" of tuples is handled by encoding grouping and
-// aggregation columns of a tuple (one tuple at a time) and storing it in a
-// map. A few other approaches have been prototyped but showed worse
-// performance:
-// 1. using the vectorized hash table - the benefit of such approach is that we
+func (h *filteringHashAggregatorHelper) encodeGroupCols(context.Context, coldata.Batch) []byte {
+	return nil
+}
+
+// distinctHashAggregatorHelperBase is a utility struct shared by
+// hashAggregatorHelpers that perform DISTINCT aggregation.
+// Note that the "distinctness" of tuples is handled by encoding grouping
+// (which is done once, one on the first batch of the group) and aggregation
+// columns of a tuple (one tuple at a time) and storing it in a map.
+// Another approach has been prototyped but showed worse performance:
+// - using the vectorized hash table - the benefit of such approach is that we
 // don't reduce ourselves to one tuple at a time (because we would be hashing
 // the full columns at once), but the big disadvantage is that the full tuples
 // are stored in the hash table (instead of an encoded representation)
-// 2. plumbing the knowledge of "groups" into this helper - the benefit is that
-// we would need to encode only aggregation columns and would be resetting the
-// maps when a new group starts. This would have worked well for the ordered
-// aggregator but is terrible for the hash aggregator because we would need to
-// have a separate helper struct for every bucket.
-type customHashAggregatorHelper struct {
+type distinctHashAggregatorHelperBase struct {
 	*hashAggregatorHelperBase
 
-	filters []*filteringHashAggHelper
-
 	inputTypes []*types.T
+	groupCols  []int
 	seen       []map[string]struct{}
-	// colsToEncode contains the slices of column indices that, when used for
-	// encoding, uniquely identify a tuple for the purposes of "distinctness".
-	colsToEncode [][]uint32
-	arena        stringarena.Arena
-	datumAlloc   *sqlbase.DatumAlloc
-	scratch      struct {
+	acc        *mon.BoundAccount
+	arena      stringarena.Arena
+	datumAlloc *sqlbase.DatumAlloc
+	scratch    struct {
 		ed      sqlbase.EncDatum
 		encoded []byte
 		// converted is a scratch space for converting a single element.
@@ -252,77 +267,71 @@ type customHashAggregatorHelper struct {
 	}
 }
 
-var _ hashAggregatorHelper = &customHashAggregatorHelper{}
-
-func newCustomHashAggregatorHelper(
+func newDistinctHashAggregatorHelperBase(
 	allocator *colmem.Allocator,
 	inputTypes []*types.T,
 	groupCols []uint32,
 	aggCols [][]uint32,
-	aggDistinct []bool,
-	filters []*filteringHashAggHelper,
 	datumAlloc *sqlbase.DatumAlloc,
-) *customHashAggregatorHelper {
-	h := &customHashAggregatorHelper{
+) *distinctHashAggregatorHelperBase {
+	h := &distinctHashAggregatorHelperBase{
 		hashAggregatorHelperBase: newAggregatorHelperBase(aggCols),
-		filters:                  filters,
 		inputTypes:               inputTypes,
 		seen:                     make([]map[string]struct{}, len(aggCols)),
-		colsToEncode:             make([][]uint32, len(aggCols)),
-		arena:                    stringarena.Make(allocator.GetAccount()),
+		acc:                      allocator.GetAccount(),
 		datumAlloc:               datumAlloc,
 	}
-	for aggIdx, isAggDistinct := range aggDistinct {
-		if isAggDistinct {
-			h.seen[aggIdx] = make(map[string]struct{})
-			hashCols := make([]uint32, len(groupCols)+len(aggCols[aggIdx]))
-			copy(hashCols, groupCols)
-			copy(hashCols[len(groupCols):], aggCols[aggIdx])
-			h.colsToEncode[aggIdx] = hashCols
-		}
-	}
+	h.arena = stringarena.Make(h.acc)
 	h.scratch.converted = []tree.Datum{nil}
+	h.groupCols = make([]int, len(groupCols))
+	for i := range groupCols {
+		h.groupCols[i] = int(groupCols[i])
+	}
 	return h
 }
 
-// performAggregation executes Compute on all fns paying attention to distinct
-// tuples if the corresponding function performs DISTINCT aggregation. For such
-// functions the approach is as follows:
-// 1. store the batch state because we will be modifying some of it
-// 2. for every function:
-//    1) apply the filter to the selection vector of the batch
-//    2) update the batch's (possibly updated) selection vector to include only
-//       tuples we haven't yet seen making sure to remember that new tuples we
-//       have just seen
-//    3) execute Compute on the updated batch
-//    4) restore the batch to the original state.
-func (h *customHashAggregatorHelper) performAggregation(
-	ctx context.Context, batch coldata.Batch, fns []aggregateFunc,
-) {
-	h.saveBatch(batch)
-	for fnIdx, fn := range fns {
-		batchToComputeOn := h.filters[fnIdx].applyFilter(ctx, batch)
-		if batchToComputeOn.Length() > 0 {
-			h.selectDistinctTuples(ctx, batchToComputeOn, fnIdx)
-			if batchToComputeOn.Length() > 0 {
-				fn.Compute(batchToComputeOn, h.aggCols[fnIdx])
-			}
+func (h *distinctHashAggregatorHelperBase) encodeGroupCols(
+	ctx context.Context, batch coldata.Batch,
+) []byte {
+	var encoded []byte
+	var err error
+	sel := batch.Selection()
+	for _, colIdx := range h.groupCols {
+		PhysicalTypeColVecToDatum(
+			h.scratch.converted, batch.ColVec(colIdx), 1 /* length */, sel, h.datumAlloc,
+		)
+		h.scratch.ed.Datum = h.scratch.converted[0]
+		encoded, err = h.scratch.ed.Fingerprint(h.inputTypes[colIdx], h.datumAlloc, encoded)
+		if err != nil {
+			colexecerror.InternalError(err)
 		}
-		h.restoreBatch(batch)
 	}
+	// Note that we don't use stringarena for this in order to avoid copying
+	// for conversion to string and back to []byte.
+	if err := h.acc.Grow(ctx, int64(len(encoded))); err != nil {
+		colexecerror.InternalError(err)
+	}
+	return encoded
 }
 
 // selectDistinctTuples updates the batch in-place to select only those tuples
 // that haven't been seen by the aggregate function yet when the function
-// performs DISTINCT aggregation (if not, the batch is not changed).
-func (h *customHashAggregatorHelper) selectDistinctTuples(
-	ctx context.Context, batch coldata.Batch, aggFnIdx int,
-) {
+// performs DISTINCT aggregation. aggColsConverter must have already done the
+// conversion of the relevant aggregate columns. This function is a noop if the
+// aggregate function performs regular aggregation (in this case converter can
+// be left nil).
+func (h *distinctHashAggregatorHelperBase) selectDistinctTuples(
+	ctx context.Context,
+	batch coldata.Batch,
+	aggFnIdx int,
+	encodedGroupCols []byte,
+	aggColsConverter *vecToDatumConverter,
+) (maybeModified bool) {
 	seen := h.seen[aggFnIdx]
 	if seen == nil {
 		// This aggregate function performs regular (non-distinct) aggregation,
 		// so we don't need to do anything.
-		return
+		return false
 	}
 	oldLen := batch.Length()
 	oldSel := batch.Selection()
@@ -335,20 +344,10 @@ func (h *customHashAggregatorHelper) selectDistinctTuples(
 		newLen   int
 		s        string
 	)
-	colVecs := batch.ColVecs()
-	fakeSel := []int{0}
 	for idx := 0; idx < oldLen; idx++ {
-		tupleIdx = idx
-		if usesSel {
-			tupleIdx = oldSel[idx]
-		}
-		fakeSel[0] = tupleIdx
-		h.scratch.encoded = h.scratch.encoded[:0]
-		for _, colIdx := range h.colsToEncode[aggFnIdx] {
-			PhysicalTypeColVecToDatum(
-				h.scratch.converted, colVecs[colIdx], 1 /* length */, fakeSel, h.datumAlloc,
-			)
-			h.scratch.ed.Datum = h.scratch.converted[0]
+		h.scratch.encoded = append(h.scratch.encoded[:0], encodedGroupCols...)
+		for _, colIdx := range h.aggCols[aggFnIdx] {
+			h.scratch.ed.Datum = aggColsConverter.getDatumColumn(int(colIdx))[idx]
 			h.scratch.encoded, err = h.scratch.ed.Fingerprint(
 				h.inputTypes[colIdx], h.datumAlloc, h.scratch.encoded,
 			)
@@ -362,11 +361,177 @@ func (h *customHashAggregatorHelper) selectDistinctTuples(
 				colexecerror.InternalError(err)
 			}
 			seen[s] = struct{}{}
+			tupleIdx = idx
+			if usesSel {
+				tupleIdx = oldSel[idx]
+			}
 			newSel[newLen] = tupleIdx
 			newLen++
 		}
 	}
 	batch.SetLength(newLen)
+	return true
+}
+
+// distinctHashAggregatorHelper is a hashAggregatorHelper that handles the
+// aggregate functions with any number of DISTINCT but with *no* FILTER
+// clauses. The helper should be shared among all groups for aggregation. The
+// fact that it doesn't handle any filtering aggregation allows us to use the
+// same vecToDatumConverter for all aggregate functions.
+type distinctHashAggregatorHelper struct {
+	*distinctHashAggregatorHelperBase
+	// aggColsConverter is responsible for converting all columns used all
+	// aggregate functions once a new batch is received.
+	aggColsConverter *vecToDatumConverter
+}
+
+var _ hashAggregatorHelper = &distinctHashAggregatorHelper{}
+
+func newDistinctHashAggregatorHelper(
+	allocator *colmem.Allocator,
+	inputTypes []*types.T,
+	groupCols []uint32,
+	aggCols [][]uint32,
+	aggDistinct []bool,
+	datumAlloc *sqlbase.DatumAlloc,
+) hashAggregatorHelper {
+	h := &distinctHashAggregatorHelper{
+		distinctHashAggregatorHelperBase: newDistinctHashAggregatorHelperBase(
+			allocator, inputTypes, groupCols, aggCols, datumAlloc,
+		),
+	}
+	// aggColsToConvert will contain indices of columns that are inputs to at
+	// least one aggregate function.
+	var aggColsToConvert util.FastIntSet
+	for aggIdx, isAggDistinct := range aggDistinct {
+		if isAggDistinct {
+			h.seen[aggIdx] = make(map[string]struct{})
+			for _, aggCol := range aggCols[aggIdx] {
+				aggColsToConvert.Add(int(aggCol))
+			}
+		}
+	}
+	aggVecIdxsToConvert := make([]int, 0, aggColsToConvert.Len())
+	for i, ok := aggColsToConvert.Next(0); ok; i, ok = aggColsToConvert.Next(i + 1) {
+		aggVecIdxsToConvert = append(aggVecIdxsToConvert, i)
+	}
+	h.aggColsConverter = newVecToDatumConverter(len(inputTypes), aggVecIdxsToConvert)
+	return h
+}
+
+// performAggregation executes Compute on all fns paying attention to distinct
+// tuples if the corresponding function performs DISTINCT aggregation. For such
+// functions the approach is as follows:
+// 1. store the batch state because we will be modifying some of it
+// 2. convert all necessary aggregate columns to datums
+// 3. for every function:
+//    1) update the batch's selection vector to include only tuples we haven't
+//       yet seen making sure to remember that new tuples we have just seen
+//    2) execute Compute on the updated batch
+//    3) restore the batch to the original state (if it might have been
+//       modified).
+func (h *distinctHashAggregatorHelper) performAggregation(
+	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, encodedGroupCols []byte,
+) {
+	h.saveBatch(batch)
+	h.aggColsConverter.convertBatch(batch)
+	for fnIdx, fn := range fns {
+		maybeModified := h.selectDistinctTuples(ctx, batch, fnIdx, encodedGroupCols, h.aggColsConverter)
+		if batch.Length() > 0 {
+			fn.Compute(batch, h.aggCols[fnIdx])
+		}
+		if maybeModified {
+			h.restoreBatch(batch)
+		}
+	}
+}
+
+// filteringDistinctHashAggregatorHelper is a hashAggregatorHelper that handles
+// the aggregate functions with any number of DISTINCT and/or FILTER clauses.
+// The helper should be shared among all groups for aggregation. The filtering
+// is delegated to filteringHashAggHelpers, and this struct handles the
+// "distinctness" of aggregation.
+type filteringDistinctHashAggregatorHelper struct {
+	*distinctHashAggregatorHelperBase
+
+	filters []*filteringHashAggHelper
+	// aggColsConverters has a separate converter for every function that
+	// performs DISTINCT aggregation. Due to the presence of filters, we cannot
+	// use a single converter like in distinctHashAggregatorHelper because a
+	// filter is applied before the distinctness check, so the tuples seen by
+	// the aggregation functions can be different.
+	// TODO(yuzefovich): we could have a shared converter among all aggregate
+	// functions that don't have a filter clause, but it doesn't seem to be
+	// worth introducing such logic at the moment.
+	aggColsConverters []*vecToDatumConverter
+}
+
+var _ hashAggregatorHelper = &filteringDistinctHashAggregatorHelper{}
+
+func newFilteringDistinctHashAggregatorHelper(
+	allocator *colmem.Allocator,
+	inputTypes []*types.T,
+	groupCols []uint32,
+	aggCols [][]uint32,
+	aggDistinct []bool,
+	filters []*filteringHashAggHelper,
+	datumAlloc *sqlbase.DatumAlloc,
+) hashAggregatorHelper {
+	h := &filteringDistinctHashAggregatorHelper{
+		distinctHashAggregatorHelperBase: newDistinctHashAggregatorHelperBase(
+			allocator, inputTypes, groupCols, aggCols, datumAlloc,
+		),
+		filters:           filters,
+		aggColsConverters: make([]*vecToDatumConverter, len(aggCols)),
+	}
+	for aggIdx, isAggDistinct := range aggDistinct {
+		if isAggDistinct {
+			h.seen[aggIdx] = make(map[string]struct{})
+			aggColsToConvert := make([]int, len(aggCols[aggIdx]))
+			for i, aggCol := range aggCols[aggIdx] {
+				aggColsToConvert[i] = int(aggCol)
+			}
+			h.aggColsConverters[aggIdx] = newVecToDatumConverter(len(inputTypes), aggColsToConvert)
+		}
+	}
+	return h
+}
+
+// performAggregation executes Compute on all fns paying attention to distinct
+// tuples if the corresponding function performs DISTINCT aggregation. For such
+// functions the approach is as follows:
+// 1. store the batch state because we will be modifying some of it
+// 2. for every function:
+//    1) apply the filter to the selection vector of the batch
+//    2) convert all aggregate columns for this function to datums if the
+//       function performs DISTINCT aggregation
+//    3) update the batch's (possibly updated) selection vector to include only
+//       tuples we haven't yet seen making sure to remember that new tuples we
+//       have just seen
+//    4) execute Compute on the updated batch
+//    5) restore the batch to the original state (if it might have been
+func (h *filteringDistinctHashAggregatorHelper) performAggregation(
+	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, encodedGroupCols []byte,
+) {
+	h.saveBatch(batch)
+	for fnIdx, fn := range fns {
+		batchToComputeOn, maybeModified := h.filters[fnIdx].applyFilter(ctx, batch)
+		if batchToComputeOn.Length() > 0 {
+			converter := h.aggColsConverters[fnIdx]
+			if converter != nil {
+				// converter is nil when the function performs non-distinct
+				// aggregation.
+				converter.convertBatch(batchToComputeOn)
+			}
+			maybeModified = h.selectDistinctTuples(ctx, batchToComputeOn, fnIdx, encodedGroupCols, converter) || maybeModified
+			if batchToComputeOn.Length() > 0 {
+				fn.Compute(batchToComputeOn, h.aggCols[fnIdx])
+			}
+		}
+		if maybeModified {
+			h.restoreBatch(batch)
+		}
+	}
 }
 
 // singleBatchOperator is a helper colexecbase.Operator that returns the
