@@ -36,28 +36,37 @@ type ResultColumn struct {
 // describe the column types of a table.
 type ResultColumns []ResultColumn
 
-// ResultColumnsFromColDescs converts ColumnDescriptors to ResultColumns.
+// ResultColumnsFromColDescs converts []ColumnDescriptor to []ResultColumn.
 func ResultColumnsFromColDescs(tableID ID, colDescs []ColumnDescriptor) ResultColumns {
-	cols := make(ResultColumns, 0, len(colDescs))
-	for i := range colDescs {
-		// Convert the ColumnDescriptor to ResultColumn.
-		colDesc := &colDescs[i]
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *ColumnDescriptor {
+		return &colDescs[i]
+	})
+}
+
+// ResultColumnsFromColDescPtrs converts []*ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescPtrs(tableID ID, colDescs []*ColumnDescriptor) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *ColumnDescriptor {
+		return colDescs[i]
+	})
+}
+
+func resultColumnsFromColDescs(
+	tableID ID, numCols int, getColDesc func(int) *ColumnDescriptor,
+) ResultColumns {
+	cols := make(ResultColumns, numCols)
+	for i := range cols {
+		colDesc := getColDesc(i)
 		typ := colDesc.Type
 		if typ == nil {
 			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Family()))
 		}
-
-		hidden := colDesc.Hidden
-		cols = append(
-			cols,
-			ResultColumn{
-				Name:           colDesc.Name,
-				Typ:            typ,
-				Hidden:         hidden,
-				TableID:        tableID,
-				PGAttributeNum: colDesc.GetLogicalColumnID(),
-			},
-		)
+		cols[i] = ResultColumn{
+			Name:           colDesc.Name,
+			Typ:            typ,
+			Hidden:         colDesc.Hidden,
+			TableID:        tableID,
+			PGAttributeNum: colDesc.GetLogicalColumnID(),
+		}
 	}
 	return cols
 }
