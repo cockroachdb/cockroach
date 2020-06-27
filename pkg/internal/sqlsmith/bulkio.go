@@ -106,20 +106,11 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	s.bulkBackups[name] = targets
 	s.lock.Unlock()
 
-	var opts tree.KVOptions
-	if s.coin() {
-		opts = tree.KVOptions{
-			tree.KVOption{
-				Key: "revision_history",
-			},
-		}
-	}
-
 	return &tree.Backup{
 		Targets: targets,
 		To:      tree.PartitionedBackup{tree.NewStrVal(name)},
 		AsOf:    makeAsOf(s),
-		Options: opts,
+		Options: tree.BackupOptions{CaptureRevisionHistory: s.coin()},
 	}, true
 }
 
