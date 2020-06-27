@@ -18,6 +18,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
@@ -51,8 +53,15 @@ Dumps all of the raw timeseries values in a cluster.
 		}
 		defer finish()
 
+		resp, err := serverpb.NewAdminClient(conn).ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
+		if err != nil {
+			return err
+		}
+
 		tsClient := tspb.NewTimeSeriesClient(conn)
-		stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
+		stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{
+			Names: catalog.AllMetricsNames(resp.Catalog...),
+		})
 		if err != nil {
 			log.Fatalf(context.Background(), "%v", err)
 		}

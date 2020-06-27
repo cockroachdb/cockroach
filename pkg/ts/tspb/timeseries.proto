@@ -134,7 +134,17 @@ message TimeSeriesQueryResponse {
   repeated Result results = 1 [(gogoproto.nullable) = false];
 }
 
-message DumpRequest {}
+message DumpRequest {
+  // A timestamp in nanoseconds which defines the early bound of the time span
+  // for this query. Will be rounded to nearest resolution boundary.
+  optional int64 start_nanos = 1 [(gogoproto.nullable) = false];
+  // A timestamp in nanoseconds which defines the late bound of the time span
+  // for this query. Must be greater than start_nanos. Will be rounded to nearest
+  // resolution boundary.
+  optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
+  // The timeseries to dump. All sources will be queried.
+  repeated string names = 3;
+}
 
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
 // we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.

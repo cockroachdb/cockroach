@@ -308,36 +308,68 @@ func (s *Server) Query(
 	return &response, nil
 }
 
-// Dump returns a stream of raw timeseries data that has been stored on the
-// server. Only data from the 10-second resolution is returned; rollup data is
-// not currently returned. Data is returned in the order it is read from disk,
-// and will thus not be totally organized by series.
+// Dump returns a stream of raw internal timeseries data that has been stored in
+// the KV layer. Data will be returned by series (alphabetically) and within a
+// series, usually in ascending timestamp order, though this should not be
+// relied upon.
+//
+// TODO(lunevalex): needs testing that restricting to individual timeseries works
+// and that the date range restrictions are respected. Should be easy enough to
+// set up a KV store and write some keys into it (`MakeDataKey`) to do so without
+// setting up a `*Server`.
 func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
+	return dumpImpl(s.db.db, req, stream)
+}
+
+func dumpImpl(db *kv.DB, req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
+	for _, seriesName := range req.Names {
+		// NB: we know from rollups that 30m-data is older than 10s-data. There are
+		// ways in which that may not be true but it's probably fine.
+		for _, res := range []Resolution{Resolution30m, Resolution10s} {
+			if err := dumpTimeseriesAllSources(db, seriesName, res, req.StartNanos, req.EndNanos, stream); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func dumpTimeseriesAllSources(
+	db *kv.DB,
+	seriesName string,
+	diskResolution Resolution,
+	startNanos, endNanos int64,
+	stream tspb.TimeSeries_DumpServer,
+) error {
+	if endNanos == 0 {
+		endNanos = math.MaxInt64
+	}
 	ctx := stream.Context()
 	span := &roachpb.Span{
-		Key:    roachpb.Key(firstTSRKey),
-		EndKey: roachpb.Key(lastTSRKey),
+		Key: MakeDataKey(
+			seriesName, "" /* source */, diskResolution, startNanos,
+		),
+		EndKey: MakeDataKey(
+			seriesName, "" /* source */, diskResolution, endNanos,
+		).PrefixEnd(),
 	}
 
 	for span != nil {
 		b := &kv.Batch{}
 		b.Header.MaxSpanRequestKeys = dumpBatchSize
 		b.Scan(span.Key, span.EndKey)
-		err := s.db.db.Run(ctx, b)
+		err := db.Run(ctx, b)
 		if err != nil {
 			return err
 		}
 		result := b.Results[0]
+
 		span = result.ResumeSpan
 		for i := range result.Rows {
 			row := &result.Rows[i]
-			name, source, resolution, _, err := DecodeDataKey(row.Key)
+			name, source, _, _, err := DecodeDataKey(row.Key)
 			if err != nil {
 				return err
-			}
-			if resolution != Resolution10s {
-				// Only return the highest resolution data.
-				continue
 			}
 			var idata roachpb.InternalTimeSeriesData
 			if err := row.ValueProto(&idata); err != nil {
