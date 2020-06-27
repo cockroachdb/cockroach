@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package geomfn
+package geogfn
 
 import (
 	"fmt"
@@ -19,60 +19,59 @@ import (
 )
 
 func TestAzimuth(t *testing.T) {
-	zero := 0.0
-	oneQuarterPi := 0.7853981633974483
-	twoQuartersPi := 1.5707963267948966
-	threeQuartersPi := 2.356194490192344
-
 	testCases := []struct {
 		a        string
 		b        string
-		expected *float64
+		expected float64
 	}{
 		{
 			"POINT(0 0)",
-			"POINT(0 0)",
-			nil,
-		},
-		{
-			"POINT(0 0)",
 			"POINT(1 1)",
-			&oneQuarterPi,
+			0.7886800845259658,
 		},
 		{
 			"POINT(0 0)",
 			"POINT(1 0)",
-			&twoQuartersPi,
+			1.5707963267948966,
 		},
 		{
 			"POINT(0 0)",
 			"POINT(1 -1)",
-			&threeQuartersPi,
+			2.352912569063827,
+		},
+		{
+			"SRID=4004;POINT(0 0)",
+			"SRID=4004;POINT(1 -1)",
+			2.3529226390237774,
 		},
 		{
 			"POINT(0 0)",
 			"POINT(0 1)",
-			&zero,
+			0,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s <=> %s", tc.a, tc.b), func(t *testing.T) {
-			a, err := geo.ParseGeometry(tc.a)
+			a, err := geo.ParseGeography(tc.a)
 			require.NoError(t, err)
-			b, err := geo.ParseGeometry(tc.b)
+			b, err := geo.ParseGeography(tc.b)
 			require.NoError(t, err)
 
 			r, err := Azimuth(a, b)
 			require.NoError(t, err)
-
-			if tc.expected == nil {
-				require.Nil(t, r)
-			} else {
-				require.Equal(t, *tc.expected, *r)
-			}
+			require.NotNil(t, r)
+			require.Equal(t, tc.expected, *r)
 		})
 	}
+
+	t.Run("same point", func(t *testing.T) {
+		a, err := geo.ParseGeography("POINT(1.0 1.0)")
+		require.NoError(t, err)
+		ret, err := Azimuth(a, a)
+		require.NoError(t, err)
+		require.Nil(t, ret)
+	})
 
 	errorTestCases := []struct {
 		a          string
@@ -87,9 +86,9 @@ func TestAzimuth(t *testing.T) {
 	}
 	for _, tc := range errorTestCases {
 		t.Run(fmt.Sprintf("%s <=> %s", tc.a, tc.b), func(t *testing.T) {
-			a, err := geo.ParseGeometry(tc.a)
+			a, err := geo.ParseGeography(tc.a)
 			require.NoError(t, err)
-			b, err := geo.ParseGeometry(tc.b)
+			b, err := geo.ParseGeography(tc.b)
 			require.NoError(t, err)
 
 			_, err = Azimuth(a, b)
@@ -99,7 +98,7 @@ func TestAzimuth(t *testing.T) {
 	}
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
-		_, err := Azimuth(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		_, err := Azimuth(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB)
 		requireMismatchingSRIDError(t, err)
 	})
 }

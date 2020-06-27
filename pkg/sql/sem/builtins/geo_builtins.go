@@ -1849,6 +1849,28 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			},
 			tree.VolatilityImmutable,
 		),
+		geographyOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeography) (tree.Datum, error) {
+				azimuth, err := geogfn.Azimuth(a.Geography, b.Geography)
+				if err != nil {
+					return nil, err
+				}
+
+				if azimuth == nil {
+					return tree.DNull, nil
+				}
+
+				return tree.NewDFloat(tree.DFloat(*azimuth)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the azimuth in radians of the segment defined by the given point geographies, or NULL if the two points are coincident. It is solved using the Inverse geodesic problem.
+
+The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.`,
+				libraryUsage: usesGeographicLib,
+			},
+			tree.VolatilityImmutable,
+		),
 	),
 	"st_distance": makeBuiltin(
 		defProps(),
