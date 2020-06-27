@@ -32,21 +32,19 @@ type Materializer struct {
 	input colexecbase.Operator
 	typs  []*types.T
 
-	da sqlbase.DatumAlloc
-
 	drainHelper *drainHelper
 
 	// runtime fields --
 
-	// curIdx represents the current index into the column batch: the next row the
-	// Materializer will emit.
+	// curIdx represents the current index into the column batch: the next row
+	// the Materializer will emit.
 	curIdx int
 	// batch is the current Batch the Materializer is processing.
 	batch coldata.Batch
-	// colvecs is the unwrapped batch.
-	colvecs []coldata.Vec
-	// sel is the selection vector on the batch.
-	sel []int
+	// converter contains the converted vectors of the current batch. Note that
+	// if the batch had a selection vector on top of it, the converted vectors
+	// will be "dense" and contain only tuples that were selected.
+	converter *vecToDatumConverter
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow
@@ -153,8 +151,10 @@ func NewMaterializer(
 		input:       input,
 		typs:        typs,
 		drainHelper: newDrainHelper(metadataSourcesQueue),
-		row:         make(sqlbase.EncDatumRow, len(typs)),
-		closers:     toClose,
+		// nil vecIdxsToConvert indicates that we want to convert all vectors.
+		converter: newVecToDatumConverter(len(typs), nil /* vecIdxsToConvert */),
+		row:       make(sqlbase.EncDatumRow, len(typs)),
+		closers:   toClose,
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -220,24 +220,21 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
 			m.batch = m.input.Next(m.Ctx)
-
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
 				return nil, m.DrainHelper()
 			}
 			m.curIdx = 0
-			m.colvecs = m.batch.ColVecs()
-			m.sel = m.batch.Selection()
+			m.converter.convertBatch(m.batch)
 		}
-		rowIdx := m.curIdx
-		if m.sel != nil {
-			rowIdx = m.sel[m.curIdx]
+
+		for colIdx := range m.typs {
+			// Note that we don't need to apply the selection vector of the
+			// batch to index m.curIdx because vecToDatumConverter returns
+			// "dense" datum column.
+			m.row[colIdx].Datum = m.converter.getDatumColumn(colIdx)[m.curIdx]
 		}
 		m.curIdx++
-
-		for colIdx, typ := range m.typs {
-			m.row[colIdx].Datum = PhysicalTypeColElemToDatum(m.colvecs[colIdx], rowIdx, &m.da, typ)
-		}
 		// Note that there is no post-processing to be done in the
 		// materializer, so we do not use ProcessRowHelper and emit the row
 		// directly.
