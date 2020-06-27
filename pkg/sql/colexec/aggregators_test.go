@@ -19,9 +19,13 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -866,6 +870,133 @@ func BenchmarkAggregator(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func BenchmarkDistinctAggregation(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
+
+	typs := []*types.T{types.Int, types.Int}
+	aggSpec := &execinfrapb.AggregatorSpec{
+		Type:      execinfrapb.AggregatorSpec_NON_SCALAR,
+		GroupCols: []uint32{0},
+		// TODO(yuzefovich): adjust the spec once we support distinct ordered
+		// aggregation.
+		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{{
+			// Func will be set below.
+			Distinct: true,
+			ColIdx:   []uint32{1},
+		}},
+	}
+	spec := &execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
+		Core: execinfrapb.ProcessorCoreUnion{
+			Aggregator: aggSpec,
+		},
+	}
+	args := NewColOperatorArgs{
+		Spec:                 spec,
+		StreamingMemAccount:  testMemAcc,
+		ProcessorConstructor: rowexec.NewProcessor,
+	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+
+	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
+		execinfrapb.AggregatorSpec_AVG,
+		execinfrapb.AggregatorSpec_COUNT,
+		execinfrapb.AggregatorSpec_SUM,
+		execinfrapb.AggregatorSpec_SUM_INT,
+	} {
+		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
+		for _, groupSize := range []int{1, 2, 16, 64, coldata.BatchSize() / 4, coldata.BatchSize()} {
+			for _, distinctProbability := range []float64{0.01, 0.1, 1.0} {
+				distinctModulo := int(1.0 / distinctProbability)
+				if (groupSize == 1 && distinctProbability != 1.0) || float64(groupSize)/float64(distinctModulo) < 0.1 {
+					// We have a such combination of groupSize and
+					// distinctProbability parameters that we will be very
+					// unlikely to satisfy them (for example, with groupSize=1
+					// and distinctProbability=0.01, every value will be
+					// distinct within the group), so we skip such
+					// configuration.
+					continue
+				}
+				for _, hasNulls := range []bool{false, true} {
+					for _, numInputBatches := range []int{64} {
+						b.Run(fmt.Sprintf("%s/groupSize=%d/distinctProb=%.2f/nulls=%t",
+							fName, groupSize, distinctProbability, hasNulls),
+							func(b *testing.B) {
+								nTuples := numInputBatches * coldata.BatchSize()
+								cols := []coldata.Vec{
+									testAllocator.NewMemColumn(types.Int, nTuples),
+									testAllocator.NewMemColumn(types.Int, nTuples),
+								}
+								groups := cols[0].Int64()
+								vals := cols[1].Int64()
+								curGroup := -1
+								nullProb := 0.0
+								if hasNulls {
+									nullProb = nullProbability
+								}
+								for i := 0; i < nTuples; i++ {
+									if groupSize == 1 || i%groupSize == 0 {
+										curGroup++
+									}
+									groups[i] = int64(curGroup)
+									vals[i] = int64(rng.Intn(distinctModulo))
+									if rng.Float64() < nullProb {
+										cols[1].Nulls().SetNull(i)
+									}
+								}
+								// Shuffle the groups around (which is equivalent to
+								// shuffling whole rows in its purpose) so that our
+								// source is truly random, yet adheres to desired
+								// configuration parameters.
+								rng.Shuffle(nTuples, func(i, j int) {
+									groups[i], groups[j] = groups[j], groups[i]
+								})
+								source := newChunkingBatchSource(typs, cols, nTuples)
+								args.Inputs = []colexecbase.Operator{source}
+								aggSpec.Aggregations[0].Func = aggFn
+								r, err := TestNewColOperator(ctx, flowCtx, args)
+								if err != nil {
+									b.Fatal(err)
+								}
+
+								a := r.Op
+								a.Init()
+								b.ResetTimer()
+								// Only count the aggregation column.
+								b.SetBytes(int64(8 * nTuples))
+								for i := 0; i < b.N; i++ {
+									source.reset()
+									// Exhaust aggregator until all batches have been read.
+									for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+									}
+									// Recreate the whole operator chain. This is a temporary
+									// solution so that comparison against wrapped rowexec
+									// aggregator is fair.
+									// TODO(yuzefovich): reset the aggregator directly once we
+									// disable fallback to the row-by-row engine.
+									r, _ = TestNewColOperator(ctx, flowCtx, args)
+									a = r.Op
+									a.Init()
+								}
+							},
+						)
+					}
+				}
+			}
+		}
 	}
 }
 
