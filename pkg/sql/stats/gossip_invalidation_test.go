@@ -49,7 +49,7 @@ func TestGossipInvalidation(t *testing.T) {
 	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
-	tableDesc := sqlbase.GetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
+	tableDesc := sqlbase.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
 	tableID := tableDesc.ID
 
 	expectNStats := func(n int) error {

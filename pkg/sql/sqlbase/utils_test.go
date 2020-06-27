@@ -61,7 +61,7 @@ func EncodeTestKey(tb testing.TB, kvDB *kv.DB, codec keys.SQLCodec, keyStr strin
 
 		// Encode the table ID if the token is a table name.
 		if tableNames[tok] {
-			desc := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
+			desc := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
 			key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
 			continue
 		}

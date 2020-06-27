@@ -53,18 +53,19 @@ import (
 func TestingGetMutableExistingTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *MutableTableDescriptor {
-	return NewMutableExistingTableDescriptor(*GetTableDescriptor(kvDB, codec, database, table))
+	return NewMutableExistingTableDescriptor(*TestingGetTableDescriptor(kvDB, codec, database, table))
 }
 
-// GetTableDescriptor retrieves a table descriptor directly from the KV layer.
+// TestingGetTableDescriptor retrieves a table descriptor directly from the KV
+// layer.
 //
 // TODO(ajwerner): Move this to catalogkv and/or question the very existence of
 // this function. Consider renaming to TestingGetTableDescriptorByName or
 // removing it altogether.
-func GetTableDescriptor(
+func TestingGetTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *TableDescriptor {
-	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
+	// log.VEventf(context.TODO(), 2, "TestingGetTableDescriptor %q %q", database, table)
 	// testutil, so we pass settings as nil for both database and table name keys.
 	dKey := NewDatabaseKey(database)
 	ctx := context.TODO()
@@ -103,11 +104,12 @@ func GetTableDescriptor(
 	return tableDesc
 }
 
-// GetImmutableTableDescriptor retrieves an immutable table descriptor directly from the KV layer.
-func GetImmutableTableDescriptor(
+// TestingGetImmutableTableDescriptor retrieves an immutable table descriptor
+// directly from the KV layer.
+func TestingGetImmutableTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *ImmutableTableDescriptor {
-	return NewImmutableTableDescriptor(*GetTableDescriptor(kvDB, codec, database, table))
+	return NewImmutableTableDescriptor(*TestingGetTableDescriptor(kvDB, codec, database, table))
 }
 
 // RandDatum generates a random Datum of the given type.

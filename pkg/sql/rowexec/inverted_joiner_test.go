@@ -166,7 +166,7 @@ func TestInvertedJoiner(t *testing.T) {
 	const biIndex = 1
 	const ciIndex = 2
 
-	td := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	type testCase struct {
 		description string

@@ -62,8 +62,8 @@ func TestIndexJoiner(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	td := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	tdf := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tdf := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {

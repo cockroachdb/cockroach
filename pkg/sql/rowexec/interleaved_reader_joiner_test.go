@@ -118,10 +118,10 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	(32, 32, '32')
 	`, sqlutils.TestDB))
 
-	pd := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
-	cd1 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	cd2 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child2")
-	cd3 := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child3")
+	pd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
+	cd1 := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
+	cd2 := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child2")
+	cd3 := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child3")
 
 	// InterleavedReaderJoiner specs for each parent-child combination used
 	// throughout the test cases.
@@ -462,9 +462,9 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(0, 0), sqlutils.RowModuloShiftedFn(0), sqlutils.RowIdxFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
-	cd := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
-	gcd := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild")
+	pd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
+	cd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
+	gcd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild")
 
 	testCases := []struct {
 		spec     execinfrapb.InterleavedReaderJoinerSpec
@@ -572,8 +572,8 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		func(row int) []tree.Datum { return nil },
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
-	cd := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
+	pd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent")
+	cd := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child")
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)

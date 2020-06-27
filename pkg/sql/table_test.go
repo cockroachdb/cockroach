@@ -330,7 +330,7 @@ CREATE TABLE test.tt (x test.t);
 `); err != nil {
 		t.Fatal(err)
 	}
-	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
+	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
 	typLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 		typDesc, err := sqlbase.GetTypeDescFromID(ctx, kvDB, keys.SystemSQLCodec, id)
 		if err != nil {
@@ -431,7 +431,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		if _, err := sqlDB.Exec(create); err != nil {
 			t.Fatal(err)
 		}
-		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 		found := tc.getExpr(desc)
 		if tc.expectedExpr != found {
 			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)

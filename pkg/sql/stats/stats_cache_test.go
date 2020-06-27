@@ -289,7 +289,7 @@ CREATE STATISTICS s FROM tt;
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		keys.SystemSQLCodec,
 	)
-	tbl := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	tbl := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
 	_, err := sc.GetTableStats(ctx, tbl.ID)

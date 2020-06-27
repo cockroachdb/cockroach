@@ -863,7 +863,7 @@ CREATE TABLE system.jobs (
 	// Run migration and verify we have added columns and renamed column family.
 	require.NoError(t, mt.runMigration(ctx, migration))
 
-	newJobsTable := sqlbase.GetTableDescriptor(
+	newJobsTable := sqlbase.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
 	require.Equal(t, 7, len(newJobsTable.Columns))
 	require.Equal(t, "created_by_type", newJobsTable.Columns[5].Name)
@@ -876,7 +876,7 @@ CREATE TABLE system.jobs (
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))
-	newJobsTableAgain := sqlbase.GetTableDescriptor(
+	newJobsTableAgain := sqlbase.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
 	require.True(t, proto.Equal(newJobsTable, newJobsTableAgain))
 }
