@@ -546,8 +546,9 @@ message InvertedJoinerSpec {
 // where b' is derived from b. For instance, if b is an array, b' will be
 // elements of the array.
 //
-// Internal columns are | a | d |. The output omits the inverted column, while
-// leaving the relative position of the PK columns unchanged.
+// Internal columns are | a | b | d |. The output sets b to NULL, since it does
+// not have the value of the original column that was indexed in the inverted
+// column.
 message InvertedFiltererSpec {
   // The index in the input row of the inverted column.
   optional uint32 inverted_col_idx = 1 [(gogoproto.nullable) = false];

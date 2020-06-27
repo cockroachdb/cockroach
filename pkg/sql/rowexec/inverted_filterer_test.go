@@ -71,11 +71,11 @@ func TestInvertedFilterer(t *testing.T) {
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
-					{23},
-					{41},
-					{50},
+					{nil, 23},
+					{nil, 41},
+					{nil, 50},
 				},
-				Types: sqlbase.MakeIntCols(1),
+				Types: sqlbase.MakeIntCols(2),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{},
@@ -96,10 +96,10 @@ func TestInvertedFilterer(t *testing.T) {
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
-					{12, 41},
-					{14, 43},
+					{12, nil, 41},
+					{14, nil, 43},
 				},
-				Types: sqlbase.MakeIntCols(2),
+				Types: sqlbase.MakeIntCols(3),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{
