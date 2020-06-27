@@ -881,9 +881,9 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 	//    parent		(pid1)
 	//	child		(pid1, cid1, cid2)
 	//	  grandchild	(pid1, cid1, cid2, gcid1)
-	parent := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
-	child := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	grandchild := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
+	parent := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
+	child := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
+	grandchild := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
@@ -1093,9 +1093,9 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 	//    parent		(pid1)
 	//	child		(pid1, cid1, cid2)
 	//	  grandchild	(pid1, cid1, cid2, gcid1)
-	parent := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
-	child := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
-	grandchild := GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
+	parent := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "parent1")
+	child := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "child1")
+	grandchild := TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "grandchild1")
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]

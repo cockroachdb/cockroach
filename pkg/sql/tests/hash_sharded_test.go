@@ -103,7 +103,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX foo ON kv_primary (v)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
+		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
 		verifyTableDescriptorState(t, tableDesc, "primary" /* shardedIndexName */)
 		shardColID := getShardColumnID(t, tableDesc, "primary" /* shardedIndexName */)
 
@@ -136,7 +136,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
+		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary" /* shardedIndexName */)
 	})
 
@@ -153,7 +153,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH BUCKET_COUNT = 12`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
+		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary2" /* shardedIndexName */)
 	})
 }

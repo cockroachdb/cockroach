@@ -68,7 +68,7 @@ func TestRevertTable(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := sqlbase.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 		desc.State = sqlbase.TableDescriptor_OFFLINE // bypass the offline check.
 		require.NoError(t, RevertTables(context.Background(), kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
 
@@ -94,9 +94,9 @@ func TestRevertTable(t *testing.T) {
 		db.Exec(t, `DELETE FROM child WHERE a % 7 = 0`)
 
 		// Revert the table to ts.
-		desc := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := sqlbase.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 		desc.State = sqlbase.TableDescriptor_OFFLINE
-		child := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
+		child := sqlbase.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
 		child.State = sqlbase.TableDescriptor_OFFLINE
 		t.Run("reject only parent", func(t *testing.T) {
 			require.Error(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
