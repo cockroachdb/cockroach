@@ -566,7 +566,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Make sure we can't get a lease on the descriptor.
-	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, _, err = t.acquireMinVersion(1, tableDesc.ID, tableDesc.Version+1)
@@ -630,7 +630,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	ctx := context.Background()
 
 	lease1, _, err := acquire(ctx, s.(*server.TestServer), tableDesc.ID)
@@ -729,7 +729,7 @@ CREATE TABLE t.foo (v INT);
 		t.Fatalf("CREATE TABLE has acquired a lease: got %d, expected 0", atomic.LoadInt32(&fooAcquiredCount))
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.ID))
 
 	if _, err := sqlDB.Exec(`
@@ -856,7 +856,7 @@ CREATE TABLE t.foo (v INT);
 		t.Fatalf("CREATE TABLE has acquired a descriptor")
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.ID))
 
 	tx, err := sqlDB.Begin()
@@ -934,7 +934,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
 	// A read-write transaction that uses the old version of the descriptor.
 	txReadWrite, err := sqlDB.Begin()
@@ -1104,7 +1104,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv"); len(tableDesc.GCMutations) != 0 {
+		if tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv"); len(tableDesc.GCMutations) != 0 {
 			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
 		}
 		return nil
@@ -1152,7 +1152,7 @@ COMMIT;
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -1214,7 +1214,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test")
 	dbID := tableDesc.ParentID
 	tableName := tableDesc.Name
 	leaseManager := t.node(1)
@@ -1298,8 +1298,8 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
-	test1Desc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test1")
-	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
+	test1Desc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test1")
+	test2Desc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
 	dbID := test2Desc.ParentID
 
 	// Acquire a lease on test1 by name.
@@ -1432,7 +1432,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if tableDesc.Version != 1 {
 		t.Fatalf("invalid version %d", tableDesc.Version)
 	}
@@ -1453,7 +1453,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// The first schema change will succeed and increment the version.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if tableDesc.Version != 2 {
 		t.Fatalf("invalid version %d", tableDesc.Version)
 	}
@@ -1483,7 +1483,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// the table descriptor. If the schema change transaction
 	// doesn't rollback the transaction this descriptor read will
 	// hang.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if tableDesc.Version != 2 {
 		t.Fatalf("invalid version %d", tableDesc.Version)
 	}
@@ -1494,7 +1494,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if tableDesc.Version != 3 {
 		t.Fatalf("invalid version %d", tableDesc.Version)
 	}
@@ -1535,7 +1535,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if tableDesc.Version != 1 {
 		t.Fatalf("invalid version %d", tableDesc.Version)
 	}
@@ -1755,8 +1755,8 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
-	test1Desc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
-	test2Desc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
+	test1Desc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
+	test2Desc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
 	dbID := test2Desc.ParentID
 
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
@@ -1952,8 +1952,8 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	beforeDesc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "before")
-	afterDesc := sqlbase.GetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "after")
+	beforeDesc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "before")
+	afterDesc := sqlbase.TestingGetTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "after")
 	dbID := beforeDesc.ParentID
 
 	// Acquire a lease on "before" by name.

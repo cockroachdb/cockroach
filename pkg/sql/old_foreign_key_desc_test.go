@@ -46,8 +46,8 @@ CREATE INDEX ON t.t1 (x);
 `); err != nil {
 		t.Fatal(err)
 	}
-	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t1")
-	desc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
+	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t1")
+	desc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remember the old foreign keys.
 	oldInboundFKs := append([]sqlbase.ForeignKeyConstraint{}, desc.InboundFKs...)
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
@@ -121,7 +121,7 @@ CREATE INDEX ON t.t1 (x);
 	if _, err := sqlDB.Exec(`DROP INDEX t.t1@t1_auto_index_fk1`); err != nil {
 		t.Fatal(err)
 	}
-	desc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
+	desc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t2")
 	// Remove the validity field on all the descriptors for comparison, since
 	// foreign keys on the referenced side's validity is not always updated correctly.
 	for i := range desc.InboundFKs {

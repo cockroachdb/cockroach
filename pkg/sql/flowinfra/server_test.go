@@ -48,7 +48,7 @@ func TestServer(t *testing.T) {
 	r.Exec(t, `CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
 	r.Exec(t, `INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
 
-	td := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
 		Table:    *td,

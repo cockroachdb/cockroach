@@ -157,7 +157,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				return
 			default:
 				// Split the table at a random row.
-				desc := sqlbase.GetTableDescriptor(cdb, keys.SystemSQLCodec, "test", "t")
+				desc := sqlbase.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "test", "t")
 
 				val := rng.Intn(n)
 				t.Logf("splitting at %d", val)

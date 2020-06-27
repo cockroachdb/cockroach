@@ -54,7 +54,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	descA := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	descA := sqlbase.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
@@ -99,7 +99,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Ensure that attempt to refresh stats on view does not result in re-
 	// enqueuing the attempt.
 	// TODO(rytaft): Should not enqueue views to begin with.
-	descVW := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
+	descVW := sqlbase.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descVW.ID, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
@@ -130,7 +130,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		INSERT INTO t.a VALUES (1);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	tableID := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
+	tableID := sqlbase.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),

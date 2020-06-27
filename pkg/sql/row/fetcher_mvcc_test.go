@@ -83,8 +83,8 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		e STRING, f STRING, PRIMARY KEY (e, f)
 	) INTERLEAVE IN PARENT parent (e)`)
 
-	parentDesc := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
-	childDesc := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
+	parentDesc := sqlbase.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
+	childDesc := sqlbase.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `child`)
 	var args []row.FetcherTableArgs
 	for _, desc := range []*sqlbase.ImmutableTableDescriptor{parentDesc, childDesc} {
 		colIdxMap := make(map[sqlbase.ColumnID]int)
