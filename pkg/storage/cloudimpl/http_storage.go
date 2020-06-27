@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package cloudimpl
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -40,7 +41,7 @@ type httpStorage struct {
 	settings *cluster.Settings
 }
 
-var _ ExternalStorage = &httpStorage{}
+var _ cloud.ExternalStorage = &httpStorage{}
 
 type retryableHTTPError struct {
 	cause error
@@ -88,7 +89,7 @@ func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	}}, nil
 }
 
-func makeHTTPStorage(base string, settings *cluster.Settings) (ExternalStorage, error) {
+func makeHTTPStorage(base string, settings *cluster.Settings) (cloud.ExternalStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
 	}
