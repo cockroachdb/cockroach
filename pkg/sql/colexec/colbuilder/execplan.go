@@ -130,7 +130,11 @@ func (r *opResult) resetToState(ctx context.Context, arg colexec.NewColOperatorR
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
+func isSupported(
+	mode sessiondata.VectorizeExecMode,
+	spec *execinfrapb.ProcessorSpec,
+	mustWrapCore *execinfrapb.ProcessorCoreUnion,
+) error {
 	core := spec.Core
 	isFullVectorization := mode == sessiondata.VectorizeOn ||
 		mode == sessiondata.VectorizeExperimentalAlways
@@ -152,6 +156,9 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 		return nil
 
 	case core.Aggregator != nil:
+		if mustWrapCore != nil && mustWrapCore.Aggregator != nil {
+			return errors.Newf("aggregator core must be wrapped")
+		}
 		aggSpec := core.Aggregator
 		for _, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
@@ -544,7 +551,7 @@ func NewColOperator(
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := r
 
-	if err = isSupported(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+	if err = isSupported(flowCtx.EvalCtx.SessionData.VectorizeMode, spec, args.TestingKnobs.MustWrapCore); err != nil {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
 		// around a planNode) because it creates complications, and a flow with
 		// such processor probably will not benefit from the vectorization.

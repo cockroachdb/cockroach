@@ -19,9 +19,13 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -866,6 +870,127 @@ func BenchmarkAggregator(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+// BenchmarkHashAggregator runs a benchmark of the vectorized hash aggregator
+// against the chain of operators that wraps the aggregator processor.
+func BenchmarkHashAggregator(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
+
+	typs := []*types.T{types.Int, types.Int}
+	aggSpec := &execinfrapb.AggregatorSpec{
+		Type:      execinfrapb.AggregatorSpec_NON_SCALAR,
+		GroupCols: []uint32{0},
+		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{{
+			// Func will be set below.
+			ColIdx: []uint32{1},
+		}},
+	}
+	spec := &execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
+		Core: execinfrapb.ProcessorCoreUnion{
+			Aggregator: aggSpec,
+		},
+	}
+	args := NewColOperatorArgs{
+		Spec:                 spec,
+		StreamingMemAccount:  testMemAcc,
+		ProcessorConstructor: rowexec.NewProcessor,
+	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+
+	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
+		execinfrapb.AggregatorSpec_COUNT,
+		execinfrapb.AggregatorSpec_SUM,
+	} {
+		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
+		for _, groupSize := range []int{1, 4, 16, 64, 256, 1024} {
+			for _, hasNulls := range []bool{false, true} {
+				for _, numInputBatches := range []int{64} {
+					nTuples := numInputBatches * coldata.BatchSize()
+					cols := []coldata.Vec{
+						testAllocator.NewMemColumn(types.Int, nTuples),
+						testAllocator.NewMemColumn(types.Int, nTuples),
+					}
+					groups := cols[0].Int64()
+					vals := cols[1].Int64()
+					curGroup := -1
+					nullProb := 0.0
+					if hasNulls {
+						nullProb = nullProbability
+					}
+					for i := 0; i < nTuples; i++ {
+						if groupSize == 1 || i%groupSize == 0 {
+							curGroup++
+						}
+						groups[i] = int64(curGroup)
+						vals[i] = int64(rng.Intn(1024))
+						if rng.Float64() < nullProb {
+							cols[1].Nulls().SetNull(i)
+						}
+					}
+					// Shuffle the groups around (which is equivalent to
+					// shuffling whole rows in its purpose) so that our
+					// source is truly random, yet adheres to desired
+					// configuration parameters.
+					rng.Shuffle(nTuples, func(i, j int) {
+						groups[i], groups[j] = groups[j], groups[i]
+					})
+					source := newChunkingBatchSource(typs, cols, nTuples)
+					args.Inputs = []colexecbase.Operator{source}
+					aggSpec.Aggregations[0].Func = aggFn
+					for _, wrapped := range []bool{true, false} {
+						kind := "vectorized"
+						if wrapped {
+							kind = "wrapped"
+						}
+						b.Run(fmt.Sprintf("%s/groupSize=%d/nulls=%t/%s", fName, groupSize, hasNulls, kind),
+							func(b *testing.B) {
+								if wrapped {
+									args.TestingKnobs.MustWrapCore = &execinfrapb.ProcessorCoreUnion{Aggregator: aggSpec}
+								} else {
+									args.TestingKnobs.MustWrapCore = nil
+								}
+								r, err := TestNewColOperator(ctx, flowCtx, args)
+								if err != nil {
+									b.Fatal(err)
+								}
+
+								a := r.Op
+								a.Init()
+								b.ResetTimer()
+								// Only count the aggregation column.
+								b.SetBytes(int64(8 * nTuples))
+								for i := 0; i < b.N; i++ {
+									source.reset()
+									// Exhaust aggregator until all batches have been read.
+									for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+									}
+									// Recreate the whole operator chain. This is necessary
+									// so that comparison against wrapped rowexec aggregator
+									// is fair (since we don't have a fast way to reset the
+									// whole chain).
+									r, _ = TestNewColOperator(ctx, flowCtx, args)
+									a = r.Op
+									a.Init()
+								}
+							},
+						)
+					}
+				}
+			}
+		}
 	}
 }
 

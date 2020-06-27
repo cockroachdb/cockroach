@@ -68,6 +68,9 @@ type NewColOperatorArgs struct {
 		// are opened/closed, which ensures that the number of open files never
 		// exceeds what is expected.
 		DelegateFDAcquisitions bool
+		// MustWrapCore can be set to indicate that a particular processor core
+		// must be wrapped (meaning it disables vectorization of that core).
+		MustWrapCore *execinfrapb.ProcessorCoreUnion
 	}
 }
 
