@@ -113,7 +113,7 @@ func encodeTestKey(kvDB *kv.DB, keyStr string) (roachpb.Key, error) {
 	for _, tok := range tokens {
 		// Encode the table ID if the token is a table name.
 		if tableNames[tok] {
-			desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
+			desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tok)
 			key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
 			continue
 		}

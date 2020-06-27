@@ -42,7 +42,7 @@ CREATE INDEX bc ON test.t(b, c);
 	}
 
 	// Retrieve the numeric descriptors.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	tID := tableDesc.ID
 	var aID, bID, cID sqlbase.ColumnID
 	for i := range tableDesc.Columns {
@@ -60,7 +60,7 @@ CREATE INDEX bc ON test.t(b, c);
 	secID := tableDesc.Indexes[0].ID
 
 	// Retrieve the numeric descriptors.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")
 	tIDHidden := tableDesc.ID
 	var rowIDHidden sqlbase.ColumnID
 	for i := range tableDesc.Columns {

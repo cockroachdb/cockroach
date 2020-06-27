@@ -184,7 +184,7 @@ func createBenchmarkChangefeed(
 	feedClock *hlc.Clock,
 	database, table string,
 ) (*benchSink, func() error, error) {
-	tableDesc := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
+	tableDesc := sqlbase.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
 		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{

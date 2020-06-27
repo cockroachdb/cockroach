@@ -148,7 +148,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var tables []sqlbase.ImmutableTableDescriptor
 	var expiration hlc.Timestamp
@@ -271,7 +271,7 @@ CREATE TEMP TABLE t2 (temp int);
 	}
 
 	for _, tableName := range []string{"t", "t2"} {
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
+		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
 		lease := leaseManager.tableNames.get(
 			tableDesc.ParentID,
 			sqlbase.ID(keys.PublicSchemaID),
@@ -304,7 +304,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Rename.
 	if _, err := db.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
@@ -333,7 +333,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Re-read the descriptor, to get the new ParentID.
-	newTableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t1", "test2")
+	newTableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t1", "test2")
 	if tableDesc.ParentID == newTableDesc.ParentID {
 		t.Fatalf("database didn't change")
 	}
@@ -376,7 +376,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
@@ -421,7 +421,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
 	// Populate the name cache.
 	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
@@ -483,7 +483,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Check that we cannot get the table by a different name.
 	if leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "tEsT", s.Clock().Now()) != nil {
@@ -519,7 +519,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Populate the name cache.
 	ctx := context.Background()
@@ -635,7 +635,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -687,7 +687,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10

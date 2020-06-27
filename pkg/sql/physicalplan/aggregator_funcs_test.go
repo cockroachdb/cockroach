@@ -437,7 +437,7 @@ func TestDistAggregationTable(t *testing.T) {
 	)
 
 	kvDB := tc.Server(0).DB()
-	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	for fn, info := range DistAggregationTable {
 		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {

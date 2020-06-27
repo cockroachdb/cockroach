@@ -517,7 +517,7 @@ func TestDropIndex(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 	idx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
@@ -529,7 +529,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -555,7 +555,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	newIdx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -617,7 +617,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	indexDesc, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -656,7 +656,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
 	// declares column families.
 
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -677,7 +677,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	numRows := 2*chunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
@@ -688,7 +688,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, tableSpan, 2*numRows)
 
 	// Ensure that index is not active.
-	tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
+	tableDesc = sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
 	if _, _, err := tableDesc.FindIndexByName("intlv_idx"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
@@ -708,7 +708,7 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, "kv").Key(keys.SystemSQLCodec)
 	gr, err := kvDB.Get(ctx, nameKey)
 
@@ -806,7 +806,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		descs = append(descs, sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
+		descs = append(descs, sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName))
 
 		nameKey := sqlbase.NewPublicTableKey(keys.MinNonPredefinedUserDescID, tableName).Key(keys.SystemSQLCodec)
 		gr, err := kvDB.Get(ctx, nameKey)
@@ -1015,8 +1015,8 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDescInterleaved := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
@@ -1100,7 +1100,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
