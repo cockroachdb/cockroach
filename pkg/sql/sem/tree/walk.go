@@ -760,7 +760,6 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 func (stmt *Backup) copyNode() *Backup {
 	stmtCopy := *stmt
 	stmtCopy.IncrementalFrom = append(Exprs(nil), stmt.IncrementalFrom...)
-	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
 	return &stmtCopy
 }
 
@@ -794,13 +793,13 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 			ret.IncrementalFrom[i] = e
 		}
 	}
-	{
-		opts, changed := walkKVOptions(v, stmt.Options)
+	if stmt.Options.EncryptionPassphrase != nil {
+		pw, changed := WalkExpr(v, stmt.Options.EncryptionPassphrase)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.Options = opts
+			ret.Options.EncryptionPassphrase = pw
 		}
 	}
 	return ret

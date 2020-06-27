@@ -230,15 +230,11 @@ func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]str
 }
 
 func backupJobDescription(
-	p sql.PlanHookState,
-	backup *tree.Backup,
-	to []string,
-	incrementalFrom []string,
-	opts map[string]string,
+	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
-		Options: optsToKVOptions(opts),
+		Options: backup.Options,
 		Targets: backup.Targets,
 	}
 
@@ -279,9 +275,14 @@ func backupPlanHook(
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	optsFn, err := p.TypeAsStringOpts(ctx, backupStmt.Options, backupOptionExpectValues)
-	if err != nil {
-		return nil, nil, nil, false, err
+
+	var pwFn func() (string, error)
+	if backupStmt.Options.EncryptionPassphrase != nil {
+		fn, err := p.TypeAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		pwFn = fn
 	}
 
 	header := sqlbase.ResultColumns{
@@ -334,13 +335,8 @@ func backupPlanHook(
 			}
 		}
 
-		opts, err := optsFn()
-		if err != nil {
-			return err
-		}
-
 		mvccFilter := MVCCFilter_Latest
-		if _, ok := opts[backupOptRevisionHistory]; ok {
+		if backupStmt.Options.CaptureRevisionHistory {
 			mvccFilter = MVCCFilter_All
 		}
 
@@ -380,8 +376,12 @@ func backupPlanHook(
 		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		var encryptionPassphrase []byte
-		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			encryptionPassphrase = []byte(passphrase)
+		if pwFn != nil {
+			pw, err := pwFn()
+			if err != nil {
+				return err
+			}
+			encryptionPassphrase = []byte(pw)
 		}
 
 		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
@@ -625,7 +625,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt, to, incrementalFrom, opts)
+		description, err := backupJobDescription(p, backupStmt, to, incrementalFrom)
 		if err != nil {
 			return err
 		}

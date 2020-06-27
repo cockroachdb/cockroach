@@ -10,6 +10,8 @@
 
 package tree
 
+import "github.com/cockroachdb/errors"
+
 // DescriptorCoverage specifies whether or not a subset of descriptors were
 // requested or if all the descriptors were requested, so all the descriptors
 // are covered in a given backup.
@@ -29,6 +31,13 @@ const (
 	AllDescriptors
 )
 
+type BackupOptions struct {
+	CaptureRevisionHistory bool
+	EncryptionPassphrase   Expr
+}
+
+var _ NodeFormatter = &BackupOptions{}
+
 // Backup represents a BACKUP statement.
 type Backup struct {
 	Targets            TargetList
@@ -36,7 +45,7 @@ type Backup struct {
 	To                 PartitionedBackup
 	IncrementalFrom    Exprs
 	AsOf               AsOfClause
-	Options            KVOptions
+	Options            BackupOptions
 }
 
 var _ Statement = &Backup{}
@@ -57,7 +66,9 @@ func (node *Backup) Format(ctx *FmtCtx) {
 		ctx.WriteString(" INCREMENTAL FROM ")
 		ctx.FormatNode(&node.IncrementalFrom)
 	}
-	if node.Options != nil {
+
+	var defaultOptions BackupOptions
+	if node.Options != defaultOptions {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
 	}
@@ -136,4 +147,36 @@ func (node *PartitionedBackup) Format(ctx *FmtCtx) {
 	if len(*node) > 1 {
 		ctx.WriteString(")")
 	}
+}
+
+func (o *BackupOptions) Format(ctx *FmtCtx) {
+	if o.CaptureRevisionHistory {
+		ctx.WriteString("revision_history")
+	}
+
+	if o.EncryptionPassphrase != nil {
+		if o.CaptureRevisionHistory {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString("encryption_passphrase=")
+		o.EncryptionPassphrase.Format(ctx)
+	}
+}
+
+func (o *BackupOptions) CombineWith(other *BackupOptions) error {
+	if o.CaptureRevisionHistory {
+		if other.CaptureRevisionHistory {
+			return errors.New("revision_history option specified multiple times")
+		}
+	} else {
+		o.CaptureRevisionHistory = other.CaptureRevisionHistory
+	}
+
+	if o.EncryptionPassphrase == nil {
+		o.EncryptionPassphrase = other.EncryptionPassphrase
+	} else if other.EncryptionPassphrase != nil {
+		return errors.New("encryption_passphrase specified multiple times")
+	}
+
+	return nil
 }

@@ -1470,7 +1470,7 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
 
-		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
+		{`BACKUP TABLE foo TO 'bar' WITH revision_history`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
@@ -2136,11 +2136,12 @@ $function$`,
 			`RESTORE TABLE foo, baz FROM 'bar'`},
 		{`RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`,
 			`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
-		{`BACKUP foo TO 'bar' WITH key1, key2 = 'value'`,
-			`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
+		{`BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret'`},
+		{`BACKUP foo TO 'bar' WITH OPTIONS (ENCRYPTION_PASSPHRASE = 'secret', revision_history)`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret'`},
 		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`,
 			`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
-
 		{`CREATE CHANGEFEED FOR foo INTO 'sink'`, `CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 
 		{`GRANT SELECT ON foo TO root`,
@@ -2977,6 +2978,19 @@ HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*`,
 DETAIL: source SQL:
 SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x
                                                         ^`,
+		},
+		{`BACKUP foo TO 'bar' WITH key1, key2 = 'value'`,
+			`at or near "key1": syntax error
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH key1, key2 = 'value'
+                         ^
+HINT: try \h BACKUP`,
+		},
+		{`BACKUP foo TO 'bar' WITH revision_history, revision_history`,
+			`at or near "revision_history": syntax error: revision_history option specified multiple times
+DETAIL: source SQL:
+BACKUP foo TO 'bar' WITH revision_history, revision_history
+                                           ^`,
 		},
 	}
 	for _, d := range testData {
