@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -21,29 +22,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 )
 
 // hashAggregatorHelper is a helper for the hash aggregator that facilitates
 // the selection of tuples on which to perform the aggregation.
 type hashAggregatorHelper interface {
+	// makeSeenMaps returns a dense slice of maps used to handle distinct
+	// aggregation of a single aggregation group (it is of the same length as
+	// the number of functions with DISTINCT clause). It will be nil whenever
+	// no aggregate function has a DISTINCT clause.
+	makeSeenMaps() []map[string]struct{}
 	// performAggregation performs aggregation of all functions in fns on all
 	// tuples in batch that are relevant for each function (meaning that only
 	// tuples that pass the criteria - like DISTINCT and/or FILTER will be
-	// aggregated). encodedGroupCols is an optional argument that contains the
-	// encoding of the grouping columns and *must not* be modified by the
-	// implementations. (Note that we can have a single encoded argument for
-	// the whole batch because the hash aggregator itself ensures that only
-	// tuples from the same group are in the batch.)
-	performAggregation(ctx context.Context, batch coldata.Batch, fns []aggregateFunc, encodedGroupCols []byte)
-	// encodeGroupCols encodes the grouping columns of the first tuple in the
-	// batch. It assumes that batch has non-zero length. Note that this returns
-	// a byte slice and not a string to avoid incurring extra conversions when
-	// used later, but the return value *must not* be modified once returned.
-	// This method is a noop if the helper doesn't perform DISTINCT
-	// aggregation.
-	encodeGroupCols(ctx context.Context, batch coldata.Batch) []byte
+	// aggregated). seen is a dense slice of maps used for storing encoded
+	// tuples that have already been seen by the corresponding group (it can be
+	// nil when no aggregate function performs distinct aggregation).
+	performAggregation(ctx context.Context, batch coldata.Batch, fns []aggregateFunc, seen []map[string]struct{})
 }
 
 // newHashAggregatorHelper creates a new hashAggregatorHelper based on provided
@@ -74,29 +70,32 @@ func newHashAggregatorHelper(
 			aggFilter[i] = tree.NoColumnIdx
 		}
 	}
-	hasDistinctAgg, hasFilterAgg := false, false
+	hasFilterAgg := false
+	// distinctAggIdxs is a dense list of function indices that perform
+	// distinct aggregation.
+	var distinctAggIdxs []int
 	for i := range aggCols {
 		if aggDistinct != nil && aggDistinct[i] {
-			hasDistinctAgg = true
+			distinctAggIdxs = append(distinctAggIdxs, i)
 		}
 		if aggFilter[i] != tree.NoColumnIdx {
 			hasFilterAgg = true
 		}
 	}
-	if !hasDistinctAgg && !hasFilterAgg {
+	if len(distinctAggIdxs) == 0 && !hasFilterAgg {
 		return newDefaultHashAggregatorHelper(aggCols)
 	}
-	if hasDistinctAgg && !hasFilterAgg {
-		return newDistinctHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, aggDistinct, datumAlloc)
+	if len(distinctAggIdxs) > 0 && !hasFilterAgg {
+		return newDistinctHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, distinctAggIdxs, datumAlloc)
 	}
 	filters := make([]*filteringHashAggHelper, len(aggCols))
 	for i, filterIdx := range aggFilter {
 		filters[i] = newFilteringHashAggHelper(filterIdx)
 	}
-	if !hasDistinctAgg {
+	if len(distinctAggIdxs) == 0 {
 		return newFilteringHashAggregatorHelper(aggCols, filters)
 	}
-	return newFilteringDistinctHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, aggDistinct, filters, datumAlloc)
+	return newFilteringDistinctHashAggregatorHelper(allocator, inputTypes, groupCols, aggCols, distinctAggIdxs, filters, datumAlloc)
 }
 
 // defaultHashAggregatorHelper is the default hashAggregatorHelper for the case
@@ -111,16 +110,16 @@ func newDefaultHashAggregatorHelper(aggCols [][]uint32) hashAggregatorHelper {
 	return &defaultHashAggregatorHelper{aggCols: aggCols}
 }
 
+func (h *defaultHashAggregatorHelper) makeSeenMaps() []map[string]struct{} {
+	return nil
+}
+
 func (h *defaultHashAggregatorHelper) performAggregation(
-	_ context.Context, batch coldata.Batch, fns []aggregateFunc, _ []byte,
+	_ context.Context, batch coldata.Batch, fns []aggregateFunc, _ []map[string]struct{},
 ) {
 	for fnIdx, fn := range fns {
 		fn.Compute(batch, h.aggCols[fnIdx])
 	}
-}
-
-func (h *defaultHashAggregatorHelper) encodeGroupCols(context.Context, coldata.Batch) []byte {
-	return nil
 }
 
 // hashAggregatorHelperBase is a utility struct that provides non-default
@@ -216,8 +215,12 @@ func newFilteringHashAggregatorHelper(
 	return h
 }
 
+func (h *filteringHashAggregatorHelper) makeSeenMaps() []map[string]struct{} {
+	return nil
+}
+
 func (h *filteringHashAggregatorHelper) performAggregation(
-	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, _ []byte,
+	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, _ []map[string]struct{},
 ) {
 	h.saveBatch(batch)
 	for fnIdx, fn := range fns {
@@ -236,10 +239,6 @@ func (h *filteringHashAggregatorHelper) performAggregation(
 	}
 }
 
-func (h *filteringHashAggregatorHelper) encodeGroupCols(context.Context, coldata.Batch) []byte {
-	return nil
-}
-
 // distinctHashAggregatorHelperBase is a utility struct shared by
 // hashAggregatorHelpers that perform DISTINCT aggregation.
 // Note that the "distinctness" of tuples is handled by encoding grouping
@@ -253,13 +252,14 @@ func (h *filteringHashAggregatorHelper) encodeGroupCols(context.Context, coldata
 type distinctHashAggregatorHelperBase struct {
 	*hashAggregatorHelperBase
 
-	inputTypes []*types.T
-	groupCols  []int
-	seen       []map[string]struct{}
-	acc        *mon.BoundAccount
-	arena      stringarena.Arena
-	datumAlloc *sqlbase.DatumAlloc
-	scratch    struct {
+	inputTypes         []*types.T
+	groupCols          []int
+	nonDistinctAggIdxs []int
+	distinctAggIdxs    []int
+	seenAlloc          *seenMapsAlloc
+	arena              stringarena.Arena
+	datumAlloc         *sqlbase.DatumAlloc
+	scratch            struct {
 		ed      sqlbase.EncDatum
 		encoded []byte
 		// converted is a scratch space for converting a single element.
@@ -272,16 +272,30 @@ func newDistinctHashAggregatorHelperBase(
 	inputTypes []*types.T,
 	groupCols []uint32,
 	aggCols [][]uint32,
+	distinctAggIdxs []int,
 	datumAlloc *sqlbase.DatumAlloc,
 ) *distinctHashAggregatorHelperBase {
 	h := &distinctHashAggregatorHelperBase{
 		hashAggregatorHelperBase: newAggregatorHelperBase(aggCols),
 		inputTypes:               inputTypes,
-		seen:                     make([]map[string]struct{}, len(aggCols)),
-		acc:                      allocator.GetAccount(),
+		nonDistinctAggIdxs:       make([]int, 0, len(aggCols)-len(distinctAggIdxs)),
+		distinctAggIdxs:          distinctAggIdxs,
+		seenAlloc:                newSeenMapsAlloc(allocator, len(distinctAggIdxs)),
+		arena:                    stringarena.Make(allocator.GetAccount()),
 		datumAlloc:               datumAlloc,
 	}
-	h.arena = stringarena.Make(h.acc)
+	for aggIdx := range aggCols {
+		isDistinct := false
+		for _, distinctAggIdx := range distinctAggIdxs {
+			if aggIdx == distinctAggIdx {
+				isDistinct = true
+				break
+			}
+		}
+		if !isDistinct {
+			h.nonDistinctAggIdxs = append(h.nonDistinctAggIdxs, aggIdx)
+		}
+	}
 	h.scratch.converted = []tree.Datum{nil}
 	h.groupCols = make([]int, len(groupCols))
 	for i := range groupCols {
@@ -290,49 +304,58 @@ func newDistinctHashAggregatorHelperBase(
 	return h
 }
 
-func (h *distinctHashAggregatorHelperBase) encodeGroupCols(
-	ctx context.Context, batch coldata.Batch,
-) []byte {
-	var encoded []byte
-	var err error
-	sel := batch.Selection()
-	for _, colIdx := range h.groupCols {
-		PhysicalTypeColVecToDatum(
-			h.scratch.converted, batch.ColVec(colIdx), 1 /* length */, sel, h.datumAlloc,
-		)
-		h.scratch.ed.Datum = h.scratch.converted[0]
-		encoded, err = h.scratch.ed.Fingerprint(h.inputTypes[colIdx], h.datumAlloc, encoded)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
+// seenMapsAlloc is a utility struct that batches allocations of seen map
+// slices.
+type seenMapsAlloc struct {
+	allocator         *colmem.Allocator
+	numDistinctAggFns int
+	newAllocCount     int
+	newAllocMemSize   int64
+	buf               []map[string]struct{}
+}
+
+func newSeenMapsAlloc(allocator *colmem.Allocator, numDistinctAggFns int) *seenMapsAlloc {
+	return &seenMapsAlloc{
+		allocator:         allocator,
+		numDistinctAggFns: numDistinctAggFns,
+		newAllocCount:     numDistinctAggFns * hashAggregatorAllocSize,
+		newAllocMemSize:   int64(numDistinctAggFns * hashAggregatorAllocSize * int(sizeOfSeenMap)),
 	}
-	// Note that we don't use stringarena for this in order to avoid copying
-	// for conversion to string and back to []byte.
-	if err := h.acc.Grow(ctx, int64(len(encoded))); err != nil {
-		colexecerror.InternalError(err)
+}
+
+const sizeOfSeenMap = unsafe.Sizeof(map[string]struct{}{})
+
+func (a *seenMapsAlloc) newSeenMapsSlice() []map[string]struct{} {
+	if len(a.buf) == 0 {
+		a.allocator.AdjustMemoryUsage(a.newAllocMemSize)
+		a.buf = make([]map[string]struct{}, a.newAllocCount)
 	}
-	return encoded
+	ret := a.buf[0:a.numDistinctAggFns]
+	a.buf = a.buf[a.numDistinctAggFns:]
+	return ret
+}
+
+func (h *distinctHashAggregatorHelperBase) makeSeenMaps() []map[string]struct{} {
+	seen := h.seenAlloc.newSeenMapsSlice()
+	for i := range h.distinctAggIdxs {
+		seen[i] = make(map[string]struct{})
+	}
+	return seen
 }
 
 // selectDistinctTuples updates the batch in-place to select only those tuples
 // that haven't been seen by the aggregate function yet when the function
 // performs DISTINCT aggregation. aggColsConverter must have already done the
-// conversion of the relevant aggregate columns. This function is a noop if the
-// aggregate function performs regular aggregation (in this case converter can
-// be left nil).
+// conversion of the relevant aggregate columns. This function assumes that
+// seen map is non-nil and is the same that is used for all batches from the
+// same aggregation group.
 func (h *distinctHashAggregatorHelperBase) selectDistinctTuples(
 	ctx context.Context,
 	batch coldata.Batch,
 	aggFnIdx int,
-	encodedGroupCols []byte,
 	aggColsConverter *vecToDatumConverter,
-) (maybeModified bool) {
-	seen := h.seen[aggFnIdx]
-	if seen == nil {
-		// This aggregate function performs regular (non-distinct) aggregation,
-		// so we don't need to do anything.
-		return false
-	}
+	seen map[string]struct{},
+) {
 	oldLen := batch.Length()
 	oldSel := batch.Selection()
 	usesSel := oldSel != nil
@@ -345,7 +368,7 @@ func (h *distinctHashAggregatorHelperBase) selectDistinctTuples(
 		s        string
 	)
 	for idx := 0; idx < oldLen; idx++ {
-		h.scratch.encoded = append(h.scratch.encoded[:0], encodedGroupCols...)
+		h.scratch.encoded = h.scratch.encoded[:0]
 		for _, colIdx := range h.aggCols[aggFnIdx] {
 			h.scratch.ed.Datum = aggColsConverter.getDatumColumn(int(colIdx))[idx]
 			h.scratch.encoded, err = h.scratch.ed.Fingerprint(
@@ -370,7 +393,6 @@ func (h *distinctHashAggregatorHelperBase) selectDistinctTuples(
 		}
 	}
 	batch.SetLength(newLen)
-	return true
 }
 
 // distinctHashAggregatorHelper is a hashAggregatorHelper that handles the
@@ -392,23 +414,20 @@ func newDistinctHashAggregatorHelper(
 	inputTypes []*types.T,
 	groupCols []uint32,
 	aggCols [][]uint32,
-	aggDistinct []bool,
+	distinctAggIdxs []int,
 	datumAlloc *sqlbase.DatumAlloc,
 ) hashAggregatorHelper {
 	h := &distinctHashAggregatorHelper{
 		distinctHashAggregatorHelperBase: newDistinctHashAggregatorHelperBase(
-			allocator, inputTypes, groupCols, aggCols, datumAlloc,
+			allocator, inputTypes, groupCols, aggCols, distinctAggIdxs, datumAlloc,
 		),
 	}
 	// aggColsToConvert will contain indices of columns that are inputs to at
 	// least one aggregate function.
 	var aggColsToConvert util.FastIntSet
-	for aggIdx, isAggDistinct := range aggDistinct {
-		if isAggDistinct {
-			h.seen[aggIdx] = make(map[string]struct{})
-			for _, aggCol := range aggCols[aggIdx] {
-				aggColsToConvert.Add(int(aggCol))
-			}
+	for _, aggIdx := range distinctAggIdxs {
+		for _, aggCol := range aggCols[aggIdx] {
+			aggColsToConvert.Add(int(aggCol))
 		}
 	}
 	aggVecIdxsToConvert := make([]int, 0, aggColsToConvert.Len())
@@ -431,18 +450,21 @@ func newDistinctHashAggregatorHelper(
 //    3) restore the batch to the original state (if it might have been
 //       modified).
 func (h *distinctHashAggregatorHelper) performAggregation(
-	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, encodedGroupCols []byte,
+	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, seen []map[string]struct{},
 ) {
 	h.saveBatch(batch)
 	h.aggColsConverter.convertBatch(batch)
-	for fnIdx, fn := range fns {
-		maybeModified := h.selectDistinctTuples(ctx, batch, fnIdx, encodedGroupCols, h.aggColsConverter)
+	// First compute all non-distinct aggregations.
+	for _, fnIdx := range h.nonDistinctAggIdxs {
+		fns[fnIdx].Compute(batch, h.aggCols[fnIdx])
+	}
+	// Now compute all distinct aggregations restoring the batch after each one.
+	for distinctAggSlot, fnIdx := range h.distinctAggIdxs {
+		h.selectDistinctTuples(ctx, batch, fnIdx, h.aggColsConverter, seen[distinctAggSlot])
 		if batch.Length() > 0 {
-			fn.Compute(batch, h.aggCols[fnIdx])
+			fns[fnIdx].Compute(batch, h.aggCols[fnIdx])
 		}
-		if maybeModified {
-			h.restoreBatch(batch)
-		}
+		h.restoreBatch(batch)
 	}
 }
 
@@ -455,11 +477,12 @@ type filteringDistinctHashAggregatorHelper struct {
 	*distinctHashAggregatorHelperBase
 
 	filters []*filteringHashAggHelper
-	// aggColsConverters has a separate converter for every function that
-	// performs DISTINCT aggregation. Due to the presence of filters, we cannot
-	// use a single converter like in distinctHashAggregatorHelper because a
-	// filter is applied before the distinctness check, so the tuples seen by
-	// the aggregation functions can be different.
+	// aggColsConverters is a dense list of separate converters for every
+	// function that performs DISTINCT aggregation. Due to the presence of
+	// filters, we cannot use a single converter like in
+	// distinctHashAggregatorHelper because a filter is applied before the
+	// distinctness check, so the tuples seen by the aggregation functions can
+	// be different.
 	// TODO(yuzefovich): we could have a shared converter among all aggregate
 	// functions that don't have a filter clause, but it doesn't seem to be
 	// worth introducing such logic at the moment.
@@ -473,26 +496,23 @@ func newFilteringDistinctHashAggregatorHelper(
 	inputTypes []*types.T,
 	groupCols []uint32,
 	aggCols [][]uint32,
-	aggDistinct []bool,
+	distinctAggIdxs []int,
 	filters []*filteringHashAggHelper,
 	datumAlloc *sqlbase.DatumAlloc,
 ) hashAggregatorHelper {
 	h := &filteringDistinctHashAggregatorHelper{
 		distinctHashAggregatorHelperBase: newDistinctHashAggregatorHelperBase(
-			allocator, inputTypes, groupCols, aggCols, datumAlloc,
+			allocator, inputTypes, groupCols, aggCols, distinctAggIdxs, datumAlloc,
 		),
 		filters:           filters,
-		aggColsConverters: make([]*vecToDatumConverter, len(aggCols)),
+		aggColsConverters: make([]*vecToDatumConverter, len(distinctAggIdxs)),
 	}
-	for aggIdx, isAggDistinct := range aggDistinct {
-		if isAggDistinct {
-			h.seen[aggIdx] = make(map[string]struct{})
-			aggColsToConvert := make([]int, len(aggCols[aggIdx]))
-			for i, aggCol := range aggCols[aggIdx] {
-				aggColsToConvert[i] = int(aggCol)
-			}
-			h.aggColsConverters[aggIdx] = newVecToDatumConverter(len(inputTypes), aggColsToConvert)
+	for i, aggIdx := range distinctAggIdxs {
+		aggColsToConvert := make([]int, len(aggCols[aggIdx]))
+		for i, aggCol := range aggCols[aggIdx] {
+			aggColsToConvert[i] = int(aggCol)
 		}
+		h.aggColsConverters[i] = newVecToDatumConverter(len(inputTypes), aggColsToConvert)
 	}
 	return h
 }
@@ -510,27 +530,33 @@ func newFilteringDistinctHashAggregatorHelper(
 //       have just seen
 //    4) execute Compute on the updated batch
 //    5) restore the batch to the original state (if it might have been
+//       modified).
 func (h *filteringDistinctHashAggregatorHelper) performAggregation(
-	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, encodedGroupCols []byte,
+	ctx context.Context, batch coldata.Batch, fns []aggregateFunc, seen []map[string]struct{},
 ) {
 	h.saveBatch(batch)
-	for fnIdx, fn := range fns {
+	h.saveBatch(batch)
+	// First compute all non-distinct aggregations.
+	for _, fnIdx := range h.nonDistinctAggIdxs {
 		batchToComputeOn, maybeModified := h.filters[fnIdx].applyFilter(ctx, batch)
 		if batchToComputeOn.Length() > 0 {
-			converter := h.aggColsConverters[fnIdx]
-			if converter != nil {
-				// converter is nil when the function performs non-distinct
-				// aggregation.
-				converter.convertBatch(batchToComputeOn)
-			}
-			maybeModified = h.selectDistinctTuples(ctx, batchToComputeOn, fnIdx, encodedGroupCols, converter) || maybeModified
-			if batchToComputeOn.Length() > 0 {
-				fn.Compute(batchToComputeOn, h.aggCols[fnIdx])
-			}
+			fns[fnIdx].Compute(batch, h.aggCols[fnIdx])
 		}
 		if maybeModified {
 			h.restoreBatch(batch)
 		}
+	}
+	// Now compute all distinct aggregations restoring the batch after each one.
+	for distinctAggSlot, fnIdx := range h.distinctAggIdxs {
+		batchToComputeOn, _ := h.filters[fnIdx].applyFilter(ctx, batch)
+		if batchToComputeOn.Length() > 0 {
+			h.aggColsConverters[distinctAggSlot].convertBatch(batchToComputeOn)
+			h.selectDistinctTuples(ctx, batchToComputeOn, fnIdx, h.aggColsConverters[distinctAggSlot], seen[distinctAggSlot])
+			if batchToComputeOn.Length() > 0 {
+				fns[fnIdx].Compute(batchToComputeOn, h.aggCols[fnIdx])
+			}
+		}
+		h.restoreBatch(batch)
 	}
 }
 
