@@ -1073,7 +1073,7 @@ HoistProjectSubquery
   + │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
   + │    │    │              └── notnull:9
   + │    │    └── projections
-  + │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+  + │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
   + │    └── filters (true)
     └── projections
   -      └── any: eq [as=r:8, outer=(1), correlated-subquery]
@@ -1161,7 +1161,7 @@ CommuteVar
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1241,7 +1241,7 @@ PushSelectIntoProject
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1319,7 +1319,7 @@ MergeSelects
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1400,7 +1400,7 @@ EliminateSelect
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1470,7 +1470,7 @@ MergeProjects
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1524,8 +1524,8 @@ FoldNonNullIsNotNull
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-  - │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
-  + │    │         └── CASE WHEN bool_or:10 AND true THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+  - │    │         └── CASE WHEN bool_or:10 AND (5 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
+  + │    │         └── CASE WHEN bool_or:10 AND true THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1579,8 +1579,8 @@ SimplifyAndTrue
     │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │    │              └── notnull:9
     │    │    └── projections
-  - │    │         └── CASE WHEN bool_or:10 AND true THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
-  + │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+  - │    │         └── CASE WHEN bool_or:10 AND true THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
+  + │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1670,7 +1670,7 @@ TryDecorrelateProject
   + │    │    │    │              └── notnull:9
   + │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1769,7 +1769,7 @@ TryDecorrelateScalarGroupBy
   + │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1855,7 +1855,7 @@ TryDecorrelateProjectSelect
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1918,7 +1918,7 @@ DecorrelateJoin
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -1993,7 +1993,7 @@ PushFilterIntoJoinRight
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2068,7 +2068,7 @@ PushSelectIntoProject
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2150,7 +2150,7 @@ EliminateSelect
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2220,7 +2220,7 @@ PruneJoinRightCols
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2311,7 +2311,7 @@ EliminateGroupByProject
     │    │    │    │                   └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2404,7 +2404,7 @@ EliminateProject
   + │    │    │    │              └── notnull:9
     │    │    │    └── filters (true)
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2489,7 +2489,7 @@ EliminateSelect
   + │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
   + │    │    │              └── notnull:9
     │    │    └── projections
-    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     │    └── filters (true)
     └── projections
          └── case:11 [as=r:8, outer=(11)]
@@ -2563,7 +2563,7 @@ EliminateSelect
   - │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
   - │    │    │              └── notnull:9
   - │    │    └── projections
-  - │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+  - │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
   - │    └── filters (true)
   + │    │    │    │    │    │    └── fd: (3)-->(4)
   + │    │    │    │    │    └── filters
@@ -2576,7 +2576,7 @@ EliminateSelect
   + │    │         └── bool-or [as=bool_or:10, outer=(9)]
   + │    │              └── notnull:9
   + │    └── projections
-  + │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+  + │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     └── projections
          └── case:11 [as=r:8, outer=(11)]
 ================================================================================
@@ -2625,7 +2625,7 @@ PruneProjectCols
     │    │         └── bool-or [as=bool_or:10, outer=(9)]
     │    │              └── notnull:9
     │    └── projections
-    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
     └── projections
          └── case:11 [as=r:8, outer=(11)]
 ================================================================================
@@ -2691,7 +2691,7 @@ InlineProjectInProject
   - │    │         └── bool-or [as=bool_or:10, outer=(9)]
   - │    │              └── notnull:9
   - │    └── projections
-  - │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+  - │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:11, outer=(10)]
   + │    │    │    │    │    └── fd: (3)-->(4)
   + │    │    │    │    └── filters
   + │    │    │    │         └── (i:4 = 5) IS NOT false [outer=(4)]
@@ -2704,7 +2704,7 @@ InlineProjectInProject
   + │              └── notnull:9
     └── projections
   -      └── case:11 [as=r:8, outer=(11)]
-  +      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+  +      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -2764,7 +2764,7 @@ CommuteLeftJoin (higher cost)
     │         └── bool-or [as=bool_or:10, outer=(9)]
     │              └── notnull:9
     └── projections
-         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 ================================================================================
 GenerateMergeJoins
   Cost: 2200.10
@@ -2816,7 +2816,7 @@ GenerateMergeJoins
     │         └── bool-or [as=bool_or:10, outer=(9)]
     │              └── notnull:9
     └── projections
-         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
@@ -2868,7 +2868,7 @@ GenerateMergeJoins (higher cost)
     │         └── bool-or [as=bool_or:10, outer=(9)]
     │              └── notnull:9
     └── projections
-         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 ================================================================================
 GenerateStreamingGroupBy
   Cost: 2190.10
@@ -2916,7 +2916,7 @@ GenerateStreamingGroupBy
     │         └── bool-or [as=bool_or:10, outer=(9)]
     │              └── notnull:9
     └── projections
-         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]
 ================================================================================
 Final best expression
   Cost: 2190.10
@@ -2964,4 +2964,4 @@ Final best expression
    │         └── bool-or [as=bool_or:10, outer=(9)]
    │              └── notnull:9
    └── projections
-        └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+        └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:8, outer=(10)]

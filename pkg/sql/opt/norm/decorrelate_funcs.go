@@ -516,15 +516,16 @@ func (c *CustomFuncs) AggsCanBeDecorrelated(aggs memo.AggregationsExpr) bool {
 func (c *CustomFuncs) constructCanaryChecker(
 	aggCanaryVar opt.ScalarExpr, inputCol opt.ColumnID,
 ) opt.ScalarExpr {
+	variable := c.f.ConstructVariable(inputCol)
 	return c.f.ConstructCase(
 		memo.TrueSingleton,
 		memo.ScalarListExpr{
 			c.f.ConstructWhen(
 				c.f.ConstructIsNot(aggCanaryVar, memo.NullSingleton),
-				c.f.ConstructVariable(inputCol),
+				variable,
 			),
 		},
-		memo.NullSingleton,
+		c.f.ConstructNull(variable.DataType()),
 	)
 }
 
@@ -1000,7 +1001,7 @@ func (r *subqueryHoister) constructGroupByAny(
 						r.f.ConstructFalse(),
 					),
 				},
-				memo.NullSingleton,
+				r.f.ConstructNull(types.Bool),
 			),
 			caseColID,
 		)},
