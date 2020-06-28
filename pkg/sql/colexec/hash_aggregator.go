@@ -361,7 +361,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 					op.scratch.diff[:len(remaining)], false, /* firstDefiniteMatch */
 				)
 				if anyMatched {
-					op.aggHelper.performAggregation(ctx, b, aggFunc.fns, aggFunc.encodedGroupCols)
+					op.aggHelper.performAggregation(ctx, b, aggFunc.fns, aggFunc.seen)
 				}
 			}
 		} else {
@@ -379,6 +379,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			keyIdx := op.keyMapping.Length()
 			aggFunc := op.hashAlloc.newHashAggFuncs()
 			aggFunc.keyIdx = keyIdx
+			aggFunc.seen = op.aggHelper.makeSeenMaps()
 
 			// Store the key of the current aggregating group into keyMapping.
 			op.allocator.PerformOperation(op.keyMapping.ColVecs(), func() {
@@ -409,8 +410,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			)
 
 			aggFunc.init(op.output.Batch)
-			aggFunc.encodedGroupCols = op.aggHelper.encodeGroupCols(ctx, b)
-			op.aggHelper.performAggregation(ctx, b, aggFunc.fns, aggFunc.encodedGroupCols)
+			op.aggHelper.performAggregation(ctx, b, aggFunc.fns, aggFunc.seen)
 		}
 
 		// We have processed all tuples with this hashCode, so we should reset
@@ -445,9 +445,10 @@ type hashAggFuncs struct {
 	keyIdx int
 
 	fns []aggregateFunc
-	// encodedGroupCols contains the encoded "signature" of the corresponding
-	// aggregating group. It should not be modified once set.
-	encodedGroupCols []byte
+	// seen is a dense slice of maps used to handle distinct aggregation (it is
+	// of the same length as the number of functions with DISTINCT clause). It
+	// will be nil whenever no aggregate function has a DISTINCT clause.
+	seen []map[string]struct{}
 }
 
 const (
