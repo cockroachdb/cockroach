@@ -1194,7 +1194,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 // possible when the required ordering of the rows to be limited can be
 // satisfied by the Scan operator.
 //
-// NOTE: Limiting unconstrained scans is done by the PushLimitIntoScan rule,
+// NOTE: Limiting unconstrained scans is done by the GenerateLimitedScans rule,
 //       since that can require IndexJoin operators to be generated.
 func (c *CustomFuncs) CanLimitConstrainedScan(
 	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
@@ -1207,8 +1207,8 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 	}
 
 	if scanPrivate.Constraint == nil {
-		// This is not a constrained scan, so skip it. The PushLimitIntoScan rule
-		// is responsible for limited unconstrained scans.
+		// This is not a constrained scan, so skip it. The GenerateLimitedScans
+		// rule is responsible for limited unconstrained scans.
 		return false
 	}
 
