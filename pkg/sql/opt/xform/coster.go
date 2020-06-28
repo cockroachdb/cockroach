@@ -314,8 +314,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// will prefer a constrained scan. This is important if our row count
 	// estimate turns out to be smaller than the actual row count.
 	var preferConstrainedScanCost memo.Cost
-	if (scan.Constraint == nil || scan.Constraint.IsUnconstrained()) &&
-		scan.InvertedConstraint == nil {
+	if scan.IsUnfiltered(c.mem.Metadata()) {
 		preferConstrainedScanCost = cpuCostFactor
 	}
 	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
