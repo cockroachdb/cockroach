@@ -115,9 +115,9 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 		// non-null foreign key relation - rows in kr imply rows in xy. However,
 		// the columns from xy are not output columns, so in order to see that this
 		// is the case we must bubble up non-output columns.
-		baseTable := t.Memo().Metadata().Table(t.Table)
-		_, isPartialIndex := baseTable.Index(t.Index).Predicate()
-		if t.HardLimit == 0 && t.Constraint == nil && !isPartialIndex {
+		md := t.Memo().Metadata()
+		baseTable := md.Table(t.Table)
+		if t.IsUnfiltered(md) {
 			for i, cnt := 0, baseTable.ColumnCount(); i < cnt; i++ {
 				unfilteredCols.Add(t.Table.ColumnID(i))
 			}

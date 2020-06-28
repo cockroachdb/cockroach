@@ -494,7 +494,7 @@ memo (optimized, ~5KB, required=[presentation: min:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:5]
  │         ├── best: (scalar-group-by G4 G5 cols=())
- │         └── cost: 1.11
+ │         └── cost: 1.10
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,cols=(1))
@@ -506,7 +506,7 @@ memo (optimized, ~5KB, required=[presentation: min:5])
  ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1)
  │    └── []
  │         ├── best: (scan abc,cols=(1),lim=1)
- │         └── cost: 1.07
+ │         └── cost: 1.06
  ├── G5: (aggregations G8)
  ├── G6: (min G9)
  ├── G7: (const 1)
@@ -556,7 +556,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G4 G5 cols=())
- │         └── cost: 1.11
+ │         └── cost: 1.10
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: -1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,rev,cols=(1))
@@ -568,7 +568,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev))
  │    └── []
  │         ├── best: (scan abc,rev,cols=(1),lim=1(rev))
- │         └── cost: 1.07
+ │         └── cost: 1.06
  ├── G5: (aggregations G8)
  ├── G6: (max G9)
  ├── G7: (const 1)
