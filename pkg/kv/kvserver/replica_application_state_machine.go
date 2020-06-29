@@ -1038,7 +1038,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	// before notifying a potentially waiting client.
 	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult())
 	if !cmd.IsTrivial() {
-		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, *cmd.replicatedResult())
+		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, cmd.replicatedResult())
 
 		if isRemoved {
 			return nil, apply.ErrRemoved
@@ -1107,7 +1107,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 // non-trivial commands. It is run with the raftMu locked. It is illegal
 // to pass a replicatedResult that does not imply any side-effects.
 func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
-	ctx context.Context, rResult kvserverpb.ReplicatedEvalResult,
+	ctx context.Context, rResult *kvserverpb.ReplicatedEvalResult,
 ) (shouldAssert, isRemoved bool) {
 	// Assert that this replicatedResult implies at least one side-effect.
 	if rResult.Equal(kvserverpb.ReplicatedEvalResult{}) {
@@ -1198,13 +1198,10 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *replicatedCmd) error {
 	switch cmd.ent.Type {
 	case raftpb.EntryNormal:
-		if cmd.replicatedResult().ChangeReplicas != nil {
-			log.Fatalf(ctx, "unexpected replication change from command %s", &cmd.raftCmd)
-		}
 		return nil
 	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
 		sm.stats.numConfChangeEntries++
-		if cmd.replicatedResult().ChangeReplicas == nil {
+		if cmd.Rejected() {
 			// The command was rejected. There is no need to report a ConfChange
 			// to raft.
 			return nil
