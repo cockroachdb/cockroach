@@ -493,6 +493,22 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
 
+	// SIGQUIT is handled differently: for SIGQUIT we spawn a goroutine
+	// and we always handle it, no matter at which point during
+	// execution we are. This makes it possible to use SIGQUIT to
+	// inspect a running process and determine what it is currently
+	// doing, even if it gets stuck somewhere.
+	if quitSignal != nil {
+		quitSignalCh := make(chan os.Signal, 1)
+		signal.Notify(quitSignalCh, quitSignal)
+		go func() {
+			for {
+				<-quitSignalCh
+				log.DumpStacks(context.Background())
+			}
+		}()
+	}
+
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -937,9 +953,6 @@ If problems persist, please see %s.`
 			}
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 			fmt.Fprintln(os.Stdout, msgDouble)
-
-		case quitSignal:
-			log.DumpStacks(shutdownCtx)
 		}
 
 		// Start the draining process in a separate goroutine so that it
@@ -1049,11 +1062,6 @@ If problems persist, please see %s.`
 				// the graceful shutdown.
 				log.Infof(shutdownCtx, "received additional signal '%s'; continuing graceful shutdown", sig)
 				continue
-			case quitSignal:
-				// A SIGQUIT is received during the "graceful shutdown" phase
-				// initiated by another signal. Take this as a request to get
-				// the stacks at this point.
-				log.DumpStacks(shutdownCtx)
 			}
 
 			// This new signal is not welcome, as it interferes with the graceful
