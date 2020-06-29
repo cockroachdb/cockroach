@@ -43,9 +43,6 @@ func initGeneratorBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if !v.props.Impure {
-			panic(fmt.Sprintf("generator functions should all be impure, found %v", v))
-		}
 		if v.props.Class != tree.GeneratorClass {
 			panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
 				"function class, found %v", v))
@@ -57,7 +54,6 @@ func initGeneratorBuiltins() {
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure:   true,
 		Class:    tree.GeneratorClass,
 		Category: categoryGenerator,
 	}
@@ -65,7 +61,6 @@ func genProps() tree.FunctionProperties {
 
 func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure:       true,
 		Class:        tree.GeneratorClass,
 		Category:     categoryGenerator,
 		ReturnLabels: returnLabels,
@@ -265,7 +260,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
-			Impure:   true,
 			Class:    tree.GeneratorClass,
 			Category: categorySystemInfo,
 		},

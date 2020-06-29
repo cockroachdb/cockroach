@@ -38,9 +38,6 @@ func initAggregateBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if !v.props.Impure {
-			panic(fmt.Sprintf("%s: aggregate functions should all be impure, found %v", k, v))
-		}
 		if v.props.Class != tree.AggregateClass {
 			panic(fmt.Sprintf("%s: aggregate functions should be marked with the tree.AggregateClass "+
 				"function class, found %v", k, v))
@@ -61,7 +58,7 @@ func initAggregateBuiltins() {
 }
 
 func aggProps() tree.FunctionProperties {
-	return tree.FunctionProperties{Class: tree.AggregateClass, Impure: true}
+	return tree.FunctionProperties{Class: tree.AggregateClass}
 }
 
 func aggPropsNullableArgs() tree.FunctionProperties {
