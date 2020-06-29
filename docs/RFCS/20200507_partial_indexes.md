@@ -201,7 +201,7 @@ and "atoms" (anything that is not an `AND` or `OR`) is as follows:
 
     ("=>" means "implies")
 
-    atom A => atom B if:          A contains B
+    atom A => atom B if:          B contains A
     atom A => AND-expr B if:      A => each of B's children
     atom A => OR-expr B if:       A => any of B's children
 

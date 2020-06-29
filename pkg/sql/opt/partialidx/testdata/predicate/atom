@@ -1,0 +1,456 @@
+# Tests for predicates with only atoms.
+
+# No variables
+
+predtest
+true
+=>
+true
+----
+true
+└── remaining filters: none
+
+predtest
+1 = 1
+=>
+2 = 2
+----
+true
+└── remaining filters: none
+
+predtest
+true = false
+=>
+false = true
+----
+true
+└── remaining filters: none
+
+predtest
+false
+=>
+true
+----
+false
+
+predtest
+1 = 3
+=>
+2 = 2
+----
+false
+
+# Boolean filters
+
+predtest vars=(bool)
+@1
+=>
+@1
+----
+true
+└── remaining filters: none
+
+predtest vars=(bool)
+NOT @1
+=>
+NOT @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(bool)
+@1
+=>
+@1 = true
+----
+true
+└── remaining filters: @1
+
+predtest vars=(bool)
+@1
+=>
+@1 IN (true)
+----
+true
+└── remaining filters: @1
+
+predtest vars=(bool)
+NOT @1
+=>
+@1
+----
+false
+
+# Equality filters
+
+predtest vars=(string)
+@1 = 'foo'
+=>
+@1 = 'foo'
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 = 10
+=>
+@1 = 10
+----
+true
+└── remaining filters: none
+
+predtest vars=(string)
+@1 = 'foo'
+=>
+@1 = 'bar'
+----
+false
+
+predtest vars=(int)
+@1 = 2
+=>
+@1 IN (0, 2, 4)
+----
+true
+└── remaining filters: @1 = 2
+
+predtest vars=(int)
+@1 = 2
+=>
+@1 > 1
+----
+true
+└── remaining filters: @1 = 2
+
+predtest vars=(int, int)
+@1 = @2
+=>
+@1 = @2
+----
+true
+└── remaining filters: none
+
+# TODO(mgartner): This filter should imply the predicate. The current logic does
+# not support this because it relies solely on constraints which can only
+# represent variable constraints in relation to constants.
+predtest vars=(int, int)
+@1 > @2
+=>
+@1 >= @2
+----
+false
+
+predtest vars=(int)
+@1 = 1
+=>
+@1 > 1
+----
+false
+
+# Inequality filters
+
+predtest vars=(int)
+@1 > 10
+=>
+@1 > 10
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 > 10
+=>
+@1 > 0
+----
+true
+└── remaining filters: @1 > 10
+
+predtest vars=(int, int)
+@1 > @2
+=>
+@1 > @2
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 > 10
+=>
+@1 > 15
+----
+false
+
+predtest vars=(int)
+@1 > 1
+=>
+@1 = 1
+----
+false
+
+predtest vars=(int, int)
+@1 >= 2
+=>
+(@1, @2) > (2, 0)
+----
+false
+
+# Functions
+
+predtest vars=(string)
+lower(@1) = 'foo'
+=>
+lower(@1) = 'foo'
+----
+true
+└── remaining filters: none
+
+predtest vars=(string)
+lower(@1) = 'foo'
+=>
+lower(@1) = 'bar'
+----
+false
+
+# LIKE
+
+predtest vars=(string)
+@1 LIKE '%foo%'
+=>
+@1 LIKE '%foo%'
+----
+true
+└── remaining filters: none
+
+predtest vars=(string)
+@1 LIKE '%foo%'
+=>
+@1 LIKE 'foo'
+----
+false
+
+# IN filters
+
+predtest vars=(int)
+@1 IN (1, 2, 3)
+=>
+@1 IN (1, 2, 3)
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 IN (2, 6)
+=>
+@1 IN (0, 2, 5, 6)
+----
+true
+└── remaining filters: @1 IN (2, 6)
+
+predtest vars=(int)
+@1 IN (2, 3)
+=>
+@1 > 1
+----
+true
+└── remaining filters: @1 IN (2, 3)
+
+predtest vars=(int)
+@1 IN (2, 6)
+=>
+@1 IN (2, 4)
+----
+false
+
+predtest vars=(int)
+@1 IN (1, 2, 3)
+=>
+@1 IN (1, 2)
+----
+false
+
+# Tuple filters
+
+predtest vars=(int, int)
+(@1, @2) = (2, 0)
+=>
+(@1, @2) = (2, 0)
+----
+true
+└── remaining filters: none
+
+predtest vars=(int, int)
+(@1, @2) > (2, 0)
+=>
+(@1, @2) > (2, 0)
+----
+true
+└── remaining filters: none
+
+predtest vars=(int, int)
+(@1, @2) > (2, 0)
+=>
+(@1, @2) > (1, 3)
+----
+true
+└── remaining filters: (@1, @2) > (2, 0)
+
+predtest vars=(int, int)
+(@1, @2) > (2, 0)
+=>
+@1 >= 2
+----
+true
+└── remaining filters: (@1, @2) > (2, 0)
+
+predtest vars=(int, int)
+(@1, @2) > (2, 0)
+=>
+@1 > 2
+----
+false
+
+predtest vars=(int, int)
+(@1, @2) = (2, 0)
+=>
+(@1, @2) = (1, 3)
+----
+false
+
+predtest vars=(int, int)
+(@1, @2) > (2, 1)
+=>
+(@1, @2) > (3, 0)
+----
+false
+
+# Conjunction filters
+
+predtest vars=(bool, bool)
+@1 AND @2
+=>
+@1
+----
+true
+└── remaining filters: @2
+
+predtest vars=(bool, bool)
+@1 AND @2
+=>
+@2
+----
+true
+└── remaining filters: @1
+
+predtest vars=(bool, bool)
+@1 AND @1 AND @2
+=>
+@1
+----
+true
+└── remaining filters: @2
+
+predtest vars=(bool, bool)
+@1 AND NOT @2
+=>
+@2
+----
+false
+
+# This filter actually implies this predicate, but our logic does not currently
+# handle this case. To do so, we'd have to create constraints at each AndExpr in
+# the filter and check for containment, which would add complexity for a case
+# which is unlikely to occur in the real-world.
+predtest vars=(int, int)
+@1 >= 2 AND @2 > 0
+=>
+(@1, @2) > (2, 0)
+----
+false
+
+# Range filters
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 10
+----
+true
+└── remaining filters: @1 < 100
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 0
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 100)
+
+predtest vars=(int, bool)
+@1 > 10 AND @2 AND @1 < 100
+=>
+@2
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 100)
+
+predtest vars=(int, bool)
+@1 > 10 AND @2 AND @1 < 100
+=>
+@1 > 0
+----
+true
+└── remaining filters: ((@1 > 10) AND (@1 < 100)) AND @2
+
+predtest vars=(int)
+@1 > 15 AND @1 < 100
+=>
+@1 > 10
+----
+true
+└── remaining filters: (@1 > 15) AND (@1 < 100)
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 20
+----
+false
+
+predtest vars=(int, bool)
+@1 > 10 AND @2 AND @1 < 100
+=>
+@1 > 20
+----
+false
+
+# Disjunction filters
+
+predtest vars=(bool)
+@1 OR @1
+=>
+@1
+----
+true
+└── remaining filters: none
+
+predtest vars=(string)
+@1 = 'foo' OR @1 = 'bar'
+=>
+@1 IN ('foo', 'bar')
+----
+true
+└── remaining filters: (@1 = 'foo') OR (@1 = 'bar')
+
+predtest vars=(int)
+@1 < 10 OR @1 > 100
+=>
+@1 < 10
+----
+false
+
+predtest vars=(bool, bool)
+@1 OR @2
+=>
+@2
+----
+false
