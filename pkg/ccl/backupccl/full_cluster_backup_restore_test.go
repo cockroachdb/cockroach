@@ -325,7 +325,7 @@ func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
 	sqlDB.CheckQueryResults(t, checkResults, sqlDB.QueryStr(t, checkResults))
 }
 
-func TestResotreDatabaseFromFullClusterBackup(t *testing.T) {
+func TestRestoreFromFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
@@ -334,24 +334,32 @@ func TestResotreDatabaseFromFullClusterBackup(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 	sqlDB.Exec(t, `DROP DATABASE data`)
-	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, LocalFoo)
 
-	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
-}
+	t.Run("database", func(t *testing.T) {
+		sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, LocalFoo)
+		defer sqlDB.Exec(t, `DROP DATABASE data`)
+		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
+	})
 
-func TestRestoreSystemTableFromFullClusterBackup(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	t.Run("table", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE data`)
+		defer sqlDB.Exec(t, `DROP DATABASE data`)
+		sqlDB.Exec(t, `RESTORE data.bank FROM $1`, LocalFoo)
+		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
+	})
 
-	const numAccounts = 10
-	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
-	defer cleanupFn()
+	t.Run("tables", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE data`)
+		defer sqlDB.Exec(t, `DROP DATABASE data`)
+		sqlDB.Exec(t, `RESTORE data.* FROM $1`, LocalFoo)
+		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM data.bank", [][]string{{"10"}})
+	})
 
-	sqlDB.Exec(t, `CREATE USER maxroach`)
-	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
-	sqlDB.Exec(t, `CREATE DATABASE temp_sys`)
-	sqlDB.Exec(t, `RESTORE system.users FROM $1 WITH into_db='temp_sys'`, LocalFoo)
-
-	sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
+	t.Run("system tables", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE temp_sys`)
+		sqlDB.Exec(t, `RESTORE system.users FROM $1 WITH into_db='temp_sys'`, LocalFoo)
+		sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
+	})
 }
 
 func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
