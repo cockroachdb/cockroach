@@ -27,14 +27,16 @@ import (
 // B: has a cached bounding box
 // G: is geography
 // S: has spatial reference system
-func Summary(t geom.T, shape geopb.ShapeType, isGeography bool) (string, error) {
-	return summary(t, shape, isGeography, 0)
+func Summary(
+	t geom.T, hasBoundingBox bool, shape geopb.ShapeType, isGeography bool,
+) (string, error) {
+	return summary(t, hasBoundingBox, geopb.SRID(t.SRID()) != geopb.UnknownSRID, shape, isGeography, 0)
 }
 
 func summary(
-	t geom.T, shape geopb.ShapeType, isGeography bool, offset int,
+	t geom.T, hasBoundingBox bool, hasSRID bool, shape geopb.ShapeType, isGeography bool, offset int,
 ) (summaryLine string, err error) {
-	f, err := summaryFlag(t, isGeography)
+	f, err := summaryFlag(t, hasBoundingBox, hasSRID, isGeography)
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +71,7 @@ func summary(
 
 		for i := 0; i < numPoints; i++ {
 			point := t.Point(i)
-			line, err := summary(point, geopb.ShapeType_Point, isGeography, offset+2)
+			line, err := summary(point, false, hasSRID, geopb.ShapeType_Point, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -88,7 +90,7 @@ func summary(
 
 		for i := 0; i < numLineStrings; i++ {
 			lineString := t.LineString(i)
-			line, err := summary(lineString, geopb.ShapeType_LineString, isGeography, offset+2)
+			line, err := summary(lineString, false, hasSRID, geopb.ShapeType_LineString, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -107,7 +109,7 @@ func summary(
 
 		for i := 0; i < numPolygons; i++ {
 			polygon := t.Polygon(i)
-			line, err := summary(polygon, geopb.ShapeType_Polygon, isGeography, offset+2)
+			line, err := summary(polygon, false, hasSRID, geopb.ShapeType_Polygon, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -131,7 +133,7 @@ func summary(
 				return "", err
 			}
 
-			line, err := summary(g, gShape, isGeography, offset+2)
+			line, err := summary(g, false, hasSRID, gShape, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -145,7 +147,9 @@ func summary(
 	}
 }
 
-func summaryFlag(t geom.T, isGeography bool) (f string, err error) {
+func summaryFlag(
+	t geom.T, hasBoundingBox bool, hasSRID bool, isGeography bool,
+) (f string, err error) {
 	layout := t.Layout()
 	if layout.MIndex() != -1 {
 		f += "M"
@@ -155,18 +159,16 @@ func summaryFlag(t geom.T, isGeography bool) (f string, err error) {
 		f += "Z"
 	}
 
-	bbox := boundingBoxFromGeom(t)
-
-	if bbox != nil {
+	if hasBoundingBox {
 		f += "B"
-	}
-
-	if geopb.SRID(t.SRID()) != geopb.UnknownSRID {
-		f += "S"
 	}
 
 	if isGeography {
 		f += "G"
+	}
+
+	if hasSRID {
+		f += "S"
 	}
 
 	return f, nil
