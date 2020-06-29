@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -639,17 +638,3 @@ func (*raftLogQueue) timer(_ time.Duration) time.Duration {
 func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
-
-var _ sort.Interface = uint64Slice(nil)
-
-// uint64Slice implements sort.Interface
-type uint64Slice []uint64
-
-// Len implements sort.Interface
-func (a uint64Slice) Len() int { return len(a) }
-
-// Swap implements sort.Interface
-func (a uint64Slice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-
-// Less implements sort.Interface
-func (a uint64Slice) Less(i, j int) bool { return a[i] < a[j] }
