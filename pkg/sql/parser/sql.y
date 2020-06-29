@@ -4572,7 +4572,7 @@ pause_stmt:
   }
 | PAUSE error // SHOW HELP: PAUSE JOBS
 
-// %Help: CREATE SCHEMA - create a new schema (not yet supported)
+// %Help: CREATE SCHEMA - create a new schema
 // %Category: DDL
 // %Text:
 // CREATE SCHEMA [IF NOT EXISTS] <schemaname>
