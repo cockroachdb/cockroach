@@ -16,6 +16,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -457,9 +458,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// Drop check constraints which reference the column.
-			// Note that foreign key constraints are dropped as part of dropping
-			// indexes on the column. In the future, when FKs no longer depend on
-			// indexes in the same way, FKs will have to be dropped separately here.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
 				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), colToDrop.ID); err != nil {
@@ -484,6 +482,26 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, colToDrop.ID); err != nil {
 				return err
+			}
+
+			// If we are able to drop indexes used by foreign keys on the origin side,
+			// the drop index codepaths aren't going to remove dependent FKs, so we
+			// need to do that here.
+			if params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionDropOriginFKIndexes) {
+				// We update the FK's slice in place here.
+				sliceIdx := 0
+				for i := range n.tableDesc.OutboundFKs {
+					n.tableDesc.OutboundFKs[sliceIdx] = n.tableDesc.OutboundFKs[i]
+					sliceIdx++
+					fk := &n.tableDesc.OutboundFKs[i]
+					if sqlbase.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.ID) {
+						sliceIdx--
+						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
+							return err
+						}
+					}
+				}
+				n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:sliceIdx]
 			}
 
 			found := false

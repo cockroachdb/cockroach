@@ -356,29 +356,34 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
+	// If the we aren't high enough version to drop indexes on the origin side
+	// then we have to attempt to delete them.
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionDropOriginFKIndexes) {
+		// Index for updating the FK slices in place when removing FKs.
+		sliceIdx := 0
+		for i := range tableDesc.OutboundFKs {
+			tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
+			sliceIdx++
+			fk := &tableDesc.OutboundFKs[i]
+			canReplace := func(idx *sqlbase.IndexDescriptor) bool {
+				return idx.IsValidOriginIndex(fk.OriginColumnIDs)
+			}
+			// The index being deleted could be used as the origin index for this foreign key.
+			if idx.IsValidOriginIndex(fk.OriginColumnIDs) && !indexHasReplacementCandidate(canReplace) {
+				if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+					return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+				}
+				sliceIdx--
+				if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
+					return err
+				}
+			}
+		}
+		tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
+	}
+
 	// Index for updating the FK slices in place when removing FKs.
 	sliceIdx := 0
-	for i := range tableDesc.OutboundFKs {
-		tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
-		sliceIdx++
-		fk := &tableDesc.OutboundFKs[i]
-		canReplace := func(idx *sqlbase.IndexDescriptor) bool {
-			return idx.IsValidOriginIndex(fk.OriginColumnIDs)
-		}
-		// The index being deleted could be used as the origin index for this foreign key.
-		if idx.IsValidOriginIndex(fk.OriginColumnIDs) && !indexHasReplacementCandidate(canReplace) {
-			if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
-				return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
-			}
-			sliceIdx--
-			if err := p.removeFKBackReference(ctx, tableDesc, fk); err != nil {
-				return err
-			}
-		}
-	}
-	tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
-
-	sliceIdx = 0
 	for i := range tableDesc.InboundFKs {
 		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
 		sliceIdx++
