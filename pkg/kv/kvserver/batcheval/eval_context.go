@@ -94,7 +94,8 @@ type EvalContext interface {
 	GetLease() (roachpb.Lease, roachpb.Lease)
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
-	GetExternalStorageFromURI(ctx context.Context, uri string) (cloud.ExternalStorage, error)
+	GetExternalStorageFromURI(ctx context.Context, uri string, user string) (cloud.ExternalStorage,
+		error)
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -210,7 +211,7 @@ func (m *mockEvalCtxImpl) GetExternalStorage(
 }
 
 func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
-	ctx context.Context, uri string,
+	ctx context.Context, uri string, user string,
 ) (cloud.ExternalStorage, error) {
 	panic("unimplemented")
 }

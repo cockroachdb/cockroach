@@ -79,7 +79,8 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage)
+		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage,
+			spec.User)
 	})
 
 	// Ingest the KVs that the producer group emitted to the chan and the row result
@@ -129,6 +130,7 @@ func readInputFiles(
 	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
+	user string,
 ) error {
 	done := ctx.Done()
 
@@ -136,7 +138,7 @@ func readInputFiles(
 
 	// Attempt to fetch total number of bytes for all files.
 	for id, dataFile := range dataFiles {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile, user)
 		if err != nil {
 			return err
 		}
@@ -161,7 +163,7 @@ func readInputFiles(
 		default:
 		}
 		if err := func() error {
-			conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(dataFile, user)
 			if err != nil {
 				return err
 			}
@@ -214,7 +216,7 @@ func readInputFiles(
 					if err != nil {
 						return err
 					}
-					conf, err := cloudimpl.ExternalStorageConfFromURI(rejFn)
+					conf, err := cloudimpl.ExternalStorageConfFromURI(rejFn, user)
 					if err != nil {
 						return err
 					}
@@ -320,13 +322,8 @@ func (f fileReader) ReadFraction() float32 {
 
 type inputConverter interface {
 	start(group ctxgroup.Group)
-	readFiles(
-		ctx context.Context,
-		dataFiles map[int32]string,
-		resumePos map[int32]int64,
-		format roachpb.IOFileFormat,
-		makeExternalStorage cloud.ExternalStorageFactory,
-	) error
+	readFiles(ctx context.Context, dataFiles map[int32]string, resumePos map[int32]int64,
+		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user string) error
 }
 
 func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {

@@ -107,6 +107,7 @@ func makeImportReaderSpecs(
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
 	walltime int64,
+	user string,
 ) []*execinfrapb.ReadImportDataSpec {
 
 	// For each input file, assign it to a node.
@@ -127,6 +128,7 @@ func makeImportReaderSpecs(
 				WalltimeNanos: walltime,
 				Uri:           make(map[int32]string),
 				ResumePos:     make(map[int32]int64),
+				User:          user,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -193,7 +195,7 @@ func DistIngest(
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
+	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, phs.User())
 
 	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
 	if err != nil {

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -120,7 +121,8 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group := ctxgroup.WithContext(ctx)
 				group.Go(func() error {
 					defer close(kvCh)
-					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format, externalStorageFactory)
+					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
+						externalStorageFactory, security.RootUser)
 				})
 
 				lastBatch := 0
@@ -859,7 +861,7 @@ func externalStorageFactory(
 		return nil, err
 	}
 	return cloudimpl.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-		nil, blobs.TestBlobServiceClient(workdir))
+		nil, blobs.TestBlobServiceClient(workdir), nil, nil)
 }
 
 // Helper to create and initialize testSpec.

@@ -39,9 +39,12 @@ const (
 )
 
 func readCreateTableFromStore(
-	ctx context.Context, filename string, externalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	ctx context.Context,
+	filename string,
+	externalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	user string,
 ) (*tree.CreateTable, error) {
-	store, err := externalStorageFromURI(ctx, filename)
+	store, err := externalStorageFromURI(ctx, filename, user)
 	if err != nil {
 		return nil, err
 	}

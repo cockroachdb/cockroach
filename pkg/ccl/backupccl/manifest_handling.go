@@ -74,10 +74,11 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 func ReadBackupManifestFromURI(
 	ctx context.Context,
 	uri string,
+	user string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *roachpb.FileEncryptionOptions,
 ) (BackupManifest, error) {
-	exportStore, err := makeExternalStorageFromURI(ctx, uri)
+	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
 
 	if err != nil {
 		return BackupManifest{}, err
@@ -349,13 +350,14 @@ func writeTableStatistics(
 func loadBackupManifests(
 	ctx context.Context,
 	uris []string,
+	user string,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *roachpb.FileEncryptionOptions,
 ) ([]BackupManifest, error) {
 	backupManifests := make([]BackupManifest, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupManifestFromURI(ctx, uri, makeExternalStorageFromURI, encryption)
+		desc, err := ReadBackupManifestFromURI(ctx, uri, user, makeExternalStorageFromURI, encryption)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read backup descriptor")
 		}
@@ -442,6 +444,7 @@ func resolveBackupManifests(
 	from [][]string,
 	endTime hlc.Timestamp,
 	encryption *roachpb.FileEncryptionOptions,
+	user string,
 ) (
 	defaultURIs []string,
 	mainBackupManifests []BackupManifest,
@@ -466,7 +469,7 @@ func resolveBackupManifests(
 
 			stores := make([]cloud.ExternalStorage, len(uris))
 			for j := range uris {
-				stores[j], err = mkStore(ctx, uris[j])
+				stores[j], err = mkStore(ctx, uris[j], user)
 				if err != nil {
 					return nil, nil, nil, errors.Wrapf(err, "export configuration")
 				}

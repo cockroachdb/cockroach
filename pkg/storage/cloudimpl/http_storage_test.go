@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,6 +45,7 @@ func TestPutHttp(t *testing.T) {
 	defer dirCleanup()
 
 	const badHeadResponse = "bad-head-response"
+	user := security.RootUser
 
 	makeServer := func() (*url.URL, func() int, func()) {
 		var files int
@@ -109,7 +111,7 @@ func TestPutHttp(t *testing.T) {
 	t.Run("singleHost", func(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
-		testExportStore(t, srv.String(), false)
+		testExportStore(t, srv.String(), false, user, nil, nil)
 		if expected, actual := 14, files(); expected != actual {
 			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
@@ -126,7 +128,7 @@ func TestPutHttp(t *testing.T) {
 		combined := *srv1
 		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
 
-		testExportStore(t, combined.String(), true)
+		testExportStore(t, combined.String(), true, user, nil, nil)
 		if expected, actual := 3, files1(); expected != actual {
 			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
 		}
@@ -145,12 +147,12 @@ func TestPutHttp(t *testing.T) {
 		srv, _, cleanup := makeServer()
 		defer cleanup()
 
-		conf, err := ExternalStorageConfFromURI(srv.String())
+		conf, err := ExternalStorageConfFromURI(srv.String(), user)
 		if err != nil {
 			t.Fatal(err)
 		}
 		s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
-			testSettings, blobs.TestEmptyBlobClientFactory)
+			testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -294,8 +296,7 @@ func TestCanDisableHttp(t *testing.T) {
 	s, err := MakeExternalStorage(
 		context.Background(),
 		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
-		conf,
-		testSettings, blobs.TestEmptyBlobClientFactory)
+		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
 	require.Nil(t, s)
 	require.Error(t, err)
 }
@@ -317,10 +318,11 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		http.DefaultTransport.(*http.Transport).Proxy = nil
 	}()
 
-	conf, err := ExternalStorageConfFromURI("http://my-server")
+	conf, err := ExternalStorageConfFromURI("http://my-server", security.RootUser)
 	require.NoError(t, err)
 	s, err := MakeExternalStorage(
-		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
+		nil, nil)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "file")
 	require.NoError(t, err)
