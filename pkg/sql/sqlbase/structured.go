@@ -102,6 +102,16 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 	return true
 }
 
+// Contains returns whether this list contains the input ID.
+func (c ColumnIDs) Contains(i ColumnID) bool {
+	for _, id := range c {
+		if i == id {
+			return true
+		}
+	}
+	return false
+}
+
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 

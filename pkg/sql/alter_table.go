@@ -486,6 +486,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+			// Drop any foreign keys that this column is part of. Note that we don't
+			// check inbound foreign keys, as those will be handled by the drop index
+			// codepaths. We update the FK's slice in place here.
+			sliceIdx := 0
+			for i := range n.tableDesc.OutboundFKs {
+				n.tableDesc.OutboundFKs[sliceIdx] = n.tableDesc.OutboundFKs[i]
+				sliceIdx++
+				fk := &n.tableDesc.OutboundFKs[i]
+				if sqlbase.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.ID) {
+					sliceIdx--
+					if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, fk); err != nil {
+						return err
+					}
+				}
+			}
+			n.tableDesc.OutboundFKs = n.tableDesc.OutboundFKs[:sliceIdx]
+
 			found := false
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == colToDrop.ID {
