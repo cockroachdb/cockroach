@@ -586,6 +586,8 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 	ctx context.Context, table *sqlbase.TableDescriptor, evalCtx *extendedEvalContext,
 ) error {
 	if table.Adding() && table.IsAs() {
+		log.Info(ctx, "starting backfill for CREATE TABLE AS")
+
 		// Acquire lease.
 		lease, err := sc.AcquireLease(ctx)
 		if err != nil {
@@ -719,6 +721,8 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	ctx context.Context, table *sqlbase.TableDescriptor,
 ) error {
 	if table.Adding() {
+		log.Info(ctx, "making table public")
+
 		fks := table.AllActiveAndInactiveForeignKeys()
 		for _, fk := range fks {
 			if err := sc.waitToUpdateLeases(ctx, fk.ReferencedTableID); err != nil {
@@ -891,6 +895,8 @@ func (sc *SchemaChanger) updateDropTableJob(
 
 // Drain old names from the cluster.
 func (sc *SchemaChanger) drainNames(ctx context.Context) error {
+	log.Info(ctx, "draining previous table names")
+
 	// Publish a new version with all the names drained after everyone
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
@@ -945,6 +951,15 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	return err
 }
 
+func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
+	buf := &logtags.Buffer{}
+	buf = buf.Add("scExec", nil)
+
+	buf = buf.Add("table", sc.tableID)
+	buf = buf.Add("mutation", sc.mutationID)
+	return buf
+}
+
 // Execute the entire schema change in steps.
 // inSession is set to false when this is called from the asynchronous
 // schema change execution path.
@@ -954,7 +969,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
-	ctx = logtags.AddTag(ctx, "scExec", nil)
+	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
 	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
 	if err != nil {
@@ -962,22 +977,22 @@ func (sc *SchemaChanger) exec(
 	}
 	if notFirst {
 		log.Infof(ctx,
-			"schema change on %s (%d v%d) mutation %d: another change is still in progress",
-			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+			"schema change on %q (v%d): another change is still in progress",
+			tableDesc.Name, tableDesc.Version,
 		)
 		return errSchemaChangeNotFirstInLine
 	}
+
+	log.Infof(ctx,
+		"schema change on %q (v%d) starting execution...",
+		tableDesc.Name, tableDesc.Version,
+	)
 
 	if tableDesc.HasDrainingNames() {
 		if err := sc.drainNames(ctx); err != nil {
 			return err
 		}
 	}
-
-	log.Infof(ctx,
-		"schema change on %s (%d v%d) mutation %d starting execution...",
-		tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
-	)
 
 	// Delete dropped table data if possible.
 	if err := sc.maybeDropTable(ctx, inSession, tableDesc, evalCtx); err != nil {
@@ -1027,8 +1042,8 @@ func (sc *SchemaChanger) exec(
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
 		log.Infof(ctx,
-			"schema change on %s (%d v%d) mutation %d: another node is currently operating on this table",
-			tableDesc.Name, sc.tableID, tableDesc.Version, sc.mutationID,
+			"schema change on %q (v%d): another node is currently operating on this table",
+			tableDesc.Name, tableDesc.Version,
 		)
 		return err
 	}
@@ -1195,6 +1210,8 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
 func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) error {
+	log.Info(ctx, "stepping through state machine")
+
 	var runStatus jobs.RunningStatus
 	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 
@@ -1253,6 +1270,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		return err
 	}
 
+	log.Info(ctx, "finished stepping through state machine")
+
 	// wait for the state change to propagate to all leases.
 	return sc.waitToUpdateLeases(ctx, sc.tableID)
 }
@@ -1267,9 +1286,9 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 		MaxBackoff:     200 * time.Millisecond,
 		Multiplier:     2,
 	}
-	log.Infof(ctx, "waiting for a single version of table %d...", tableID)
+	log.Infof(ctx, "waiting for a single version...")
 	version, err := sc.leaseMgr.WaitForOneVersion(ctx, tableID, retryOpts)
-	log.Infof(ctx, "waiting for a single version of table %d... done (at v %d)", tableID, version)
+	log.Infof(ctx, "waiting for a single version... done (at v %d)", version)
 	return err
 }
 
@@ -1476,6 +1495,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	}
 
 	// Mark the mutations as completed.
+	log.Info(ctx, "marking schema change as complete")
 	_, err := sc.done(ctx)
 	return err
 }
