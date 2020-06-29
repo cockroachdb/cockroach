@@ -1047,7 +1047,8 @@ func (p *planner) writeSchemaChange(
 	}
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+		return errors.Errorf("no schema changes allowed on table %q as it is being dropped",
+			tableDesc.Name)
 	}
 	if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, mutationID); err != nil {
 		return err
@@ -1063,7 +1064,8 @@ func (p *planner) writeSchemaChangeToBatch(
 	}
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
-		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
+		return errors.Errorf("no schema changes allowed on table %q as it is being dropped",
+			tableDesc.Name)
 	}
 	return p.writeTableDescToBatch(ctx, tableDesc, b)
 }
