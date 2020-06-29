@@ -134,8 +134,11 @@ const (
 	// This is used e.g. when processing the calls inside ROWS FROM.
 	RejectNestedGenerators
 
-	// RejectImpureFunctions rejects any non-const functions like now().
-	RejectImpureFunctions
+	// RejectStableFunctions rejects any stable functions.
+	RejectStableFunctions
+
+	// RejectVolatileFunctions rejects any volatile functions.
+	RejectVolatileFunctions
 
 	// RejectSubqueries rejects subqueries in scalar contexts.
 	RejectSubqueries
@@ -160,10 +163,6 @@ type ScalarProperties struct {
 	// SeenGenerator is set to true if the expression originally
 	// contained a SRF.
 	SeenGenerator bool
-
-	// SeenImpureFunctions is set to true if the expression originally
-	// contained an impure function.
-	SeenImpure bool
 
 	// inFuncExpr is temporarily set to true while type checking the
 	// parameters of a function. Used to process RejectNestedGenerators
@@ -824,15 +823,34 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		}
 		sc.Properties.Derived.SeenGenerator = true
 	}
-	if def.Impure {
-		if sc.Properties.required.rejectFlags&RejectImpureFunctions != 0 {
+	return nil
+}
+
+// checkOverloadUsage checks whether the given built-in overload is allowed in
+// the current context.
+func (sc *SemaContext) checkOverloadUsage(overload *Overload) error {
+	if sc == nil {
+		return nil
+	}
+	switch overload.Volatility {
+	case VolatilityVolatile:
+		if sc.Properties.required.rejectFlags&RejectVolatileFunctions != 0 {
 			// The code FeatureNotSupported is a bit misleading here,
 			// because we probably can't support the feature at all. However
 			// this error code matches PostgreSQL's in the same conditions.
 			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"impure functions are not allowed in %s", sc.Properties.required.context)
+				"volatile functions are not allowed in %s", sc.Properties.required.context)
 		}
-		sc.Properties.Derived.SeenImpure = true
+	case VolatilityStable:
+		if sc.Properties.required.rejectFlags&RejectStableFunctions != 0 {
+			// The code FeatureNotSupported is a bit misleading here,
+			// because we probably can't support the feature at all. However
+			// this error code matches PostgreSQL's in the same conditions.
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"context-dependent functions are not allowed in %s",
+				sc.Properties.required.context,
+			)
+		}
 	}
 	return nil
 }
@@ -891,8 +909,7 @@ func (expr *FuncExpr) TypeCheck(
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
-			"%s()", def.Name)
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
 	// If the function is an aggregate that does not accept null arguments and we
@@ -1019,6 +1036,9 @@ func (expr *FuncExpr) TypeCheck(
 			&expr.Func,
 			strings.Join(typeNames, ", "),
 		)
+	}
+	if err := semaCtx.checkOverloadUsage(overloadImpl); err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 	if overloadImpl.counter != nil {
 		telemetry.Inc(overloadImpl.counter)

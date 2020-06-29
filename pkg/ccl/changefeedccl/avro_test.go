@@ -81,7 +81,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 		for colIdx, expr := range rowTuple {
 			col := &tableDesc.Columns[colIdx]
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-				ctx, expr, col.Type, "avro", &semaCtx, false /* allowImpure */)
+				ctx, expr, col.Type, "avro", &semaCtx, tree.VolatilityStable)
 			if err != nil {
 				return nil, err
 			}

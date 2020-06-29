@@ -246,11 +246,19 @@ var builtins = map[string]builtinDefinition{
 
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
-	"concat": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	"concat": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+			// In Postgres concat can take any arguments, converting them to their
+			// text representation. Since the text representation can depend on the
+			// context (e.g. timezone), the function is Stable. In our case, we only
+			// take String inputs so our version is Immutable.
+			IgnoreVolatilityCheck: true,
+		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var buffer bytes.Buffer
 				length := 0
 				for _, d := range args {
@@ -266,15 +274,23 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buffer.String()), nil
 			},
 			Info:       "Concatenates a comma-separated list of strings.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
-	"concat_ws": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	"concat_ws": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+			// In Postgres concat_ws can take any arguments, converting them to their
+			// text representation. Since the text representation can depend on the
+			// context (e.g. timezone), the function is Stable. In our case, we only
+			// take String inputs so our version is Immutable.
+			IgnoreVolatilityCheck: true,
+		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
 					return nil, pgerror.Newf(pgcode.UndefinedFunction, errInsufficientArgsFmtString, "concat_ws")
 				}
@@ -304,16 +320,16 @@ var builtins = map[string]builtinDefinition{
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
 				"returns `wow!great`.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString, IgnoreVolatilityCheck: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.Bytes}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				str := []byte(tree.MustBeDBytes(args[0]))
 				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
@@ -337,15 +353,15 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		}),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString, IgnoreVolatilityCheck: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				str := string(tree.MustBeDString(args[0]))
 				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
@@ -369,7 +385,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Encode the string `str` as a byte array using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
