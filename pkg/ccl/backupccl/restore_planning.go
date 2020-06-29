@@ -221,6 +221,13 @@ func allocateDescriptorRewrites(
 		}
 	}
 
+	// Include the database descriptors when calculating the max ID.
+	for _, database := range databasesByID {
+		if int64(database.ID) > maxDescIDInBackup {
+			maxDescIDInBackup = int64(database.ID)
+		}
+	}
+
 	// Include the type descriptors when calculating the max ID.
 	for _, typ := range typesByID {
 		if int64(typ.ID) > maxDescIDInBackup {
