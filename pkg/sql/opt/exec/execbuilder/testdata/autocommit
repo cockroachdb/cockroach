@@ -644,7 +644,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r34: sending batch 2 CPut, 2 InitPut to (n1,s1):1
+dist sender send  r34: sending batch 2 CPut to (n1,s1):1
 dist sender send  r34: sending batch 2 Scan to (n1,s1):1
 dist sender send  r34: sending batch 1 EndTxn to (n1,s1):1
 
@@ -668,7 +668,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r34: sending batch 1 Scan to (n1,s1):1
-dist sender send  r34: sending batch 1 Put, 1 CPut, 1 Del to (n1,s1):1
+dist sender send  r34: sending batch 1 Put to (n1,s1):1
 dist sender send  r34: sending batch 1 Scan to (n1,s1):1
 dist sender send  r34: sending batch 1 EndTxn to (n1,s1):1
 
@@ -722,7 +722,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
 dist sender send  r34: sending batch 1 Scan to (n1,s1):1
 dist sender send  r34: sending batch 1 Del to (n1,s1):1
 dist sender send  r34: sending batch 1 Scan to (n1,s1):1
-dist sender send  r34: sending batch 2 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r34: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
 # -----------------------
 # Multiple mutation tests

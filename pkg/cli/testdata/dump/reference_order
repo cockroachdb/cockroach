@@ -43,7 +43,6 @@ CREATE TABLE b (
 
 CREATE TABLE a (
 	i INT8 NULL,
-	INDEX a_auto_index_fk_i_ref_b (i ASC),
 	FAMILY "primary" (i, rowid)
 );
 
@@ -63,7 +62,6 @@ CREATE TABLE f (
 	i INT8 NOT NULL,
 	g INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	INDEX f_auto_index_fk_g_ref_g (g ASC),
 	FAMILY "primary" (i, g)
 );
 
@@ -72,14 +70,11 @@ CREATE TABLE d (
 	e INT8 NULL,
 	f INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	INDEX d_auto_index_fk_e_ref_e (e ASC),
-	INDEX d_auto_index_fk_f_ref_f (f ASC),
 	FAMILY "primary" (i, e, f)
 );
 
 CREATE TABLE c (
 	i INT8 NULL,
-	INDEX c_auto_index_fk_i_ref_d (i ASC),
 	FAMILY "primary" (i, rowid)
 );
 
@@ -152,8 +147,6 @@ CREATE TABLE d (
 	e INT8 NULL,
 	f INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	INDEX d_auto_index_fk_e_ref_e (e ASC),
-	INDEX d_auto_index_fk_f_ref_f (f ASC),
 	FAMILY "primary" (i, e, f)
 );
 

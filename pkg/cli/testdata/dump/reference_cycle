@@ -34,7 +34,6 @@ CREATE TABLE loop_b (
 	id INT8 NOT NULL,
 	a_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX loop_b_auto_index_fk_a_id_ref_loop_a (a_id ASC),
 	FAMILY "primary" (id, a_id)
 );
 
@@ -72,7 +71,6 @@ CREATE TABLE loop_b (
 	id INT8 NOT NULL,
 	a_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX loop_b_auto_index_fk_a_id_ref_loop_a (a_id ASC),
 	FAMILY "primary" (id, a_id)
 );
 

@@ -73,32 +73,20 @@ WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
 Del /Table/53/1/"a-pk1"/0
 executing cascade for constraint fk_delete_cascade_ref_a
-Del /Table/54/2/"a-pk1"/"b1-pk1"/0
 Del /Table/54/1/"b1-pk1"/0
-Del /Table/54/2/"a-pk1"/"b1-pk2"/0
 Del /Table/54/1/"b1-pk2"/0
 executing cascade for constraint fk_delete_cascade_ref_a
-Del /Table/55/2/"a-pk1"/"b2-pk1"/0
 Del /Table/55/1/"b2-pk1"/0
-Del /Table/55/2/"a-pk1"/"b2-pk2"/0
 Del /Table/55/1/"b2-pk2"/0
 executing cascade for constraint fk_delete_cascade_ref_b1
-Del /Table/56/2/"b1-pk1"/"c1-pk1-b1-pk1"/0
 Del /Table/56/1/"c1-pk1-b1-pk1"/0
-Del /Table/56/2/"b1-pk1"/"c1-pk2-b1-pk1"/0
 Del /Table/56/1/"c1-pk2-b1-pk1"/0
-Del /Table/56/2/"b1-pk2"/"c1-pk3-b1-pk2"/0
 Del /Table/56/1/"c1-pk3-b1-pk2"/0
-Del /Table/56/2/"b1-pk2"/"c1-pk4-b1-pk2"/0
 Del /Table/56/1/"c1-pk4-b1-pk2"/0
 executing cascade for constraint fk_delete_cascade_ref_b1
-Del /Table/57/2/"b1-pk1"/"c2-pk1-b1-pk1"/0
 Del /Table/57/1/"c2-pk1-b1-pk1"/0
-Del /Table/57/2/"b1-pk1"/"c2-pk2-b1-pk1"/0
 Del /Table/57/1/"c2-pk2-b1-pk1"/0
-Del /Table/57/2/"b1-pk2"/"c2-pk3-b1-pk2"/0
 Del /Table/57/1/"c2-pk3-b1-pk2"/0
-Del /Table/57/2/"b1-pk2"/"c2-pk4-b1-pk2"/0
 Del /Table/57/1/"c2-pk4-b1-pk2"/0
 executing cascade for constraint fk_id_ref_b2
 Del /Table/58/1/"b2-pk1"/0
@@ -192,23 +180,7 @@ executing cascade for constraint fk_update_cascade_ref_a
 Del /Table/61/2/"updated"/0
 CPut /Table/61/2/"updated2"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
 executing cascade for constraint fk_update_cascade_ref_b1
-Del /Table/62/2/"updated"/"c1-pk1"/0
-CPut /Table/62/2/"updated2"/"c1-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/62/2/"updated"/"c1-pk2"/0
-CPut /Table/62/2/"updated2"/"c1-pk2"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/62/2/"updated"/"c1-pk3"/0
-CPut /Table/62/2/"updated2"/"c1-pk3"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/62/2/"updated"/"c1-pk4"/0
-CPut /Table/62/2/"updated2"/"c1-pk4"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_cascade_ref_b1
-Del /Table/63/2/"updated"/"c2-pk1"/0
-CPut /Table/63/2/"updated2"/"c2-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/63/2/"updated"/"c2-pk2"/0
-CPut /Table/63/2/"updated2"/"c2-pk2"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/63/2/"updated"/"c2-pk3"/0
-CPut /Table/63/2/"updated2"/"c2-pk3"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/63/2/"updated"/"c2-pk4"/0
-CPut /Table/63/2/"updated2"/"c2-pk4"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_id_ref_b2
 Del /Table/64/1/"updated"/0
 CPut /Table/64/1/"updated2"/0 -> /TUPLE/
@@ -268,12 +240,8 @@ WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 Del /Table/65/1/"delete_me"/0
 executing cascade for constraint fk_delete_set_null_ref_a
 executing cascade for constraint fk_delete_set_null_ref_a
-Del /Table/67/2/"delete_me"/"b2-pk2"/0
 executing cascade for constraint fk_delete_set_null_ref_a
-Del /Table/68/2/"delete_me"/"b3-pk1"/0
 executing cascade for constraint fk_delete_set_null_ref_a
-Del /Table/69/2/"delete_me"/"b4-pk1"/0
-Del /Table/69/2/"delete_me"/"b4-pk2"/0
 
 # Clean up after the test.
 statement ok
@@ -349,30 +317,14 @@ WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
 Del /Table/70/1/"a-pk1"/0
 executing cascade for constraint fk_delete_cascade_ref_a
-Del /Table/71/2/"a-pk1"/"b1-pk1"/0
 Del /Table/71/1/"b1-pk1"/0
-Del /Table/71/2/"a-pk1"/"b1-pk2"/0
 Del /Table/71/1/"b1-pk2"/0
 executing cascade for constraint fk_delete_cascade_ref_a
-Del /Table/72/2/"a-pk1"/"b2-pk1"/0
 Del /Table/72/1/"b2-pk1"/0
-Del /Table/72/2/"a-pk1"/"b2-pk2"/0
 Del /Table/72/1/"b2-pk2"/0
 executing cascade for constraint fk_delete_set_null_ref_b1
-Del /Table/73/2/"b1-pk1"/"c1-pk1-b1-pk1"/0
-Del /Table/73/2/"b1-pk1"/"c1-pk2-b1-pk1"/0
-Del /Table/73/2/"b1-pk2"/"c1-pk3-b1-pk2"/0
-Del /Table/73/2/"b1-pk2"/"c1-pk4-b1-pk2"/0
 executing cascade for constraint fk_delete_set_null_ref_b1
-Del /Table/74/2/"b1-pk1"/"c2-pk1-b1-pk1"/0
-Del /Table/74/2/"b1-pk1"/"c2-pk2-b1-pk1"/0
-Del /Table/74/2/"b1-pk2"/"c2-pk3-b1-pk2"/0
-Del /Table/74/2/"b1-pk2"/"c2-pk4-b1-pk2"/0
 executing cascade for constraint fk_delete_set_null_ref_b2
-Del /Table/75/2/"b2-pk1"/"c3-pk1-b2-pk1"/0
-Del /Table/75/2/"b2-pk1"/"c3-pk2-b2-pk1"/0
-Del /Table/75/2/"b2-pk2"/"c3-pk3-b2-pk2"/0
-Del /Table/75/2/"b2-pk2"/"c3-pk4-b2-pk2"/0
 
 # Clean up after the test.
 statement ok
@@ -430,15 +382,7 @@ Del /Table/76/1/"original"/0
 CPut /Table/76/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint fk_update_set_null_ref_a
 executing cascade for constraint fk_update_set_null_ref_a
-Del /Table/78/2/"original"/"b2-pk2"/0
-CPut /Table/78/2/NULL/"b2-pk2"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_a
-Del /Table/79/2/"original"/"b3-pk1"/0
-CPut /Table/79/2/NULL/"b3-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/79/2/"original"/"b4-pk1"/0
-CPut /Table/79/2/NULL/"b4-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/79/2/"original"/"b4-pk2"/0
-CPut /Table/79/2/NULL/"b4-pk2"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_a
 
 # Clean up after the test.
@@ -524,20 +468,8 @@ executing cascade for constraint fk_update_cascade_ref_a
 Del /Table/83/2/"original"/0
 CPut /Table/83/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_b1
-Del /Table/84/2/"original"/"c1-pk1-b1-pk1"/0
-CPut /Table/84/2/NULL/"c1-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/84/2/"original"/"c1-pk2-b1-pk1"/0
-CPut /Table/84/2/NULL/"c1-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_b1
-Del /Table/85/2/"original"/"c2-pk1-b1-pk1"/0
-CPut /Table/85/2/NULL/"c2-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/85/2/"original"/"c2-pk2-b1-pk1"/0
-CPut /Table/85/2/NULL/"c2-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_b2
-Del /Table/86/2/"original"/"c3-pk1-b2-pk1"/0
-CPut /Table/86/2/NULL/"c3-pk1-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/86/2/"original"/"c3-pk2-b2-pk1"/0
-CPut /Table/86/2/NULL/"c3-pk2-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
 
 # Clean up after the test.
 statement ok
@@ -596,12 +528,8 @@ WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 Del /Table/87/1/"delete_me"/0
 executing cascade for constraint fk_delete_set_default_ref_a
 executing cascade for constraint fk_delete_set_default_ref_a
-Del /Table/89/2/"delete_me"/"b2-pk2"/0
 executing cascade for constraint fk_delete_set_default_ref_a
-Del /Table/90/2/"delete_me"/"b3-pk1"/0
 executing cascade for constraint fk_delete_set_default_ref_a
-Del /Table/91/2/"delete_me"/"b4-pk1"/0
-Del /Table/91/2/"delete_me"/"b4-pk2"/0
 
 # Clean up after the test.
 statement ok
@@ -677,30 +605,14 @@ WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
 Del /Table/92/1/"a-pk1"/0
 executing cascade for constraint fk_delete_cascade_ref_a
-Del /Table/93/2/"a-pk1"/"b1-pk1"/0
 Del /Table/93/1/"b1-pk1"/0
-Del /Table/93/2/"a-pk1"/"b1-pk2"/0
 Del /Table/93/1/"b1-pk2"/0
 executing cascade for constraint fk_delete_cascade_ref_a
-Del /Table/94/2/"a-pk1"/"b2-pk1"/0
 Del /Table/94/1/"b2-pk1"/0
-Del /Table/94/2/"a-pk1"/"b2-pk2"/0
 Del /Table/94/1/"b2-pk2"/0
 executing cascade for constraint fk_delete_set_default_ref_b1
-Del /Table/95/2/"b1-pk1"/"c1-pk1-b1-pk1"/0
-Del /Table/95/2/"b1-pk1"/"c1-pk2-b1-pk1"/0
-Del /Table/95/2/"b1-pk2"/"c1-pk3-b1-pk2"/0
-Del /Table/95/2/"b1-pk2"/"c1-pk4-b1-pk2"/0
 executing cascade for constraint fk_delete_set_default_ref_b1
-Del /Table/96/2/"b1-pk1"/"c2-pk1-b1-pk1"/0
-Del /Table/96/2/"b1-pk1"/"c2-pk2-b1-pk1"/0
-Del /Table/96/2/"b1-pk2"/"c2-pk3-b1-pk2"/0
-Del /Table/96/2/"b1-pk2"/"c2-pk4-b1-pk2"/0
 executing cascade for constraint fk_delete_set_default_ref_b2
-Del /Table/97/2/"b2-pk1"/"c3-pk1-b2-pk1"/0
-Del /Table/97/2/"b2-pk1"/"c3-pk2-b2-pk1"/0
-Del /Table/97/2/"b2-pk2"/"c3-pk3-b2-pk2"/0
-Del /Table/97/2/"b2-pk2"/"c3-pk4-b2-pk2"/0
 
 # Clean up after the test.
 statement ok
@@ -758,15 +670,7 @@ Del /Table/98/1/"original"/0
 CPut /Table/98/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint fk_update_set_null_ref_a
 executing cascade for constraint fk_update_set_null_ref_a
-Del /Table/100/2/"original"/"b2-pk2"/0
-CPut /Table/100/2/"b2-default"/"b2-pk2"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_a
-Del /Table/101/2/"original"/"b3-pk1"/0
-CPut /Table/101/2/"b3-default"/"b3-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/101/2/"original"/"b4-pk1"/0
-CPut /Table/101/2/"b3-default"/"b4-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/101/2/"original"/"b4-pk2"/0
-CPut /Table/101/2/"b3-default"/"b4-pk2"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_a
 
 # Clean up after the test.
@@ -852,20 +756,8 @@ executing cascade for constraint fk_update_cascade_ref_a
 Del /Table/105/2/"original"/0
 CPut /Table/105/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_b1
-Del /Table/106/2/"original"/"c1-pk1-b1-pk1"/0
-CPut /Table/106/2/"b1-default"/"c1-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/106/2/"original"/"c1-pk2-b1-pk1"/0
-CPut /Table/106/2/"b1-default"/"c1-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_b1
-Del /Table/107/2/"original"/"c2-pk1-b1-pk1"/0
-CPut /Table/107/2/"b1-default"/"c2-pk1-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/107/2/"original"/"c2-pk2-b1-pk1"/0
-CPut /Table/107/2/"b1-default"/"c2-pk2-b1-pk1"/0 -> /BYTES/ (expecting does not exist)
 executing cascade for constraint fk_update_set_null_ref_b2
-Del /Table/108/2/"original"/"c3-pk1-b2-pk1"/0
-CPut /Table/108/2/"b2-default"/"c3-pk1-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
-Del /Table/108/2/"original"/"c3-pk2-b2-pk1"/0
-CPut /Table/108/2/"b2-default"/"c3-pk2-b2-pk1"/0 -> /BYTES/ (expecting does not exist)
 
 # Clean up after the test.
 statement ok
@@ -896,9 +788,5 @@ query T kvtrace(Del,FKScan)
 DELETE FROM parent WHERE x = 1
 ----
 Del /Table/109/1/1/0
-Del /Table/110/2/1/1/0
 Del /Table/110/1/1/0
-Del /Table/110/2/1/2/0
 Del /Table/110/1/2/0
-Del /Table/111/2/1/1/0
-Del /Table/111/2/1/2/0

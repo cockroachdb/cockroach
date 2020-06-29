@@ -299,8 +299,6 @@ SHOW INDEXES FROM unindexed
 ----
 table_name  index_name                                      non_unique  seq_in_index  column_name  direction  storing  implicit
 unindexed   primary                                         false       1             rowid        ASC        false    false
-unindexed   unindexed_auto_index_fk_customer_ref_customers  true        1             customer     ASC        false    false
-unindexed   unindexed_auto_index_fk_customer_ref_customers  true        2             rowid        ASC        false    true
 
 statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
@@ -505,7 +503,6 @@ delivery  CREATE TABLE delivery (
           CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
           CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products(upc),
           INDEX delivery_item_idx (item ASC),
-          INDEX delivery_auto_index_fk_order_ref_orders ("order" ASC, shipment ASC),
           FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
@@ -664,10 +661,6 @@ DROP TABLE products RESTRICT
 statement error referenced by foreign key from table "customer reviews"
 DROP TABLE orders
 
-# reviews has a multi-col FK in which dropping one col is not allowed.
-statement error column "order" is referenced by existing index "customer reviews_auto_index_orderfk"
-ALTER TABLE "user content"."customer reviews" DROP COLUMN "order"
-
 statement ok
 ALTER TABLE "user content"."customer reviews" DROP COLUMN "order" CASCADE
 
@@ -779,9 +772,6 @@ refpairs_wrong_order  primary                                         false     
 refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    true        1             b            ASC        false    false
 refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    true        2             a            ASC        false    false
 refpairs_wrong_order  refpairs_wrong_order_b_a_idx                    true        3             rowid        ASC        false    true
-refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  true        1             a            ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  true        2             b            ASC        false    false
-refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs  true        3             rowid        ASC        false    true
 
 statement ok
 CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
@@ -795,9 +785,6 @@ refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        1 
 refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        2             c            ASC        false    false
 refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        3             b            ASC        false    false
 refpairs_c_between  refpairs_c_between_a_c_b_idx                  true        4             rowid        ASC        false    true
-refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        1             a            ASC        false    false
-refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        2             b            ASC        false    false
-refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  true        3             rowid        ASC        false    true
 
 statement ok
 CREATE TABLE refpairs (
@@ -1035,7 +1022,6 @@ refers  CREATE TABLE refers (
         b INT8 NULL,
         CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee(id),
         INDEX another_idx (b ASC),
-        INDEX refers_auto_index_fk_a_ref_referee (a ASC),
         INDEX foo (a ASC),
         FAMILY "primary" (a, b, rowid)
 )
@@ -2655,25 +2641,9 @@ INSERT INTO nonempty_b VALUES (1), (2), (3);
 statement ok
 INSERT INTO nonempty_a VALUES (1, NULL, 1)
 
-# Fails because self_id is not indexed, and an index will not be automatically created because the table is nonempty
-statement error foreign key requires an existing index on columns \("self_id"\)
-ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
-
-statement ok
-CREATE INDEX ON nonempty_a (self_id)
-
-# This now succeeds with the manually added index
 statement ok
 ALTER TABLE nonempty_a ADD CONSTRAINT fk_self_id FOREIGN KEY (self_id) REFERENCES nonempty_a;
 
-# Fails because b_id is not indexed, and an index will not be automatically created because the table is nonempty
-statement error foreign key requires an existing index on columns \("b_id"\)
-ALTER TABLE nonempty_a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES nonempty_b;
-
-statement ok
-CREATE INDEX ON nonempty_a (b_id)
-
-# This now succeeds with the manually added index
 statement ok
 ALTER TABLE nonempty_a ADD CONSTRAINT fk_b FOREIGN KEY (b_id) REFERENCES nonempty_b;
 
@@ -2707,7 +2677,7 @@ statement ok
 CREATE TABLE child_duplicate_cols (id INT, parent_id INT, PRIMARY KEY (id))
 
 # The fk constraint is invalid because it has duplicate columns, so automatically adding the index fails
-statement error index \"child_duplicate_cols_auto_index_fk\" contains duplicate column \"parent_id\"
+statement error foreign key contains duplicate column \"parent_id\"
 ALTER TABLE child_duplicate_cols ADD CONSTRAINT fk FOREIGN KEY (parent_id, parent_id) references parent
 
 statement ok
