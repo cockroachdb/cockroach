@@ -20,5 +20,14 @@
     "type": "shell",
     "script": "teamcity-agent.sh",
     "execute_command": "sudo sh -c '{{ .Vars }} {{ .Path }}'"
+  },{
+    "type": "file",
+    "source": "filebeat/filebeat-agent.yml",
+    "destination": "/tmp/filebeat.yml"
+  },
+  {
+    "type": "shell",
+    "script": "setup_filebeat_on_teamcity_agent.sh",
+    "execute_command": "sudo sh -c '{{ .Vars }} {{ .Path }}'"
   }]
 }
