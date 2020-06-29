@@ -883,6 +883,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Check the queuing conditions while holding the lock.
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
+	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
 	r.mu.Unlock()
 
 	// Record the stats delta in the StoreMetrics.
@@ -900,6 +901,9 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	}
 	if needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(now) {
 		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+	}
+	if needsTruncationByLogSize {
+		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 
 	b.recordStatsOnCommit()
@@ -1054,12 +1058,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
-	if cmd.replicatedResult().RaftLogDelta == 0 {
-		sm.r.handleNoRaftLogDeltaResult(ctx)
-	}
-	if cmd.localResult != nil {
-		sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
-	}
+	// On ConfChange entries, inform the raft.RawNode.
 	if err := sm.maybeApplyConfChange(ctx, cmd); err != nil {
 		return nil, wrapWithNonDeterministicFailure(err, "unable to apply conf change")
 	}
@@ -1069,6 +1068,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	// considered local at this point as their proposal will have been detached
 	// in prepareLocalResult().
 	if cmd.IsLocal() {
+		// Handle the LocalResult.
+		if cmd.localResult != nil {
+			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
+		}
+
 		rejected := cmd.Rejected()
 		higherReproposalsExist := cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
 		if !rejected && higherReproposalsExist {

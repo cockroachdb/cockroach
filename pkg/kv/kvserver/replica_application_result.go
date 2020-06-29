@@ -363,25 +363,6 @@ func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
 	}
 }
 
-func (r *Replica) handleNoRaftLogDeltaResult(ctx context.Context) {
-	// Check for whether to queue the range for Raft log truncation if this is
-	// not a Raft log truncation command itself. We don't want to check the
-	// Raft log for truncation on every write operation or even every operation
-	// which occurs after the Raft log exceeds RaftLogQueueStaleSize. The logic
-	// below queues the replica for possible Raft log truncation whenever an
-	// additional RaftLogQueueStaleSize bytes have been written to the Raft
-	// log.
-	r.mu.Lock()
-	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
-	if checkRaftLog {
-		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
-	}
-	r.mu.Unlock()
-	if checkRaftLog {
-		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
-	}
-}
-
 func (r *Replica) handleSuggestedCompactionsResult(
 	ctx context.Context, scs []kvserverpb.SuggestedCompaction,
 ) {
