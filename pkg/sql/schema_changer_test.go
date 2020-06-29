@@ -3967,7 +3967,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
@@ -4001,7 +4001,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {

@@ -626,6 +626,7 @@ func ResolveFK(
 	evalCtx *tree.EvalContext,
 ) error {
 	originCols := make([]*sqlbase.ColumnDescriptor, len(d.FromCols))
+	originColMap := make(map[string]struct{}, len(d.FromCols))
 	for i, col := range d.FromCols {
 		col, err := tbl.FindActiveOrNewColumnByName(col)
 		if err != nil {
@@ -634,6 +635,12 @@ func ResolveFK(
 		if err := col.CheckCanBeFKRef(); err != nil {
 			return err
 		}
+		// Ensure that the origin columns don't have duplicates.
+		if _, ok := originColMap[col.Name]; ok {
+			return pgerror.Newf(pgcode.InvalidForeignKey,
+				"foreign key contains duplicate column %q", col.Name)
+		}
+		originColMap[col.Name] = struct{}{}
 		originCols[i] = col
 	}
 
@@ -727,6 +734,11 @@ func ResolveFK(
 		}
 	}
 
+	originColumnIDs := make(sqlbase.ColumnIDs, len(originCols))
+	for i, col := range originCols {
+		originColumnIDs[i] = col.ID
+	}
+
 	targetColIDs := make(sqlbase.ColumnIDs, len(referencedCols))
 	for i := range referencedCols {
 		targetColIDs[i] = referencedCols[i].ID
@@ -761,40 +773,41 @@ func ResolveFK(
 		}
 	}
 
-	originColumnIDs := make(sqlbase.ColumnIDs, len(originCols))
-	for i, col := range originCols {
-		originColumnIDs[i] = col.ID
-	}
-	// Search for an index on the origin table that matches. If one doesn't exist,
-	// we create one automatically if the table to alter is new or empty. We also
-	// search if an index for the set of columns was created in this transaction.
-	_, err = sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
-	// If there was no error, we found a suitable index.
-	if err != nil {
-		// No existing suitable index was found.
-		if ts == NonEmptyTable {
-			var colNames bytes.Buffer
-			colNames.WriteString(`("`)
-			for i, id := range originColumnIDs {
-				if i != 0 {
-					colNames.WriteString(`", "`)
-				}
-				col, err := tbl.TableDesc().FindColumnByID(id)
-				if err != nil {
-					return err
-				}
-				colNames.WriteString(col.Name)
-			}
-			colNames.WriteString(`")`)
-			return pgerror.Newf(pgcode.ForeignKeyViolation,
-				"foreign key requires an existing index on columns %s", colNames.String())
-		}
-		_, err := addIndexForFK(tbl, originCols, constraintName, ts)
+	// Check if the version is high enough to stop creating origin indexes.
+	if evalCtx.Settings != nil &&
+		!evalCtx.Settings.Version.IsActive(ctx, clusterversion.VersionNoOriginFKIndexes) {
+		// Search for an index on the origin table that matches. If one doesn't exist,
+		// we create one automatically if the table to alter is new or empty. We also
+		// search if an index for the set of columns was created in this transaction.
+		_, err = sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
+		// If there was no error, we found a suitable index.
 		if err != nil {
-			return err
+			// No existing suitable index was found.
+			if ts == NonEmptyTable {
+				var colNames bytes.Buffer
+				colNames.WriteString(`("`)
+				for i, id := range originColumnIDs {
+					if i != 0 {
+						colNames.WriteString(`", "`)
+					}
+					col, err := tbl.TableDesc().FindColumnByID(id)
+					if err != nil {
+						return err
+					}
+					colNames.WriteString(col.Name)
+				}
+				colNames.WriteString(`")`)
+				return pgerror.Newf(pgcode.ForeignKeyViolation,
+					"foreign key requires an existing index on columns %s", colNames.String())
+			}
+			_, err := addIndexForFK(tbl, originCols, constraintName, ts)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
+	// Ensure that there is an index on the referenced side to use.
 	_, err = sqlbase.FindFKReferencedIndex(target.TableDesc(), targetColIDs)
 	if err != nil {
 		return err

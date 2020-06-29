@@ -1778,6 +1778,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			continue
 		}
 
+		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
+			continue
+		}
+
 		if pkCols == nil {
 			pkIndex := md.Table(scanPrivate.Table).Index(cat.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
