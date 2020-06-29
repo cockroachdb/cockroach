@@ -333,7 +333,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop); err != nil {
+			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop, true /* queueJob */); err != nil {
 				return err
 			}
 
