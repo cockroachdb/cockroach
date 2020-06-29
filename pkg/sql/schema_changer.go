@@ -906,6 +906,13 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 			// Free up the old name(s) for reuse.
 			namesToReclaim = desc.DrainingNames
 			desc.DrainingNames = nil
+			// Note: at one time there was a bug which would populate a DropJobID for
+			// the newly created table in TRUNCATE. A table should never have such a
+			// job ID populated unless it is in the DROP state. We repair that here.
+			// See #50587 for context.
+			if desc.State == sqlbase.TableDescriptor_PUBLIC  && desc.GetDropJobID() != 0 {
+				desc.DropJobID = 0
+			}
 			dropJobID = desc.GetDropJobID()
 			return nil
 		},
@@ -923,7 +930,12 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 					func(context.Context, *client.Txn, *jobs.Job) error {
 						return nil
 					}); err != nil {
-					return err
+					// Failing to update the job should not prevent the rename from
+					// making progress. The above fix to detect the bogus drop job
+					// on a PUBLIC table should prevent this defensive code from being
+					// a problem but nevertheless, it's better than preventing progress
+					// here.
+					log.Warningf(ctx, "failed to update drop job: %v", err)
 				}
 			}
 
