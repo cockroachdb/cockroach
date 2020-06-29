@@ -1003,6 +1003,9 @@ func (r *restoreResumer) Resume(
 		return err
 	}
 
+	// TODO(pbardea): This was part of the original design where full cluster
+	// restores were a special case, but really we should be making only the
+	// temporary system tables public before we restore all the system table data.
 	if r.descriptorCoverage == tree.AllDescriptors {
 		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB); err != nil {
 			return err
@@ -1077,6 +1080,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
 		b := txn.NewBatch()
+		newTables := make([]*sqlbase.TableDescriptor, 0, len(details.TableDescs))
 		for _, tbl := range r.tables {
 			tableDesc := *tbl
 			tableDesc.Version++
@@ -1097,6 +1101,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 				sqlbase.WrapDescriptor(&tableDesc),
 				existingDescVal,
 			)
+			newTables = append(newTables, &tableDesc)
 		}
 
 		if err := txn.Run(ctx, b); err != nil {
@@ -1105,6 +1110,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 
 		// Update and persist the state of the job.
 		details.TablesPublished = true
+		details.TableDescs = newTables
 		if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
 			for _, newJob := range newSchemaChangeJobs {
 				if cleanupErr := newJob.CleanupOnRollback(ctx); cleanupErr != nil {
