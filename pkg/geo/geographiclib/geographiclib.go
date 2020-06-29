@@ -53,7 +53,7 @@ func NewSpheroid(radius float64, flattening float64) *Spheroid {
 
 // Inverse solves the geodetic inverse problem on the given spheroid
 // (https://en.wikipedia.org/wiki/Geodesy#Geodetic_problems).
-// Returns s12 (distance in meters), az1 (azimuth to point 1) and az2 (azimuth to point 2).
+// Returns s12 (distance in meters), az1 (azimuth at point 1) and az2 (azimuth at point 2).
 func (s *Spheroid) Inverse(a, b s2.LatLng) (s12, az1, az2 float64) {
 	var retS12, retAZ1, retAZ2 C.double
 	C.geod_inverse(
