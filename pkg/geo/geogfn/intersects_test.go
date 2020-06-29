@@ -163,6 +163,30 @@ func TestIntersects(t *testing.T) {
 			true,
 		},
 		{
+			"LINESTRING intersects POINT across the longitudinal boundary",
+			"LINESTRING(179 0, -179 0)",
+			"POINT(179.1 0)",
+			true,
+		},
+		{
+			"LINESTRING does not intersect POINT with linestring crossing the longitudinal boundary but POINT on the other side",
+			"LINESTRING(179 0, -179 0)",
+			"POINT(170 0)",
+			false,
+		},
+		{
+			"POLYGON intersects POINT lying inside latitudinal boundary",
+			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+			"POINT (150 88)",
+			true,
+		},
+		{
+			"POLYGON does not intersect POINT lying outside latitudinal boundary",
+			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+			"POINT (170 88)",
+			false,
+		},
+		{
 			"POLYGON intersects itself",
 			"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 			"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
