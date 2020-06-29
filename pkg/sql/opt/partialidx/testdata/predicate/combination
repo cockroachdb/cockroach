@@ -1,0 +1,17 @@
+# Tests for predicates containing combinations of conjunctions and disjunctions.
+
+predtest vars=(bool, bool, bool, bool)
+(@1 OR @2) AND (@3 OR @4)
+=>
+(@4 OR @3) AND (@2 OR @1)
+----
+true
+└── remaining filters: (@1 OR @2) AND (@3 OR @4)
+
+predtest vars=(int, int)
+(@1 < 1 OR @1 > 10) AND (@2 < 2 OR @2 > 20)
+=>
+(@1 < 3 OR @1 > 9) AND (@2 < 4 OR @2 > 19)
+----
+true
+└── remaining filters: ((@1 < 1) OR (@1 > 10)) AND ((@2 < 2) OR (@2 > 20))
