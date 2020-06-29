@@ -478,6 +478,9 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
     }
     return nil
 }
+func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
+  return u.val.(*tree.BackupOptions)
+}
 func (u *sqlSymUnion) transactionModes() tree.TransactionModes {
     return u.val.(tree.TransactionModes)
 }
@@ -566,7 +569,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
@@ -614,7 +617,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
-%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
+%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
 %token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
@@ -841,6 +844,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
+%type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
 %type <[]tree.StorageParam> storage_parameter_list opt_table_with
@@ -1079,7 +1083,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
 %type <tree.TargetList> targets targets_roles changefeed_targets
-%type <*tree.TargetList> opt_on_targets_roles
+%type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
 %type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
@@ -2006,6 +2010,7 @@ alter_attribute_action:
 //        [ WITH <option> [= <value>] [, ...] ]
 //
 // Targets:
+//    Empty targets list: backup full cluster.
 //    TABLE <pattern> [, ...]
 //    DATABASE <databasename> [, ...]
 //
@@ -2013,20 +2018,81 @@ alter_attribute_action:
 //    "[scheme]://[host]/[path to backup]?[parameters]"
 //
 // Options:
-//    INTO_DB
-//    SKIP_MISSING_FOREIGN_KEYS
+//    revision_history: enable revision history
+//    encryption_passphrase="secret": encrypt backups
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+  BACKUP opt_backup_targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_backup_options
   {
-    $$.val = &tree.Backup{DescriptorCoverage: tree.AllDescriptors, To: $3.partitionedBackup(), IncrementalFrom: $5.exprs(), AsOf: $4.asOfClause(), Options: $6.kvOptions()}
-  }
-| BACKUP targets TO partitioned_backup opt_as_of_clause opt_incremental opt_with_options
-  {
-    $$.val = &tree.Backup{Targets: $2.targetList(), To: $4.partitionedBackup(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
+    backup := &tree.Backup{
+      To:              $4.partitionedBackup(),
+      IncrementalFrom: $6.exprs(),
+      AsOf:            $5.asOfClause(),
+      Options:         *$7.backupOptions(),
+    }
+
+    tl := $2.targetListPtr()
+    if tl == nil {
+      backup.DescriptorCoverage = tree.AllDescriptors
+    } else {
+      backup.DescriptorCoverage = tree.RequestedDescriptors
+      backup.Targets = *tl
+    }
+
+    $$.val = backup
   }
 | BACKUP error // SHOW HELP: BACKUP
+
+opt_backup_targets:
+  /* EMPTY -- full cluster */
+  {
+    $$.val = (*tree.TargetList)(nil)
+  }
+| targets
+  {
+    t := $1.targetList()
+    $$.val = &t
+  }
+
+// Optional backup options.
+opt_with_backup_options:
+  WITH backup_options_list
+  {
+    $$.val = $2.backupOptions()
+  }
+| WITH OPTIONS '(' backup_options_list ')'
+  {
+    $$.val = $4.backupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.BackupOptions{}
+  }
+
+backup_options_list:
+  // Require at least one option
+  backup_options
+  {
+    $$.val = $1.backupOptions()
+  }
+| backup_options_list ',' backup_options
+  {
+    if err := $1.backupOptions().CombineWith($3.backupOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid backup options.
+backup_options:
+  ENCRYPTION_PASSPHRASE '=' string_or_placeholder
+  {
+    $$.val = &tree.BackupOptions{EncryptionPassphrase: $3.expr()}
+  }
+| REVISION_HISTORY
+  {
+    $$.val = &tree.BackupOptions{CaptureRevisionHistory: true}
+  }
 
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
@@ -10288,6 +10354,7 @@ unreserved_keyword:
 | DOUBLE
 | DROP
 | ENCODING
+| ENCRYPTION_PASSPHRASE
 | ENUM
 | ESCAPE
 | EXCLUDE
@@ -10414,6 +10481,7 @@ unreserved_keyword:
 | RESTORE
 | RESTRICT
 | RESUME
+| REVISION_HISTORY
 | REVOKE
 | ROLE
 | ROLES

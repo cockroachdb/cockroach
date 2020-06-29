@@ -104,8 +104,7 @@ alter_stmt ::=
 	| alter_role_stmt
 
 backup_stmt ::=
-	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
-	| 'BACKUP' targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
+	'BACKUP' opt_backup_targets 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_backup_options
 
 cancel_stmt ::=
 	cancel_jobs_stmt
@@ -313,6 +312,9 @@ alter_role_stmt ::=
 	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
 	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_role_options
 
+opt_backup_targets ::=
+	targets
+
 partitioned_backup ::=
 	string_or_placeholder
 	| '(' string_or_placeholder_list ')'
@@ -323,6 +325,11 @@ opt_as_of_clause ::=
 
 opt_incremental ::=
 	'INCREMENTAL' 'FROM' string_or_placeholder_list
+	| 
+
+opt_with_backup_options ::=
+	'WITH' backup_options_list
+	| 'WITH' 'OPTIONS' '(' backup_options_list ')'
 	| 
 
 cancel_jobs_stmt ::=
@@ -680,6 +687,7 @@ unreserved_keyword ::=
 	| 'DOUBLE'
 	| 'DROP'
 	| 'ENCODING'
+	| 'ENCRYPTION_PASSPHRASE'
 	| 'ENUM'
 	| 'ESCAPE'
 	| 'EXCLUDE'
@@ -806,6 +814,7 @@ unreserved_keyword ::=
 	| 'RESTORE'
 	| 'RESTRICT'
 	| 'RESUME'
+	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'ROLE'
 	| 'ROLES'
@@ -1024,6 +1033,9 @@ opt_role_options ::=
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
+
+backup_options_list ::=
+	( backup_options ) ( ( ',' backup_options ) )*
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
@@ -1403,6 +1415,10 @@ opt_with ::=
 
 role_options ::=
 	( role_option ) ( ( role_option ) )*
+
+backup_options ::=
+	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
+	| 'REVISION_HISTORY'
 
 changefeed_targets ::=
 	single_table_pattern_list

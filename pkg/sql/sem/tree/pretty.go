@@ -1941,7 +1941,7 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 	if node.IncrementalFrom != nil {
 		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
 	}
-	if node.Options != nil {
+	if !node.Options.IsDefault() {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))
 	}
 	return p.rlTable(items...)
