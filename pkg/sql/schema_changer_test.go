@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // asyncSchemaChangerDisabled can be used to disable asynchronous processing
@@ -4687,4 +4689,35 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		}
 		return nil
 	})
+}
+
+// TestPublicTableWithDropJobID tests that dropping/renaming a table will
+// succeed regardless of the existence of a DropJobID. This is critical because
+// old bugs could create such tables and then cause problems.
+func TestTableWithDropJobID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// We're going to create a table, then we'll manually muck with its descriptor
+	// as though it had a drop job ID that is bogus, then we'll try to rename it.
+	kvDB := tc.Server(0).DB()
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+	td := sqlbase.GetTableDescriptor(kvDB, "defaultdb", "foo")
+	require.NotNil(t, td)
+	td.DropJobID = rand.Int63()
+	td.Version++
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		require.NoError(t, txn.SetSystemConfigTrigger())
+		key := sqlbase.MakeDescMetadataKey(td.GetID())
+		wrapped := sqlbase.WrapDescriptor(td)
+		return txn.Put(ctx, key, wrapped)
+	}))
+	idVer, err := tc.Server(0).LeaseManager().(*sql.LeaseManager).WaitForOneVersion(ctx, td.GetID(), retry.Options{})
+	require.Equal(t, td.Version, idVer)
+	require.NoError(t, err)
+	tdb.Exec(t, `ALTER TABLE foo RENAME TO bar`)
 }

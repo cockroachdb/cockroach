@@ -190,7 +190,6 @@ func (p *planner) truncateTable(
 	if err != nil {
 		return err
 	}
-	tableDesc.DropJobID = dropJobID
 	newTableDesc := sqlbase.NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),
@@ -222,6 +221,7 @@ func (p *planner) truncateTable(
 	}
 
 	// Drop table.
+	tableDesc.DropJobID = dropJobID
 	if err := p.initiateDropTable(ctx, tableDesc, false /* drainName */); err != nil {
 		return err
 	}
