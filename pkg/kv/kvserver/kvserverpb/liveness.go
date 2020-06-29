@@ -11,6 +11,7 @@
 package kvserverpb
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,4 +39,12 @@ func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
 	expiration := timeutil.Unix(0, l.Expiration.WallTime)
 	deadAsOf := expiration.Add(threshold)
 	return !now.Before(deadAsOf)
+}
+
+func (l Liveness) String() string {
+	var extra string
+	if l.Draining || l.Decommissioning {
+		extra = fmt.Sprintf(" drain:%t decom:%t", l.Draining, l.Decommissioning)
+	}
+	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
 }

@@ -60,6 +60,6 @@ func LineInterpolatePoints(g *geo.Geometry, fraction float64, repeat bool) (*geo
 		}
 		return geo.ParseGeometryFromEWKB(interpolatedPointEWKB)
 	default:
-		return nil, errors.Newf("geometry %s should be LineString", g.Shape())
+		return nil, errors.Newf("geometry %s should be LineString", g.ShapeType())
 	}
 }

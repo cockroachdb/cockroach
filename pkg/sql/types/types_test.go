@@ -157,8 +157,8 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geography,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  0,
-						Shape: geopb.Shape_Unset,
+						SRID:      0,
+						ShapeType: geopb.ShapeType_Unset,
 					},
 				},
 			},
@@ -174,12 +174,12 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geography,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  4325,
-						Shape: geopb.Shape_MultiPoint,
+						SRID:      4325,
+						ShapeType: geopb.ShapeType_MultiPoint,
 					},
 				},
 			},
-			MakeGeography(geopb.Shape_MultiPoint, 4325),
+			MakeGeography(geopb.ShapeType_MultiPoint, 4325),
 		},
 
 		// GEOMETRY
@@ -191,8 +191,8 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geometry,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  0,
-						Shape: geopb.Shape_Unset,
+						SRID:      0,
+						ShapeType: geopb.ShapeType_Unset,
 					},
 				},
 			},
@@ -208,12 +208,12 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geometry,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  4325,
-						Shape: geopb.Shape_MultiPoint,
+						SRID:      4325,
+						ShapeType: geopb.ShapeType_MultiPoint,
 					},
 				},
 			},
-			MakeGeometry(geopb.Shape_MultiPoint, 4325),
+			MakeGeometry(geopb.ShapeType_MultiPoint, 4325),
 		},
 
 		// INET

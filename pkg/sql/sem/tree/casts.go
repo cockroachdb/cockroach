@@ -706,7 +706,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err := geo.GeospatialTypeFitsColumnMetadata(
 				d.Geography,
 				t.InternalType.GeoMetadata.SRID,
-				t.InternalType.GeoMetadata.Shape,
+				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
 			}
@@ -719,7 +719,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err := geo.GeospatialTypeFitsColumnMetadata(
 				g,
 				t.InternalType.GeoMetadata.SRID,
-				t.InternalType.GeoMetadata.Shape,
+				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
 			}
@@ -751,7 +751,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err := geo.GeospatialTypeFitsColumnMetadata(
 				d.Geometry,
 				t.InternalType.GeoMetadata.SRID,
-				t.InternalType.GeoMetadata.Shape,
+				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
 			}
@@ -760,7 +760,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err := geo.GeospatialTypeFitsColumnMetadata(
 				d.Geography,
 				t.InternalType.GeoMetadata.SRID,
-				t.InternalType.GeoMetadata.Shape,
+				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
 			}
