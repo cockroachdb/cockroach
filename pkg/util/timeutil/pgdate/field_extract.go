@@ -643,6 +643,32 @@ func (fe *fieldExtract) MakeTime() time.Time {
 	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset))
 }
 
+// MakeTimeWithoutTimezone returns only the time component of the extract,
+// without any timezone information. The returned time always has UTC location.
+// See ParseTimeWithoutTimezone.
+func (fe *fieldExtract) MakeTimeWithoutTimezone() time.Time {
+	if fe.sentinel != nil {
+		return stripTimezone(*fe.sentinel)
+	}
+
+	ret := fe.MakeTimestamp()
+	hour, min, sec := ret.Clock()
+	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.UTC)
+}
+
+// stropTimezone converts the given time to a time that looks the same but is in
+// UTC, e.g. from
+//   2020-06-26 01:02:03 +0200 CEST
+// to
+//   2020-06-27 01:02:03 +0000 UTC.
+//
+// Note that the two times don't represent the same time instant.
+func stripTimezone(t time.Time) time.Time {
+	_, offset := t.Zone()
+	t = t.Add(time.Duration(offset) * time.Second).UTC()
+	return t
+}
+
 // MakeTimestamp returns a time.Time containing all extracted information.
 func (fe *fieldExtract) MakeTimestamp() time.Time {
 	if fe.sentinel != nil {
@@ -658,6 +684,25 @@ func (fe *fieldExtract) MakeTimestamp() time.Time {
 	nano, _ := fe.Get(fieldNanos)
 
 	return time.Date(year, time.Month(month), day, hour, min, sec, nano, fe.MakeLocation())
+}
+
+// MakeTimestampWIthoutTimezone returns a time.Time containing all extracted
+// information, minus any timezone information (which is stripped). The returned
+// time always has UTC location. See ParseTimestampWithoutTimezone.
+func (fe *fieldExtract) MakeTimestampWithoutTimezone() time.Time {
+	if fe.sentinel != nil {
+		return stripTimezone(*fe.sentinel)
+	}
+
+	year, _ := fe.Get(fieldYear)
+	month, _ := fe.Get(fieldMonth)
+	day, _ := fe.Get(fieldDay)
+	hour, _ := fe.Get(fieldHour)
+	min, _ := fe.Get(fieldMinute)
+	sec, _ := fe.Get(fieldSecond)
+	nano, _ := fe.Get(fieldNanos)
+
+	return time.Date(year, time.Month(month), day, hour, min, sec, nano, time.UTC)
 }
 
 // MakeLocation returns the timezone information stored in the extract,

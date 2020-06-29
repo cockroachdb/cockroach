@@ -183,6 +183,31 @@ func (td timeData) testParseTimestamp(t *testing.T, info string, mode pgdate.Par
 	td.crossCheck(t, info, "timestamptz", td.s, mode, exp, expErr)
 }
 
+func (td timeData) testParseTimestampWithoutTimezone(
+	t *testing.T, info string, mode pgdate.ParseMode,
+) {
+	info = fmt.Sprintf("%s ParseTimestampWithoutTimezone", info)
+	exp, expErr := td.expected(mode)
+	res, err := pgdate.ParseTimestampWithoutTimezone(time.Time{}, mode, td.s)
+
+	// HACK: This is a format that parses as a date and timestamp,
+	// but is not a time.
+	if td.s == "2018 123" {
+		exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
+		expErr = false
+	}
+
+	if td.isRolloverTime {
+		exp = exp.AddDate(0, 0, 1)
+	}
+	// Convert the expected time to the same timestamp but in UTC.
+	_, offset := exp.Zone()
+	exp = exp.Add(time.Duration(offset) * time.Second).UTC()
+
+	check(t, info, exp, expErr, res, err)
+	td.crossCheck(t, info, "timestamp", td.s, mode, exp, expErr)
+}
+
 var dateTestData = []timeData{
 	// The cases below are taken from
 	// https://github.com/postgres/postgres/blob/REL_10_5/src/test/regress/sql/date.sql
@@ -702,6 +727,7 @@ var timestampTestData = []timeData{
 // useful for developing the tests themselves and doesn't need
 // to be part of a regular build.
 func TestMain(m *testing.M) {
+	flag.Parse()
 	if dbString != "" {
 		if d, err := gosql.Open("postgres", dbString); err == nil {
 			if err := d.Ping(); err == nil {
@@ -743,6 +769,7 @@ func TestParse(t *testing.T) {
 					tstc.testParseDate(t, info, mode)
 					tstc.testParseTime(t, info, mode)
 					tstc.testParseTimestamp(t, info, mode)
+					tstc.testParseTimestampWithoutTimezone(t, info, mode)
 				}
 			}
 

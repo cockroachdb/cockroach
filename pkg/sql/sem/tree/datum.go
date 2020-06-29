@@ -1903,7 +1903,7 @@ func ParseDTime(ctx ParseTimeContext, s string, precision time.Duration) (*DTime
 
 	s = timeutil.ReplaceLibPQTimePrefix(s)
 
-	t, err := pgdate.ParseTime(now, pgdate.ParseModeYMD, s)
+	t, err := pgdate.ParseTimeWithoutTimezone(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, makeParseError(s, types.Time, nil)
@@ -2114,6 +2114,7 @@ func (d *DTimeTZ) Size() uintptr {
 
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
+	// Time always has UTC location.
 	time.Time
 }
 
@@ -2148,13 +2149,10 @@ const (
 // the provided string in UTC, or an error if parsing is unsuccessful.
 func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*DTimestamp, error) {
 	now := relativeParseTime(ctx)
-	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
+	t, err := pgdate.ParseTimestampWithoutTimezone(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		return nil, err
 	}
-	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
-	_, offset := t.Zone()
-	t = t.Add(time.Duration(offset) * time.Second).UTC()
 	return MakeDTimestamp(t, precision)
 }
 
