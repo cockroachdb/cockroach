@@ -97,6 +97,12 @@ const (
 )
 
 // ParseDate converts a string into Date.
+//
+// Any specified timezone is inconsequential. Examples:
+//  - "now": parses to the local date (in the current timezone)
+//  - "2020-06-26 01:09:15.511971": parses to '2020-06-26'
+//  - "2020-06-26 01:09:15.511971-05": parses to '2020-06-26'
+//
 func ParseDate(now time.Time, mode ParseMode, s string) (Date, error) {
 	fe := fieldExtract{
 		now:      now,
@@ -139,6 +145,38 @@ func ParseTime(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	return fe.MakeTime(), nil
 }
 
+// ParseTimeWithoutTimezone converts a string into a time value on the epoch
+// day, dropping any timezone information. The returned time always has UTC
+// location.
+//
+// Any specified timezone is inconsequential. Examples:
+//  - "now": parses to the local time of day (in the current timezone)
+//  - "01:09:15.511971" and "01:09:15.511971-05" parse to the same result
+//
+func ParseTimeWithoutTimezone(now time.Time, mode ParseMode, s string) (time.Time, error) {
+	fe := fieldExtract{
+		now:      now,
+		required: timeRequiredFields,
+		wanted:   timeFields,
+	}
+
+	if err := fe.Extract(s); err != nil {
+		// It's possible that the user has given us a complete
+		// timestamp string; let's try again, accepting more fields.
+		fe = fieldExtract{
+			now:      now,
+			mode:     mode,
+			required: timeRequiredFields,
+			wanted:   dateTimeFields,
+		}
+
+		if err := fe.Extract(s); err != nil {
+			return TimeEpoch, parseError(err, "time", s)
+		}
+	}
+	return fe.MakeTimeWithoutTimezone(), nil
+}
+
 // ParseTimestamp converts a string into a timestamp.
 func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	fe := fieldExtract{
@@ -154,6 +192,33 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 		return TimeEpoch, parseError(err, "timestamp", s)
 	}
 	return fe.MakeTimestamp(), nil
+}
+
+// ParseTimestampWithoutTimezone converts a string into a timestamp, stripping
+// away any timezone information. Any specified timezone is inconsequential. The
+// returned time always has UTC location.
+//
+// For example, all these inputs return 2020-06-26 01:02:03 +0000 UTC:
+//   - '2020-06-26 01:02:03';
+//   - '2020-06-26 01:02:03+04';
+//   - 'now', if the local local time (in the current timezone) is
+//     2020-06-26 01:02:03. Note that this does not represent the same time
+//     instant, but the one that "reads" the same in UTC.
+//
+func ParseTimestampWithoutTimezone(now time.Time, mode ParseMode, s string) (time.Time, error) {
+	fe := fieldExtract{
+		mode: mode,
+		now:  now,
+		// A timestamp only actually needs a date component; the time
+		// would be midnight.
+		required: dateRequiredFields,
+		wanted:   dateTimeFields,
+	}
+
+	if err := fe.Extract(s); err != nil {
+		return TimeEpoch, parseError(err, "timestamp", s)
+	}
+	return fe.MakeTimestampWithoutTimezone(), nil
 }
 
 // badFieldPrefixError constructs an error with pg code InvalidDatetimeFormat.
