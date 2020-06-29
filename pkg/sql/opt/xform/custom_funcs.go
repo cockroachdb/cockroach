@@ -1935,6 +1935,7 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.IndexOrdinal()
 		lookupJoin.InvertedExpr = function
+		lookupJoin.InvertedCol = indexGeoCol
 		lookupJoin.InputCol = inputGeoCol
 		lookupJoin.Cols = indexCols.Union(inputProps.OutputCols)
 

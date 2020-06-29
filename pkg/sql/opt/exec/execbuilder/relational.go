@@ -1395,6 +1395,10 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	inputCols := join.Input.Relational().OutputCols
 	lookupCols := join.Cols.Difference(inputCols)
 
+	// Add the inverted column since it will be referenced in the inverted
+	// expression and needs a corresponding indexed var.
+	lookupCols.Add(join.InvertedCol)
+
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
 	allCols := joinOutputMap(input.outputCols, lookupColMap)
 
