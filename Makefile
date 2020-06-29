@@ -895,6 +895,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/substring.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
+  pkg/sql/colexec/vec_to_datum.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go
 
 OPTGEN_TARGETS = \
