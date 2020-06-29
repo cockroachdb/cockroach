@@ -168,8 +168,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 	version := tableDesc.Version
 
-	log.Infof(ctx, "Running backfill for %q, v=%d, m=%d",
-		tableDesc.Name, tableDesc.Version, sc.mutationID)
+	log.Infof(ctx, "Running backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	needColumnBackfill := false
 	for _, m := range tableDesc.Mutations {
@@ -284,8 +283,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 		}
 	}
 
-	log.Infof(ctx, "Completed backfill for %q, v=%d, m=%d",
-		tableDesc.Name, tableDesc.Version, sc.mutationID)
+	log.Infof(ctx, "Completed backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	if sc.testingKnobs.RunAfterBackfill != nil {
 		if err := sc.testingKnobs.RunAfterBackfill(*sc.job.ID()); err != nil {
@@ -302,6 +300,8 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 func (sc *SchemaChanger) dropConstraints(
 	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) (map[sqlbase.ID]*ImmutableTableDescriptor, error) {
+	log.Infof(ctx, "dropping %d constraints", len(constraints))
+
 	fksByBackrefTable := make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 	for i := range constraints {
 		c := &constraints[i]
@@ -384,6 +384,8 @@ func (sc *SchemaChanger) dropConstraints(
 			return nil, err
 		}
 	}
+
+	log.Info(ctx, "finished dropping constraints")
 	return descs, nil
 }
 
@@ -393,6 +395,8 @@ func (sc *SchemaChanger) dropConstraints(
 func (sc *SchemaChanger) addConstraints(
 	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
 ) error {
+	log.Infof(ctx, "adding %d constraints", len(constraints))
+
 	fksByBackrefTable := make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 	for i := range constraints {
 		c := &constraints[i]
@@ -480,6 +484,7 @@ func (sc *SchemaChanger) addConstraints(
 			return err
 		}
 	}
+	log.Info(ctx, "finished adding constraints")
 	return nil
 }
 
@@ -494,6 +499,7 @@ func (sc *SchemaChanger) validateConstraints(
 	if testDisableTableLeases {
 		return nil
 	}
+	log.Infof(ctx, "validating %d new constraints", len(constraints))
 
 	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
 	if err != nil {
@@ -560,7 +566,11 @@ func (sc *SchemaChanger) validateConstraints(
 			})
 		})
 	}
-	return grp.Wait()
+	if err := grp.Wait(); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished validating new constraints")
+	return nil
 }
 
 // getTableVersion retrieves the descriptor for the table being
@@ -590,6 +600,8 @@ func (sc *SchemaChanger) getTableVersion(
 func (sc *SchemaChanger) truncateIndexes(
 	ctx context.Context, version sqlbase.DescriptorVersion, dropped []sqlbase.IndexDescriptor,
 ) error {
+	log.Infof(ctx, "clearing data for %d indexes", len(dropped))
+
 	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
 		chunkSize = sc.testingKnobs.BackfillChunkSize
@@ -662,6 +674,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			return err
 		}
 	}
+	log.Info(ctx, "finished clearing data for indexes")
 	return nil
 }
 
@@ -971,6 +984,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if testDisableTableLeases {
 		return nil
 	}
+	log.Info(ctx, "validating new indexes")
 
 	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
 	if err != nil {
@@ -1027,7 +1041,11 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			return sc.validateInvertedIndexes(ctx, tableDesc, invertedIndexes, runHistoricalTxn)
 		})
 	}
-	return grp.Wait()
+	if err := grp.Wait(); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished validating new indexes")
+	return nil
 }
 
 // validateInvertedIndexes checks that the indexes have entries for
@@ -1256,6 +1274,8 @@ func (sc *SchemaChanger) validateForwardIndexes(
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context, version sqlbase.DescriptorVersion, addingSpans []roachpb.Span,
 ) error {
+	log.Infof(ctx, "backfilling %d indexes", len(addingSpans))
+
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
 	}
@@ -1274,6 +1294,8 @@ func (sc *SchemaChanger) backfillIndexes(
 		backfill.IndexMutationFilter, addingSpans); err != nil {
 		return err
 	}
+
+	log.Info(ctx, "finished backfilling indexes")
 	return sc.validateIndexes(ctx)
 }
 
@@ -1285,9 +1307,15 @@ func (sc *SchemaChanger) backfillIndexes(
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context, version sqlbase.DescriptorVersion,
 ) error {
-	return sc.distBackfill(
+	log.Infof(ctx, "clearing and backfilling columns")
+
+	if err := sc.distBackfill(
 		ctx, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		backfill.ColumnMutationFilter, nil)
+		backfill.ColumnMutationFilter, nil); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished clearing and backfilling columns")
+	return nil
 }
 
 // runSchemaChangesInTxn runs all the schema changes immediately in a
