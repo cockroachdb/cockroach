@@ -68,6 +68,7 @@ const (
 	VersionAlterSystemJobsAddCreatedByColumns
 	VersionAddScheduledJobsTable
 	VersionUserDefinedSchemas
+	VersionDropOriginFKIndexes
 
 	// Add new versions here (step one of two).
 )
@@ -516,6 +517,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionUserDefinedSchemas enables the creation of user defined schemas.
 		Key:     VersionUserDefinedSchemas,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionDropOriginFKIndexes allows for users to drop indexes that are
+		// used by the origin side of a foreign key relationship.
+		Key:     VersionDropOriginFKIndexes,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).

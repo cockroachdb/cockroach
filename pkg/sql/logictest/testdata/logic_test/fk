@@ -655,12 +655,6 @@ ALTER TABLE delivery DROP COLUMN "item"
 statement ok
 DROP INDEX products@products_upc_key CASCADE
 
-statement error index "orders_product_idx" is in use as a foreign key constraint
-DROP INDEX orders@orders_product_idx
-
-statement error index "orders_product_idx" is in use as a foreign key constraint
-DROP INDEX orders@orders_product_idx RESTRICT
-
 statement error "products" is referenced by foreign key from table "orders"
 DROP TABLE products
 
@@ -713,14 +707,8 @@ INSERT INTO child VALUES (2, 2)
 statement error pgcode 23503 foreign key 
 INSERT INTO grandchild VALUES (1, 1)
 
-statement error in use as a foreign key constraint
+statement ok
 DROP INDEX grandchild@grandchild_parent_id_idx
-
-statement ok
-DROP INDEX grandchild@grandchild_parent_id_idx CASCADE
-
-statement ok
-INSERT INTO grandchild VALUES (1, 1)
 
 statement ok
 DROP TABLE grandchild

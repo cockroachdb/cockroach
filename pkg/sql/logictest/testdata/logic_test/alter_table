@@ -259,9 +259,6 @@ INSERT INTO t (a, d) VALUES (23, 24)
 statement error foreign key
 INSERT INTO t VALUES (31, 7, 32)
 
-statement error in use as a foreign key constraint
-DROP INDEX t@t_f_idx
-
 statement ok
 ALTER TABLE t DROP CONSTRAINT fk_f_ref_other
 
@@ -1354,3 +1351,19 @@ CREATE TABLE d.public.t50069_a (x INT);
 
 statement error pq: no data source matches prefix: d.public.t50069_a in this context
 ALTER TABLE t50069_a ADD COLUMN y INT AS (d.public.t50069_a.x + 1) STORED
+
+# Dropping a column with a foreign key should delete the column and the FK.
+statement ok
+DROP TABLE IF EXISTS parent, child;
+CREATE TABLE parent (p INT PRIMARY KEY);
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p), FAMILY (c, p), INDEX (p));
+ALTER TABLE child DROP COLUMN p
+
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE child (
+       c INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (c ASC),
+       FAMILY fam_0_c_p (c)
+)
