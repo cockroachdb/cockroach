@@ -113,11 +113,6 @@ TABLE child
  ├── r int
  ├── INDEX primary
  │    └── c int not null
- ├── INDEX child_auto_index_fk
- │    ├── p int
- │    ├── q int
- │    ├── r int
- │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan child
 
@@ -155,11 +150,6 @@ TABLE child2
  ├── q int
  ├── r int
  ├── INDEX primary
- │    └── c int not null
- ├── INDEX child2_auto_index_fk
- │    ├── p int
- │    ├── q int
- │    ├── r int
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan child2
