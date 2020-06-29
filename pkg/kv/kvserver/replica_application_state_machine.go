@@ -894,20 +894,11 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// intentionally doesn't track the origin of the writes.
 	b.r.writeStats.recordCount(float64(b.mutations), 0 /* nodeID */)
 
-	// NB: the bootstrap store has a nil split queue.
-	// TODO(tbg): the above is probably a lie now.
 	now := timeutil.Now()
-	if r.store.splitQueue != nil && needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
+	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
-	// The bootstrap store has a nil merge queue.
-	// TODO(tbg): the above is probably a lie now.
-	if r.store.mergeQueue != nil && needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(now) {
-		// TODO(tbg): for ranges which are small but protected from merges by
-		// other means (zone configs etc), this is called on every command, and
-		// fires off a goroutine each time. Make this trigger (and potentially
-		// the split one above, though it hasn't been observed to be as
-		// bothersome) less aggressive.
+	if needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(now) {
 		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 
