@@ -430,7 +430,7 @@ func (b *backupResumer) Resume(
 	}
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI)
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, p.User())
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
@@ -440,7 +440,7 @@ func (b *backupResumer) Resume(
 	}
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
 			return err
 		}
@@ -497,7 +497,7 @@ func (b *backupResumer) Resume(
 	if err != nil {
 		log.Warningf(ctx, "unable to clear stats from job payload: %+v", err)
 	}
-	b.deleteCheckpoint(ctx, p.ExecCfg())
+	b.deleteCheckpoint(ctx, p.ExecCfg(), p.User())
 
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -566,20 +566,23 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
 
-	cfg := phs.(sql.PlanHookState).ExecCfg()
-	b.deleteCheckpoint(ctx, cfg)
+	p := phs.(sql.PlanHookState)
+	cfg := p.ExecCfg()
+	b.deleteCheckpoint(ctx, cfg, p.User())
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return b.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
 	})
 }
 
-func (b *backupResumer) deleteCheckpoint(ctx context.Context, cfg *sql.ExecutorConfig) {
+func (b *backupResumer) deleteCheckpoint(
+	ctx context.Context, cfg *sql.ExecutorConfig, user string,
+) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
 		// details.URI.
-		conf, err := cloudimpl.ExternalStorageConfFromURI(details.URI)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, user)
 		if err != nil {
 			return err
 		}

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -43,11 +44,11 @@ func TestPutS3(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	user := security.RootUser
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := ExternalStorageFromURI(
-			ctx, fmt.Sprintf("s3://%s/%s", bucket, "backup-test-default"),
-			base.ExternalIODirConfig{}, testSettings, blobs.TestEmptyBlobClientFactory,
-		)
+		_, err := ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
+			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
+			blobs.TestEmptyBlobClientFactory, user, nil, nil)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			AuthParam,
@@ -66,27 +67,20 @@ func TestPutS3(t *testing.T) {
 			t.Skip(err)
 		}
 
-		testExportStore(
-			t,
-			fmt.Sprintf(
-				"s3://%s/%s?%s=%s",
-				bucket, "backup-test-default",
-				AuthParam, authParamImplicit,
-			),
-			false,
-		)
+		testExportStore(t, fmt.Sprintf(
+			"s3://%s/%s?%s=%s",
+			bucket, "backup-test-default",
+			AuthParam, authParamImplicit,
+		), false, user, nil, nil)
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		testExportStore(t,
-			fmt.Sprintf(
-				"s3://%s/%s?%s=%s&%s=%s",
-				bucket, "backup-test",
-				S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
-				S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
-			),
-			false,
-		)
+		testExportStore(t, fmt.Sprintf(
+			"s3://%s/%s?%s=%s&%s=%s",
+			bucket, "backup-test",
+			S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+			S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
+		), false, user, nil, nil)
 		testListFiles(t,
 			fmt.Sprintf(
 				"s3://%s/%s?%s=%s&%s=%s",
@@ -94,6 +88,7 @@ func TestPutS3(t *testing.T) {
 				S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
 				S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
 			),
+			user, nil, nil,
 		)
 	})
 }
@@ -120,6 +115,7 @@ func TestPutS3Endpoint(t *testing.T) {
 	if bucket == "" {
 		t.Skip("AWS_S3_ENDPOINT_BUCKET env var must be set")
 	}
+	user := security.RootUser
 
 	u := url.URL{
 		Scheme:   "s3",
@@ -128,7 +124,7 @@ func TestPutS3Endpoint(t *testing.T) {
 		RawQuery: q.Encode(),
 	}
 
-	testExportStore(t, u.String(), false)
+	testExportStore(t, u.String(), false, user, nil, nil)
 }
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
@@ -184,15 +180,17 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	user := security.RootUser
 
-	conf, err := ExternalStorageConfFromURI(u.String())
+	conf, err := ExternalStorageConfFromURI(u.String(), user)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, clientFactory)
+	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+		clientFactory, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

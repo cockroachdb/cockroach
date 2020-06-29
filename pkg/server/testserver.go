@@ -582,7 +582,8 @@ func makeSQLServerArgs(
 			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
 				return nil, errors.New("external storage is not available to secondary tenants")
 			},
-			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+			externalStorageFromURI: func(ctx context.Context,
+				uri, user string) (cloud.ExternalStorage, error) {
 				return nil, errors.New("external uri storage is not available to secondary tenants")
 			},
 		},

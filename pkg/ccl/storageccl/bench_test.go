@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -152,7 +153,8 @@ func BenchmarkImport(b *testing.B) {
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
-			storage, err := cloudimpl.ExternalStorageConfFromURI(`nodelocal://0/` + subdir)
+			storage, err := cloudimpl.ExternalStorageConfFromURI(`nodelocal://0/`+subdir,
+				security.RootUser)
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}

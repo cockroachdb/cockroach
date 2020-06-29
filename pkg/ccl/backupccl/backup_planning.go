@@ -388,7 +388,7 @@ func backupPlanHook(
 		if err != nil {
 			return err
 		}
-		defaultStore, err := makeCloudStorage(ctx, defaultURI)
+		defaultStore, err := makeCloudStorage(ctx, defaultURI, p.User())
 		if err != nil {
 			return err
 		}
@@ -404,7 +404,7 @@ func backupPlanHook(
 		g := ctxgroup.WithContext(ctx)
 		if len(incrementalFrom) > 0 {
 			if encryptionPassphrase != nil {
-				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0])
+				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0], p.User())
 				if err != nil {
 					return err
 				}
@@ -429,7 +429,7 @@ func backupPlanHook(
 					// descriptors around.
 					uri := incrementalFrom[i]
 					desc, err := ReadBackupManifestFromURI(
-						ctx, uri, makeCloudStorage, encryption,
+						ctx, uri, p.User(), makeCloudStorage, encryption,
 					)
 					if err != nil {
 						return errors.Wrapf(err, "failed to read backup from %q", uri)
@@ -499,7 +499,7 @@ func backupPlanHook(
 				// Close the old store before overwriting the reference with the new
 				// subdir store.
 				defaultStore.Close()
-				defaultStore, err = makeCloudStorage(ctx, defaultURI)
+				defaultStore, err = makeCloudStorage(ctx, defaultURI, p.User())
 				if err != nil {
 					return errors.Wrap(err, "re-opening layer-specific destination location")
 				}
@@ -560,6 +560,7 @@ func backupPlanHook(
 				prevBackups,
 				nil, /*backupLocalityInfo*/
 				keys.MinKey,
+				p.User(),
 				func(span covering.Range, start, end hlc.Timestamp) error {
 					if (start == hlc.Timestamp{}) {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
@@ -613,6 +614,7 @@ func backupPlanHook(
 			append(prevBackups, backupManifest),
 			nil, /*backupLocalityInfo*/
 			keys.MinKey,
+			p.User(),
 			errOnMissingRange,
 		); err != nil {
 			return err
@@ -637,7 +639,7 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			exportStore, err := makeCloudStorage(ctx, defaultURI)
+			exportStore, err := makeCloudStorage(ctx, defaultURI, p.User())
 			if err != nil {
 				return err
 			}
