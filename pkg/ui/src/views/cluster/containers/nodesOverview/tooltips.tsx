@@ -16,7 +16,7 @@ import { AggregatedNodeStatus } from ".";
 
 export const getStatusDescription = (status: LivenessStatus) => {
   switch (status) {
-    case LivenessStatus.LIVE:
+    case LivenessStatus.NODE_STATUS_LIVE:
       return (
         <div className="tooltip__table--title">
           <p>
@@ -28,8 +28,8 @@ export const getStatusDescription = (status: LivenessStatus) => {
           </p>
         </div>
       );
-    case LivenessStatus.UNKNOWN:
-    case LivenessStatus.UNAVAILABLE:
+    case LivenessStatus.NODE_STATUS_UNKNOWN:
+    case LivenessStatus.NODE_STATUS_UNAVAILABLE:
       return (
         <div className="tooltip__table--title">
           <p>
@@ -41,7 +41,7 @@ export const getStatusDescription = (status: LivenessStatus) => {
           </p>
         </div>
       );
-    case LivenessStatus.DEAD:
+    case LivenessStatus.NODE_STATUS_DEAD:
       return (
         <div className="tooltip__table--title">
           <p>
@@ -57,7 +57,7 @@ export const getStatusDescription = (status: LivenessStatus) => {
           </p>
         </div>
       );
-    case LivenessStatus.DECOMMISSIONING:
+    case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
       return (
         <div className="tooltip__table--title">
           <p>

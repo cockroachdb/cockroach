@@ -103,7 +103,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       const base = [{value: "", label: "Cluster"}];
       return base.concat(
         _.chain(nodeStatuses)
-          .filter(ns => livenessStatusByNodeID[ns.desc.node_id] !== LivenessStatus.DECOMMISSIONED)
+          .filter(ns => livenessStatusByNodeID[ns.desc.node_id] !== LivenessStatus.NODE_STATUS_DECOMMISSIONED)
           .map(ns => ({
             value: ns.desc.node_id.toString(),
             label: nodeDisplayNameByID[ns.desc.node_id],

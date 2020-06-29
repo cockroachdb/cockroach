@@ -116,17 +116,17 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
 
 const getBadgeTypeByNodeStatus = (status: LivenessStatus | AggregatedNodeStatus): BadgeProps["status"] => {
   switch (status) {
-    case LivenessStatus.UNKNOWN:
+    case LivenessStatus.NODE_STATUS_UNKNOWN:
       return "warning";
-    case LivenessStatus.DEAD:
+    case LivenessStatus.NODE_STATUS_DEAD:
       return "danger";
-    case LivenessStatus.UNAVAILABLE:
+    case LivenessStatus.NODE_STATUS_UNAVAILABLE:
       return "warning";
-    case LivenessStatus.LIVE:
+    case LivenessStatus.NODE_STATUS_LIVE:
       return "default";
-    case LivenessStatus.DECOMMISSIONING:
+    case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
       return "warning";
-    case LivenessStatus.DECOMMISSIONED:
+    case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
       return "default";
     case AggregatedNodeStatus.LIVE:
       return "default";
@@ -305,7 +305,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         switch (record.status) {
           case AggregatedNodeStatus.DEAD:
             badgeText = "warning";
-            tooltipText = getStatusDescription(LivenessStatus.DEAD);
+            tooltipText = getStatusDescription(LivenessStatus.NODE_STATUS_DEAD);
             nodeTooltip = getNodeStatusDescription(record.status);
             break;
           case AggregatedNodeStatus.LIVE:
@@ -313,8 +313,8 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             badgeText = AggregatedNodeStatus[record.status];
             nodeTooltip = getNodeStatusDescription(record.status);
             break;
-          case LivenessStatus.UNKNOWN:
-          case LivenessStatus.UNAVAILABLE:
+          case LivenessStatus.NODE_STATUS_UNKNOWN:
+          case LivenessStatus.NODE_STATUS_UNAVAILABLE:
             badgeText = "suspect";
             tooltipText = getStatusDescription(record.status);
             break;
@@ -484,7 +484,7 @@ export const liveNodesTableDataSelector = createSelector(
             availableMemory: FixLong(ns.total_system_memory).toNumber(),
             numCpus: ns.num_cpus,
             version: ns.build_info.tag,
-            status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE,
+            status: nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.NODE_STATUS_LIVE,
           };
         });
 
@@ -500,14 +500,14 @@ export const liveNodesTableDataSelector = createSelector(
           const nodesByStatus = _.groupBy(nestedRows, (row: NodeStatusRow) => row.status);
 
           // Return DEAD status if at least one node is dead;
-          if (!_.isEmpty(nodesByStatus[LivenessStatus.DEAD])) {
+          if (!_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_DEAD])) {
             return AggregatedNodeStatus.DEAD;
           }
 
           // Return WARNING status if at least one node is decommissioning or suspected;
-          if (!_.isEmpty(nodesByStatus[LivenessStatus.DECOMMISSIONING])
-            || !_.isEmpty(nodesByStatus[LivenessStatus.UNKNOWN])
-            || !_.isEmpty(nodesByStatus[LivenessStatus.UNAVAILABLE])) {
+          if (!_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_DECOMMISSIONING])
+            || !_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNKNOWN])
+            || !_.isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNAVAILABLE])) {
             return AggregatedNodeStatus.WARNING;
           }
 
