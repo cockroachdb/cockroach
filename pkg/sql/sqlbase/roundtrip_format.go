@@ -25,7 +25,8 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *tree.EvalContext) (tree.D
 	case types.ArrayFamily, types.CollatedStringFamily:
 		return parseAsTyp(evalCtx, t, s)
 	default:
-		return tree.ParseAndRequireString(t, s, evalCtx)
+		res, _, err := tree.ParseAndRequireString(t, s, evalCtx)
+		return res, err
 	}
 }
 

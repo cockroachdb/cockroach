@@ -159,7 +159,7 @@ func retrieveUserAndPassword(
 					// representation of a TimestampTZ which has the same underlying
 					// representation in the table as a Timestamp (UTC time).
 					timeCtx := tree.NewParseTimeContext(timeutil.Now())
-					validUntil, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+					validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 					if err != nil {
 						return errors.Wrap(err,
 							"error trying to parse timestamp while retrieving password valid until value")

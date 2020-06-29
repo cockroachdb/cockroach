@@ -124,7 +124,7 @@ func (td timeData) expected(mode pgdate.ParseMode) (time.Time, bool) {
 func (td timeData) testParseDate(t *testing.T, info string, mode pgdate.ParseMode) {
 	info = fmt.Sprintf("%s ParseDate", info)
 	exp, expErr := td.expected(mode)
-	dt, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+	dt, _, err := pgdate.ParseDate(time.Time{}, mode, td.s)
 	res, _ := dt.ToTime()
 
 	// HACK: This is a format that parses as a date and timestamp,
@@ -146,12 +146,12 @@ func (td timeData) testParseDate(t *testing.T, info string, mode pgdate.ParseMod
 func (td timeData) testParseTime(t *testing.T, info string, mode pgdate.ParseMode) {
 	info = fmt.Sprintf("%s ParseTime", info)
 	exp, expErr := td.expected(mode)
-	res, err := pgdate.ParseTime(time.Time{}, mode, td.s)
+	res, _, err := pgdate.ParseTime(time.Time{}, mode, td.s)
 
 	// Weird times like 24:00:00 or 23:59:60 aren't allowed,
 	// unless there's also a date.
 	if td.isRolloverTime {
-		_, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+		_, _, err := pgdate.ParseDate(time.Time{}, mode, td.s)
 		expErr = err != nil
 	}
 
@@ -166,7 +166,7 @@ func (td timeData) testParseTime(t *testing.T, info string, mode pgdate.ParseMod
 func (td timeData) testParseTimestamp(t *testing.T, info string, mode pgdate.ParseMode) {
 	info = fmt.Sprintf("%s ParseTimestamp", info)
 	exp, expErr := td.expected(mode)
-	res, err := pgdate.ParseTimestamp(time.Time{}, mode, td.s)
+	res, _, err := pgdate.ParseTimestamp(time.Time{}, mode, td.s)
 
 	// HACK: This is a format that parses as a date and timestamp,
 	// but is not a time.
@@ -181,6 +181,31 @@ func (td timeData) testParseTimestamp(t *testing.T, info string, mode pgdate.Par
 
 	check(t, info, exp, expErr, res, err)
 	td.crossCheck(t, info, "timestamptz", td.s, mode, exp, expErr)
+}
+
+func (td timeData) testParseTimestampWithoutTimezone(
+	t *testing.T, info string, mode pgdate.ParseMode,
+) {
+	info = fmt.Sprintf("%s ParseTimestampWithoutTimezone", info)
+	exp, expErr := td.expected(mode)
+	res, _, err := pgdate.ParseTimestampWithoutTimezone(time.Time{}, mode, td.s)
+
+	// HACK: This is a format that parses as a date and timestamp,
+	// but is not a time.
+	if td.s == "2018 123" {
+		exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
+		expErr = false
+	}
+
+	if td.isRolloverTime {
+		exp = exp.AddDate(0, 0, 1)
+	}
+	// Convert the expected time to the same timestamp but in UTC.
+	_, offset := exp.Zone()
+	exp = exp.Add(time.Duration(offset) * time.Second).UTC()
+
+	check(t, info, exp, expErr, res, err)
+	td.crossCheck(t, info, "timestamp", td.s, mode, exp, expErr)
 }
 
 var dateTestData = []timeData{
@@ -702,6 +727,7 @@ var timestampTestData = []timeData{
 // useful for developing the tests themselves and doesn't need
 // to be part of a regular build.
 func TestMain(m *testing.M) {
+	flag.Parse()
 	if dbString != "" {
 		if d, err := gosql.Open("postgres", dbString); err == nil {
 			if err := d.Ping(); err == nil {
@@ -743,6 +769,7 @@ func TestParse(t *testing.T) {
 					tstc.testParseDate(t, info, mode)
 					tstc.testParseTime(t, info, mode)
 					tstc.testParseTimestamp(t, info, mode)
+					tstc.testParseTimestampWithoutTimezone(t, info, mode)
 				}
 			}
 
@@ -800,7 +827,7 @@ func bench(b *testing.B, layout string, s string, locationName string) {
 
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					if _, err := pgdate.ParseTimestamp(time.Time{}, 0, benchS); err != nil {
+					if _, _, err := pgdate.ParseTimestamp(time.Time{}, 0, benchS); err != nil {
 						b.Fatal(err)
 					}
 					b.SetBytes(bytes)
@@ -919,5 +946,120 @@ func (td timeData) crossCheck(
 		default:
 			t.Errorf(`%s: unexpected error from "%s": %s`, info, s, err)
 		}
+	}
+}
+
+func TestDependsOnContext(t *testing.T) {
+	// Each test case contains the expected output for each of ParseDate,
+	// ParseTime, ParseTimeWithoutTimezone, ParseTimestamp,
+	// ParseTimestampWithoutTimezone.
+	//
+	// The output contains the result with "yes/no" appended to indicate context
+	// dependence. If an error is expected, "error" is used.
+	testCases := []struct {
+		s             string
+		date          string
+		time          string
+		timeNoTZ      string
+		timestamp     string
+		timestampNoTZ string
+	}{
+		{
+			s:             "04:05:06",
+			date:          "error",
+			time:          "0000-01-01 04:05:06 +0500 +0500 yes",
+			timeNoTZ:      "0000-01-01 04:05:06 +0000 UTC no",
+			timestamp:     "error",
+			timestampNoTZ: "error",
+		},
+		{
+			s:             "04:05:06.000001+00",
+			date:          "error",
+			time:          "0000-01-01 04:05:06.000001 +0000 +0000 no",
+			timeNoTZ:      "0000-01-01 04:05:06.000001 +0000 UTC no",
+			timestamp:     "error",
+			timestampNoTZ: "error",
+		},
+		{
+			s:             "04:05:06.000001-04",
+			date:          "error",
+			time:          "0000-01-01 04:05:06.000001 -0400 -0400 no",
+			timeNoTZ:      "0000-01-01 04:05:06.000001 +0000 UTC no",
+			timestamp:     "error",
+			timestampNoTZ: "error",
+		},
+		{
+			s:             "2017-03-03 01:00:00.00000",
+			date:          "2017-03-03 no",
+			time:          "0000-01-01 01:00:00 +0500 +0500 yes",
+			timeNoTZ:      "0000-01-01 01:00:00 +0000 UTC no",
+			timestamp:     "2017-03-03 01:00:00 +0500 foo yes",
+			timestampNoTZ: "2017-03-03 01:00:00 +0000 UTC no",
+		},
+		{
+			s:             "2017-03-03 01:00:00.00000-04",
+			date:          "2017-03-03 no",
+			time:          "0000-01-01 01:00:00 -0400 -0400 no",
+			timeNoTZ:      "0000-01-01 01:00:00 +0000 UTC no",
+			timestamp:     "2017-03-03 01:00:00 -0400 -040000 no",
+			timestampNoTZ: "2017-03-03 01:00:00 +0000 UTC no",
+		},
+		{
+			s:             "2017-03-03 01:00:00.00000 Europe/Berlin",
+			date:          "2017-03-03 no",
+			time:          "0000-01-01 01:00:00 +0100 +0100 no",
+			timeNoTZ:      "0000-01-01 01:00:00 +0000 UTC no",
+			timestamp:     "2017-03-03 01:00:00 +0100 CET no",
+			timestampNoTZ: "2017-03-03 01:00:00 +0000 UTC no",
+		},
+		{
+			s:             "now",
+			date:          "2001-02-03 yes",
+			time:          "2001-02-03 04:05:06.000001 +0500 foo yes",
+			timeNoTZ:      "2001-02-03 04:05:06.000001 +0000 UTC yes",
+			timestamp:     "2001-02-03 04:05:06.000001 +0500 foo yes",
+			timestampNoTZ: "2001-02-03 04:05:06.000001 +0000 UTC yes",
+		},
+		{
+			s:             "tomorrow",
+			date:          "2001-02-04 yes",
+			time:          "error",
+			timeNoTZ:      "error",
+			timestamp:     "2001-02-04 00:00:00 +0500 foo yes",
+			timestampNoTZ: "2001-02-04 00:00:00 +0000 UTC yes",
+		},
+	}
+
+	now := time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", 18000))
+	mode := pgdate.ParseModeYMD
+	for _, tc := range testCases {
+		t.Run(tc.s, func(t *testing.T) {
+			toStr := func(result interface{}, depOnCtx bool, err error) string {
+				if err != nil {
+					return "error"
+				}
+				if s := fmt.Sprint(result); depOnCtx {
+					return s + " yes"
+				} else {
+					return s + " no"
+				}
+			}
+			check := func(what string, expected string, actual string) {
+				t.Helper()
+				if expected != actual {
+					t.Errorf("%s: expected '%s', got '%s'", what, expected, actual)
+				}
+			}
+			check("ParseDate", tc.date, toStr(pgdate.ParseDate(now, mode, tc.s)))
+			check("ParseTime", tc.time, toStr(pgdate.ParseTime(now, mode, tc.s)))
+			check(
+				"ParseTimeWithoutTimezone", tc.timeNoTZ,
+				toStr(pgdate.ParseTimeWithoutTimezone(now, mode, tc.s)),
+			)
+			check("ParseTimestamp", tc.timestamp, toStr(pgdate.ParseTimestamp(now, mode, tc.s)))
+			check("ParseTimestampWithoutTimezone",
+				tc.timestampNoTZ, toStr(pgdate.ParseTimestampWithoutTimezone(now, mode, tc.s)),
+			)
+		})
 	}
 }

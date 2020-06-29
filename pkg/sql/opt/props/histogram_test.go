@@ -513,11 +513,11 @@ func TestFilterBucket(t *testing.T) {
 	})
 
 	t.Run("date", func(t *testing.T) {
-		upperBound, err := tree.ParseDDate(&evalCtx, "2019-08-01")
+		upperBound, _, err := tree.ParseDDate(&evalCtx, "2019-08-01")
 		if err != nil {
 			t.Fatal(err)
 		}
-		lowerBound, err := tree.ParseDDate(&evalCtx, "2019-07-01")
+		lowerBound, _, err := tree.ParseDDate(&evalCtx, "2019-07-01")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -526,7 +526,7 @@ func TestFilterBucket(t *testing.T) {
 			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
 		}}
 
-		ub1, err := tree.ParseDDate(&evalCtx, "2019-07-02")
+		ub1, _, err := tree.ParseDDate(&evalCtx, "2019-07-02")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -546,11 +546,11 @@ func TestFilterBucket(t *testing.T) {
 	})
 
 	t.Run("timestamp", func(t *testing.T) {
-		upperBound, err := tree.ParseDTimestamp(&evalCtx, "2019-08-01 12:00:00.000000", time.Microsecond)
+		upperBound, _, err := tree.ParseDTimestamp(&evalCtx, "2019-08-01 12:00:00.000000", time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
-		lowerBound, err := tree.ParseDTimestamp(&evalCtx, "2019-07-01 12:00:00.000000", time.Microsecond)
+		lowerBound, _, err := tree.ParseDTimestamp(&evalCtx, "2019-07-01 12:00:00.000000", time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -559,7 +559,7 @@ func TestFilterBucket(t *testing.T) {
 			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
 		}}
 
-		ub1, err := tree.ParseDTimestamp(&evalCtx, "2019-07-02 00:00:00.000000", time.Microsecond)
+		ub1, _, err := tree.ParseDTimestamp(&evalCtx, "2019-07-02 00:00:00.000000", time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}

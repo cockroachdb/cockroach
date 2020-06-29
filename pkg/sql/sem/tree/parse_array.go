@@ -71,10 +71,11 @@ func (p *parseState) gobbleString(isTerminatingChar func(ch byte) bool) (out str
 }
 
 type parseState struct {
-	s      string
-	ctx    ParseTimeContext
-	result *DArray
-	t      *types.T
+	s                string
+	ctx              ParseTimeContext
+	dependsOnContext bool
+	result           *DArray
+	t                *types.T
 }
 
 func (p *parseState) advance() {
@@ -136,9 +137,12 @@ func (p *parseState) parseElement() error {
 		}
 	}
 
-	d, err := ParseAndRequireString(p.t, next, p.ctx)
+	d, dependsOnContext, err := ParseAndRequireString(p.t, next, p.ctx)
 	if err != nil {
 		return err
+	}
+	if dependsOnContext {
+		p.dependsOnContext = true
 	}
 	return p.result.Append(d)
 }
@@ -146,17 +150,27 @@ func (p *parseState) parseElement() error {
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
 // cases such as `'{1,2,3}'::INT[]`. The input type t is the type of the
 // parameter of the array to parse.
-func ParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
-	ret, err := doParseDArrayFromString(ctx, s, t)
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func ParseDArrayFromString(
+	ctx ParseTimeContext, s string, t *types.T,
+) (_ *DArray, dependsOnContext bool, _ error) {
+	ret, dependsOnContext, err := doParseDArrayFromString(ctx, s, t)
 	if err != nil {
-		return ret, makeParseError(s, types.MakeArray(t), err)
+		return ret, false, makeParseError(s, types.MakeArray(t), err)
 	}
-	return ret, nil
+	return ret, dependsOnContext, nil
 }
 
 // doParseDArraryFromString does most of the work of ParseDArrayFromString,
 // except the error it returns isn't prettified as a parsing error.
-func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArray, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func doParseDArrayFromString(
+	ctx ParseTimeContext, s string, t *types.T,
+) (_ *DArray, dependsOnContext bool, _ error) {
 	parser := parseState{
 		s:      s,
 		ctx:    ctx,
@@ -166,35 +180,35 @@ func doParseDArrayFromString(ctx ParseTimeContext, s string, t *types.T) (*DArra
 
 	parser.eatWhitespace()
 	if parser.peek() != '{' {
-		return nil, enclosingError
+		return nil, false, enclosingError
 	}
 	parser.advance()
 	parser.eatWhitespace()
 	if parser.peek() != '}' {
 		if err := parser.parseElement(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		parser.eatWhitespace()
 		for parser.peek() == ',' {
 			parser.advance()
 			parser.eatWhitespace()
 			if err := parser.parseElement(); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 		}
 	}
 	parser.eatWhitespace()
 	if parser.eof() {
-		return nil, enclosingError
+		return nil, false, enclosingError
 	}
 	if parser.peek() != '}' {
-		return nil, malformedError
+		return nil, false, malformedError
 	}
 	parser.advance()
 	parser.eatWhitespace()
 	if !parser.eof() {
-		return nil, extraTextError
+		return nil, false, extraTextError
 	}
 
-	return parser.result, nil
+	return parser.result, parser.dependsOnContext, nil
 }

@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
 )
@@ -42,9 +40,6 @@ type SemaContext struct {
 
 	// IVarContainer is used to resolve the types of IndexedVars.
 	IVarContainer IndexedVarContainer
-
-	// Location references the *Location on the current Session.
-	Location **time.Location
 
 	// SearchPath indicates where to search for unqualified function
 	// names. The path elements must be normalized via Name.Normalize()
@@ -202,19 +197,6 @@ func (sc *SemaContext) isUnresolvedPlaceholder(expr Expr) bool {
 		return false
 	}
 	return sc.Placeholders.IsUnresolvedPlaceholder(expr)
-}
-
-// GetLocation returns the session timezone.
-func (sc *SemaContext) GetLocation() *time.Location {
-	if sc == nil || sc.Location == nil || *sc.Location == nil {
-		return time.UTC
-	}
-	return *sc.Location
-}
-
-// GetRelativeParseTime implements ParseTimeContext.
-func (sc *SemaContext) GetRelativeParseTime() time.Time {
-	return timeutil.Now().In(sc.GetLocation())
 }
 
 // GetTypeResolver returns the TypeReferenceResolver.

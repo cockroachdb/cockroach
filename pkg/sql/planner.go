@@ -282,7 +282,6 @@ func newInternalPlanner(
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
 	p.semaCtx = tree.MakeSemaContext()
-	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.TypeResolver = p
 

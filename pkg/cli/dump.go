@@ -388,7 +388,7 @@ WHERE
 		if enumMembersS != nil {
 			// The driver sends back arrays as bytes, so we have to parse the array
 			// if we want to access its elements.
-			arr, err := tree.ParseDArrayFromString(
+			arr, _, err := tree.ParseDArrayFromString(
 				tree.NewTestingEvalContext(serverCfg.Settings), string(enumMembersS), types.String)
 			if err != nil {
 				return nil, err
@@ -439,7 +439,7 @@ func getAsOf(conn *sqlConn, asOf string) (string, error) {
 		clusterTS = string(vals[0].([]byte))
 	} else {
 		// Validate the timestamp. This prevents SQL injection.
-		if _, err := tree.ParseDTimestamp(nil, asOf, time.Nanosecond); err != nil {
+		if _, _, err := tree.ParseDTimestamp(nil, asOf, time.Nanosecond); err != nil {
 			return "", err
 		}
 		clusterTS = asOf
@@ -601,7 +601,8 @@ func extractArray(val interface{}) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("unexpected value: %T", b)
 	}
-	arr, err := tree.ParseDArrayFromString(tree.NewTestingEvalContext(serverCfg.Settings), string(b), types.String)
+	evalCtx := tree.NewTestingEvalContext(serverCfg.Settings)
+	arr, _, err := tree.ParseDArrayFromString(evalCtx, string(b), types.String)
 	if err != nil {
 		return nil, err
 	}
@@ -932,7 +933,7 @@ func dumpTableData(
 						}
 					case types.ArrayFamily:
 						// We can only observe ARRAY types by their [] suffix.
-						d, err = tree.ParseDArrayFromString(
+						d, _, err = tree.ParseDArrayFromString(
 							tree.NewTestingEvalContext(serverCfg.Settings), string(t), ct.ArrayContents())
 						if err != nil {
 							return err
