@@ -139,11 +139,11 @@ func parseDatumPath(evalCtx *tree.EvalContext, str string, typs []types.Family) 
 		case types.DecimalFamily:
 			val, err = tree.ParseDDecimal(valStr)
 		case types.DateFamily:
-			val, err = tree.ParseDDate(evalCtx, valStr)
+			val, _, err = tree.ParseDDate(evalCtx, valStr)
 		case types.TimestampFamily:
-			val, err = tree.ParseDTimestamp(evalCtx, valStr, time.Microsecond)
+			val, _, err = tree.ParseDTimestamp(evalCtx, valStr, time.Microsecond)
 		case types.TimestampTZFamily:
-			val, err = tree.ParseDTimestampTZ(evalCtx, valStr, time.Microsecond)
+			val, _, err = tree.ParseDTimestampTZ(evalCtx, valStr, time.Microsecond)
 		case types.StringFamily:
 			val = tree.NewDString(valStr)
 		case types.OidFamily:

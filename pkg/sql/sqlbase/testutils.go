@@ -1159,7 +1159,15 @@ func RandCreateTableWithInterleave(
 		extraCols := make([]*tree.ColumnTableDef, nColumns)
 		// Add more columns to the table.
 		for i := range extraCols {
-			extraCol := randColumnTableDef(rng, tableIdx, i+prefixLength)
+			// Loop until we generate an indexable column type.
+			var extraCol *tree.ColumnTableDef
+			for {
+				extraCol = randColumnTableDef(rng, tableIdx, i+prefixLength)
+				extraColType := tree.MustBeStaticallyKnownType(extraCol.Type)
+				if ColumnTypeIsIndexable(extraColType) {
+					break
+				}
+			}
 			extraCols[i] = extraCol
 			columnDefs = append(columnDefs, extraCol)
 			defs = append(defs, extraCol)
@@ -1430,7 +1438,7 @@ func randIndexTableDefFromCols(
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
-		if MustBeValueEncoded(semType) {
+		if !ColumnTypeIsIndexable(semType) {
 			continue
 		}
 		indexElemList = append(indexElemList, tree.IndexElem{

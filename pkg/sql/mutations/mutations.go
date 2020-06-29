@@ -420,7 +420,7 @@ func foreignKeyMutator(
 				for refI, refCol := range availCols {
 					fkColType := tree.MustBeStaticallyKnownType(fkCol.Type)
 					refColType := tree.MustBeStaticallyKnownType(refCol.Type)
-					if fkColType.Equivalent(refColType) {
+					if fkColType.Equivalent(refColType) && sqlbase.ColumnTypeIsIndexable(refColType) {
 						usingCols = append(usingCols, refCol)
 						availCols = append(availCols[:refI], availCols[refI+1:]...)
 						found = true

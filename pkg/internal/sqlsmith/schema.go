@@ -160,7 +160,7 @@ FROM
 		// If enum members were provided, parse the result into a string array.
 		var members []string
 		if len(membersRaw) != 0 {
-			arr, err := tree.ParseDArrayFromString(&evalCtx, string(membersRaw), types.String)
+			arr, _, err := tree.ParseDArrayFromString(&evalCtx, string(membersRaw), types.String)
 			if err != nil {
 				return nil, err
 			}

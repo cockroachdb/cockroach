@@ -40,9 +40,12 @@ func TestExtractRelative(t *testing.T) {
 	now := time.Date(2018, 10, 17, 0, 0, 0, 0, time.UTC)
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			d, err := ParseDate(now, ParseModeYMD, tc.s)
+			d, depOnCtx, err := ParseDate(now, ParseModeYMD, tc.s)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !depOnCtx {
+				t.Fatalf("relative dates should depend on context")
 			}
 			ts, err := d.ToTime()
 			if err != nil {
@@ -86,7 +89,7 @@ func TestExtractSentinels(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			fe := fieldExtract{now: now}
+			fe := fieldExtract{currentTime: now}
 			err := fe.Extract(tc.s)
 			if tc.err {
 				if err == nil {

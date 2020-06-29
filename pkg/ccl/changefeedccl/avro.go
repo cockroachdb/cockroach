@@ -256,7 +256,8 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return d.(*tree.DTimeTZ).TimeTZ.String(), nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
+			d, _, err := tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
+			return d, err
 		}
 	case types.TimestampFamily:
 		avroType = avroLogicalType{
