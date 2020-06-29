@@ -1395,6 +1395,11 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	inputCols := join.Input.Relational().OutputCols
 	lookupCols := join.Cols.Difference(inputCols)
 
+	// Add the inverted column since it will be referenced in the inverted
+	// expression and needs a corresponding indexed var. It will be projected
+	// away below.
+	lookupCols.Add(join.InvertedCol)
+
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
 	allCols := joinOutputMap(input.outputCols, lookupColMap)
 
@@ -1435,11 +1440,8 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		return execPlan{}, err
 	}
 
-	// Apply a post-projection if Cols doesn't contain all input columns.
-	if !inputCols.SubsetOf(join.Cols) {
-		return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
-	}
-	return res, nil
+	// Apply a post-projection to remove the inverted column.
+	return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
