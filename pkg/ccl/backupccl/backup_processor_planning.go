@@ -60,6 +60,7 @@ func distBackup(
 		mvccFilter,
 		encryption,
 		startTime, endTime,
+		phs.User(),
 	)
 	if err != nil {
 		return err
@@ -132,6 +133,7 @@ func makeBackupDataProcessorSpecs(
 	mvccFilter roachpb.MVCCFilter,
 	encryption *roachpb.FileEncryptionOptions,
 	startTime, endTime hlc.Timestamp,
+	user string,
 ) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
 	var spanPartitions []sql.SpanPartition
 	var introducedSpanPartitions []sql.SpanPartition
@@ -162,6 +164,7 @@ func makeBackupDataProcessorSpecs(
 			PKIDs:            pkIDs,
 			BackupStartTime:  startTime,
 			BackupEndTime:    endTime,
+			User:             user,
 		}
 		nodeToSpec[partition.Node] = spec
 	}
@@ -182,6 +185,7 @@ func makeBackupDataProcessorSpecs(
 				PKIDs:            pkIDs,
 				BackupStartTime:  startTime,
 				BackupEndTime:    endTime,
+				User:             user,
 			}
 			nodeToSpec[partition.Node] = spec
 		}

@@ -86,7 +86,7 @@ func showBackupPlanHook(
 			return err
 		}
 
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str)
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str, p.User())
 		if err != nil {
 			return errors.Wrapf(err, "make storage")
 		}

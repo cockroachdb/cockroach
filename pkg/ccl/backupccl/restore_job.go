@@ -122,6 +122,7 @@ func makeImportSpans(
 	backups []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	lowWaterMark roachpb.Key,
+	user string,
 	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
 ) ([]importEntry, hlc.Timestamp, error) {
 	// Put the covering for the already-completed spans into the
@@ -190,7 +191,7 @@ func makeImportSpans(
 		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
 			storesByLocalityKV = make(map[string]roachpb.ExternalStorage)
 			for kv, uri := range backupLocalityInfo[i].URIsByOriginalLocalityKV {
-				conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
+				conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
 				if err != nil {
 					return nil, hlc.Timestamp{}, err
 				}
@@ -592,6 +593,7 @@ func restore(
 	spans []roachpb.Span,
 	job *jobs.Job,
 	encryption *roachpb.FileEncryptionOptions,
+	user string,
 ) (RowCount, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
@@ -628,7 +630,8 @@ func restore(
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityInfo, highWaterMark, errOnMissingRange)
+	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityInfo,
+		highWaterMark, user, errOnMissingRange)
 	if err != nil {
 		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
@@ -788,7 +791,8 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *roachpb.FileEncryptionOptions,
 ) ([]BackupManifest, BackupManifest, []sqlbase.Descriptor, error) {
-	backupManifests, err := loadBackupManifests(ctx, details.URIs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
+	backupManifests, err := loadBackupManifests(ctx, details.URIs,
+		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption)
 	if err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
@@ -1048,7 +1052,7 @@ func (r *restoreResumer) Resume(
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URIs[lastBackupIndex])
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}
@@ -1097,6 +1101,7 @@ func (r *restoreResumer) Resume(
 		spans,
 		r.job,
 		details.Encryption,
+		p.User(),
 	)
 	if err != nil {
 		return err

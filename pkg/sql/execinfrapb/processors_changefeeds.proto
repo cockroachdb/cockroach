@@ -35,6 +35,10 @@ message ChangeAggregatorSpec {
 
   // Feed is the specification for this changefeed.
   optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+
+  // User who initiated the changefeed. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 3 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -54,4 +58,8 @@ message ChangeFrontierSpec {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "JobID"
   ];
+
+  // User who initiated the changefeed. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 4 [(gogoproto.nullable) = false];
 }

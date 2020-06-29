@@ -26,7 +26,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -57,37 +60,57 @@ func init() {
 }
 
 func storeFromURI(
-	ctx context.Context, t *testing.T, uri string, clientFactory blobs.BlobClientFactory,
+	ctx context.Context,
+	t *testing.T,
+	uri string,
+	clientFactory blobs.BlobClientFactory,
+	user string,
+	ie *sql.InternalExecutor,
+	kvDB *kv.DB,
 ) cloud.ExternalStorage {
-	conf, err := ExternalStorageConfFromURI(uri)
+	conf, err := ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, clientFactory)
+	s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+		clientFactory, ie, kvDB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
-	testExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, skipSingleFile)
+func testExportStore(
+	t *testing.T,
+	storeURI string,
+	skipSingleFile bool,
+	user string,
+	ie *sql.InternalExecutor,
+	kvDB *kv.DB,
+) {
+	testExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, user,
+		skipSingleFile, ie, kvDB)
 }
 
 func testExportStoreWithExternalIOConfig(
-	t *testing.T, ioConf base.ExternalIODirConfig, storeURI string, skipSingleFile bool,
+	t *testing.T,
+	ioConf base.ExternalIODirConfig,
+	storeURI, user string,
+	skipSingleFile bool,
+	ie *sql.InternalExecutor,
+	kvDB *kv.DB,
 ) {
 	ctx := context.Background()
 
-	conf, err := ExternalStorageConfFromURI(storeURI)
+	conf, err := ExternalStorageConfFromURI(storeURI, user)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory)
+	s, err := MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +194,8 @@ func testExportStoreWithExternalIOConfig(
 		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory)
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
+			user, nil, nil)
 		defer singleFile.Close()
 
 		res, err := singleFile.ReadFile(ctx, "")
@@ -191,7 +215,8 @@ func testExportStoreWithExternalIOConfig(
 	})
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "B"
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory)
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
+			user, nil, nil)
 		defer singleFile.Close()
 
 		if err := singleFile.WriteFile(ctx, "", bytes.NewReader([]byte("bbb"))); err != nil {
@@ -222,7 +247,7 @@ func testExportStoreWithExternalIOConfig(
 		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, storeURI, clientFactory)
+		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, nil, nil)
 		defer singleFile.Close()
 
 		// Read a valid file.
@@ -248,7 +273,7 @@ func testExportStoreWithExternalIOConfig(
 	})
 }
 
-func testListFiles(t *testing.T, storeURI string) {
+func testListFiles(t *testing.T, storeURI, user string, ie *sql.InternalExecutor, kvDB *kv.DB) {
 	ctx := context.Background()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
 	dataNumberFiles := []string{"file/numbers/data1.csv", "file/numbers/data2.csv", "file/numbers/data3.csv"}
@@ -259,7 +284,7 @@ func testListFiles(t *testing.T, storeURI string) {
 
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory)
+		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
 		if err := file.WriteFile(ctx, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
@@ -386,7 +411,7 @@ func testListFiles(t *testing.T, storeURI string) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				s := storeFromURI(ctx, t, tc.URI, clientFactory)
+				s := storeFromURI(ctx, t, tc.URI, clientFactory, user, nil, nil)
 				filesList, err := s.ListFiles(ctx, tc.suffix)
 				if err != nil {
 					t.Fatal(err)
@@ -405,7 +430,7 @@ func testListFiles(t *testing.T, storeURI string) {
 	})
 
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory)
+		file := storeFromURI(ctx, t, storeURI, clientFactory, user, nil, nil)
 		if err := file.Delete(ctx, fileName); err != nil {
 			t.Fatal(err)
 		}
@@ -421,14 +446,15 @@ func TestPutGoogleCloud(t *testing.T) {
 		t.Skip("GS_BUCKET env var must be set")
 	}
 
+	user := security.RootUser
+
 	t.Run("empty", func(t *testing.T) {
-		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"), false)
+		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"),
+			false, user, nil, nil)
 	})
 	t.Run("default", func(t *testing.T) {
-		testExportStore(t,
-			fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam, authParamDefault),
-			false,
-		)
+		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam,
+			authParamDefault), false, user, nil, nil)
 	})
 	t.Run("specified", func(t *testing.T) {
 		credentials := os.Getenv("GS_JSONKEY")
@@ -436,17 +462,14 @@ func TestPutGoogleCloud(t *testing.T) {
 			t.Skip("GS_JSONKEY env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
-		testExportStore(t,
-			fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
-				bucket,
-				"backup-test-specified",
-				AuthParam,
-				authParamSpecified,
-				CredentialsParam,
-				url.QueryEscape(encoded),
-			),
-			false,
-		)
+		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
+			bucket,
+			"backup-test-specified",
+			AuthParam,
+			authParamSpecified,
+			CredentialsParam,
+			url.QueryEscape(encoded),
+		), false, user, nil, nil)
 		testListFiles(t,
 			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
 				bucket,
@@ -457,6 +480,7 @@ func TestPutGoogleCloud(t *testing.T) {
 				CredentialsParam,
 				url.QueryEscape(encoded),
 			),
+			security.RootUser, nil, nil,
 		)
 	})
 	t.Run("implicit", func(t *testing.T) {
@@ -464,10 +488,8 @@ func TestPutGoogleCloud(t *testing.T) {
 		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
 			t.Skip(err)
 		}
-		testExportStore(t,
-			fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit", AuthParam, authParamImplicit),
-			false,
-		)
+		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
+			AuthParam, authParamImplicit), false, user, nil, nil)
 	})
 }
 
@@ -501,12 +523,11 @@ func TestWorkloadStorage(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	user := security.RootUser
 
 	{
-		s, err := ExternalStorageFromURI(
-			ctx, bankURL().String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory,
-		)
+		s, err := ExternalStorageFromURI(ctx, bankURL().String(), base.ExternalIODirConfig{},
+			settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -523,10 +544,8 @@ func TestWorkloadStorage(t *testing.T) {
 	{
 		params := map[string]string{
 			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
-		s, err := ExternalStorageFromURI(
-			ctx, bankURL(params).String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory,
-		)
+		s, err := ExternalStorageFromURI(ctx, bankURL(params).String(), base.ExternalIODirConfig{},
+			settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 		require.NoError(t, err)
 		r, err := s.ReadFile(ctx, ``)
 		require.NoError(t, err)
@@ -538,34 +557,22 @@ func TestWorkloadStorage(t *testing.T) {
 		`), strings.TrimSpace(string(bytes)))
 	}
 
-	_, err := ExternalStorageFromURI(
-		ctx, `workload:///nope`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err := ExternalStorageFromURI(ctx, `workload:///nope`, base.ExternalIODirConfig{}, settings,
+		blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///fmt/bank/bank?version=`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = ExternalStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`,
+		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/nope/nope?version=`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/nope/nope?version=`,
+		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank`, base.ExternalIODirConfig{},
+		settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `parameter version is required`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank?version=`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=`,
+		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = ExternalStorageFromURI(
-		ctx, `workload:///csv/bank/bank?version=nope`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory,
-	)
+	_, err = ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`,
+		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
 	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }

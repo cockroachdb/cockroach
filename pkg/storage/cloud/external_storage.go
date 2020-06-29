@@ -70,4 +70,5 @@ type ExternalStorage interface {
 type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
 
 // ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
-type ExternalStorageFromURIFactory func(ctx context.Context, uri string) (ExternalStorage, error)
+type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
+	user string) (ExternalStorage, error)

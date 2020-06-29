@@ -189,21 +189,24 @@ type externalStorageBuilder struct {
 	conf              base.ExternalIODirConfig
 	settings          *cluster.Settings
 	blobClientFactory blobs.BlobClientFactory
-	engine            storage.Engine
 	initCalled        bool
+	ie                *sql.InternalExecutor
+	db                *kv.DB
 }
 
 func (e *externalStorageBuilder) init(
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
-	engine storage.Engine,
+	ie *sql.InternalExecutor,
+	db *kv.DB,
 ) {
 	e.conf = conf
 	e.settings = settings
 	e.blobClientFactory = blobClientFactory
-	e.engine = engine
 	e.initCalled = true
+	e.ie = ie
+	e.db = db
 }
 
 func (e *externalStorageBuilder) makeExternalStorage(
@@ -212,16 +215,17 @@ func (e *externalStorageBuilder) makeExternalStorage(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloudimpl.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory)
+	return cloudimpl.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
+		e.db)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
-	ctx context.Context, uri string,
+	ctx context.Context, uri string, user string,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloudimpl.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory)
+	return cloudimpl.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db)
 }
 
 // NewServer creates a Server from a server.Config.
@@ -446,8 +450,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorage, error) {
 		return externalStorageBuilder.makeExternalStorage(ctx, dest)
 	}
-	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri)
+	externalStorageFromURI := func(ctx context.Context, uri string,
+		user string) (cloud.ExternalStorage, error) {
+		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
 	}
 
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
@@ -1048,9 +1053,10 @@ func (s *Server) Start(ctx context.Context) error {
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
+	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
 	s.externalStorageBuilder.init(s.cfg.ExternalIODirConfig, s.st,
 		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
-			s.nodeDialer, s.st.ExternalIODir), nil)
+			s.nodeDialer, s.st.ExternalIODir), &fileTableInternalExecutor, s.db)
 
 	bootstrapVersion := s.cfg.Settings.Version.BinaryVersion()
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {

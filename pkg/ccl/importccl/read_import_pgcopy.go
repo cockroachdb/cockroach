@@ -66,8 +66,9 @@ func (d *pgCopyReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
+	user string,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, d.readFile, makeExternalStorage, user)
 }
 
 type postgreStreamCopy struct {
