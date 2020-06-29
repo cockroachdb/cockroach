@@ -16,6 +16,7 @@ import (
 	"go/token"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -567,7 +568,7 @@ func (expr *StrVal) ResolveAsType(
 		return ParseDByte(expr.s)
 
 	default:
-		val, err := ParseAndRequireString(typ, expr.s, semaCtx)
+		val, err := ParseAndRequireString(typ, expr.s, dummyParseTimeContext{})
 		if err != nil {
 			return nil, err
 		}
@@ -588,4 +589,19 @@ func (expr *StrVal) ResolveAsType(
 		c := NewTypedCastExpr(&expr.resString, typ)
 		return c.TypeCheck(ctx, semaCtx, typ)
 	}
+}
+
+// dummyParseTimeContext is a ParseTimeContext when used for parsing timestamps
+// during type-checking. Note that results that depend on the context are not
+// retained in the AST.
+type dummyParseTimeContext struct{}
+
+var _ ParseTimeContext = dummyParseTimeContext{}
+
+// We can return any time, but not the zero value - it causes an error when
+// parsing "yesterday".
+var dummyTime = time.Date(2000, time.January, 2, 3, 4, 5, 0, time.UTC)
+
+func (dummyParseTimeContext) GetRelativeParseTime() time.Time {
+	return dummyTime
 }
