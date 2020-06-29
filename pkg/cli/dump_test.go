@@ -732,7 +732,6 @@ CREATE TABLE account (
 	person_id INT8 NULL,
 	accountno INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX account_auto_index_fk_person_id_ref_person (person_id ASC),
 	FAMILY "primary" (id, person_id, accountno)
 );
 

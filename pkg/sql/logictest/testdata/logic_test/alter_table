@@ -1108,10 +1108,6 @@ INSERT INTO t2 VALUES (2, 2)
 statement ok
 INSERT INTO t2 VALUES (1, 1)
 
-# Error out trying to add a column with a foreign key on a non-empty table.
-statement error pq: foreign key requires an existing index on columns \("z"\)
-ALTER TABLE t2 ADD COLUMN z INT REFERENCES t1 (x)
-
 # Check that the foreign key was indeed added.
 query TT
 SHOW CREATE t2
@@ -1120,7 +1116,6 @@ t2  CREATE TABLE t2 (
     y INT8 NULL,
     x INT8 NULL,
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
-    INDEX t2_auto_index_fk_x_ref_t1 (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1162,14 +1157,6 @@ ROLLBACK
 statement ok
 INSERT INTO t2 VALUES (1, 2)
 
-statement error pq: foreign key requires an existing index on columns \("x"\)
-BEGIN;
-DROP INDEX t2@i;
-ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x)
-
-statement ok
-ROLLBACK
-
 # Test using ADD COL REFERENCES in a self referencing constraint.
 statement ok
 DROP TABLE t1 CASCADE;
@@ -1184,7 +1171,6 @@ t1  CREATE TABLE t1 (
     x2 INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (x ASC),
     CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES t1(x),
-    INDEX t1_auto_index_fk_x2_ref_t1 (x2 ASC),
     FAMILY "primary" (x, x2)
 )
 
@@ -1209,7 +1195,6 @@ t2  CREATE TABLE t2 (
     y INT8 NULL,
     x INT8 NULL,
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
-    INDEX t2_auto_index_fk_x_ref_t1 (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1232,7 +1217,6 @@ t2  CREATE TABLE t2 (
     y INT8 NULL,
     x INT8 NULL,
     CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
-    INDEX t2_auto_index_fk_x_ref_t1 (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
 

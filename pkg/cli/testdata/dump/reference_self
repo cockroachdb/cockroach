@@ -24,7 +24,6 @@ CREATE TABLE t (
 	id INT8 NOT NULL,
 	next_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
 	FAMILY "primary" (id, next_id)
 );
 
@@ -52,7 +51,6 @@ CREATE TABLE t (
 	id INT8 NOT NULL,
 	next_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
 	FAMILY "primary" (id, next_id)
 );
 
@@ -81,7 +79,6 @@ CREATE TABLE "table" (
 	id INT8 NOT NULL,
 	"'" INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t ("'" ASC),
 	FAMILY "primary" (id, "'")
 );
 
@@ -104,7 +101,6 @@ CREATE TABLE "table" (
 	id INT8 NOT NULL,
 	"'" INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t ("'" ASC),
 	FAMILY "primary" (id, "'")
 );
 
