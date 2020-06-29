@@ -30,6 +30,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── fd: (1)==(4), (4)==(1)
  ├── prune: (2,5,6)
+ ├── interesting orderings: (+4,+5)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
@@ -52,6 +53,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── fd: (1)==(4), (4)==(1)
  ├── prune: (5,6)
+ ├── interesting orderings: (+4,+5)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
@@ -80,6 +82,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── fd: (1)==(4), (4)==(1)
  ├── prune: (2,6)
+ ├── interesting orderings: (+4,+5)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
@@ -104,6 +107,7 @@ inner-join (lookup abcd)
  ├── lookup columns are key
  ├── fd: (1)==(4), (4)==(1)
  ├── prune: (2,5)
+ ├── interesting orderings: (+4,+5)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
  │    ├── key columns: [1] = [4]
@@ -127,6 +131,7 @@ inner-join (lookup abcd)
  ├── key columns: [7] = [7]
  ├── lookup columns are key
  ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2)
+ ├── interesting orderings: (+4,+5)
  ├── inner-join (lookup abcd@secondary)
  │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
  │    ├── key columns: [1 2] = [4 5]

@@ -1035,7 +1035,7 @@ project
       ├── cost: 10.41
       ├── key: (1)
       ├── fd: ()-->(2)
-      ├── prune: (1,2)
+      ├── prune: (1)
       └── interesting orderings: (+1) (+2,+1)
 
 opt expect-not=UnifyComparisonTypes format=show-all
@@ -1055,7 +1055,7 @@ project
       ├── cost: 1029.61
       ├── key: (1)
       ├── fd: (1)-->(2)
-      ├── prune: (1,2)
+      ├── prune: (1)
       └── interesting orderings: (+1) (+2,+1)
 
 opt expect=UnifyComparisonTypes
