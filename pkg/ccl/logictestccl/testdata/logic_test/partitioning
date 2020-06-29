@@ -379,6 +379,11 @@ CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (uuid_v4() || 'foo')
 )
 
+statement error PARTITION p1: 'now'::TIMESTAMP: partition values must be constant
+CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ('now')
+)
+
 statement ok
 CREATE TABLE ok1 (
   a INT, b INT, c INT,
