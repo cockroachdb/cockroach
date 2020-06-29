@@ -163,6 +163,15 @@ message RestoreSpanEntry {
   repeated roachpb.ImportRequest.File files = 2 [(gogoproto.nullable) = false];
 }
 
+message SplitAndScatterSpec {
+  message RestoreEntryChunk {
+    repeated RestoreSpanEntry entries = 1 [(gogoproto.nullable) = false];
+  }
+
+  repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.ImportRequest.TableRekey rekeys = 2 [(gogoproto.nullable) = false];
+}
+
 // FileCompression list of the compression codecs which are currently
 // supported for CSVWriter spec
 enum FileCompression {
