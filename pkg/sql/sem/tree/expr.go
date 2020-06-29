@@ -1394,13 +1394,6 @@ func (node *FuncExpr) IsWindowFunctionApplication() bool {
 	return node.WindowDef != nil
 }
 
-// IsImpure returns whether the function application is impure, meaning that it
-// potentially returns a different value when called in the same statement with
-// the same parameters.
-func (node *FuncExpr) IsImpure() bool {
-	return node.fnProps != nil && node.fnProps.Impure
-}
-
 // IsDistSQLBlocklist returns whether the function is not supported by DistSQL.
 func (node *FuncExpr) IsDistSQLBlocklist() bool {
 	return node.fnProps != nil && node.fnProps.DistsqlBlocklist
