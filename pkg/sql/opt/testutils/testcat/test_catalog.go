@@ -991,7 +991,7 @@ var _ cat.TableStatistic = &TableStat{}
 
 // CreatedAt is part of the cat.TableStatistic interface.
 func (ts *TableStat) CreatedAt() time.Time {
-	d, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
+	d, _, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
 	if err != nil {
 		panic(err)
 	}

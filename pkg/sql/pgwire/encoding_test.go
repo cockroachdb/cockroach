@@ -189,7 +189,7 @@ func TestEncodings(t *testing.T) {
 				// the case, manually do the conversion to array.
 				darr, isdarr := tc.Datum.(*tree.DArray)
 				if isdarr && d.ResolvedType().Family() == types.StringFamily {
-					d, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
+					d, _, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
 					if err != nil {
 						t.Fatal(err)
 					}

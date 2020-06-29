@@ -208,35 +208,35 @@ func mustParseDBool(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDDate(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDDate(nil, s)
+	d, _, err := tree.ParseDDate(nil, s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 func mustParseDTime(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTime(nil, s, time.Microsecond)
+	d, _, err := tree.ParseDTime(nil, s, time.Microsecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 func mustParseDTimeTZ(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimeTZ(nil, s, time.Microsecond)
+	d, _, err := tree.ParseDTimeTZ(nil, s, time.Microsecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 func mustParseDTimestamp(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestamp(nil, s, time.Millisecond)
+	d, _, err := tree.ParseDTimestamp(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 func mustParseDTimestampTZ(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestampTZ(nil, s, time.Millisecond)
+	d, _, err := tree.ParseDTimestampTZ(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func mustParseDJSON(t *testing.T, s string) tree.Datum {
 }
 func mustParseDStringArray(t *testing.T, s string) tree.Datum {
 	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	d, err := tree.ParseDArrayFromString(&evalContext, s, types.String)
+	d, _, err := tree.ParseDArrayFromString(&evalContext, s, types.String)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func mustParseDStringArray(t *testing.T, s string) tree.Datum {
 }
 func mustParseDIntArray(t *testing.T, s string) tree.Datum {
 	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Int)
+	d, _, err := tree.ParseDArrayFromString(&evalContext, s, types.Int)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func mustParseDIntArray(t *testing.T, s string) tree.Datum {
 }
 func mustParseDDecimalArray(t *testing.T, s string) tree.Datum {
 	evalContext := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	d, err := tree.ParseDArrayFromString(&evalContext, s, types.Decimal)
+	d, _, err := tree.ParseDArrayFromString(&evalContext, s, types.Decimal)
 	if err != nil {
 		t.Fatal(err)
 	}

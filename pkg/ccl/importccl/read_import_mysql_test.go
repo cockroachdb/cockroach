@@ -228,14 +228,14 @@ func TestMysqlValueToDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	date := func(s string) tree.Datum {
-		d, err := tree.ParseDDate(nil, s)
+		d, _, err := tree.ParseDDate(nil, s)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return d
 	}
 	ts := func(s string) tree.Datum {
-		d, err := tree.ParseDTimestamp(nil, s, time.Microsecond)
+		d, _, err := tree.ParseDTimestamp(nil, s, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}

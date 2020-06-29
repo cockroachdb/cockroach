@@ -790,9 +790,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	case types.DateFamily:
 		switch d := d.(type) {
 		case *DString:
-			return ParseDDate(ctx, string(*d))
+			res, _, err := ParseDDate(ctx, string(*d))
+			return res, err
 		case *DCollatedString:
-			return ParseDDate(ctx, d.Contents)
+			res, _, err := ParseDDate(ctx, d.Contents)
+			return res, err
 		case *DDate:
 			return d, nil
 		case *DInt:
@@ -809,9 +811,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		roundTo := TimeFamilyPrecisionToRoundDuration(t.Precision())
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTime(ctx, string(*d), roundTo)
+			res, _, err := ParseDTime(ctx, string(*d), roundTo)
+			return res, err
 		case *DCollatedString:
-			return ParseDTime(ctx, d.Contents, roundTo)
+			res, _, err := ParseDTime(ctx, d.Contents, roundTo)
+			return res, err
 		case *DTime:
 			return d.Round(roundTo), nil
 		case *DTimeTZ:
@@ -833,9 +837,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		roundTo := TimeFamilyPrecisionToRoundDuration(t.Precision())
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimeTZ(ctx, string(*d), roundTo)
+			res, _, err := ParseDTimeTZ(ctx, string(*d), roundTo)
+			return res, err
 		case *DCollatedString:
-			return ParseDTimeTZ(ctx, d.Contents, roundTo)
+			res, _, err := ParseDTimeTZ(ctx, d.Contents, roundTo)
+			return res, err
 		case *DTime:
 			return NewDTimeTZFromLocation(timeofday.TimeOfDay(*d).Round(roundTo), ctx.GetLocation()), nil
 		case *DTimeTZ:
@@ -849,9 +855,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestamp(ctx, string(*d), roundTo)
+			res, _, err := ParseDTimestamp(ctx, string(*d), roundTo)
+			return res, err
 		case *DCollatedString:
-			return ParseDTimestamp(ctx, d.Contents, roundTo)
+			res, _, err := ParseDTimestamp(ctx, d.Contents, roundTo)
+			return res, err
 		case *DDate:
 			t, err := d.ToTime()
 			if err != nil {
@@ -876,9 +884,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestampTZ(ctx, string(*d), roundTo)
+			res, _, err := ParseDTimestampTZ(ctx, string(*d), roundTo)
+			return res, err
 		case *DCollatedString:
-			return ParseDTimestampTZ(ctx, d.Contents, roundTo)
+			res, _, err := ParseDTimestampTZ(ctx, d.Contents, roundTo)
+			return res, err
 		case *DDate:
 			t, err := d.ToTime()
 			if err != nil {
@@ -956,7 +966,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	case types.ArrayFamily:
 		switch v := d.(type) {
 		case *DString:
-			return ParseDArrayFromString(ctx, string(*v), t.ArrayContents())
+			res, _, err := ParseDArrayFromString(ctx, string(*v), t.ArrayContents())
+			return res, err
 		case *DArray:
 			dcast := NewDArray(t.ArrayContents())
 			for _, e := range v.Array {

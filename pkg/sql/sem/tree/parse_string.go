@@ -18,44 +18,49 @@ import (
 
 // ParseAndRequireString parses s as type t for simple types. Arrays and collated
 // strings are not handled.
-func ParseAndRequireString(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func ParseAndRequireString(
+	t *types.T, s string, ctx ParseTimeContext,
+) (d Datum, dependsOnContext bool, err error) {
 	switch t.Family() {
 	case types.ArrayFamily:
-		return ParseDArrayFromString(ctx, s, t.ArrayContents())
+		d, dependsOnContext, err = ParseDArrayFromString(ctx, s, t.ArrayContents())
 	case types.BitFamily:
-		return ParseDBitArray(s)
+		d, err = ParseDBitArray(s)
 	case types.BoolFamily:
-		return ParseDBool(s)
+		d, err = ParseDBool(s)
 	case types.BytesFamily:
-		return ParseDByte(s)
+		d, err = ParseDByte(s)
 	case types.DateFamily:
-		return ParseDDate(ctx, s)
+		d, dependsOnContext, err = ParseDDate(ctx, s)
 	case types.DecimalFamily:
-		return ParseDDecimal(s)
+		d, err = ParseDDecimal(s)
 	case types.FloatFamily:
-		return ParseDFloat(s)
+		d, err = ParseDFloat(s)
 	case types.INetFamily:
-		return ParseDIPAddrFromINetString(s)
+		d, err = ParseDIPAddrFromINetString(s)
 	case types.IntFamily:
-		return ParseDInt(s)
+		d, err = ParseDInt(s)
 	case types.IntervalFamily:
-		itm, err := t.IntervalTypeMetadata()
-		if err != nil {
-			return nil, err
+		itm, typErr := t.IntervalTypeMetadata()
+		if typErr != nil {
+			return nil, false, typErr
 		}
-		return ParseDIntervalWithTypeMetadata(s, itm)
+		d, err = ParseDIntervalWithTypeMetadata(s, itm)
 	case types.GeographyFamily:
-		return ParseDGeography(s)
+		d, err = ParseDGeography(s)
 	case types.GeometryFamily:
-		return ParseDGeometry(s)
+		d, err = ParseDGeometry(s)
 	case types.JsonFamily:
-		return ParseDJSON(s)
+		d, err = ParseDJSON(s)
 	case types.OidFamily:
 		i, err := ParseDInt(s)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return NewDOid(*i), nil
+		d = NewDOid(*i)
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
 		//   'hello'::CHAR(2) -> 'he'
@@ -63,20 +68,21 @@ func ParseAndRequireString(t *types.T, s string, ctx ParseTimeContext) (Datum, e
 		if t.Width() > 0 {
 			s = util.TruncateString(s, int(t.Width()))
 		}
-		return NewDString(s), nil
+		return NewDString(s), false, nil
 	case types.TimeFamily:
-		return ParseDTime(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
+		d, dependsOnContext, err = ParseDTime(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.TimeTZFamily:
-		return ParseDTimeTZ(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
+		d, dependsOnContext, err = ParseDTimeTZ(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.TimestampFamily:
-		return ParseDTimestamp(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
+		d, dependsOnContext, err = ParseDTimestamp(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.TimestampTZFamily:
-		return ParseDTimestampTZ(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
+		d, dependsOnContext, err = ParseDTimestampTZ(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
 	case types.UuidFamily:
-		return ParseDUuidFromString(s)
+		d, err = ParseDUuidFromString(s)
 	case types.EnumFamily:
-		return MakeDEnumFromLogicalRepresentation(t, s)
+		d, err = MakeDEnumFromLogicalRepresentation(t, s)
 	default:
-		return nil, errors.AssertionFailedf("unknown type %s (%T)", t, t)
+		return nil, false, errors.AssertionFailedf("unknown type %s (%T)", t, t)
 	}
+	return d, dependsOnContext, err
 }

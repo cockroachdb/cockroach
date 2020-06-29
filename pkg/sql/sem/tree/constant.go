@@ -568,16 +568,11 @@ func (expr *StrVal) ResolveAsType(
 		return ParseDByte(expr.s)
 
 	default:
-		val, err := ParseAndRequireString(typ, expr.s, dummyParseTimeContext{})
+		val, dependsOnContext, err := ParseAndRequireString(typ, expr.s, dummyParseTimeContext{})
 		if err != nil {
 			return nil, err
 		}
-		// Check the volatility of the cast from String to this type.
-		volatility, ok := LookupCastVolatility(types.String, typ)
-		if !ok {
-			return nil, errors.AssertionFailedf("unexpected type %s", typ)
-		}
-		if volatility <= VolatilityImmutable {
+		if !dependsOnContext {
 			return val, nil
 		}
 		// Interpreting a string as one of these types may depend on the timezone or

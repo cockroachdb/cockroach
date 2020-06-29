@@ -70,12 +70,15 @@ func TestParseDate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.s, func(t *testing.T) {
-			d, err := ParseDate(time.Time{}, ParseModeYMD, tc.s)
+			d, depOnCtx, err := ParseDate(time.Time{}, ParseModeYMD, tc.s)
 			if tc.err != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.err) {
 					t.Fatalf("got %v, expected %v", err, tc.err)
 				}
 				return
+			}
+			if depOnCtx {
+				t.Fatalf("should not depend on context")
 			}
 			pg := d.PGEpochDays()
 			if pg != tc.pgdays {

@@ -277,31 +277,31 @@ func DecodeOidDatum(
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
-			d, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			d, err := tree.ParseDDate(ctx, string(b))
+			d, _, err := tree.ParseDDate(ctx, string(b))
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as date", b)
 			}
 			return d, nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(nil, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTime(nil, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as time", b)
 			}
 			return d, nil
 		case oid.T_timetz:
-			d, err := tree.ParseDTimeTZ(ctx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimeTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
 			}

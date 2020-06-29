@@ -49,7 +49,7 @@ func TestParseTs(t *testing.T) {
 	}
 
 	for i, test := range parseTsTests {
-		parsed, err := tree.ParseDTimestamp(nil, test.strTimestamp, time.Nanosecond)
+		parsed, _, err := tree.ParseDTimestamp(nil, test.strTimestamp, time.Nanosecond)
 		if err != nil {
 			t.Errorf("%d could not parse [%s]: %v", i, test.strTimestamp, err)
 			continue
@@ -65,7 +65,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 	ts := time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("UTC", 0))
 
 	parse := func(encoded []byte) time.Time {
-		decoded, err := tree.ParseDTimestamp(nil, string(encoded), time.Nanosecond)
+		decoded, _, err := tree.ParseDTimestamp(nil, string(encoded), time.Nanosecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,7 +93,7 @@ func TestWriteBinaryArray(t *testing.T) {
 	// writeBuffer is equivalent to writing to two different writeBuffers and
 	// then concatenating the result.
 	st := cluster.MakeTestingClusterSettings()
-	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", types.Int)
+	ary, _, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", types.Int)
 
 	defaultConv := makeTestingConvCfg()
 
@@ -321,7 +321,7 @@ func benchmarkWriteString(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
-	d, err := tree.ParseDDate(nil, "2010-09-28")
+	d, _, err := tree.ParseDDate(nil, "2010-09-28")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -329,7 +329,7 @@ func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteTimestamp(b *testing.B, format pgwirebase.FormatCode) {
-	ts, err := tree.ParseDTimestamp(nil, "2010-09-28 12:00:00.1", time.Microsecond)
+	ts, _, err := tree.ParseDTimestamp(nil, "2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func benchmarkWriteTimestamp(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
-	tstz, err := tree.ParseDTimestampTZ(nil, "2010-09-28 12:00:00.1", time.Microsecond)
+	tstz, _, err := tree.ParseDTimestampTZ(nil, "2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}
