@@ -373,7 +373,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 ) (map[string]ConstraintDetail, error) {
 	info := make(map[string]ConstraintDetail)
 
-	// Indexes provide PK, Unique and FK constraints.
+	// Indexes provide PK and Unique constraints.
 	indexes := desc.AllNonDropIndexes()
 	for _, index := range indexes {
 		if index.ID == desc.PrimaryIndex.ID {

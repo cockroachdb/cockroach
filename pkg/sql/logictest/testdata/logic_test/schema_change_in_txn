@@ -1543,7 +1543,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM y
 ----
-y  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
+y  fk_b_ref_x  FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
+y  primary     PRIMARY KEY  PRIMARY KEY (a ASC)              true
 
 # Also test dropping the index on the referenced side
 statement ok
