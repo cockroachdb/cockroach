@@ -262,7 +262,7 @@ func TestProject(t *testing.T) {
 			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4004)),
 			100000,
 			45 * math.Pi / 180.0,
-			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0.635304728143855, 0.6395336363116583}).SetSRID(4004)),
+			geo.MustNewGeographyFromGeom(geom.NewPointFlat(geom.XY, []float64{0.6353047281438549, 0.6395336363116583}).SetSRID(4004)),
 		},
 	}
 
