@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
@@ -55,4 +56,63 @@ func TestReplicaChecksumVersion(t *testing.T) {
 			require.NotNil(t, rc.Checksum)
 		}
 	})
+}
+
+func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	defer cancel()
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
+	id := uuid.FastMakeV4()
+	notify := make(chan struct{})
+	close(notify)
+
+	// Simple condition, the checksum is notified, but not computed.
+	tc.repl.mu.Lock()
+	tc.repl.mu.checksums[id] = ReplicaChecksum{notify: notify}
+	tc.repl.mu.Unlock()
+	rc, err := tc.repl.getChecksum(ctx, id)
+	if !testutils.IsError(err, "no checksum found") {
+		t.Fatal(err)
+	}
+	require.Nil(t, rc.Checksum)
+	// Next condition, the initial wait expires and checksum is not started,
+	// this will take 10ms.
+	id = uuid.FastMakeV4()
+	tc.repl.mu.Lock()
+	tc.repl.mu.checksums[id] = ReplicaChecksum{notify: make(chan struct{})}
+	tc.repl.mu.Unlock()
+	rc, err = tc.repl.getChecksum(ctx, id)
+	if !testutils.IsError(err, "checksum computation did not start") {
+		t.Fatal(err)
+	}
+	require.Nil(t, rc.Checksum)
+	// Next condition, initial wait expired and we found the started flag,
+	// so next step is for context deadline.
+	id = uuid.FastMakeV4()
+	tc.repl.mu.Lock()
+	tc.repl.mu.checksums[id] = ReplicaChecksum{notify: make(chan struct{}), started: true}
+	tc.repl.mu.Unlock()
+	rc, err = tc.repl.getChecksum(ctx, id)
+	if !testutils.IsError(err, "context deadline exceeded") {
+		t.Fatal(err)
+	}
+	require.Nil(t, rc.Checksum)
+
+	// Need to reset the context, since we deadlined it above.
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	// Next condition, node should quiesce.
+	tc.repl.store.Stopper().Quiesce(ctx)
+	rc, err = tc.repl.getChecksum(ctx, uuid.FastMakeV4())
+	if !testutils.IsError(err, "store quiescing") {
+		t.Fatal(err)
+	}
+	require.Nil(t, rc.Checksum)
 }

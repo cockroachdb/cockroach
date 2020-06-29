@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,15 +55,6 @@ import (
 // but we want to exclude these violations, focusing only on cases in which we
 // know old CRDB versions (<19.1 at time of writing) were not involved.
 var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
-
-const (
-	// collectChecksumTimeout controls how long we'll wait to collect a checksum
-	// for a CheckConsistency request. We need to bound the time that we wait
-	// because the checksum might never be computed for a replica if that replica
-	// is caught up via a snapshot and never performs the ComputeChecksum
-	// operation.
-	collectChecksumTimeout = 15 * time.Second
-)
 
 // ReplicaChecksum contains progress on a replica checksum computation.
 type ReplicaChecksum struct {
@@ -372,17 +363,11 @@ func (r *Replica) RunConsistencyCheck(
 			func(ctx context.Context) {
 				defer wg.Done()
 
-				var resp CollectChecksumResponse
-				err := contextutil.RunWithTimeout(ctx, "collect checksum", collectChecksumTimeout,
-					func(ctx context.Context) error {
-						var masterChecksum []byte
-						if len(results) > 0 {
-							masterChecksum = results[0].Response.Checksum
-						}
-						var err error
-						resp, err = r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
-						return err
-					})
+				var masterChecksum []byte
+				if len(results) > 0 {
+					masterChecksum = results[0].Response.Checksum
+				}
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
@@ -438,16 +423,21 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 		r.mu.checksums[id] = c
 	}
 	r.mu.Unlock()
-	// Wait
-	select {
-	case <-r.store.Stopper().ShouldStop():
-		return ReplicaChecksum{},
-			errors.Errorf("store has stopped while waiting for compute checksum (ID = %s)", id)
-	case <-ctx.Done():
-		return ReplicaChecksum{},
-			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
-	case <-c.notify:
+
+	// Wait for the checksum to compute or at least to start.
+	computed, err := r.checksumInitialWait(ctx, id, c.notify)
+	if err != nil {
+		return ReplicaChecksum{}, err
 	}
+	// If the checksum started, but has not completed commit
+	// to waiting the full deadline.
+	if !computed {
+		_, err = r.checksumWait(ctx, id, c.notify, nil)
+		if err != nil {
+			return ReplicaChecksum{}, err
+		}
+	}
+
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
@@ -461,6 +451,61 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 		return ReplicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
 	}
 	return c, nil
+}
+
+// Waits for the checksum to be available or for the checksum to start computing.
+// If we waited for 10% of the deadline and it has not started, then it's
+// unlikely to start because this replica is most likely being restored from
+// snapshots.
+func (r *Replica) checksumInitialWait(
+	ctx context.Context, id uuid.UUID, notify chan struct{},
+) (bool, error) {
+	d, dOk := ctx.Deadline()
+	// The max wait time should be 5 seconds, so we dont end up waiting for
+	// minutes for a huge range.
+	maxInitialWait := 5 * time.Second
+	var initialWait <-chan time.Time
+	if dOk {
+		duration := time.Duration(timeutil.Until(d).Nanoseconds() / 10)
+		if duration > maxInitialWait {
+			duration = maxInitialWait
+		}
+		initialWait = time.After(duration)
+	} else {
+		initialWait = time.After(maxInitialWait)
+	}
+	return r.checksumWait(ctx, id, notify, initialWait)
+}
+
+// checksumWait waits for the checksum to be available or for the computation
+// to start  within the initialWait time. The bool return flag is used to
+// indicate if a checksum is available (true) or if the initial wait has expired
+// and the caller should wait more, since the checksum computation started.
+func (r *Replica) checksumWait(
+	ctx context.Context, id uuid.UUID, notify chan struct{}, initialWait <-chan time.Time,
+) (bool, error) {
+	// Wait
+	select {
+	case <-r.store.Stopper().ShouldQuiesce():
+		return false,
+			errors.Errorf("store quiescing while waiting for compute checksum (ID = %s)", id)
+	case <-ctx.Done():
+		return false,
+			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+	case <-initialWait:
+		{
+			r.mu.Lock()
+			started := r.mu.checksums[id].started
+			r.mu.Unlock()
+			if !started {
+				return false,
+					errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
+			}
+			return false, nil
+		}
+	case <-notify:
+		return true, nil
+	}
 }
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
@@ -505,6 +550,7 @@ func (r *Replica) sha512(
 	snap storage.Reader,
 	snapshot *roachpb.RaftSnapshotData,
 	mode roachpb.ChecksumMode,
+	limiter *limit.LimiterBurstDisabled,
 ) (*replicaHash, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
@@ -519,6 +565,11 @@ func (r *Replica) sha512(
 	hasher := sha512.New()
 
 	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
+		// Rate Limit the scan through the range
+		if err := limiter.WaitN(ctx, len(unsafeKey.Key)+len(unsafeValue)); err != nil {
+			return err
+		}
+
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
 			kv := roachpb.RaftSnapshotData_KeyValue{
