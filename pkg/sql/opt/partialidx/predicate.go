@@ -18,10 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// FiltersImplyPredicate attempts to prove that a partial index predicate is
-// implied by the given filters. If implication is proven, the function returns
-// the remaining filters (see "Remaining Filters" below) and true. If
-// implication cannot be proven, nil and false are returned.
+// Implicator is used to 1) prove that query filters imply a partial index
+// predicate expression and 2) reduce the original filters into a simplified set
+// of filters that are equivalent to the original when applied on top of a
+// partial index scan. The FiltersImplyPredicate function handles both of these
+// tasks.
 //
 // I. Proving Implication
 //
@@ -117,12 +118,41 @@ import (
 // disjunction is encountered in the predicate (rule #2), and disjunctions in
 // the filters are never traversed when searching for exact matches to remove
 // (rule #3).
-func FiltersImplyPredicate(
-	filters memo.FiltersExpr,
-	pred opt.ScalarExpr,
-	f *norm.Factory,
-	md *opt.Metadata,
-	evalCtx *tree.EvalContext,
+type Implicator struct {
+	f       *norm.Factory
+	md      *opt.Metadata
+	evalCtx *tree.EvalContext
+
+	// constraintCache stores constraints built from atoms. Caching the
+	// constraints prevents building constraints for the same atom multiple
+	// times.
+	constraintCache map[opt.ScalarExpr]constraintResult
+}
+
+// constraintResult contains the result of building the constraint for an atom.
+// It includes both the constraint and the tight boolean.
+type constraintResult struct {
+	c     *constraint.Set
+	tight bool
+}
+
+// Init initializes an Implicator with the given factory, metadata, and eval
+// context.
+func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.EvalContext) {
+	im.f = f
+	im.md = md
+	im.evalCtx = evalCtx
+	im.constraintCache = make(map[opt.ScalarExpr]constraintResult)
+}
+
+// FiltersImplyPredicate attempts to prove that a partial index predicate is
+// implied by the given filters. If implication is proven, the function returns
+// the remaining filters (which when applied on top of a partial index scan,
+// make a plan equivalent to the original) and true. If implication cannot be
+// proven, nil and false are returned. See Implicator for more details on how
+// implication is proven and how the remaining filters are determined.
+func (im *Implicator) FiltersImplyPredicate(
+	filters memo.FiltersExpr, pred opt.ScalarExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
 	// Empty filters are equivalent to True, which only implies True.
 	if len(filters) == 0 && pred == memo.TrueSingleton {
@@ -155,12 +185,6 @@ func FiltersImplyPredicate(
 		}
 	}
 
-	im := implicator{
-		md:              md,
-		evalCtx:         evalCtx,
-		constraintCache: make(map[opt.ScalarExpr]constraintResult),
-	}
-
 	// Populate the constraint cache with any constraints already generated for
 	// FiltersItems that are atoms.
 	for _, f := range filters {
@@ -177,27 +201,11 @@ func FiltersImplyPredicate(
 	// removed from the remaining filters.
 	exactMatches := make(map[opt.Expr]struct{})
 	if im.scalarExprImpliesPredicate(&filters, pred, exactMatches) {
-		remainingFilters = simplifyFiltersExpr(filters, exactMatches, f)
+		remainingFilters = im.simplifyFiltersExpr(filters, exactMatches)
 		return remainingFilters, true
 	}
 
 	return nil, false
-}
-
-type implicator struct {
-	md      *opt.Metadata
-	evalCtx *tree.EvalContext
-
-	// constraintCache stores constraints built from atoms, reducing the need to
-	// build constraints for the same atom multiple times.
-	constraintCache map[opt.ScalarExpr]constraintResult
-}
-
-// constraintResult encapsulates the result of building a constraint for an
-// atom, containing both the constraint set and the tight boolean.
-type constraintResult struct {
-	c     *constraint.Set
-	tight bool
 }
 
 // scalarExprImpliesPredicate returns true if the expression e implies the
@@ -212,7 +220,7 @@ type constraintResult struct {
 //
 // Also note that exactMatches is optional, and nil can be passed when it is not
 // necessary to keep track of exactly matching expressions.
-func (im *implicator) scalarExprImpliesPredicate(
+func (im *Implicator) scalarExprImpliesPredicate(
 	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 
@@ -245,7 +253,7 @@ func (im *implicator) scalarExprImpliesPredicate(
 
 // filtersExprImpliesPredicate returns true if the FiltersExpr e implies the
 // ScalarExpr pred.
-func (im *implicator) filtersExprImpliesPredicate(
+func (im *Implicator) filtersExprImpliesPredicate(
 	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	switch pt := pred.(type) {
@@ -294,7 +302,7 @@ func (im *implicator) filtersExprImpliesPredicate(
 // pred. This function transforms e into an equivalent FiltersExpr that is
 // passed to filtersExprImpliesPredicate to prevent duplicating logic for both
 // types of conjunctions.
-func (im *implicator) andExprImpliesPredicate(
+func (im *Implicator) andExprImpliesPredicate(
 	e *memo.AndExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	f := make(memo.FiltersExpr, 2)
@@ -308,7 +316,7 @@ func (im *implicator) andExprImpliesPredicate(
 //
 // Note that in all recursive calls within this function, we do not pass
 // exactMatches. See FiltersImplyPredicate (rule #3) for more details.
-func (im *implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
+func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
 	switch pt := pred.(type) {
 	case *memo.AndExpr:
 		// OR-expr A => AND-expr B iff A => each of B's children.
@@ -347,7 +355,7 @@ func (im *implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr
 // atomImpliesPredicate returns true if the atom expression e implies the
 // ScalarExpr pred. The atom e cannot be an AndExpr, OrExpr, RangeExpr, or
 // FiltersExpr.
-func (im *implicator) atomImpliesPredicate(
+func (im *Implicator) atomImpliesPredicate(
 	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	switch pt := pred.(type) {
@@ -377,7 +385,7 @@ func (im *implicator) atomImpliesPredicate(
 // Constraints are used to prove containment because they make it easy to assess
 // if one expression contains another, handling many types of expressions
 // including comparison operators, IN operators, and tuples.
-func (im *implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
+func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 	// Build constraint sets for a and b, unless they have been cached.
 	aSet, aTight, ok := im.fetchConstraint(a)
 	if !ok {
@@ -426,7 +434,7 @@ func (im *implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 
 // cacheConstraint caches a constraint set and a tight boolean for the given
 // scalar expression.
-func (im *implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
+func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
 	im.constraintCache[e] = constraintResult{
 		c:     c,
 		tight: tight,
@@ -436,7 +444,7 @@ func (im *implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight
 // fetchConstraint returns a constraint set, tight boolean, and true the cache
 // contains and entry for the given scalar expression. It returns ok = false if
 // the scalar expression does not exist in the cache.
-func (im *implicator) fetchConstraint(e opt.ScalarExpr) (c *constraint.Set, tight bool, ok bool) {
+func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (c *constraint.Set, tight bool, ok bool) {
 	if res, ok := im.constraintCache[e]; ok {
 		return res.c, res.tight, true
 	}
@@ -449,8 +457,8 @@ func (im *implicator) fetchConstraint(e opt.ScalarExpr) (c *constraint.Set, tigh
 // If a FiltersItem at the root exists in exactMatches, the entire FiltersItem
 // is omitted from the returned FiltersItem. If not, the FiltersItem is
 // recursively searched. See simplifyScalarExpr for more details.
-func simplifyFiltersExpr(
-	e memo.FiltersExpr, exactMatches map[opt.Expr]struct{}, f *norm.Factory,
+func (im *Implicator) simplifyFiltersExpr(
+	e memo.FiltersExpr, exactMatches map[opt.Expr]struct{},
 ) memo.FiltersExpr {
 	filters := make(memo.FiltersExpr, 0, len(e))
 
@@ -463,12 +471,12 @@ func simplifyFiltersExpr(
 
 		// Otherwise, attempt to recursively simplify the FilterItem's Condition
 		// and append the result to the filters.
-		s := simplifyScalarExpr(e[i].Condition, exactMatches, f)
+		s := im.simplifyScalarExpr(e[i].Condition, exactMatches)
 
 		// If the scalar expression was reduced to True, don't add it to the
 		// filters.
 		if s != memo.TrueSingleton {
-			filters = append(filters, f.ConstructFiltersItem(s))
+			filters = append(filters, im.f.ConstructFiltersItem(s))
 		}
 	}
 
@@ -483,14 +491,14 @@ func simplifyFiltersExpr(
 //
 // Also note that we do not attempt to traverse OrExprs. See
 // FiltersImplyPredicate (rule #3) for more details.
-func simplifyScalarExpr(
-	e opt.ScalarExpr, exactMatches map[opt.Expr]struct{}, f *norm.Factory,
+func (im *Implicator) simplifyScalarExpr(
+	e opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) opt.ScalarExpr {
 
 	switch t := e.(type) {
 	case *memo.RangeExpr:
-		and := simplifyScalarExpr(t.And, exactMatches, f)
-		return f.ConstructRange(and)
+		and := im.simplifyScalarExpr(t.And, exactMatches)
+		return im.f.ConstructRange(and)
 
 	case *memo.AndExpr:
 		_, leftIsExactMatch := exactMatches[t.Left]
@@ -499,14 +507,14 @@ func simplifyScalarExpr(
 			return memo.TrueSingleton
 		}
 		if leftIsExactMatch {
-			return simplifyScalarExpr(t.Right, exactMatches, f)
+			return im.simplifyScalarExpr(t.Right, exactMatches)
 		}
 		if rightIsExactMatch {
-			return simplifyScalarExpr(t.Left, exactMatches, f)
+			return im.simplifyScalarExpr(t.Left, exactMatches)
 		}
-		left := simplifyScalarExpr(t.Left, exactMatches, f)
-		right := simplifyScalarExpr(t.Right, exactMatches, f)
-		return f.ConstructAnd(left, right)
+		left := im.simplifyScalarExpr(t.Left, exactMatches)
+		right := im.simplifyScalarExpr(t.Right, exactMatches)
+		return im.f.ConstructAnd(left, right)
 
 	default:
 		return e
