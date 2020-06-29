@@ -154,6 +154,15 @@ message BackupDataSpec {
   optional string user = 10 [(gogoproto.nullable) = false];
 }
 
+// RestoreDataEntry will be specified at planning time to the SplitAndScatter
+// processors, then those processors will stream these, encoded as bytes in rows
+// to the RestoreDataProcessors.
+// This field has a subset of the importEntry struct defined in restore.
+message RestoreSpanEntry {
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.ImportRequest.File files = 2 [(gogoproto.nullable) = false];
+}
+
 // FileCompression list of the compression codecs which are currently
 // supported for CSVWriter spec
 enum FileCompression {
