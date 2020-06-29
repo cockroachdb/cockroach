@@ -156,9 +156,19 @@ func FiltersImplyPredicate(
 	}
 
 	im := implicator{
-		md:      md,
-		evalCtx: evalCtx,
+		md:              md,
+		evalCtx:         evalCtx,
 		constraintCache: make(map[opt.ScalarExpr]constraintResult),
+	}
+
+	// Populate the constraint cache with any constraints already generated for
+	// FiltersItems that are atoms.
+	for _, f := range filters {
+		op := f.Condition.Op()
+		if f.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
+			// TODO: try not doing this if it already exists in the cache.
+			im.cacheConstraint(f.Condition, f.ScalarProps().Constraints, f.ScalarProps().TightConstraints)
+		}
 	}
 
 	// If no exact match was found, recursively check the sub-expressions of the
@@ -189,7 +199,6 @@ type constraintResult struct {
 	c     *constraint.Set
 	tight bool
 }
-
 
 // scalarExprImpliesPredicate returns true if the expression e implies the
 // ScalarExpr pred. If e or any of its encountered sub-expressions are exact
