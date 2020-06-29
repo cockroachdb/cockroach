@@ -454,6 +454,23 @@ type hashRouter struct {
 	alloc    sqlbase.DatumAlloc
 }
 
+// ControlledRouter allows the processor to edit the router for dynamic routing
+// of rows.
+type ControlledRouter interface {
+	// Direct provides a way for a processor to specify a mapping between spans
+	// and stream IDs to a router. This is used to dynamically direct spans in
+	// DistSQL flow. An example of this usage is the SplitAndScatter processor
+	// used in restore.
+	Direct(execinfrapb.OutputRouterSpec_RangeRouterSpec_Span)
+}
+
+// Direct implements the ControlledRouter interface.
+func (rr *rangeRouter) Direct(span execinfrapb.OutputRouterSpec_RangeRouterSpec_Span) {
+	rr.spans = append(rr.spans, span)
+	// TODO: Insert in the correct place rather than sort every time.
+	sort.Slice(rr.spans, func(i int, j int) bool { return bytes.Compare(rr.spans[i].End, rr.spans[j].End) == -1 })
+}
+
 // rangeRouter is a router that assumes the keyColumn'th column of incoming
 // rows is a roachpb.Key, and maps it to a stream based on a matching
 // span. That is, keys in the nth span will be mapped to the nth stream. The
