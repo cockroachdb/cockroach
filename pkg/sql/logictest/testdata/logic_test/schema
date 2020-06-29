@@ -1,4 +1,7 @@
 statement ok
+SET experimental_enable_user_defined_schemas = true
+
+statement ok
 CREATE SCHEMA IF NOT EXISTS public
 
 statement ok
@@ -10,10 +13,13 @@ CREATE SCHEMA IF NOT EXISTS pg_catalog
 statement ok
 CREATE SCHEMA IF NOT EXISTS information_schema
 
-statement error unimplemented: new schemas are unsupported
+statement ok
+CREATE SCHEMA derp
+
+statement ok
 CREATE SCHEMA IF NOT EXISTS derp
 
-statement error unimplemented: new schemas are unsupported
+statement error schema \"derp\" already exists
 CREATE SCHEMA derp
 
 statement error schema .* already exists

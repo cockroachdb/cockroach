@@ -423,6 +423,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_enable_user_defined_schemas`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_user_defined_schemas`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar(`experimental_enable_user_defined_schemas`, s)
+			if err != nil {
+				return err
+			}
+			m.SetUserDefinedSchemasEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.UserDefinedSchemasEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(userDefinedSchemasClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`enable_zigzag_join`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_zigzag_join`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

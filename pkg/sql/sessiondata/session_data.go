@@ -43,6 +43,9 @@ type SessionData struct {
 	DistSQLMode DistSQLExecMode
 	// EnumsEnabled indicates whether use of ENUM types are allowed.
 	EnumsEnabled bool
+	// UserDefinedSchemasEnabled indicates whether use of user defined schemas
+	// are allowed.
+	UserDefinedSchemasEnabled bool
 	// ExperimentalDistSQLPlanningMode indicates whether the experimental
 	// DistSQL planning driven by the optimizer is enabled.
 	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
