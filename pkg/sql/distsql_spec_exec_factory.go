@@ -124,7 +124,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
-	p.ResultColumns = sqlbase.ResultColumnsFromColDescs(tabDesc.GetID(), cols)
+	p.ResultColumns = sqlbase.ResultColumnsFromColDescPtrs(tabDesc.GetID(), cols)
 
 	if indexConstraint != nil && indexConstraint.IsContradiction() {
 		// TODO(yuzefovich): once ConstructValues is implemented, consider

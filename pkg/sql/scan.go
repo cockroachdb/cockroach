@@ -57,7 +57,7 @@ type scanNode struct {
 	// be gained (e.g. for tables with wide rows) by reading only certain
 	// columns from KV using point lookups instead of a single range lookup for
 	// the entire row.
-	cols []sqlbase.ColumnDescriptor
+	cols []*sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 
@@ -280,12 +280,12 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
 	desc *sqlbase.ImmutableTableDescriptor, colCfg scanColumnsConfig,
-) (cols []sqlbase.ColumnDescriptor, err error) {
+) (cols []*sqlbase.ColumnDescriptor, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.ReadableColumns))
+	cols = make([]*sqlbase.ColumnDescriptor, 0, len(desc.ReadableColumns))
 	for _, wc := range colCfg.wantedColumns {
 		var c *sqlbase.ColumnDescriptor
 		var err error
@@ -298,7 +298,7 @@ func initColsForScan(
 			return cols, err
 		}
 
-		cols = append(cols, *c)
+		cols = append(cols, c)
 	}
 
 	if colCfg.addUnwantedAsHidden {
@@ -312,9 +312,12 @@ func initColsForScan(
 				}
 			}
 			if !found {
+				// NB: we could amortize this allocation using a second slice,
+				// but addUnwantedAsHidden is only used by scrub, so doing so
+				// doesn't seem worth it.
 				col := *c
 				col.Hidden = true
-				cols = append(cols, col)
+				cols = append(cols, &col)
 			}
 		}
 	}
@@ -334,7 +337,7 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.desc.GetID(), n.cols)
+	n.resultColumns = sqlbase.ResultColumnsFromColDescPtrs(n.desc.GetID(), n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
