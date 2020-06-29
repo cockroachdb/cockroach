@@ -48,8 +48,8 @@ func fillInPlaceholders(
 			return nil, errors.AssertionFailedf("no type for placeholder %s", idx)
 		}
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-			ctx, e, typ, "EXECUTE parameter", /* context */
-			&semaCtx, true /* allowImpure */)
+			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, tree.VolatilityVolatile,
+		)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)
 		}

@@ -245,7 +245,7 @@ func alterColumnTypeGeneral(
 			toType,
 			"ALTER COLUMN TYPE USING EXPRESSION",
 			&params.p.semaCtx,
-			true, /* allowImpure */
+			tree.VolatilityVolatile,
 			tn,
 		)
 
