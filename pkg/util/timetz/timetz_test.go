@@ -30,10 +30,10 @@ func TestParseTimeTZToStringRoundTrip(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc, func(t *testing.T) {
-			exampleTime, err := ParseTimeTZ(timeutil.Now(), tc, time.Microsecond)
+			exampleTime, _, err := ParseTimeTZ(timeutil.Now(), tc, time.Microsecond)
 			assert.NoError(t, err)
 
-			exampleTimeFromString, err := ParseTimeTZ(timeutil.Now(), exampleTime.String(), time.Microsecond)
+			exampleTimeFromString, _, err := ParseTimeTZ(timeutil.Now(), exampleTime.String(), time.Microsecond)
 			assert.NoError(t, err)
 
 			assert.True(t, exampleTime.Equal(exampleTimeFromString))
@@ -63,19 +63,24 @@ func TestTimeTZString(t *testing.T) {
 }
 
 func TestTimeTZ(t *testing.T) {
-	maxTime, err := ParseTimeTZ(timeutil.Now(), "24:00:00-1559", time.Microsecond)
+	maxTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "24:00:00-1559", time.Microsecond)
 	require.NoError(t, err)
-	minTime, err := ParseTimeTZ(timeutil.Now(), "00:00:00+1559", time.Microsecond)
+	require.False(t, depOnCtx)
+	minTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "00:00:00+1559", time.Microsecond)
 	require.NoError(t, err)
+	require.False(t, depOnCtx)
 
 	// These are all the same UTC time equivalents.
-	utcTime, err := ParseTimeTZ(timeutil.Now(), "11:14:15+0", time.Microsecond)
+	utcTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "11:14:15+0", time.Microsecond)
 	require.NoError(t, err)
-	sydneyTime, err := ParseTimeTZ(timeutil.Now(), "21:14:15+10", time.Microsecond)
+	require.False(t, depOnCtx)
+	sydneyTime, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "21:14:15+10", time.Microsecond)
 	require.NoError(t, err)
+	require.False(t, depOnCtx)
 
-	sydneyTimeWithMillisecond, err := ParseTimeTZ(timeutil.Now(), "21:14:15.001+10", time.Microsecond)
+	sydneyTimeWithMillisecond, depOnCtx, err := ParseTimeTZ(timeutil.Now(), "21:14:15.001+10", time.Microsecond)
 	require.NoError(t, err)
+	require.False(t, depOnCtx)
 
 	// No daylight savings in Hawaii!
 	hawaiiZone, err := time.LoadLocation("Pacific/Honolulu")
@@ -183,40 +188,41 @@ func TestParseTimeTZ(t *testing.T) {
 		str       string
 		precision time.Duration
 
-		expected      TimeTZ
-		expectedError bool
+		expected         TimeTZ
+		expectedDepOnCtx bool
+		expectedError    bool
 	}{
-		{str: "01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0)},
-		{str: "01:24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 24, 0, 0), 0)},
-		{str: "01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0)},
-		{str: "1970-01-01 01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "0000-01-01  01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0)},
-		{str: "4:5:6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(4, 5, 6, 0), 0)},
-		{str: "24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "24:00:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "24:00:00.000", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "24:00:00.000000", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0)},
-		{str: "01:02:03+13", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -13*60*60)},
-		{str: "01:02:03-13", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 13*60*60)},
-		{str: "01:02:03+7", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -7*60*60)},
-		{str: "01:02:03-0730", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 7*60*60+30*60)},
-		{str: "24:00+3", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -3*60*60)},
-		{str: "24:00:00+4", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -4*60*60)},
-		{str: "24:00:00.000-5", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 5*60*60)},
-		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
-		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
-		{str: "1970-01-01T24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60)},
-		{str: "00:00-1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MaxTimeTZOffsetSecs)},
-		{str: "00:00+1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MinTimeTZOffsetSecs)},
-		{str: " 01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0)},
+		{str: "01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0), expectedDepOnCtx: true},
+		{str: "01:24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 24, 0, 0), 0), expectedDepOnCtx: true},
+		{str: "01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0), expectedDepOnCtx: true},
+		{str: "1970-01-01 01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "1970-01-01T01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "0000-01-01  01:02:03", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "01:02:03.000123", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 123), 0), expectedDepOnCtx: true},
+		{str: "4:5:6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(4, 5, 6, 0), 0), expectedDepOnCtx: true},
+		{str: "24:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0), expectedDepOnCtx: true},
+		{str: "24:00:00", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0), expectedDepOnCtx: true},
+		{str: "24:00:00.000", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0), expectedDepOnCtx: true},
+		{str: "24:00:00.000000", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 0), expectedDepOnCtx: true},
+		{str: "01:02:03+13", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -13*60*60), expectedDepOnCtx: false},
+		{str: "01:02:03-13", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 13*60*60), expectedDepOnCtx: false},
+		{str: "01:02:03+7", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), -7*60*60), expectedDepOnCtx: false},
+		{str: "01:02:03-0730", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 7*60*60+30*60), expectedDepOnCtx: false},
+		{str: "24:00+3", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -3*60*60), expectedDepOnCtx: false},
+		{str: "24:00:00+4", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -4*60*60), expectedDepOnCtx: false},
+		{str: "24:00:00.000-5", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, 5*60*60), expectedDepOnCtx: false},
+		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60), expectedDepOnCtx: false},
+		{str: "24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60), expectedDepOnCtx: false},
+		{str: "1970-01-01T24:00:00.000000+6", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.Time2400, -6*60*60), expectedDepOnCtx: false},
+		{str: "00:00-1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MaxTimeTZOffsetSecs), expectedDepOnCtx: false},
+		{str: "00:00+1559", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(0, 0, 0, 0), MinTimeTZOffsetSecs), expectedDepOnCtx: false},
+		{str: " 01:03:24", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 3, 24, 0), 0), expectedDepOnCtx: true},
 
-		{str: "01:02:03.000123", precision: time.Millisecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0)},
-		{str: "01:02:03.000123", precision: time.Millisecond / 10, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 100), 0)},
-		{str: "01:02:03.500123", precision: time.Second, expected: MakeTimeTZ(timeofday.New(1, 2, 4, 0), 0)},
+		{str: "01:02:03.000123", precision: time.Millisecond, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0), expectedDepOnCtx: true},
+		{str: "01:02:03.000123", precision: time.Millisecond / 10, expected: MakeTimeTZ(timeofday.New(1, 2, 3, 100), 0), expectedDepOnCtx: true},
+		{str: "01:02:03.500123", precision: time.Second, expected: MakeTimeTZ(timeofday.New(1, 2, 4, 0), 0), expectedDepOnCtx: true},
 
 		{str: "", expectedError: true},
 		{str: "foo", expectedError: true},
@@ -230,12 +236,13 @@ func TestParseTimeTZ(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d: %s", i, tc.str), func(t *testing.T) {
-			actual, err := ParseTimeTZ(timeutil.Now(), tc.str, tc.precision)
+			actual, depOnCtx, err := ParseTimeTZ(timeutil.Now(), tc.str, tc.precision)
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, actual)
+				assert.Equal(t, tc.expectedDepOnCtx, depOnCtx)
 			}
 		})
 	}

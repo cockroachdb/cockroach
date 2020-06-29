@@ -96,11 +96,17 @@ func Now() TimeTZ {
 
 // ParseTimeTZ parses and returns the TimeTZ represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the given
+// `now` value (either for the time or the local timezone).
+//
+func ParseTimeTZ(
+	now time.Time, s string, precision time.Duration,
+) (_ TimeTZ, dependsOnContext bool, _ error) {
 	// Special case as we have to use `ParseTimestamp` to get the date.
 	// We cannot use `ParseTime` as it does not have timezone awareness.
 	if !timeTZHasTimeComponent.MatchString(s) {
-		return TimeTZ{}, pgerror.Newf(
+		return TimeTZ{}, false, pgerror.Newf(
 			pgcode.InvalidTextRepresentation,
 			"could not parse %q as TimeTZ",
 			s,
@@ -115,10 +121,10 @@ func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, erro
 		s = timeutil.ReplaceLibPQTimePrefix(s)
 	}
 
-	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
-		return TimeTZ{}, pgerror.Newf(
+		return TimeTZ{}, false, pgerror.Newf(
 			pgcode.InvalidTextRepresentation,
 			"could not parse %q as TimeTZ",
 			s,
@@ -134,13 +140,13 @@ func ParseTimeTZ(now time.Time, s string, precision time.Duration) (TimeTZ, erro
 	_, offsetSecsUnconverted := t.Zone()
 	offsetSecs := int32(-offsetSecsUnconverted)
 	if offsetSecs > MaxTimeTZOffsetSecs || offsetSecs < MinTimeTZOffsetSecs {
-		return TimeTZ{}, pgerror.Newf(
+		return TimeTZ{}, false, pgerror.Newf(
 			pgcode.NumericValueOutOfRange,
 			"time zone displacement out of range: %q",
 			s,
 		)
 	}
-	return MakeTimeTZ(retTime, offsetSecs), nil
+	return MakeTimeTZ(retTime, offsetSecs), dependsOnContext, nil
 }
 
 // String implements the Stringer interface.

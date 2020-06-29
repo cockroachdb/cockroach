@@ -88,7 +88,8 @@ lo}`, types.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 				}
 			}
 			evalContext := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			actual, err := ParseDArrayFromString(evalContext, td.str, td.typ)
+			// TODO(radu): check the dependsOnContext result.
+			actual, _, err := ParseDArrayFromString(evalContext, td.str, td.typ)
 			if err != nil {
 				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
 			}
@@ -138,7 +139,7 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 		}
 		buf.WriteByte('}')
 
-		parsed, err := ParseDArrayFromString(
+		parsed, _, err := ParseDArrayFromString(
 			NewTestingEvalContext(cluster.MakeTestingClusterSettings()), buf.String(), types.String)
 		if err != nil {
 			t.Fatalf(`got error: "%s" for elem "%s"`, err, buf.String())
@@ -180,7 +181,7 @@ func TestParseArrayError(t *testing.T) {
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
-			_, err := ParseDArrayFromString(
+			_, _, err := ParseDArrayFromString(
 				NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
 			if err == nil {
 				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)

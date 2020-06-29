@@ -47,8 +47,15 @@ type fieldExtract struct {
 	// Tracks the fields that have been set, to distinguish 0 from unset.
 	has fieldSet
 	// Provides a time for evaluating relative dates as well as a
-	// timezone.
-	now  time.Time
+	// timezone. Should only be used via the now() and location() accessors.
+	currentTime time.Time
+	// currentTimeUsed is set if we consulted currentTime (indicating if the
+	// result depends on the context).
+	currentTimeUsed bool
+
+	// location is set to the timezone specified by the timestamp (if any).
+	location *time.Location
+
 	mode ParseMode
 	// The fields that must be present to succeed.
 	required fieldSet
@@ -66,6 +73,19 @@ type fieldExtract struct {
 	wanted fieldSet
 	// Tracks whether the current timestamp is of db2 format.
 	isDB2 bool
+}
+
+func (fe *fieldExtract) now() time.Time {
+	fe.currentTimeUsed = true
+	return fe.currentTime
+}
+
+func (fe *fieldExtract) getLocation() *time.Location {
+	if fe.location != nil {
+		return fe.location
+	}
+	fe.currentTimeUsed = true
+	return fe.currentTime.Location()
 }
 
 // Extract is the top-level function.  It attempts to break the input
@@ -137,7 +157,7 @@ func (fe *fieldExtract) Extract(s string) error {
 			}
 
 		case keywordNow:
-			if err := fe.matchedSentinel(fe.now, match); err != nil {
+			if err := fe.matchedSentinel(fe.now(), match); err != nil {
 				return err
 			}
 
@@ -203,7 +223,7 @@ func (fe *fieldExtract) Extract(s string) error {
 	if leftoverText != "" {
 		if loc, err := zoneCacheInstance.LoadLocation(leftoverText); err == nil {
 			// Save off the timezone for later resolution to an offset.
-			fe.now = fe.now.In(loc)
+			fe.location = loc
 
 			// Since we're using a named location, we must have a date
 			// in order to compute daylight-savings time.
@@ -651,7 +671,7 @@ func (fe *fieldExtract) MakeTimeWithoutTimezone() time.Time {
 		return stripTimezone(*fe.sentinel)
 	}
 
-	ret := fe.MakeTimestamp()
+	ret := fe.MakeTimestampWithoutTimezone()
 	hour, min, sec := ret.Clock()
 	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.UTC)
 }
@@ -710,7 +730,7 @@ func (fe *fieldExtract) MakeTimestampWithoutTimezone() time.Time {
 func (fe *fieldExtract) MakeLocation() *time.Location {
 	tzHour, ok := fe.Get(fieldTZHour)
 	if !ok {
-		return fe.now.Location()
+		return fe.getLocation()
 	}
 	tzMin, _ := fe.Get(fieldTZMinute)
 	tzSec, _ := fe.Get(fieldTZSecond)

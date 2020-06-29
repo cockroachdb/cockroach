@@ -2305,7 +2305,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTS := args[1].(*tree.DTimestamp)
-				tsTZ, err := truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				tsTZ, err := truncateTimestamp(fromTS.Time, timeSpan)
 				if err != nil {
 					return nil, err
 				}
@@ -2328,13 +2328,13 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				return truncateTimestamp(fromTSTZ.Time, timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: millennium, century, decade, year, quarter, month,\n" +
 				"week, day, hour, minute, second, millisecond, microsecond.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
@@ -2359,7 +2359,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTSTZ := args[1].(*tree.DTimestampTZ)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return truncateTimestamp(ctx, fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
+				return truncateTimestamp(fromTSTZ.Time.In(ctx.GetLocation()), timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -2412,7 +2412,7 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				tzArg := string(tree.MustBeDString(args[0]))
 				tsArg := string(tree.MustBeDString(args[1]))
-				ts, err := tree.ParseDTimestampTZ(ctx, tsArg, time.Microsecond)
+				ts, _, err := tree.ParseDTimestampTZ(ctx, tsArg, time.Microsecond)
 				if err != nil {
 					return nil, err
 				}
@@ -5709,9 +5709,7 @@ func decodeEscape(input string) ([]byte, error) {
 	return result, nil
 }
 
-func truncateTimestamp(
-	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
-) (*tree.DTimestampTZ, error) {
+func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ, error) {
 	year := fromTime.Year()
 	month := fromTime.Month()
 	day := fromTime.Day()

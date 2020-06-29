@@ -1767,10 +1767,13 @@ func relativeParseTime(ctx ParseTimeContext) time.Time {
 
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
-func ParseDDate(ctx ParseTimeContext, s string) (*DDate, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, err := pgdate.ParseDate(now, 0 /* mode */, s)
-	return NewDDate(t), err
+	t, dependsOnContext, err := pgdate.ParseDate(now, 0 /* mode */, s)
+	return NewDDate(t), dependsOnContext, err
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1891,23 +1894,28 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseDTime(ctx ParseTimeContext, s string, precision time.Duration) (*DTime, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func ParseDTime(
+	ctx ParseTimeContext, s string, precision time.Duration,
+) (_ *DTime, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 
 	// Special case on 24:00 and 24:00:00 as the parser
 	// does not handle these correctly.
 	if DTimeMaxTimeRegex.MatchString(s) {
-		return MakeDTime(timeofday.Time2400), nil
+		return MakeDTime(timeofday.Time2400), false, nil
 	}
 
 	s = timeutil.ReplaceLibPQTimePrefix(s)
 
-	t, err := pgdate.ParseTimeWithoutTimezone(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimeWithoutTimezone(now, pgdate.ParseModeYMD, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
-		return nil, makeParseError(s, types.Time, nil)
+		return nil, false, makeParseError(s, types.Time, nil)
 	}
-	return MakeDTime(timeofday.FromTime(t).Round(precision)), nil
+	return MakeDTime(timeofday.FromTime(t).Round(precision)), dependsOnContext, nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2026,13 +2034,18 @@ func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ 
 
 // ParseDTimeTZ parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
-func ParseDTimeTZ(ctx ParseTimeContext, s string, precision time.Duration) (*DTimeTZ, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func ParseDTimeTZ(
+	ctx ParseTimeContext, s string, precision time.Duration,
+) (_ *DTimeTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	d, err := timetz.ParseTimeTZ(now, s, precision)
+	d, dependsOnContext, err := timetz.ParseTimeTZ(now, s, precision)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return NewDTimeTZ(d), nil
+	return NewDTimeTZ(d), dependsOnContext, nil
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2146,13 +2159,19 @@ const (
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
-func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*DTimestamp, error) {
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
+func ParseDTimestamp(
+	ctx ParseTimeContext, s string, precision time.Duration,
+) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, err := pgdate.ParseTimestampWithoutTimezone(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, pgdate.ParseModeYMD, s)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return MakeDTimestamp(t, precision)
+	d, err := MakeDTimestamp(t, precision)
+	return d, dependsOnContext, err
 }
 
 // AsDTimestamp attempts to retrieve a DTimestamp from an Expr, returning a DTimestamp and
@@ -2372,16 +2391,20 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
 // the provided string in the provided location, or an error if parsing is unsuccessful.
+//
+// The dependsOnContext return value indicates if we had to consult the
+// ParseTimeContext (either for the time or the local timezone).
 func ParseDTimestampTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
-) (*DTimestampTZ, error) {
+) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
+	t, dependsOnContext, err := pgdate.ParseTimestamp(now, pgdate.ParseModeYMD, s)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// Always normalize time to the current location.
-	return MakeDTimestampTZ(t, precision)
+	d, err := MakeDTimestampTZ(t, precision)
+	return d, dependsOnContext, err
 }
 
 var dZeroTimestampTZ = &DTimestampTZ{}

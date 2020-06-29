@@ -422,41 +422,42 @@ func TestParseDDate(t *testing.T) {
 	)
 
 	testData := []struct {
-		str      string
-		expected string
+		str              string
+		expected         string
+		expectedDepOnCtx bool
 	}{
-		{"now", "2001-02-03"},
-		{"today", "2001-02-03"},
-		{"tomorrow", "2001-02-04"},
-		{"yesterday", "2001-02-02"},
-		{"2017-03-03 01:00:00.00000", "2017-03-03"},
-		{"2017-03-03 01:00:00.00000-05", "2017-03-03"},
-		{"2017-03-03 01:00:00.00000+05", "2017-03-03"},
-		{"2017-03-03 -01:00:00", "2017-03-03"},
-		{"2017-03-03 -01:00:00 America/New_York", "2017-03-03"},
-		{"2017-03-03 -1:0:0", "2017-03-03"},
-		{"2017-03-03 -01:00", "2017-03-03"},
-		{"2017-03-03 -01", "2017-03-03"},
-		{"2017-03-03 -010000", "2017-03-03"},
-		{"2017-03-03 -0100", "2017-03-03"},
-		{"2017-03-03 -1", "2017-03-03"},
-		{"2017-03-03", "2017-03-03"},
-		{"2017-3-3 -01:00:00", "2017-03-03"},
-		{"2017-3-3 -1:0:0", "2017-03-03"},
-		{"2017-3-3 -01:00", "2017-03-03"},
-		{"2017-3-3 -01", "2017-03-03"},
-		{"2017-3-3 -010000", "2017-03-03"},
-		{"2017-3-3 -0100", "2017-03-03"},
-		{"2017-3-3 -1", "2017-03-03"},
-		{"2017-3-3", "2017-03-03"},
+		{"now", "2001-02-03", true},
+		{"today", "2001-02-03", true},
+		{"tomorrow", "2001-02-04", true},
+		{"yesterday", "2001-02-02", true},
+		{"2017-03-03 01:00:00.00000", "2017-03-03", false},
+		{"2017-03-03 01:00:00.00000-05", "2017-03-03", false},
+		{"2017-03-03 01:00:00.00000+05", "2017-03-03", false},
+		{"2017-03-03 -01:00:00", "2017-03-03", false},
+		{"2017-03-03 -01:00:00 America/New_York", "2017-03-03", false},
+		{"2017-03-03 -1:0:0", "2017-03-03", false},
+		{"2017-03-03 -01:00", "2017-03-03", false},
+		{"2017-03-03 -01", "2017-03-03", false},
+		{"2017-03-03 -010000", "2017-03-03", false},
+		{"2017-03-03 -0100", "2017-03-03", false},
+		{"2017-03-03 -1", "2017-03-03", false},
+		{"2017-03-03", "2017-03-03", false},
+		{"2017-3-3 -01:00:00", "2017-03-03", false},
+		{"2017-3-3 -1:0:0", "2017-03-03", false},
+		{"2017-3-3 -01:00", "2017-03-03", false},
+		{"2017-3-3 -01", "2017-03-03", false},
+		{"2017-3-3 -010000", "2017-03-03", false},
+		{"2017-3-3 -0100", "2017-03-03", false},
+		{"2017-3-3 -1", "2017-03-03", false},
+		{"2017-3-3", "2017-03-03", false},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDDate(ctx, td.str)
+		actual, depOnCtx, err := tree.ParseDDate(ctx, td.str)
 		if err != nil {
 			t.Errorf("unexpected error while parsing DATE %s: %s", td.str, err)
 			continue
 		}
-		expected, err := tree.ParseDDate(nil, td.expected)
+		expected, _, err := tree.ParseDDate(nil, td.expected)
 		if err != nil {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
@@ -465,6 +466,9 @@ func TestParseDDate(t *testing.T) {
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
+		}
+		if td.expectedDepOnCtx != depOnCtx {
+			t.Errorf("DATE %s: expected depOnCtx=%v", td.str, td.expectedDepOnCtx)
 		}
 	}
 }
@@ -539,40 +543,44 @@ func TestParseDTime(t *testing.T) {
 	// Since ParseDTime shares most of the underlying parsing logic to
 	// ParseDTimestamp, we only test a subset of the timestamp test cases.
 	testData := []struct {
-		str       string
-		precision time.Duration
-		expected  timeofday.TimeOfDay
+		str              string
+		precision        time.Duration
+		expected         timeofday.TimeOfDay
+		expectedDepOnCtx bool
 	}{
-		{"now", time.Microsecond, timeofday.New(4, 5, 6, 1)},
-		{" 04:05:06 ", time.Microsecond, timeofday.New(4, 5, 6, 0)},
-		{"04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
-		{"04:05:06.000001", time.Microsecond, timeofday.New(4, 5, 6, 1)},
-		{"04:05:06.000001+00", time.Microsecond, timeofday.New(4, 5, 6, 1)},
-		{"04:05:06.000001-05", time.Microsecond, timeofday.New(4, 5, 6, 1)},
-		{"04:05:06.000001+05", time.Microsecond, timeofday.New(4, 5, 6, 1)},
-		{"04:05:06.000001", time.Second, timeofday.New(4, 5, 6, 0)},
-		{"04:05:06-07", time.Microsecond, timeofday.New(4, 5, 6, 0)},
-		{"0000-01-01 04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
-		{"2001-01-01 04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0)},
-		{"4:5:6", time.Microsecond, timeofday.New(4, 5, 6, 0)},
-		{"24:00:00", time.Microsecond, timeofday.Time2400},
-		{"24:00:00.000", time.Microsecond, timeofday.Time2400},
-		{"24:00:00.000000", time.Microsecond, timeofday.Time2400},
-		{"0000-01-01T24:00:00", time.Microsecond, timeofday.Time2400},
-		{"0000-01-01T24:00:00.0", time.Microsecond, timeofday.Time2400},
-		{"0000-01-01 24:00:00", time.Microsecond, timeofday.Time2400},
-		{"0000-01-01 24:00:00.0", time.Microsecond, timeofday.Time2400},
-		{" 24:00:00.0", time.Microsecond, timeofday.Time2400},
-		{" 24:00:00.0  ", time.Microsecond, timeofday.Time2400},
+		{"now", time.Microsecond, timeofday.New(4, 5, 6, 1), true},
+		{" 04:05:06 ", time.Microsecond, timeofday.New(4, 5, 6, 0), false},
+		{"04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0), false},
+		{"04:05:06.000001", time.Microsecond, timeofday.New(4, 5, 6, 1), false},
+		{"04:05:06.000001+00", time.Microsecond, timeofday.New(4, 5, 6, 1), false},
+		{"04:05:06.000001-05", time.Microsecond, timeofday.New(4, 5, 6, 1), false},
+		{"04:05:06.000001+05", time.Microsecond, timeofday.New(4, 5, 6, 1), false},
+		{"04:05:06.000001", time.Second, timeofday.New(4, 5, 6, 0), false},
+		{"04:05:06-07", time.Microsecond, timeofday.New(4, 5, 6, 0), false},
+		{"0000-01-01 04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0), false},
+		{"2001-01-01 04:05:06", time.Microsecond, timeofday.New(4, 5, 6, 0), false},
+		{"4:5:6", time.Microsecond, timeofday.New(4, 5, 6, 0), false},
+		{"24:00:00", time.Microsecond, timeofday.Time2400, false},
+		{"24:00:00.000", time.Microsecond, timeofday.Time2400, false},
+		{"24:00:00.000000", time.Microsecond, timeofday.Time2400, false},
+		{"0000-01-01T24:00:00", time.Microsecond, timeofday.Time2400, false},
+		{"0000-01-01T24:00:00.0", time.Microsecond, timeofday.Time2400, false},
+		{"0000-01-01 24:00:00", time.Microsecond, timeofday.Time2400, false},
+		{"0000-01-01 24:00:00.0", time.Microsecond, timeofday.Time2400, false},
+		{" 24:00:00.0", time.Microsecond, timeofday.Time2400, false},
+		{" 24:00:00.0  ", time.Microsecond, timeofday.Time2400, false},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTime(ctx, td.str, td.precision)
+		actual, depOnCtx, err := tree.ParseDTime(ctx, td.str, td.precision)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
 			continue
 		}
 		if *actual != tree.DTime(td.expected) {
 			t.Errorf("TIME %s: got %s, expected %s", td.str, actual, td.expected)
+		}
+		if td.expectedDepOnCtx != depOnCtx {
+			t.Errorf("TIME %s: expected depOnCtx=%v", td.str, td.expectedDepOnCtx)
 		}
 	}
 }
@@ -592,7 +600,7 @@ func TestParseDTimeError(t *testing.T) {
 		"24:00:00.000000+05",
 	}
 	for _, s := range testData {
-		actual, _ := tree.ParseDTime(nil, s, time.Microsecond)
+		actual, _, _ := tree.ParseDTime(nil, s, time.Microsecond)
 		if actual != nil {
 			t.Errorf("TIME %s: got %s, expected error", s, actual)
 		}
@@ -610,43 +618,47 @@ func TestParseDTimeTZ(t *testing.T) {
 	}
 
 	testData := []struct {
-		str       string
-		precision time.Duration
-		expected  timetz.TimeTZ
+		str              string
+		precision        time.Duration
+		expected         timetz.TimeTZ
+		expectedDepOnCtx bool
 	}{
-		{" 04:05:06 ", time.Microsecond, mk(4, 5, 6, 0, -18000)},
-		{"04:05:06", time.Microsecond, mk(4, 5, 6, 0, -18000)},
-		{"04:05:06.000001", time.Microsecond, mk(4, 5, 6, 1, -18000)},
-		{"04:05:06.000001", time.Second, mk(4, 5, 6, 0, -18000)},
-		{"04:05:06.000001+00", time.Microsecond, mk(4, 5, 6, 1, 0)},
-		{"04:05:06.000001-04", time.Microsecond, mk(4, 5, 6, 1, 4*3600)},
-		{"04:05:06.000001+04", time.Microsecond, mk(4, 5, 6, 1, -4*3600)},
-		{"04:05:06-07", time.Microsecond, mk(4, 5, 6, 0, 7*3600)},
-		{"0000-01-01 04:05:06", time.Microsecond, mk(4, 5, 6, 0, -18000)},
-		{"2001-01-01 04:05:06", time.Microsecond, mk(4, 5, 6, 0, -18000)},
-		{"4:5:6", time.Microsecond, mk(4, 5, 6, 0, -18000)},
-		{"24:00:00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{"24:00:00.000", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{"24:00:00.000000", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{"24:00:00.000000+00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, 0)},
-		{"24:00:00.000000-04", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, 4*3600)},
-		{"24:00:00.000000+04", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -4*3600)},
-		{"0000-01-01T24:00:00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{"0000-01-01T24:00:00.0", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{"0000-01-01 24:00:00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{"0000-01-01 24:00:00.0", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{" 24:00:00.0", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
-		{" 24:00:00.0  ", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000)},
+		{" 04:05:06 ", time.Microsecond, mk(4, 5, 6, 0, -18000), true},
+		{"04:05:06", time.Microsecond, mk(4, 5, 6, 0, -18000), true},
+		{"04:05:06.000001", time.Microsecond, mk(4, 5, 6, 1, -18000), true},
+		{"04:05:06.000001", time.Second, mk(4, 5, 6, 0, -18000), true},
+		{"04:05:06.000001+00", time.Microsecond, mk(4, 5, 6, 1, 0), false},
+		{"04:05:06.000001-04", time.Microsecond, mk(4, 5, 6, 1, 4*3600), false},
+		{"04:05:06.000001+04", time.Microsecond, mk(4, 5, 6, 1, -4*3600), false},
+		{"04:05:06-07", time.Microsecond, mk(4, 5, 6, 0, 7*3600), false},
+		{"0000-01-01 04:05:06", time.Microsecond, mk(4, 5, 6, 0, -18000), true},
+		{"2001-01-01 04:05:06", time.Microsecond, mk(4, 5, 6, 0, -18000), true},
+		{"4:5:6", time.Microsecond, mk(4, 5, 6, 0, -18000), true},
+		{"24:00:00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{"24:00:00.000", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{"24:00:00.000000", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{"24:00:00.000000+00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, 0), false},
+		{"24:00:00.000000-04", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, 4*3600), false},
+		{"24:00:00.000000+04", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -4*3600), false},
+		{"0000-01-01T24:00:00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{"0000-01-01T24:00:00.0", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{"0000-01-01 24:00:00", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{"0000-01-01 24:00:00.0", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{" 24:00:00.0", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
+		{" 24:00:00.0  ", time.Microsecond, timetz.MakeTimeTZ(timeofday.Time2400, -18000), true},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTimeTZ(ctx, td.str, td.precision)
+		actual, depOnCtx, err := tree.ParseDTimeTZ(ctx, td.str, td.precision)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
 			continue
 		}
 		exp := tree.DTimeTZ{TimeTZ: td.expected}
 		if *actual != exp {
-			t.Errorf("TIME %s: got %s, expected %s", td.str, actual, &exp)
+			t.Errorf("TIMETZ %s: got %s, expected %s", td.str, actual, &exp)
+		}
+		if td.expectedDepOnCtx != depOnCtx {
+			t.Errorf("TIME %s: expected depOnCtx=%v", td.str, td.expectedDepOnCtx)
 		}
 	}
 }
@@ -664,7 +676,7 @@ func TestParseDTimeTZError(t *testing.T) {
 		"now",
 	}
 	for _, s := range testData {
-		actual, _ := tree.ParseDTimeTZ(nil, s, time.Microsecond)
+		actual, _, _ := tree.ParseDTimeTZ(nil, s, time.Microsecond)
 		if actual != nil {
 			t.Errorf("TIMETZ %s: got %s, expected error", s, actual)
 		}
@@ -679,45 +691,49 @@ func TestParseDTimestamp(t *testing.T) {
 	)
 
 	testData := []struct {
-		str      string
-		expected time.Time
+		str              string
+		expected         time.Time
+		expectedDepOnCtx bool
 	}{
-		{"now", time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.UTC)},
-		{"today", time.Date(2001, time.February, 3, 0, 0, 0, 0, time.UTC)},
-		{"tomorrow", time.Date(2001, time.February, 4, 0, 0, 0, 0, time.UTC)},
-		{"yesterday", time.Date(2001, time.February, 2, 0, 0, 0, 0, time.UTC)},
-		{"2001-02-03", time.Date(2001, time.February, 3, 0, 0, 0, 0, time.UTC)},
-		{"2001-02-03 04:05:06", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)},
-		{"2001-02-03 04:05:06.000001", time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.UTC)},
-		{"2001-02-03 04:05:06.00001", time.Date(2001, time.February, 3, 4, 5, 6, 10000, time.UTC)},
-		{"2001-02-03 04:05:06.0001", time.Date(2001, time.February, 3, 4, 5, 6, 100000, time.UTC)},
-		{"2001-02-03 04:05:06.001", time.Date(2001, time.February, 3, 4, 5, 6, 1000000, time.UTC)},
-		{"2001-02-03 04:05:06.01", time.Date(2001, time.February, 3, 4, 5, 6, 10000000, time.UTC)},
-		{"2001-02-03 04:05:06.1", time.Date(2001, time.February, 3, 4, 5, 6, 100000000, time.UTC)},
-		{"2001-02-03 04:05:06.12", time.Date(2001, time.February, 3, 4, 5, 6, 120000000, time.UTC)},
-		{"2001-02-03 04:05:06.123", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.UTC)},
-		{"2001-02-03 04:05:06.1234", time.Date(2001, time.February, 3, 4, 5, 6, 123400000, time.UTC)},
-		{"2001-02-03 04:05:06.12345", time.Date(2001, time.February, 3, 4, 5, 6, 123450000, time.UTC)},
-		{"2001-02-03 04:05:06.123456", time.Date(2001, time.February, 3, 4, 5, 6, 123456000, time.UTC)},
-		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.UTC)},
-		{"2001-02-03 04:05:06-07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)},
-		{"2001-02-03 04:05:06-07:42", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)},
-		{"2001-02-03 04:05:06-07:30:09", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)},
-		{"2001-02-03 04:05:06+07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC)},
-		{"2001-02-03 04:0:06", time.Date(2001, time.February, 3, 4, 0, 6, 0, time.UTC)},
-		{"2001-02-03 0:0:06", time.Date(2001, time.February, 3, 0, 0, 6, 0, time.UTC)},
-		{"2001-02-03 4:05:0", time.Date(2001, time.February, 3, 4, 5, 0, 0, time.UTC)},
-		{"2001-02-03 4:05:0-07:0:00", time.Date(2001, time.February, 3, 4, 5, 0, 0, time.UTC)},
-		{"2001-02-03 4:0:6 +3:0:0", time.Date(2001, time.February, 3, 4, 0, 6, 0, time.UTC)},
+		{"now", time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.UTC), true},
+		{"today", time.Date(2001, time.February, 3, 0, 0, 0, 0, time.UTC), true},
+		{"tomorrow", time.Date(2001, time.February, 4, 0, 0, 0, 0, time.UTC), true},
+		{"yesterday", time.Date(2001, time.February, 2, 0, 0, 0, 0, time.UTC), true},
+		{"2001-02-03", time.Date(2001, time.February, 3, 0, 0, 0, 0, time.UTC), false},
+		{"2001-02-03 04:05:06", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC), false},
+		{"2001-02-03 04:05:06.000001", time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.UTC), false},
+		{"2001-02-03 04:05:06.00001", time.Date(2001, time.February, 3, 4, 5, 6, 10000, time.UTC), false},
+		{"2001-02-03 04:05:06.0001", time.Date(2001, time.February, 3, 4, 5, 6, 100000, time.UTC), false},
+		{"2001-02-03 04:05:06.001", time.Date(2001, time.February, 3, 4, 5, 6, 1000000, time.UTC), false},
+		{"2001-02-03 04:05:06.01", time.Date(2001, time.February, 3, 4, 5, 6, 10000000, time.UTC), false},
+		{"2001-02-03 04:05:06.1", time.Date(2001, time.February, 3, 4, 5, 6, 100000000, time.UTC), false},
+		{"2001-02-03 04:05:06.12", time.Date(2001, time.February, 3, 4, 5, 6, 120000000, time.UTC), false},
+		{"2001-02-03 04:05:06.123", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.UTC), false},
+		{"2001-02-03 04:05:06.1234", time.Date(2001, time.February, 3, 4, 5, 6, 123400000, time.UTC), false},
+		{"2001-02-03 04:05:06.12345", time.Date(2001, time.February, 3, 4, 5, 6, 123450000, time.UTC), false},
+		{"2001-02-03 04:05:06.123456", time.Date(2001, time.February, 3, 4, 5, 6, 123456000, time.UTC), false},
+		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.UTC), false},
+		{"2001-02-03 04:05:06-07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC), false},
+		{"2001-02-03 04:05:06-07:42", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC), false},
+		{"2001-02-03 04:05:06-07:30:09", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC), false},
+		{"2001-02-03 04:05:06+07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.UTC), false},
+		{"2001-02-03 04:0:06", time.Date(2001, time.February, 3, 4, 0, 6, 0, time.UTC), false},
+		{"2001-02-03 0:0:06", time.Date(2001, time.February, 3, 0, 0, 6, 0, time.UTC), false},
+		{"2001-02-03 4:05:0", time.Date(2001, time.February, 3, 4, 5, 0, 0, time.UTC), false},
+		{"2001-02-03 4:05:0-07:0:00", time.Date(2001, time.February, 3, 4, 5, 0, 0, time.UTC), false},
+		{"2001-02-03 4:0:6 +3:0:0", time.Date(2001, time.February, 3, 4, 0, 6, 0, time.UTC), false},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTimestamp(ctx, td.str, time.Nanosecond)
+		actual, depOnCtx, err := tree.ParseDTimestamp(ctx, td.str, time.Nanosecond)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIMESTAMP %s: %s", td.str, err)
 			continue
 		}
 		if !actual.Time.Equal(td.expected) {
 			t.Errorf("TIMESTAMP %s: got %s, expected %s", td.str, actual, td.expected)
+		}
+		if td.expectedDepOnCtx != depOnCtx {
+			t.Errorf("TIMESTAMP %s: expected depOnCtx=%v", td.str, td.expectedDepOnCtx)
 		}
 	}
 }
@@ -729,45 +745,49 @@ func TestParseDTimestampTZ(t *testing.T) {
 	ctx := testParseTimeContext(time.Date(2001, time.February, 3, 4, 5, 6, 1000, local))
 
 	testData := []struct {
-		str      string
-		expected time.Time
+		str              string
+		expected         time.Time
+		expectedDepOnCtx bool
 	}{
-		{"now", time.Date(2001, time.February, 3, 4, 5, 6, 1000, local)},
-		{"today", time.Date(2001, time.February, 3, 0, 0, 0, 0, local)},
-		{"tomorrow", time.Date(2001, time.February, 4, 0, 0, 0, 0, local)},
-		{"yesterday", time.Date(2001, time.February, 2, 0, 0, 0, 0, local)},
-		{"2001-02-03", time.Date(2001, time.February, 3, 0, 0, 0, 0, local)},
-		{"2001-02-03 04:05:06", time.Date(2001, time.February, 3, 4, 5, 6, 0, local)},
-		{"2001-02-03 04:05:06.000001", time.Date(2001, time.February, 3, 4, 5, 6, 1000, local)},
-		{"2001-02-03 04:05:06.00001", time.Date(2001, time.February, 3, 4, 5, 6, 10000, local)},
-		{"2001-02-03 04:05:06.0001", time.Date(2001, time.February, 3, 4, 5, 6, 100000, local)},
-		{"2001-02-03 04:05:06.001", time.Date(2001, time.February, 3, 4, 5, 6, 1000000, local)},
-		{"2001-02-03 04:05:06.01", time.Date(2001, time.February, 3, 4, 5, 6, 10000000, local)},
-		{"2001-02-03 04:05:06.1", time.Date(2001, time.February, 3, 4, 5, 6, 100000000, local)},
-		{"2001-02-03 04:05:06.12", time.Date(2001, time.February, 3, 4, 5, 6, 120000000, local)},
-		{"2001-02-03 04:05:06.123", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, local)},
-		{"2001-02-03 04:05:06.1234", time.Date(2001, time.February, 3, 4, 5, 6, 123400000, local)},
-		{"2001-02-03 04:05:06.12345", time.Date(2001, time.February, 3, 4, 5, 6, 123450000, local)},
-		{"2001-02-03 04:05:06.123456", time.Date(2001, time.February, 3, 4, 5, 6, 123456000, local)},
-		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.FixedZone("", -7*3600))},
-		{"2001-02-03 04:05:06-07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", -7*3600))},
-		{"2001-02-03 04:05:06-07:42", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", -7*3600-42*60))},
-		{"2001-02-03 04:05:06-07:30:09", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", -7*3600-30*60-9))},
-		{"2001-02-03 04:05:06+07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", 7*3600))},
-		{"2001-02-03 04:0:06", time.Date(2001, time.February, 3, 4, 0, 6, 0, local)},
-		{"2001-02-03 0:0:06", time.Date(2001, time.February, 3, 0, 0, 6, 0, local)},
-		{"2001-02-03 4:05:0", time.Date(2001, time.February, 3, 4, 5, 0, 0, local)},
-		{"2001-02-03 4:05:0-07:0:00", time.Date(2001, time.February, 3, 4, 5, 0, 0, time.FixedZone("", -7*3600))},
-		{"2001-02-03 4:0:6 +3:0:0", time.Date(2001, time.February, 3, 4, 0, 6, 0, time.FixedZone("", 3*3600))},
+		{"now", time.Date(2001, time.February, 3, 4, 5, 6, 1000, local), true},
+		{"today", time.Date(2001, time.February, 3, 0, 0, 0, 0, local), true},
+		{"tomorrow", time.Date(2001, time.February, 4, 0, 0, 0, 0, local), true},
+		{"yesterday", time.Date(2001, time.February, 2, 0, 0, 0, 0, local), true},
+		{"2001-02-03", time.Date(2001, time.February, 3, 0, 0, 0, 0, local), true},
+		{"2001-02-03 04:05:06", time.Date(2001, time.February, 3, 4, 5, 6, 0, local), true},
+		{"2001-02-03 04:05:06.000001", time.Date(2001, time.February, 3, 4, 5, 6, 1000, local), true},
+		{"2001-02-03 04:05:06.00001", time.Date(2001, time.February, 3, 4, 5, 6, 10000, local), true},
+		{"2001-02-03 04:05:06.0001", time.Date(2001, time.February, 3, 4, 5, 6, 100000, local), true},
+		{"2001-02-03 04:05:06.001", time.Date(2001, time.February, 3, 4, 5, 6, 1000000, local), true},
+		{"2001-02-03 04:05:06.01", time.Date(2001, time.February, 3, 4, 5, 6, 10000000, local), true},
+		{"2001-02-03 04:05:06.1", time.Date(2001, time.February, 3, 4, 5, 6, 100000000, local), true},
+		{"2001-02-03 04:05:06.12", time.Date(2001, time.February, 3, 4, 5, 6, 120000000, local), true},
+		{"2001-02-03 04:05:06.123", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, local), true},
+		{"2001-02-03 04:05:06.1234", time.Date(2001, time.February, 3, 4, 5, 6, 123400000, local), true},
+		{"2001-02-03 04:05:06.12345", time.Date(2001, time.February, 3, 4, 5, 6, 123450000, local), true},
+		{"2001-02-03 04:05:06.123456", time.Date(2001, time.February, 3, 4, 5, 6, 123456000, local), true},
+		{"2001-02-03 04:05:06.123-07", time.Date(2001, time.February, 3, 4, 5, 6, 123000000, time.FixedZone("", -7*3600)), false},
+		{"2001-02-03 04:05:06-07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", -7*3600)), false},
+		{"2001-02-03 04:05:06-07:42", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", -7*3600-42*60)), false},
+		{"2001-02-03 04:05:06-07:30:09", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", -7*3600-30*60-9)), false},
+		{"2001-02-03 04:05:06+07", time.Date(2001, time.February, 3, 4, 5, 6, 0, time.FixedZone("", 7*3600)), false},
+		{"2001-02-03 04:0:06", time.Date(2001, time.February, 3, 4, 0, 6, 0, local), true},
+		{"2001-02-03 0:0:06", time.Date(2001, time.February, 3, 0, 0, 6, 0, local), true},
+		{"2001-02-03 4:05:0", time.Date(2001, time.February, 3, 4, 5, 0, 0, local), true},
+		{"2001-02-03 4:05:0-07:0:00", time.Date(2001, time.February, 3, 4, 5, 0, 0, time.FixedZone("", -7*3600)), false},
+		{"2001-02-03 4:0:6 +3:0:0", time.Date(2001, time.February, 3, 4, 0, 6, 0, time.FixedZone("", 3*3600)), false},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTimestampTZ(ctx, td.str, time.Nanosecond)
+		actual, depOnCtx, err := tree.ParseDTimestampTZ(ctx, td.str, time.Nanosecond)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIMESTAMP %s: %s", td.str, err)
 			continue
 		}
 		if !actual.Time.Equal(td.expected) {
 			t.Errorf("TIMESTAMPTZ %s: got %s, expected %s", td.str, actual, td.expected)
+		}
+		if td.expectedDepOnCtx != depOnCtx {
+			t.Errorf("TIMESTAMPTZ %s: expected depOnCtx=%v", td.str, td.expectedDepOnCtx)
 		}
 	}
 }
@@ -798,16 +818,20 @@ func TestDTimeTZ(t *testing.T) {
 		},
 	}
 
-	maxTime, err := tree.ParseDTimeTZ(ctx, "24:00:00-1559", time.Microsecond)
+	maxTime, depOnCtx, err := tree.ParseDTimeTZ(ctx, "24:00:00-1559", time.Microsecond)
 	require.NoError(t, err)
-	minTime, err := tree.ParseDTimeTZ(ctx, "00:00:00+1559", time.Microsecond)
+	require.False(t, depOnCtx)
+	minTime, depOnCtx, err := tree.ParseDTimeTZ(ctx, "00:00:00+1559", time.Microsecond)
 	require.NoError(t, err)
+	require.False(t, depOnCtx)
 
 	// These are all the same UTC time equivalents.
-	utcTime, err := tree.ParseDTimeTZ(ctx, "11:14:15+0", time.Microsecond)
+	utcTime, depOnCtx, err := tree.ParseDTimeTZ(ctx, "11:14:15+0", time.Microsecond)
 	require.NoError(t, err)
-	sydneyTime, err := tree.ParseDTimeTZ(ctx, "21:14:15+10", time.Microsecond)
+	require.False(t, depOnCtx)
+	sydneyTime, depOnCtx, err := tree.ParseDTimeTZ(ctx, "21:14:15+10", time.Microsecond)
 	require.NoError(t, err)
+	require.False(t, depOnCtx)
 
 	// No daylight savings in Hawaii!
 	hawaiiZone, err := time.LoadLocation("Pacific/Honolulu")

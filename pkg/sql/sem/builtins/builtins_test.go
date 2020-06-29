@@ -351,7 +351,7 @@ func TestExtractTimeSpanFromTimeTZ(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s_%s", tc.timeSpan, tc.timeTZString), func(t *testing.T) {
-			timeTZ, err := tree.ParseDTimeTZ(nil, tc.timeTZString, time.Microsecond)
+			timeTZ, _, err := tree.ParseDTimeTZ(nil, tc.timeTZString, time.Microsecond)
 			assert.NoError(t, err)
 
 			datum, err := extractTimeSpanFromTimeTZ(timeTZ, tc.timeSpan)
@@ -467,7 +467,7 @@ func TestTruncateTimestamp(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.timeSpan, func(t *testing.T) {
-			result, err := truncateTimestamp(nil, tc.fromTime, tc.timeSpan)
+			result, err := truncateTimestamp(tc.fromTime, tc.timeSpan)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})

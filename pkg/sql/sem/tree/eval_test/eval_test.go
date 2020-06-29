@@ -109,7 +109,7 @@ func TestEval(t *testing.T) {
 						t.Fatal(err)
 					}
 					// Now parse the new string as the expected type.
-					datum, err := tree.ParseAndRequireString(expr.ResolvedType(), s, evalCtx)
+					datum, _, err := tree.ParseAndRequireString(expr.ResolvedType(), s, evalCtx)
 					if err != nil {
 						t.Errorf("%s: %s", err, s)
 						return err.Error()
@@ -118,7 +118,7 @@ func TestEval(t *testing.T) {
 				}
 				return tree.NewDTuple(typedExpr.ResolvedType(), datums...).String()
 			}
-			datum, err := tree.ParseAndRequireString(typedExpr.ResolvedType(), res.String, evalCtx)
+			datum, _, err := tree.ParseAndRequireString(typedExpr.ResolvedType(), res.String, evalCtx)
 			if err != nil {
 				t.Errorf("%s: %s", err, res.String)
 				return err.Error()

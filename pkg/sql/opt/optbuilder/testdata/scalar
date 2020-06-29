@@ -371,8 +371,7 @@ cast: INT8 [type=int]
 build-scalar
 '2010-05-12'::timestamp
 ----
-cast: TIMESTAMP [type=timestamp]
- └── const: '2010-05-12' [type=string]
+const: '2010-05-12 00:00:00+00:00' [type=timestamp]
 
 build-scalar
 'now'::timestamp
@@ -384,8 +383,7 @@ build-scalar
 '2010-05-12'::timestamp - 'now'
 ----
 minus [type=interval]
- ├── cast: TIMESTAMP [type=timestamp]
- │    └── const: '2010-05-12' [type=string]
+ ├── const: '2010-05-12 00:00:00+00:00' [type=timestamp]
  └── cast: TIMESTAMP [type=timestamp]
       └── const: 'now' [type=string]
 
