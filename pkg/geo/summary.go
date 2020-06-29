@@ -27,12 +27,12 @@ import (
 // B: has a cached bounding box
 // G: is geography
 // S: has spatial reference system
-func Summary(t geom.T, shape geopb.Shape, isGeography bool) (string, error) {
+func Summary(t geom.T, shape geopb.ShapeType, isGeography bool) (string, error) {
 	return summary(t, shape, isGeography, 0)
 }
 
 func summary(
-	t geom.T, shape geopb.Shape, isGeography bool, offset int,
+	t geom.T, shape geopb.ShapeType, isGeography bool, offset int,
 ) (summaryLine string, err error) {
 	f, err := summaryFlag(t, isGeography)
 	if err != nil {
@@ -69,7 +69,7 @@ func summary(
 
 		for i := 0; i < numPoints; i++ {
 			point := t.Point(i)
-			line, err := summary(point, geopb.Shape_Point, isGeography, offset+2)
+			line, err := summary(point, geopb.ShapeType_Point, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -88,7 +88,7 @@ func summary(
 
 		for i := 0; i < numLineStrings; i++ {
 			lineString := t.LineString(i)
-			line, err := summary(lineString, geopb.Shape_LineString, isGeography, offset+2)
+			line, err := summary(lineString, geopb.ShapeType_LineString, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -107,7 +107,7 @@ func summary(
 
 		for i := 0; i < numPolygons; i++ {
 			polygon := t.Polygon(i)
-			line, err := summary(polygon, geopb.Shape_Polygon, isGeography, offset+2)
+			line, err := summary(polygon, geopb.ShapeType_Polygon, isGeography, offset+2)
 			if err != nil {
 				return "", err
 			}
@@ -126,7 +126,7 @@ func summary(
 
 		for i := 0; i < numGeoms; i++ {
 			g := t.Geom(i)
-			gShape, err := shapeFromGeom(g)
+			gShape, err := shapeTypeFromGeomT(g)
 			if err != nil {
 				return "", err
 			}

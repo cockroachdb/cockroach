@@ -46,7 +46,7 @@ func Centroid(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (*geo.G
 	switch geomRepr.(type) {
 	case *geom.Point, *geom.LineString, *geom.Polygon, *geom.MultiPoint, *geom.MultiLineString, *geom.MultiPolygon:
 	default:
-		return nil, errors.Newf("unhandled geography type %s", g.Shape().String())
+		return nil, errors.Newf("unhandled geography type %s", g.ShapeType().String())
 	}
 
 	regions, err := geo.S2RegionsFromGeom(geomRepr, geo.EmptyBehaviorOmit)

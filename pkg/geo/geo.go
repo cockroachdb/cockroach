@@ -47,8 +47,8 @@ const (
 type GeospatialType interface {
 	// SRID returns the SRID of the given type.
 	SRID() geopb.SRID
-	// Shape returns the Shape of the given type.
-	Shape() geopb.Shape
+	// ShapeType returns the ShapeType of the given type.
+	ShapeType() geopb.ShapeType
 }
 
 var _ GeospatialType = (*Geometry)(nil)
@@ -57,15 +57,17 @@ var _ GeospatialType = (*Geography)(nil)
 // GeospatialTypeFitsColumnMetadata determines whether a GeospatialType is compatible with the
 // given SRID and Shape.
 // Returns an error if the types does not fit.
-func GeospatialTypeFitsColumnMetadata(t GeospatialType, srid geopb.SRID, shape geopb.Shape) error {
+func GeospatialTypeFitsColumnMetadata(
+	t GeospatialType, srid geopb.SRID, shapeType geopb.ShapeType,
+) error {
 	// SRID 0 can take in any SRID. Otherwise SRIDs must match.
 	if srid != 0 && t.SRID() != srid {
 		return errors.Newf("object SRID %d does not match column SRID %d", t.SRID(), srid)
 	}
 	// Shape_Geometry/Shape_Unset can take in any kind of shape.
 	// Otherwise, shapes must match.
-	if shape != geopb.Shape_Unset && shape != geopb.Shape_Geometry && shape != t.Shape() {
-		return errors.Newf("object type %s does not match column type %s", t.Shape(), shape)
+	if shapeType != geopb.ShapeType_Unset && shapeType != geopb.ShapeType_Geometry && shapeType != t.ShapeType() {
+		return errors.Newf("object type %s does not match column type %s", t.ShapeType(), shapeType)
 	}
 	return nil
 }
@@ -97,7 +99,7 @@ func NewGeometryUnsafe(spatialObject geopb.SpatialObject) *Geometry {
 
 // NewGeometryFromPointCoords makes a point from x, y coordinates.
 func NewGeometryFromPointCoords(x, y float64) (*Geometry, error) {
-	s, err := spatialObjectFromGeom(geom.NewPointFlat(geom.XY, []float64{x, y}))
+	s, err := spatialObjectFromGeomT(geom.NewPointFlat(geom.XY, []float64{x, y}))
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +108,7 @@ func NewGeometryFromPointCoords(x, y float64) (*Geometry, error) {
 
 // NewGeometryFromGeom creates a new Geometry object from a geom.T object.
 func NewGeometryFromGeom(g geom.T) (*Geometry, error) {
-	spatialObject, err := spatialObjectFromGeom(g)
+	spatialObject, err := spatialObjectFromGeomT(g)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +224,7 @@ func adjustEWKBSRID(b geopb.EWKB, srid geopb.SRID) (geopb.SpatialObject, error) 
 		return geopb.SpatialObject{}, err
 	}
 	adjustGeomSRID(t, srid)
-	return spatialObjectFromGeom(t)
+	return spatialObjectFromGeomT(t)
 }
 
 // AsGeomT returns the geometry as a geom.T object.
@@ -255,9 +257,9 @@ func (g *Geometry) SRID() geopb.SRID {
 	return g.spatialObject.SRID
 }
 
-// Shape returns the shape of the Geometry.
-func (g *Geometry) Shape() geopb.Shape {
-	return g.spatialObject.Shape
+// ShapeType returns the shape type of the Geometry.
+func (g *Geometry) ShapeType() geopb.ShapeType {
+	return g.spatialObject.ShapeType
 }
 
 // BoundingBoxIntersects returns whether the bounding box of the given geometry
@@ -298,7 +300,7 @@ func NewGeographyUnsafe(spatialObject geopb.SpatialObject) *Geography {
 
 // NewGeographyFromGeom creates a new Geography from a geom.T object.
 func NewGeographyFromGeom(g geom.T) (*Geography, error) {
-	spatialObject, err := spatialObjectFromGeom(g)
+	spatialObject, err := spatialObjectFromGeomT(g)
 	if err != nil {
 		return nil, err
 	}
@@ -431,9 +433,9 @@ func (g *Geography) SRID() geopb.SRID {
 	return g.spatialObject.SRID
 }
 
-// Shape returns the shape of the Geography.
-func (g *Geography) Shape() geopb.Shape {
-	return g.spatialObject.Shape
+// ShapeType returns the shape type of the Geography.
+func (g *Geography) ShapeType() geopb.ShapeType {
+	return g.spatialObject.ShapeType
 }
 
 // Spheroid returns the spheroid represented by the given Geography.
@@ -594,13 +596,13 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 // Common
 //
 
-// spatialObjectFromGeom creates a geopb.SpatialObject from a geom.T.
-func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
+// spatialObjectFromGeomT creates a geopb.SpatialObject from a geom.T.
+func spatialObjectFromGeomT(t geom.T) (geopb.SpatialObject, error) {
 	ret, err := ewkb.Marshal(t, DefaultEWKBEncodingFormat)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	shape, err := shapeFromGeom(t)
+	shapeType, err := shapeTypeFromGeomT(t)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
@@ -617,29 +619,29 @@ func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
 	return geopb.SpatialObject{
 		EWKB:        geopb.EWKB(ret),
 		SRID:        geopb.SRID(t.SRID()),
-		Shape:       shape,
+		ShapeType:   shapeType,
 		BoundingBox: bbox,
 	}, nil
 }
 
-func shapeFromGeom(t geom.T) (geopb.Shape, error) {
+func shapeTypeFromGeomT(t geom.T) (geopb.ShapeType, error) {
 	switch t := t.(type) {
 	case *geom.Point:
-		return geopb.Shape_Point, nil
+		return geopb.ShapeType_Point, nil
 	case *geom.LineString:
-		return geopb.Shape_LineString, nil
+		return geopb.ShapeType_LineString, nil
 	case *geom.Polygon:
-		return geopb.Shape_Polygon, nil
+		return geopb.ShapeType_Polygon, nil
 	case *geom.MultiPoint:
-		return geopb.Shape_MultiPoint, nil
+		return geopb.ShapeType_MultiPoint, nil
 	case *geom.MultiLineString:
-		return geopb.Shape_MultiLineString, nil
+		return geopb.ShapeType_MultiLineString, nil
 	case *geom.MultiPolygon:
-		return geopb.Shape_MultiPolygon, nil
+		return geopb.ShapeType_MultiPolygon, nil
 	case *geom.GeometryCollection:
-		return geopb.Shape_GeometryCollection, nil
+		return geopb.ShapeType_GeometryCollection, nil
 	default:
-		return geopb.Shape_Unset, errors.Newf("unknown shape: %T", t)
+		return geopb.ShapeType_Unset, errors.Newf("unknown shape: %T", t)
 	}
 }
 

@@ -176,7 +176,7 @@ func AdjustValueToColumnType(
 			if err := geo.GeospatialTypeFitsColumnMetadata(
 				in.Geometry,
 				typ.InternalType.GeoMetadata.SRID,
-				typ.InternalType.GeoMetadata.Shape,
+				typ.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
 			}
@@ -186,7 +186,7 @@ func AdjustValueToColumnType(
 			if err := geo.GeospatialTypeFitsColumnMetadata(
 				in.Geography,
 				typ.InternalType.GeoMetadata.SRID,
-				typ.InternalType.GeoMetadata.Shape,
+				typ.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
 				return nil, err
 			}

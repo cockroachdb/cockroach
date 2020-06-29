@@ -119,7 +119,7 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 func TestLint(t *testing.T) {
 	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
 	if err != nil {
-		t.Skip(err)
+		t.Fatal(err)
 	}
 	pkgDir := filepath.Join(crdb.Dir, "pkg")
 
