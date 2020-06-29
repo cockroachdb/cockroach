@@ -18,7 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/pgproto3"
+	"github.com/jackc/chunkreader/v2"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // PGTest can be used to send and receive arbitrary pgwire messages on
@@ -42,10 +43,7 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 			conn.Close()
 		}
 	}()
-	fe, err := pgproto3.NewFrontend(conn, conn)
-	if err != nil {
-		return nil, errors.Wrap(err, "new frontend")
-	}
+	fe := pgproto3.NewFrontend(chunkreader.New(conn), conn)
 	if err := fe.Send(&pgproto3.StartupMessage{
 		ProtocolVersion: 196608, // Version 3.0
 		Parameters: map[string]string{
@@ -56,7 +54,7 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 	}
 	if msg, err := fe.Receive(); err != nil {
 		return nil, errors.Wrap(err, "receive")
-	} else if auth, ok := msg.(*pgproto3.Authentication); !ok || auth.Type != 0 {
+	} else if _, ok := msg.(*pgproto3.AuthenticationOk); !ok {
 		return nil, errors.Errorf("unexpected: %#v", msg)
 	}
 	p := &PGTest{

@@ -684,6 +684,7 @@ func (c *conn) handleSimpleQuery(
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)
 	if err != nil {
+		log.VEventf(ctx, 2, "parse error: %s", query, err)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	endParse := timeutil.Now()
@@ -768,6 +769,7 @@ func (c *conn) handleParse(
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, nakedIntSize)
 	if err != nil {
+		log.VEventf(ctx, 2, "parse error: %s", query, err)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	if len(stmts) > 1 {

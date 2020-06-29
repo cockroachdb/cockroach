@@ -36,7 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
+	"github.com/pkg/errors"
 )
 
 // TestFeedFactory is an interface to create changefeeds.

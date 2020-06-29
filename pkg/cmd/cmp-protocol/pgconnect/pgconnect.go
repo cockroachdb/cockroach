@@ -18,8 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgproto3"
+	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/pgproto3"
+	"github.com/pkg/errors"
 )
 
 // Connect connects to the postgres-compatible server at addr with specified

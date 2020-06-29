@@ -16,7 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 )
 
 // SQLRunner is a helper for issuing SQL statements; it supports multiple
@@ -116,7 +117,7 @@ func (sr *SQLRunner) Init(
 		for i, s := range sr.stmts {
 			stmtName := fmt.Sprintf("%s-%d", name, i+1)
 			var err error
-			s.prepared, err = mcp.PrepareEx(ctx, stmtName, s.sql, nil /* opts */)
+			s.prepared, err = mcp.PrepareEx(ctx, stmtName, s.sql)
 			if err != nil {
 				return errors.Wrapf(err, "preparing %s", s.sql)
 			}
@@ -134,13 +135,13 @@ func (h StmtHandle) check() {
 	}
 }
 
-var simpleProtocolOpt = &pgx.QueryExOptions{SimpleProtocol: true}
+//var simpleProtocolOpt = &pgx.QueryExOptions{SimpleProtocol: true}
 
 type stmt struct {
 	sr  *SQLRunner
 	sql string
 	// prepared is only used for the prepare method.
-	prepared *pgx.PreparedStatement
+	prepared *pgconn.StatementDescription
 }
 
 // StmtHandle is associated with a (possibly prepared) statement; created by
@@ -153,18 +154,18 @@ type StmtHandle struct {
 // connection that was passed to SQLRunner.Init.
 //
 // See pgx.Conn.Exec.
-func (h StmtHandle) Exec(ctx context.Context, args ...interface{}) (pgx.CommandTag, error) {
+func (h StmtHandle) Exec(ctx context.Context, args ...interface{}) (pgconn.CommandTag, error) {
 	h.check()
 	p := h.s.sr.mcp.Get()
 	switch h.s.sr.method {
 	case prepare:
-		return p.ExecEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+		return p.Exec(ctx, h.s.prepared.Name, args...)
 
-	case noprepare:
-		return p.ExecEx(ctx, h.s.sql, nil /* options */, args...)
+	//case noprepare:
+	//	return p.ExecEx(ctx, h.s.sql, nil /* options */, args...)
 
-	case simple:
-		return p.ExecEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+	//case simple:
+	//	return p.ExecEx(ctx, h.s.sql, simpleProtocolOpt, args...)
 
 	default:
 		panic("invalid method")
@@ -175,19 +176,21 @@ func (h StmtHandle) Exec(ctx context.Context, args ...interface{}) (pgx.CommandT
 //
 // See pgx.Conn.Exec.
 func (h StmtHandle) ExecTx(
-	ctx context.Context, tx *pgx.Tx, args ...interface{},
-) (pgx.CommandTag, error) {
+	ctx context.Context, tx pgx.Tx, args ...interface{},
+) (pgconn.CommandTag, error) {
 	h.check()
 	switch h.s.sr.method {
 	case prepare:
-		return tx.ExecEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+		return tx.Exec(ctx, h.s.prepared.Name, args...)
 
-	case noprepare:
-		return tx.ExecEx(ctx, h.s.sql, nil /* options */, args...)
+		/*
+			case noprepare:
+				return tx.Exec(ctx, h.s.sql, args...)
 
-	case simple:
-		return tx.ExecEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+			case simple:
+				return tx.Exec(ctx, h.s.sql, simpleProtocolOpt, args...)
 
+		*/
 	default:
 		panic("invalid method")
 	}
@@ -196,18 +199,20 @@ func (h StmtHandle) ExecTx(
 // Query executes a query that returns rows.
 //
 // See pgx.Conn.Query.
-func (h StmtHandle) Query(ctx context.Context, args ...interface{}) (*pgx.Rows, error) {
+func (h StmtHandle) Query(ctx context.Context, args ...interface{}) (pgx.Rows, error) {
 	h.check()
 	p := h.s.sr.mcp.Get()
 	switch h.s.sr.method {
 	case prepare:
-		return p.QueryEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+		return p.Query(ctx, h.s.prepared.Name, args...)
 
-	case noprepare:
-		return p.QueryEx(ctx, h.s.sql, nil /* options */, args...)
+		/*
+			case noprepare:
+				return p.Query(ctx, h.s.sql, nil , args...)
 
-	case simple:
-		return p.QueryEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+			case simple:
+				return p.Query(ctx, h.s.sql, simpleProtocolOpt, args...)
+		*/
 
 	default:
 		panic("invalid method")
@@ -217,19 +222,19 @@ func (h StmtHandle) Query(ctx context.Context, args ...interface{}) (*pgx.Rows, 
 // QueryTx executes a query that returns rows, inside a transaction.
 //
 // See pgx.Tx.Query.
-func (h StmtHandle) QueryTx(
-	ctx context.Context, tx *pgx.Tx, args ...interface{},
-) (*pgx.Rows, error) {
+func (h StmtHandle) QueryTx(ctx context.Context, tx pgx.Tx, args ...interface{}) (pgx.Rows, error) {
 	h.check()
 	switch h.s.sr.method {
 	case prepare:
-		return tx.QueryEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+		return tx.Query(ctx, h.s.prepared.Name, args...)
 
-	case noprepare:
-		return tx.QueryEx(ctx, h.s.sql, nil /* options */, args...)
+		/*
+			case noprepare:
+				return tx.QueryEx(ctx, h.s.sql, nil , args...)
 
-	case simple:
-		return tx.QueryEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+			case simple:
+				return tx.QueryEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+		*/
 
 	default:
 		panic("invalid method")
@@ -239,18 +244,20 @@ func (h StmtHandle) QueryTx(
 // QueryRow executes a query that is expected to return at most one row.
 //
 // See pgx.Conn.QueryRow.
-func (h StmtHandle) QueryRow(ctx context.Context, args ...interface{}) *pgx.Row {
+func (h StmtHandle) QueryRow(ctx context.Context, args ...interface{}) pgx.Row {
 	h.check()
 	p := h.s.sr.mcp.Get()
 	switch h.s.sr.method {
 	case prepare:
-		return p.QueryRowEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+		return p.QueryRow(ctx, h.s.prepared.Name, args...)
 
-	case noprepare:
-		return p.QueryRowEx(ctx, h.s.sql, nil /* options */, args...)
+		/*
+			case noprepare:
+				return p.QueryRowEx(ctx, h.s.sql, args...)
 
-	case simple:
-		return p.QueryRowEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+			case simple:
+				return p.QueryRowEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+		*/
 
 	default:
 		panic("invalid method")
@@ -261,17 +268,20 @@ func (h StmtHandle) QueryRow(ctx context.Context, args ...interface{}) *pgx.Row 
 // inside a transaction.
 //
 // See pgx.Conn.QueryRow.
-func (h StmtHandle) QueryRowTx(ctx context.Context, tx *pgx.Tx, args ...interface{}) *pgx.Row {
+func (h StmtHandle) QueryRowTx(ctx context.Context, tx pgx.Tx, args ...interface{}) pgx.Row {
 	h.check()
 	switch h.s.sr.method {
 	case prepare:
-		return tx.QueryRowEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+		return tx.QueryRow(ctx, h.s.prepared.Name, args...)
 
-	case noprepare:
-		return tx.QueryRowEx(ctx, h.s.sql, nil /* options */, args...)
+		/*
+			case noprepare:
+				return tx.QueryRowEx(ctx, h.s.sql, nil, args...)
 
-	case simple:
-		return tx.QueryRowEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+			case simple:
+				return tx.QueryRowEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+
+		*/
 
 	default:
 		panic("invalid method")

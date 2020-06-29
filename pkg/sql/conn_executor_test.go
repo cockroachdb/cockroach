@@ -42,7 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
@@ -708,20 +709,19 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// Use pgx so that we can introspect error codes returned from cockroach.
 	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "", url.User("root"))
 	defer cleanup()
-	conf, err := pgx.ParseConnectionString(pgURL.String())
-	require.NoError(t, err)
-	conn, err := pgx.Connect(conf)
-	require.NoError(t, err)
-
-	tx, err := conn.Begin()
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
 
-	_, err = tx.Exec("SAVEPOINT cockroach_restart")
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+
+	_, err = tx.Exec(ctx, "SAVEPOINT cockroach_restart")
 	require.NoError(t, err)
 
 	// Do something with the user's transaction so that we'll use the user
 	// transaction in the planning of the below `SHOW COLUMNS`.
-	_, err = tx.Exec("INSERT INTO foo VALUES (1)")
+	_, err = tx.Exec(ctx, "INSERT INTO foo VALUES (1)")
 	require.NoError(t, err)
 
 	// Inject an error that will happen during planning.
@@ -743,11 +743,11 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	})
 
 	// Plan a query will get a restart error during planning.
-	_, err = tx.Prepare("show_columns", "SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
+	_, err = tx.Prepare(ctx, "show_columns", "SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
 	require.Regexp(t,
 		`restart transaction: TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn \(RETRY_REASON_UNKNOWN - boom\)`,
 		err)
-	var pgErr pgx.PgError
+	var pgErr pgconn.PgError
 	require.True(t, errors.As(err, &pgErr))
 	require.Equal(t, pgcode.SerializationFailure, pgcode.MakeCode(pgErr.Code))
 
@@ -755,14 +755,14 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// completion.
 	filter.setFilter(nil)
 
-	_, err = tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
+	_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT cockroach_restart")
 	require.NoError(t, err)
 
-	_, err = tx.Exec("INSERT INTO foo VALUES (1)")
+	_, err = tx.Exec(ctx, "INSERT INTO foo VALUES (1)")
 	require.NoError(t, err)
-	_, err = tx.Prepare("show_columns", "SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
+	_, err = tx.Prepare(ctx, "show_columns", "SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
 	require.NoError(t, err)
-	require.NoError(t, tx.Commit())
+	require.NoError(t, tx.Commit(ctx))
 }
 
 // TestTrimFlushedStatements verifies that the conn executor trims the

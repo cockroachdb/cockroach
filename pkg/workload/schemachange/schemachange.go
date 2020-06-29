@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 )
 
@@ -178,12 +178,13 @@ func (s *schemaChange) Ops(urls []string, reg *histogram.Registry) (workload.Que
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: s.concurrency * 2, //TODO(spaskob): pick a sensible default.
 	}
-	pool, err := workload.NewMultiConnPool(cfg, urls...)
+	ctx := context.Background()
+	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
-	seqNum, err := s.initSeqNum(pool)
+	seqNum, err := s.initSeqNum(ctx, pool)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -213,7 +214,9 @@ func (s *schemaChange) Ops(urls []string, reg *histogram.Registry) (workload.Que
 // TODO(spaskob): Do we need to protect from workloads running concurrently.
 // It's not obvious how the workloads will behave when accessing the same
 // cluster.
-func (s *schemaChange) initSeqNum(pool *workload.MultiConnPool) (*int64, error) {
+func (s *schemaChange) initSeqNum(
+	ctx context.Context, pool *workload.MultiConnPool,
+) (*int64, error) {
 	seqNum := new(int64)
 
 	const q = `
@@ -222,7 +225,7 @@ SELECT max(regexp_extract(name, '[0-9]+$')::int)
  WHERE name ~ '^(table|view|seq)[0-9]+$';
 `
 	var max gosql.NullInt64
-	if err := pool.Get().QueryRow(q).Scan(&max); err != nil {
+	if err := pool.Get().QueryRow(ctx, q).Scan(&max); err != nil {
 		return nil, err
 	}
 	if max.Valid {
@@ -270,10 +273,10 @@ var (
 	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
 )
 
-func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
+func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx, opsNum int) (string, error) {
 	var log strings.Builder
 	for i := 0; i < opsNum; i++ {
-		op, noops, err := w.randOp(tx)
+		op, noops, err := w.randOp(ctx, tx)
 		if err != nil {
 			return noops, errors.Mark(
 				errors.Wrap(err, "could not generate a random operation"),
@@ -288,7 +291,7 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 		if !w.dryRun {
 			histBin := "opOk"
 			start := timeutil.Now()
-			if _, err = tx.Exec(op); err != nil {
+			if _, err = tx.Exec(ctx, op); err != nil {
 				histBin = "txnRbk"
 				log.WriteString(fmt.Sprintf("***FAIL: %v\n", err))
 				log.WriteString("ROLLBACK;\n")
@@ -301,8 +304,8 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx, opsNum int) (string, error) {
 	return log.String(), nil
 }
 
-func (w *schemaChangeWorker) run(_ context.Context) error {
-	tx, err := w.pool.Get().Begin()
+func (w *schemaChangeWorker) run(ctx context.Context) error {
+	tx, err := w.pool.Get().Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
@@ -320,7 +323,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool.
-		if rbkErr := tx.Rollback(); rbkErr != nil {
+		if rbkErr := tx.Rollback(ctx); rbkErr != nil {
 			return errors.Wrapf(err, "Could not rollback %v", rbkErr)
 		}
 		switch {
@@ -339,7 +342,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	// If there were no errors commit the txn.
 	histBin := "txnOk"
 	cmtErrMsg := ""
-	if err = tx.Commit(); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		histBin = "txnCmtErr"
 		cmtErrMsg = fmt.Sprintf("***FAIL: %v", err)
 	}
@@ -353,7 +356,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
+func (w *schemaChangeWorker) randOp(ctx context.Context, tx *pgx.Tx) (string, string, error) {
 	var log strings.Builder
 	for {
 		var stmt string
@@ -361,76 +364,76 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 		op := opType(w.ops.Int())
 		switch op {
 		case addColumn:
-			stmt, err = w.addColumn(tx)
+			stmt, err = w.addColumn(ctx, tx)
 
 		case addConstraint:
-			stmt, err = w.addConstraint(tx)
+			stmt, err = w.addConstraint(ctx, tx)
 
 		case createIndex:
-			stmt, err = w.createIndex(tx)
+			stmt, err = w.createIndex(ctx, tx)
 
 		case createSequence:
-			stmt, err = w.createSequence(tx)
+			stmt, err = w.createSequence(ctx, tx)
 
 		case createTable:
-			stmt, err = w.createTable(tx)
+			stmt, err = w.createTable(ctx, tx)
 
 		case createTableAs:
-			stmt, err = w.createTableAs(tx)
+			stmt, err = w.createTableAs(ctx, tx)
 
 		case createView:
-			stmt, err = w.createView(tx)
+			stmt, err = w.createView(ctx, tx)
 
 		case dropColumn:
-			stmt, err = w.dropColumn(tx)
+			stmt, err = w.dropColumn(ctx, tx)
 
 		case dropColumnDefault:
-			stmt, err = w.dropColumnDefault(tx)
+			stmt, err = w.dropColumnDefault(ctx, tx)
 
 		case dropColumnNotNull:
-			stmt, err = w.dropColumnNotNull(tx)
+			stmt, err = w.dropColumnNotNull(ctx, tx)
 
 		case dropColumnStored:
-			stmt, err = w.dropColumnStored(tx)
+			stmt, err = w.dropColumnStored(ctx, tx)
 
 		case dropConstraint:
-			stmt, err = w.dropConstraint(tx)
+			stmt, err = w.dropConstraint(ctx, tx)
 
 		case dropIndex:
-			stmt, err = w.dropIndex(tx)
+			stmt, err = w.dropIndex(ctx, tx)
 
 		case dropSequence:
-			stmt, err = w.dropSequence(tx)
+			stmt, err = w.dropSequence(ctx, tx)
 
 		case dropTable:
-			stmt, err = w.dropTable(tx)
+			stmt, err = w.dropTable(ctx, tx)
 
 		case dropView:
-			stmt, err = w.dropView(tx)
+			stmt, err = w.dropView(ctx, tx)
 
 		case renameColumn:
-			stmt, err = w.renameColumn(tx)
+			stmt, err = w.renameColumn(ctx, tx)
 
 		case renameIndex:
-			stmt, err = w.renameIndex(tx)
+			stmt, err = w.renameIndex(ctx, tx)
 
 		case renameSequence:
-			stmt, err = w.renameSequence(tx)
+			stmt, err = w.renameSequence(ctx, tx)
 
 		case renameTable:
-			stmt, err = w.renameTable(tx)
+			stmt, err = w.renameTable(ctx, tx)
 
 		case renameView:
-			stmt, err = w.renameView(tx)
+			stmt, err = w.renameView(ctx, tx)
 
 		case setColumnDefault:
-			stmt, err = w.setColumnDefault(tx)
+			stmt, err = w.setColumnDefault(ctx, tx)
 
 		case setColumnNotNull:
-			stmt, err = w.setColumnNotNull(tx)
+			stmt, err = w.setColumnNotNull(ctx, tx)
 
 		case setColumnType:
-			stmt, err = w.setColumnType(tx)
+			stmt, err = w.setColumnType(ctx, tx)
 		}
 
 		// TODO(spaskob): use more fine-grained error reporting.
@@ -442,13 +445,13 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
 	}
 }
 
-func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) addColumn(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	columnName, err := w.randColumn(tx, tableName, w.existingPct)
+	columnName, err := w.randColumn(ctx, tx, tableName, w.existingPct)
 	if err != nil {
 		return "", err
 	}
@@ -461,24 +464,24 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
 }
 
-func (w *schemaChangeWorker) addConstraint(tx *pgx.Tx) (string, error) {
+func (w *schemaChangeWorker) addConstraint(ctx context.Context, tx pgx.Tx) (string, error) {
 	// TODO(peter): unimplemented
 	// - Export sqlbase.randColumnTableDef.
 	return "", nil
 }
 
-func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) createIndex(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	columnNames, err := w.tableColumnsShuffled(tx, tableName)
+	columnNames, err := w.tableColumnsShuffled(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
 
-	indexName, err := w.randIndex(tx, tableName, w.existingPct)
+	indexName, err := w.randIndex(ctx, tx, tableName, w.existingPct)
 	if err != nil {
 		return "", err
 	}
@@ -508,12 +511,12 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(def), nil
 }
 
-func (w *schemaChangeWorker) createSequence(tx *pgx.Tx) (string, error) {
+func (w *schemaChangeWorker) createSequence(ctx context.Context, tx pgx.Tx) (string, error) {
 	return fmt.Sprintf(`CREATE SEQUENCE "seq%d"`, atomic.AddInt64(w.seqNum, 1)), nil
 }
 
-func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 10)
+func (w *schemaChangeWorker) createTable(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 10)
 	if err != nil {
 		return "", err
 	}
@@ -524,13 +527,13 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(stmt), nil
 }
 
-func (w *schemaChangeWorker) createTableAs(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) createTableAs(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	columnNames, err := w.tableColumnsShuffled(tx, tableName)
+	columnNames, err := w.tableColumnsShuffled(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -541,7 +544,7 @@ func (w *schemaChangeWorker) createTableAs(tx *pgx.Tx) (string, error) {
 		names[i] = tree.Name(columnNames[i])
 	}
 
-	destTableName, err := w.randTable(tx, 10)
+	destTableName, err := w.randTable(ctx, tx, 10)
 	if err != nil {
 		return "", err
 	}
@@ -550,13 +553,13 @@ func (w *schemaChangeWorker) createTableAs(tx *pgx.Tx) (string, error) {
 		destTableName, tree.Serialize(&names), tableName), nil
 }
 
-func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) createView(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	columnNames, err := w.tableColumnsShuffled(tx, tableName)
+	columnNames, err := w.tableColumnsShuffled(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -567,7 +570,7 @@ func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
 		names[i] = tree.Name(columnNames[i])
 	}
 
-	destViewName, err := w.randView(tx, w.existingPct)
+	destViewName, err := w.randView(ctx, tx, w.existingPct)
 	if err != nil {
 		return "", err
 	}
@@ -577,114 +580,114 @@ func (w *schemaChangeWorker) createView(tx *pgx.Tx) (string, error) {
 		destViewName, tree.Serialize(&names), tableName), nil
 }
 
-func (w *schemaChangeWorker) dropColumn(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropColumn(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" DROP COLUMN "%s"`, tableName, columnName), nil
 }
 
-func (w *schemaChangeWorker) dropColumnDefault(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropColumnDefault(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
 }
 
-func (w *schemaChangeWorker) dropColumnNotNull(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropColumnNotNull(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
 
-func (w *schemaChangeWorker) dropColumnStored(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropColumnStored(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
 }
 
-func (w *schemaChangeWorker) dropConstraint(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropConstraint(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	constraintName, err := w.randConstraint(tx, tableName)
+	constraintName, err := w.randConstraint(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" DROP CONSTRAINT "%s"`, tableName, constraintName), nil
 }
 
-func (w *schemaChangeWorker) dropIndex(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropIndex(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	indexName, err := w.randIndex(tx, tableName, 100)
+	indexName, err := w.randIndex(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`DROP INDEX "%s"@"%s"`, tableName, indexName), nil
 }
 
-func (w *schemaChangeWorker) dropSequence(tx *pgx.Tx) (string, error) {
-	sequenceName, err := w.randSequence(tx, 100)
+func (w *schemaChangeWorker) dropSequence(ctx context.Context, tx pgx.Tx) (string, error) {
+	sequenceName, err := w.randSequence(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`DROP SEQUENCE "%s"`, sequenceName), nil
 }
 
-func (w *schemaChangeWorker) dropTable(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) dropTable(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`DROP TABLE "%s"`, tableName), nil
 }
 
-func (w *schemaChangeWorker) dropView(tx *pgx.Tx) (string, error) {
-	viewName, err := w.randView(tx, 100)
+func (w *schemaChangeWorker) dropView(ctx context.Context, tx pgx.Tx) (string, error) {
+	viewName, err := w.randView(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`DROP VIEW "%s"`, viewName), nil
 }
 
-func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) renameColumn(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	srcColumnName, err := w.randColumn(tx, tableName, 100)
+	srcColumnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 
-	destColumnName, err := w.randColumn(tx, tableName, 50)
+	destColumnName, err := w.randColumn(ctx, tx, tableName, 50)
 	if err != nil {
 		return "", err
 	}
@@ -693,18 +696,18 @@ func (w *schemaChangeWorker) renameColumn(tx *pgx.Tx) (string, error) {
 		tableName, srcColumnName, destColumnName), nil
 }
 
-func (w *schemaChangeWorker) renameIndex(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) renameIndex(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	srcIndexName, err := w.randIndex(tx, tableName, w.existingPct)
+	srcIndexName, err := w.randIndex(ctx, tx, tableName, w.existingPct)
 	if err != nil {
 		return "", err
 	}
 
-	destIndexName, err := w.randIndex(tx, tableName, 50)
+	destIndexName, err := w.randIndex(ctx, tx, tableName, 50)
 	if err != nil {
 		return "", err
 	}
@@ -713,13 +716,13 @@ func (w *schemaChangeWorker) renameIndex(tx *pgx.Tx) (string, error) {
 		tableName, srcIndexName, destIndexName), nil
 }
 
-func (w *schemaChangeWorker) renameSequence(tx *pgx.Tx) (string, error) {
-	srcSequenceName, err := w.randSequence(tx, 100)
+func (w *schemaChangeWorker) renameSequence(ctx context.Context, tx pgx.Tx) (string, error) {
+	srcSequenceName, err := w.randSequence(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	destSequenceName, err := w.randSequence(tx, 50)
+	destSequenceName, err := w.randSequence(ctx, tx, 50)
 	if err != nil {
 		return "", err
 	}
@@ -727,13 +730,13 @@ func (w *schemaChangeWorker) renameSequence(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER SEQUENCE "%s" RENAME TO "%s"`, srcSequenceName, destSequenceName), nil
 }
 
-func (w *schemaChangeWorker) renameTable(tx *pgx.Tx) (string, error) {
-	srcTableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) renameTable(ctx context.Context, tx pgx.Tx) (string, error) {
+	srcTableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	destTableName, err := w.randTable(tx, 50)
+	destTableName, err := w.randTable(ctx, tx, 50)
 	if err != nil {
 		return "", err
 	}
@@ -741,13 +744,13 @@ func (w *schemaChangeWorker) renameTable(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE "%s" RENAME TO "%s"`, srcTableName, destTableName), nil
 }
 
-func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
-	srcViewName, err := w.randView(tx, 100)
+func (w *schemaChangeWorker) renameView(ctx context.Context, tx pgx.Tx) (string, error) {
+	srcViewName, err := w.randView(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
 
-	destViewName, err := w.randView(tx, 50)
+	destViewName, err := w.randView(ctx, tx, 50)
 	if err != nil {
 		return "", err
 	}
@@ -755,29 +758,29 @@ func (w *schemaChangeWorker) renameView(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER VIEW "%s" RENAME TO "%s"`, srcViewName, destViewName), nil
 }
 
-func (w *schemaChangeWorker) setColumnDefault(tx *pgx.Tx) (string, error) {
+func (w *schemaChangeWorker) setColumnDefault(ctx context.Context, tx pgx.Tx) (string, error) {
 	// TODO(peter): unimplemented
 	return "", nil
 }
 
-func (w *schemaChangeWorker) setColumnNotNull(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) setColumnNotNull(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
 }
 
-func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+func (w *schemaChangeWorker) setColumnType(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := w.randTable(ctx, tx, 100)
 	if err != nil {
 		return "", err
 	}
-	columnName, err := w.randColumn(tx, tableName, 100)
+	columnName, err := w.randColumn(ctx, tx, tableName, 100)
 	if err != nil {
 		return "", err
 	}
@@ -786,7 +789,7 @@ func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
 }
 
 func (w *schemaChangeWorker) randColumn(
-	tx *pgx.Tx, tableName string, pctExisting int,
+	ctx context.Context, tx pgx.Tx, tableName string, pctExisting int,
 ) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
@@ -801,13 +804,15 @@ ORDER BY random()
    LIMIT 1;
 `, tableName)
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
+func (w *schemaChangeWorker) randConstraint(
+	ctx context.Context, tx pgx.Tx, tableName string,
+) (string, error) {
 	q := fmt.Sprintf(`
   SELECT constraint_name
     FROM [SHOW CONSTRAINTS FROM "%s"]
@@ -815,7 +820,7 @@ ORDER BY random()
    LIMIT 1;
 `, tableName)
 	var name string
-	err := tx.QueryRow(q).Scan(&name)
+	err := tx.QueryRow(ctx, q).Scan(&name)
 	if err != nil {
 		return "", err
 	}
@@ -823,7 +828,7 @@ ORDER BY random()
 }
 
 func (w *schemaChangeWorker) randIndex(
-	tx *pgx.Tx, tableName string, pctExisting int,
+	ctx context.Context, tx pgx.Tx, tableName string, pctExisting int,
 ) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		// We make a unique name for all indices by prefixing them with the table
@@ -838,13 +843,15 @@ ORDER BY random()
    LIMIT 1;
 `, tableName)
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randSequence(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randSequence(
+	ctx context.Context, tx pgx.Tx, pctExisting int,
+) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		return fmt.Sprintf(`seq%d`, atomic.AddInt64(w.seqNum, 1)), nil
 	}
@@ -856,13 +863,15 @@ ORDER BY random()
    LIMIT 1;
 `
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randTable(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randTable(
+	ctx context.Context, tx pgx.Tx, pctExisting int,
+) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		return fmt.Sprintf("table%d", atomic.AddInt64(w.seqNum, 1)), nil
 	}
@@ -874,13 +883,15 @@ ORDER BY random()
    LIMIT 1;
 `
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-func (w *schemaChangeWorker) randView(tx *pgx.Tx, pctExisting int) (string, error) {
+func (w *schemaChangeWorker) randView(
+	ctx context.Context, tx pgx.Tx, pctExisting int,
+) (string, error) {
 	if w.rng.Intn(100) >= pctExisting {
 		return fmt.Sprintf("view%d", atomic.AddInt64(w.seqNum, 1)), nil
 	}
@@ -892,19 +903,21 @@ ORDER BY random()
    LIMIT 1;
 `
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
+func (w *schemaChangeWorker) tableColumnsShuffled(
+	ctx context.Context, tx pgx.Tx, tableName string,
+) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
 FROM [SHOW COLUMNS FROM "%s"];
 `, tableName)
 
-	rows, err := tx.Query(q)
+	rows, err := tx.Query(ctx, q)
 	if err != nil {
 		return nil, err
 	}

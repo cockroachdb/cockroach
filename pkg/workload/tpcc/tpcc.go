@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -74,7 +74,7 @@ type tpcc struct {
 
 	usePostgres  bool
 	serializable bool
-	txOpts       *pgx.TxOptions
+	txOpts       pgx.TxOptions
 
 	expensiveChecks bool
 
@@ -281,7 +281,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			if w.serializable {
-				w.txOpts = &pgx.TxOptions{IsoLevel: pgx.Serializable}
+				w.txOpts = pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
 			w.auditor = newAuditor(w.warehouses)
@@ -591,11 +591,12 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 	dbs := make([]*workload.MultiConnPool, len(urls))
 	var g errgroup.Group
+	ctx := context.Background()
 	for i := range urls {
 		i := i
 		g.Go(func() error {
 			var err error
-			dbs[i], err = workload.NewMultiConnPool(cfg, urls[i])
+			dbs[i], err = workload.NewMultiConnPool(ctx, cfg, urls[i])
 			return err
 		})
 	}

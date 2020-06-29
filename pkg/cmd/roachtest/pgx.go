@@ -49,7 +49,7 @@ func registerPgx(r *testRegistry) {
 
 		t.Status("installing pgx")
 		if err := repeatRunE(
-			ctx, c, node, "install pgx", "go get -u github.com/jackc/pgx",
+			ctx, c, node, "install pgx", "go get -u github.com/jackc/pgx/v4",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +103,7 @@ func registerPgx(r *testRegistry) {
 		xmlResults, _ := repeatRunWithBuffer(
 			ctx, c, t.l, node,
 			"run pgx test suite",
-			"cd `go env GOPATH`/src/github.com/jackc/pgx && "+
+			"cd `go env GOPATH`/src/github.com/jackc/pgx/v4 && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
