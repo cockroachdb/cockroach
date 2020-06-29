@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -45,7 +46,12 @@ func TestTruncateDoesNotSetDropJobOnNewTable(t *testing.T) {
 	tdb.Exec(t, `TRUNCATE foo`)
 	newID := getTableDescID(t, "foo")
 	require.NotEqual(t, oldID, newID)
-	td, err := sqlbase.GetTableDescFromID(ctx, tc.Server(0).DB(), newID)
-	require.NoError(t, err)
+	var td *sqlbase.TableDescriptor
+	require.NoError(t, tc.Server(0).DB().Txn(ctx, func(
+		ctx context.Context, txn *client.Txn,
+	) (err error) {
+		td, err = sqlbase.GetTableDescFromID(ctx, txn, newID)
+		return err
+	}))
 	require.Zero(t, td.DropJobID)
 }
