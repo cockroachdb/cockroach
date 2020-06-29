@@ -35,6 +35,7 @@ const (
 type BackupOptions struct {
 	CaptureRevisionHistory bool
 	EncryptionPassphrase   Expr
+	Detached               bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -151,16 +152,27 @@ func (node *PartitionedBackup) Format(ctx *FmtCtx) {
 
 // Format implements the NodeFormatter interface
 func (o *BackupOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
 	if o.CaptureRevisionHistory {
 		ctx.WriteString("revision_history")
+		addSep = true
 	}
 
 	if o.EncryptionPassphrase != nil {
-		if o.CaptureRevisionHistory {
-			ctx.WriteString(", ")
-		}
+		maybeAddSep()
 		ctx.WriteString("encryption_passphrase=")
 		o.EncryptionPassphrase.Format(ctx)
+	}
+
+	if o.Detached {
+		maybeAddSep()
+		ctx.WriteString("detached")
 	}
 }
 
@@ -179,6 +191,14 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.EncryptionPassphrase = other.EncryptionPassphrase
 	} else if other.EncryptionPassphrase != nil {
 		return errors.New("encryption_passphrase specified multiple times")
+	}
+
+	if o.Detached {
+		if other.Detached {
+			return errors.New("detached option specified multiple times")
+		}
+	} else {
+		o.Detached = other.Detached
 	}
 
 	return nil
