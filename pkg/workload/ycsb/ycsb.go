@@ -19,17 +19,19 @@ import (
 	"hash"
 	"hash/fnv"
 	"math"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -80,15 +82,13 @@ const (
 	)`
 
 	timeFormatTemplate = `2006-01-02 15:04:05.000000-07:00`
-	timeZoneDefault    = `UTC`
-	timeFormatLen      = len(timeFormatTemplate)
 )
 
 type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed        int64
+	seed        uint64
 	timeString  bool
 	insertHash  bool
 	zeroPadding int
@@ -122,7 +122,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`workload`: {RuntimeOnly: true},
 		}
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
 		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
@@ -295,31 +295,67 @@ func (g *ycsb) Tables() []workload.Table {
 			},
 		),
 	}
-	usertableInitialRowsFn := func(rowIdx int) []interface{} {
-		w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-		key := w.buildKeyName(uint64(g.insertStart + rowIdx))
-		if g.json {
-			return []interface{}{key, "{}"}
-		}
-		return []interface{}{key, "", "", "", "", "", "", "", "", "", ""}
-	}
 	if g.json {
 		usertable.Schema = usertableSchemaJSON
 		usertable.InitialRows = workload.Tuples(
 			g.insertCount,
-			usertableInitialRowsFn,
-		)
+			func(rowIdx int) []interface{} {
+				w := ycsbWorker{
+					config:   g,
+					hashFunc: fnv.New64(),
+				}
+				key := w.buildKeyName(uint64(g.insertStart + rowIdx))
+				// TODO(peter): Need to fill in FIELD here, rather than an empty JSONB
+				// value.
+				return []interface{}{key, "{}"}
+			})
 	} else {
 		if g.families {
 			usertable.Schema = usertableSchemaRelationalWithFamilies
 		} else {
 			usertable.Schema = usertableSchemaRelational
 		}
-		usertable.InitialRows = workload.TypedTuples(
-			g.insertCount,
-			usertableTypes,
-			usertableInitialRowsFn,
-		)
+
+		const batchSize = 1000
+		usertable.InitialRows = workload.BatchedTuples{
+			NumBatches: (g.insertCount + batchSize - 1) / batchSize,
+			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
+				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
+				if rowEnd > g.insertCount {
+					rowEnd = g.insertCount
+				}
+				cb.Reset(usertableTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
+
+				key := cb.ColVec(0).Bytes()
+				// coldata.Bytes only allows appends so we have to reset it.
+				key.Reset()
+
+				var fields [numTableFields]*coldata.Bytes
+				for i := range fields {
+					fields[i] = cb.ColVec(i + 1).Bytes()
+					// coldata.Bytes only allows appends so we have to reset it.
+					fields[i].Reset()
+				}
+
+				w := ycsbWorker{
+					config:   g,
+					hashFunc: fnv.New64(),
+				}
+				rng := rand.NewSource(g.seed + uint64(batchIdx))
+
+				var tmpbuf [fieldLength]byte
+				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+					rowOffset := rowIdx - rowBegin
+
+					key.Set(rowOffset, []byte(w.buildKeyName(uint64(rowIdx))))
+
+					for i := range fields {
+						randStringLetters(rng, tmpbuf[:])
+						fields[i].Set(rowOffset, tmpbuf[:])
+					}
+				}
+			},
+		}
 	}
 	return []workload.Table{usertable}
 }
@@ -446,7 +482,7 @@ func (g *ycsb) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(g.seed + int64(i)))
+		rng := rand.New(rand.NewSource(g.seed + uint64(i)))
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),
@@ -621,6 +657,29 @@ func (yw *ycsbWorker) randString(length int) string {
 		str[i] = letters[yw.rng.Intn(len(letters))]
 	}
 	return string(str)
+}
+
+// NOTE: The following is intentionally duplicated with the ones in
+// workload/tpcc/generate.go. They're a very hot path in restoring a fixture and
+// hardcoding the consts seems to trigger some compiler optimizations that don't
+// happen if those things are params. Don't modify these without consulting
+// BenchmarkRandStringFast.
+
+func randStringLetters(rng rand.Source, buf []byte) {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const lettersLen = uint64(len(letters))
+	const lettersCharsPerRand = uint64(11) // floor(log(math.MaxUint64)/log(lettersLen))
+
+	var r, charsLeft uint64
+	for i := 0; i < len(buf); i++ {
+		if charsLeft == 0 {
+			r = rng.Uint64()
+			charsLeft = lettersCharsPerRand
+		}
+		buf[i] = letters[r%lettersLen]
+		r = r / lettersLen
+		charsLeft--
+	}
 }
 
 func (yw *ycsbWorker) insertRow(ctx context.Context) error {
