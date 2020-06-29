@@ -106,6 +106,7 @@ message ProcessorCoreUnion {
   optional InvertedFiltererSpec invertedFilterer = 29;
   optional InvertedJoinerSpec invertedJoiner = 30;
   optional BackupDataSpec backupData = 31;
+  optional SplitAndScatterSpec splitAndScatter = 32;
 
   reserved 6, 12;
 }
