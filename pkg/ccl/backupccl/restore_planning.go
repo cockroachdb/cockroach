@@ -189,6 +189,13 @@ func allocateTableRewrites(
 		}
 	}
 
+	// Include the database descriptors when calculating the max ID.
+	for _, database := range databasesByID {
+		if int64(database.ID) > maxDescIDInBackup {
+			maxDescIDInBackup = int64(database.ID)
+		}
+	}
+
 	needsNewParentIDs := make(map[string][]sqlbase.ID)
 
 	// Increment the DescIDGenerator so that it is higher than the max desc ID in

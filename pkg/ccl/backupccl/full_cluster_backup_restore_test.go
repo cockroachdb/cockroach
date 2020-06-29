@@ -310,6 +310,25 @@ func TestEmptyFullClusterRestore(t *testing.T) {
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
 }
 
+// Regression test for #50561.
+func TestClusterRestoreEmptyDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 10
+	_, _, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, initNone)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `CREATE DATABASE some_db`)
+	sqlDB.Exec(t, `CREATE DATABASE some_db_2`)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+
+	checkQuery := "SHOW DATABASES"
+	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
+}
+
 func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
