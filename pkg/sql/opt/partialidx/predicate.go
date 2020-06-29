@@ -12,6 +12,7 @@ package partialidx
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -157,6 +158,7 @@ func FiltersImplyPredicate(
 	im := implicator{
 		md:      md,
 		evalCtx: evalCtx,
+		constraintCache: make(map[opt.ScalarExpr]constraintResult),
 	}
 
 	// If no exact match was found, recursively check the sub-expressions of the
@@ -175,7 +177,19 @@ func FiltersImplyPredicate(
 type implicator struct {
 	md      *opt.Metadata
 	evalCtx *tree.EvalContext
+
+	// constraintCache stores constraints built from atoms, reducing the need to
+	// build constraints for the same atom multiple times.
+	constraintCache map[opt.ScalarExpr]constraintResult
 }
+
+// constraintResult encapsulates the result of building a constraint for an
+// atom, containing both the constraint set and the tight boolean.
+type constraintResult struct {
+	c     *constraint.Set
+	tight bool
+}
+
 
 // scalarExprImpliesPredicate returns true if the expression e implies the
 // ScalarExpr pred. If e or any of its encountered sub-expressions are exact
@@ -355,8 +369,17 @@ func (im *implicator) atomImpliesPredicate(
 // if one expression contains another, handling many types of expressions
 // including comparison operators, IN operators, and tuples.
 func (im *implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
-	aSet, aTight := memo.BuildConstraints(a, im.md, im.evalCtx)
-	bSet, bTight := memo.BuildConstraints(b, im.md, im.evalCtx)
+	// Build constraint sets for a and b, unless they have been cached.
+	aSet, aTight, ok := im.fetchConstraint(a)
+	if !ok {
+		aSet, aTight = memo.BuildConstraints(a, im.md, im.evalCtx)
+		im.cacheConstraint(a, aSet, aTight)
+	}
+	bSet, bTight, ok := im.fetchConstraint(b)
+	if !ok {
+		bSet, bTight = memo.BuildConstraints(b, im.md, im.evalCtx)
+		im.cacheConstraint(b, bSet, bTight)
+	}
 
 	// If either set has more than one constraint, then constraints cannot be
 	// used to prove containment. This happens when an expression has more than
@@ -390,6 +413,25 @@ func (im *implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 	}
 
 	return ac.Contains(im.evalCtx, bc)
+}
+
+// cacheConstraint caches a constraint set and a tight boolean for the given
+// scalar expression.
+func (im *implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
+	im.constraintCache[e] = constraintResult{
+		c:     c,
+		tight: tight,
+	}
+}
+
+// fetchConstraint returns a constraint set, tight boolean, and true the cache
+// contains and entry for the given scalar expression. It returns ok = false if
+// the scalar expression does not exist in the cache.
+func (im *implicator) fetchConstraint(e opt.ScalarExpr) (c *constraint.Set, tight bool, ok bool) {
+	if res, ok := im.constraintCache[e]; ok {
+		return res.c, res.tight, true
+	}
+	return c, tight, false
 }
 
 // simplifyFiltersExpr returns a new FiltersExpr with any expressions in e that
