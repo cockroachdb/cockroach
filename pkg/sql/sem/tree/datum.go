@@ -1737,7 +1737,6 @@ type ParseTimeContext interface {
 }
 
 var _ ParseTimeContext = &EvalContext{}
-var _ ParseTimeContext = &SemaContext{}
 var _ ParseTimeContext = &simpleParseTimeContext{}
 
 // NewParseTimeContext constructs a ParseTimeContext that returns
