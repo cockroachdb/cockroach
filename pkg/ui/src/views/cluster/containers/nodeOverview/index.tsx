@@ -85,7 +85,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
       );
     }
 
-    const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.LIVE;
+    const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.NODE_STATUS_LIVE;
     const livenessString = livenessNomenclature(liveness);
 
     return (

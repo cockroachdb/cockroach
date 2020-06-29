@@ -442,7 +442,7 @@ message DecommissionStatusRequest {
 // DecommissionRequest requests the server to set the Decommissioning flag on
 // all nodes specified by 'node_id' to the value of 'decommissioning'.
 //
-// If no 'node_id' is given, targets the recipient node.
+// If no 'node_id' is given, it targets the recipient node.
 message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
