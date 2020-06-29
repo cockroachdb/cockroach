@@ -251,6 +251,19 @@ func (r *Replica) needsMergeBySizeRLocked() bool {
 	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
 }
 
+func (r *Replica) needsRaftLogTruncationLocked() bool {
+	// We don't want to check the Raft log for truncation on every write
+	// operation or even every operation which occurs after the Raft log exceeds
+	// RaftLogQueueStaleSize. The logic below queues the replica for possible
+	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
+	// have been written to the Raft log.
+	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	if checkRaftLog {
+		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
+	}
+	return checkRaftLog
+}
+
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
 // returned. Note that the max size is determined by either the current maximum
