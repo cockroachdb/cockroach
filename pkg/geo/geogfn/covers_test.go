@@ -378,6 +378,30 @@ func TestCovers(t *testing.T) {
 			"POINT(1.0 2.0)",
 			true,
 		},
+		{
+			"LINESTRING covers POINT across the longitudinal boundary",
+			"LINESTRING(179 0, -179 0)",
+			"POINT(179.1 0)",
+			true,
+		},
+		{
+			"LINESTRING does not cover POINT with linestring crossing the longitudinal boundary but POINT on the other side",
+			"LINESTRING(179 0, -179 0)",
+			"POINT(170 0)",
+			false,
+		},
+		{
+			"POLYGON covers POINT lying inside latitudinal boundary",
+			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+			"POINT (150 88)",
+			true,
+		},
+		{
+			"POLYGON does not cover POINT lying outside latitudinal boundary",
+			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+			"POINT (170 88)",
+			false,
+		},
 	}
 
 	for _, tc := range testCases {

@@ -155,7 +155,10 @@ func summaryFlag(t geom.T, isGeography bool) (f string, err error) {
 		f += "Z"
 	}
 
-	bbox := boundingBoxFromGeom(t)
+	bbox, err := boundingBoxFromGeomT(t, geopb.SpatialObjectType_GeometryType)
+	if err != nil {
+		return "", err
+	}
 
 	if bbox != nil {
 		f += "B"
