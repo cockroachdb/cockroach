@@ -95,7 +95,7 @@ func (b *CheckConstraintBuilder) Build(
 		types.Bool,
 		"CHECK",
 		b.semaCtx,
-		true, /* allowImpure */
+		tree.VolatilityVolatile,
 		&b.tableName,
 	)
 	if err != nil {
