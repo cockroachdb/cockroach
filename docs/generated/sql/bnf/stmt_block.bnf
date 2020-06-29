@@ -115,6 +115,7 @@ create_stmt ::=
 	create_role_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
+	| create_schedule_for_backup_stmt
 
 delete_stmt ::=
 	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -365,6 +366,9 @@ create_ddl_stmt ::=
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
+
+create_schedule_for_backup_stmt ::=
+	'CREATE' 'SCHEDULE' opt_description 'FOR' 'BACKUP' opt_backup_targets 'TO' partitioned_backup opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
 
 opt_with_clause ::=
 	with_clause
@@ -638,6 +642,7 @@ unreserved_keyword ::=
 	| 'AGGREGATE'
 	| 'ALTER'
 	| 'ALWAYS'
+	| 'APPENDING'
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
@@ -651,6 +656,7 @@ unreserved_keyword ::=
 	| 'CACHE'
 	| 'CANCEL'
 	| 'CASCADE'
+	| 'CHANGES'
 	| 'CHANGEFEED'
 	| 'CLOSE'
 	| 'CLUSTER'
@@ -666,6 +672,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONSTRAINTS'
+	| 'CONTINUE'
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
@@ -691,9 +698,11 @@ unreserved_keyword ::=
 	| 'ENCRYPTION_PASSPHRASE'
 	| 'ENUM'
 	| 'ESCAPE'
+	| 'EVERY'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
 	| 'EXECUTE'
+	| 'EXECUTION'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
 	| 'EXPERIMENTAL_FINGERPRINTS'
@@ -703,6 +712,7 @@ unreserved_keyword ::=
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
+	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
 	| 'FIRST'
@@ -763,6 +773,7 @@ unreserved_keyword ::=
 	| 'MONTH'
 	| 'NAMES'
 	| 'NAN'
+	| 'NEVER'
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
@@ -796,6 +807,7 @@ unreserved_keyword ::=
 	| 'PRECEDING'
 	| 'PREPARE'
 	| 'PRESERVE'
+	| 'PREVIOUS'
 	| 'PRIORITY'
 	| 'PUBLIC'
 	| 'PUBLICATION'
@@ -804,6 +816,7 @@ unreserved_keyword ::=
 	| 'RANGE'
 	| 'RANGES'
 	| 'READ'
+	| 'RECURRING'
 	| 'RECURSIVE'
 	| 'REF'
 	| 'REINDEX'
@@ -815,6 +828,7 @@ unreserved_keyword ::=
 	| 'RESTORE'
 	| 'RESTRICT'
 	| 'RESUME'
+	| 'RETRY'
 	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'ROLE'
@@ -823,6 +837,8 @@ unreserved_keyword ::=
 	| 'ROLLUP'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUNNING'
+	| 'SCHEDULE'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -848,6 +864,7 @@ unreserved_keyword ::=
 	| 'SPLIT'
 	| 'SQL'
 	| 'START'
+	| 'STARTING'
 	| 'STATISTICS'
 	| 'STDIN'
 	| 'STORAGE'
@@ -887,6 +904,7 @@ unreserved_keyword ::=
 	| 'VALUE'
 	| 'VARYING'
 	| 'VIEW'
+	| 'WAIT'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -1087,6 +1105,24 @@ create_stats_target ::=
 
 opt_create_stats_options ::=
 	as_of_clause
+	| 
+
+opt_description ::=
+	string_or_placeholder
+	| 
+
+cron_expr ::=
+	'RECURRING' 'NEVER'
+	| 'RECURRING' sconst_or_placeholder
+
+opt_full_backup_clause ::=
+	'FULL' 'BACKUP' sconst_or_placeholder
+	| 'FULL' 'BACKUP' 'ALWAYS'
+	| 
+
+opt_with_schedule_options ::=
+	'WITH' 'EXPERIMENTAL' 'SCHEDULE' 'OPTIONS' kv_option_list
+	| 'WITH' 'EXPERIMENTAL' 'SCHEDULE' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
 with_clause ::=
@@ -1512,6 +1548,10 @@ sequence_name ::=
 opt_sequence_option_list ::=
 	sequence_option_list
 	| 
+
+sconst_or_placeholder ::=
+	'SCONST'
+	| 'PLACEHOLDER'
 
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*

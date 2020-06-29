@@ -21,6 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/followerreadsccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/jobsccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
