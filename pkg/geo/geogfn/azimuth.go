@@ -8,24 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package geomfn
+package geogfn
 
 import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 )
 
-// Azimuth returns the azimuth in radians of the segment defined by the given point geometries,
-// where point a is the reference point.
-// The reference direction from which the azimuth is calculated is north, and is positive clockwise.
-// i.e. North = 0; East = π/2; South = π; West = 3π/2.
-// See https://en.wikipedia.org/wiki/Polar_coordinate_system.
+// Azimuth returns the azimuth in radians of the segment defined by the given point geometries.
+// The azimuth is angle is referenced from north, and is positive clockwise.
+// North = 0; East = π/2; South = π; West = 3π/2.
 // Returns nil if the two points are the same.
-// Returns an error if any of the two Geometry items are not points.
-func Azimuth(a *geo.Geometry, b *geo.Geometry) (*float64, error) {
+// Returns an error if any of the two Geography items are not points.
+func Azimuth(a *geo.Geography, b *geo.Geography) (*float64, error) {
 	if a.SRID() != b.SRID() {
 		return nil, geo.NewMismatchingSRIDsError(a, b)
 	}
@@ -54,9 +53,16 @@ func Azimuth(a *geo.Geometry, b *geo.Geometry) (*float64, error) {
 		return nil, nil
 	}
 
-	atan := math.Atan2(bPoint.Y()-aPoint.Y(), bPoint.X()-aPoint.X())
-	// math.Pi / 2 is North, so subtract that from atan to compensate such that 0 is north.
-	// Then add 2*math.Pi to become positive.
-	azimuth := math.Mod(math.Pi/2-atan+2*math.Pi, 2*math.Pi)
-	return &azimuth, nil
+	s, err := a.Spheroid()
+	if err != nil {
+		return nil, err
+	}
+
+	_, az1, _ := s.Inverse(
+		s2.LatLngFromDegrees(aPoint.Y(), aPoint.X()),
+		s2.LatLngFromDegrees(bPoint.Y(), bPoint.X()),
+	)
+	// Convert to radians.
+	az1 = az1 * math.Pi / 180
+	return &az1, nil
 }

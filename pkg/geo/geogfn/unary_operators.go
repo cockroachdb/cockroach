@@ -148,8 +148,8 @@ func Project(g *geo.Geography, distance float64, azimuth s1.Angle) (*geo.Geograp
 	ret := geom.NewPointFlat(
 		geom.XY,
 		[]float64{
-			float64(projected.Lng.Normalized()) * 180.0 / math.Pi,
-			normalizeLatitude(float64(projected.Lat)) * 180.0 / math.Pi,
+			geo.NormalizeLongitudeDegrees(projected.Lng.Degrees()),
+			geo.NormalizeLatitudeDegrees(projected.Lat.Degrees()),
 		},
 	).SetSRID(point.SRID())
 	return geo.NewGeographyFromGeom(ret)
@@ -192,33 +192,4 @@ func length(
 		totalLength *= spheroid.SphereRadius
 	}
 	return totalLength, nil
-}
-
-// normalizeLatitude convert a latitude to the range of -Pi/2, Pi/2.
-func normalizeLatitude(lat float64) float64 {
-	if lat > 2.0*math.Pi {
-		lat = math.Remainder(lat, 2.0*math.Pi)
-	}
-
-	if lat < -2.0*math.Pi {
-		lat = math.Remainder(lat, -2.0*math.Pi)
-	}
-
-	if lat > math.Pi {
-		lat = math.Pi - lat
-	}
-
-	if lat < -1.0*math.Pi {
-		lat = -1.0*math.Pi - lat
-	}
-
-	if lat > math.Pi*2 {
-		lat = math.Pi - lat
-	}
-
-	if lat < -1.0*math.Pi*2 {
-		lat = -1.0*math.Pi - lat
-	}
-
-	return lat
 }
