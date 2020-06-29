@@ -682,6 +682,7 @@ unreserved_keyword ::=
 	| 'DELETE'
 	| 'DEFAULTS'
 	| 'DEFERRED'
+	| 'DETACHED'
 	| 'DISCARD'
 	| 'DOMAIN'
 	| 'DOUBLE'
@@ -1419,6 +1420,7 @@ role_options ::=
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'REVISION_HISTORY'
+	| 'DETACHED'
 
 changefeed_targets ::=
 	single_table_pattern_list
