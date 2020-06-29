@@ -1206,7 +1206,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 					return nil, err
 				}
 
-				summary, err := geo.Summary(t, g.ShapeType(), false)
+				summary, err := geo.Summary(t, g.SpatialObject().BoundingBox != nil, g.ShapeType(), false)
 				if err != nil {
 					return nil, err
 				}
@@ -1234,7 +1234,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					return nil, err
 				}
 
-				summary, err := geo.Summary(t, g.ShapeType(), true)
+				summary, err := geo.Summary(t, g.SpatialObject().BoundingBox != nil, g.ShapeType(), true)
 				if err != nil {
 					return nil, err
 				}
