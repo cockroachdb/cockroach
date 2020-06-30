@@ -36,7 +36,7 @@ CREATE TABLE t10();
 count
 GRANT ALL ON * TO TEST
 ----
-160
+50
 
 count
 CREATE ROLE rolea
