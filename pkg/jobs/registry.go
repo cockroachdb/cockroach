@@ -367,11 +367,30 @@ func (r *Registry) NewJob(record Record) *Job {
 }
 
 // CreateJobWithTxn creates a job to be started later with StartJob.
-// It stores the job in the jobs table, marks it pending and gives the
+// It stores the job in the jobs table, marks it running and gives the
 // current node a lease.
 func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
 	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+const invalidNodeID = 0
+
+// CreateAdoptableJobWithTxn creates a job which will be adopted for execution at a later time
+// by some node in the cluster.
+func (r *Registry) CreateAdoptableJobWithTxn(
+	ctx context.Context, record Record, txn *kv.Txn,
+) (*Job, error) {
+	j := r.NewJob(record)
+
+	// We create a job record with an invalid lease to force the registry (on some node
+	// in the cluster) to adopt this job at a later time.
+	lease := &jobspb.Lease{NodeID: invalidNodeID}
+
+	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), lease); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -1015,9 +1034,9 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		isLive bool
 	}
 	nodeStatusMap := map[roachpb.NodeID]*nodeStatus{
-		// 0 is not a valid node ID, but we treat it as an always-dead node so that
+		// We treat invalidNodeID as an always-dead node so that
 		// the empty lease (Lease{}) is always considered expired.
-		0: {isLive: false},
+		invalidNodeID: {isLive: false},
 	}
 	// If no liveness is available, adopt all jobs. This is reasonable because this
 	// only affects SQL tenants, which have at most one SQL server running on their
