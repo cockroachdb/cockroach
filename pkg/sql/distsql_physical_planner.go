@@ -2102,11 +2102,34 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		InvertedExpr:   *n.expression.ToProto(),
 	}
 
-	plan.AddSingleGroupStage(dsp.gatewayNodeID,
-		execinfrapb.ProcessorCoreUnion{
-			InvertedFilterer: invertedFiltererSpec,
-		},
-		execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+	distribute := false
+	if n.expression.Left == nil && n.expression.Right == nil {
+		// Check if the previous stage is on multiple nodes.
+		prevStageNode := plan.Processors[plan.ResultRouters[0]].Node
+		for i := 1; i < len(plan.ResultRouters); i++ {
+			if n := plan.Processors[plan.ResultRouters[i]].Node; n != prevStageNode {
+				distribute = true
+				break
+			}
+		}
+	}
+
+	if distribute {
+		// Instantiate one inverted filterer for every stream.
+		plan.AddNoGroupingStage(
+			execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes, execinfrapb.Ordering{})
+		plan.AddSingleGroupStage(
+			dsp.gatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+	} else {
+		plan.AddSingleGroupStage(dsp.gatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: invertedFiltererSpec,
+			},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+	}
 	return plan, nil
 }
 

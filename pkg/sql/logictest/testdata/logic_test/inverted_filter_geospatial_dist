@@ -1,0 +1,63 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1.0 1.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)'),
+  (3, 'POINT(3.0 3.0)'),
+  (4, 'LINESTRING(4.0 4.0, 5.0 5.0)'),
+  (5, 'LINESTRING(40.0 40.0, 41.0 41.0)'),
+  (6, 'POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))')
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom) ORDER BY k
+----
+3
+6
+
+# TODO(sumeer): this SPLIT point is bogus, since the first column in the inverted index
+# is a cellid (int). But we currently can't provide an int here since it gives us an
+# error: SPLIT AT data column 1 (geom) must be of type geometry, not type int.
+
+statement ok
+ALTER INDEX geo_table@geom_index SPLIT AT VALUES ('POINT(3.0 3.0)')
+
+query TI colnames,rowsort
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+----
+replicas  lease_holder
+{1}       1
+{1}       1
+
+statement ok
+ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 'POINT(3.0 3.0)')
+
+query TI colnames,rowsort
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+----
+replicas  lease_holder
+{1}       1
+{2}       2
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom) ORDER BY k
+----
+3
+6
+
+# If we change the code to make createPlanForInvertedFilter() take the distribute=true
+# codepath we get
+# https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk19P2zwUxu_fT2GdG6heQ-0kLeCrbCNsmaBhaaQNkQhlzRGLCHZmuxMT6nefknRAYI3aXjQ6f35-nqOj8wjmZwUC5sF58CEhS12Rszi6INfBt8vzd-GM7J-G82T-5XxE1i13XcMtqhubf6-QfP0UxAEx9qaUFrXBhTX7e5dROEv23UNG3EM22hPiYxBdBEl8RRvyfkSi-DSIyfsrcpcBBakKnOX3aEBcA4eMQq3VAo1Rukk9tg1h8QCCUShlvbRNOqOwUBpBPIItbYUgIGksxZgXqMcMKBRo87Jqn210b0pZ4IP_ZB4ozOtcGkHGnE-cE4dPmDdl02NvenI0PfhH8ojksiAuI8r-QG0gW1FQS_vsyNj8FkHwFd3edSh_obZYnJWVRY16zPvW_9aDh1oTJYnPBTGNb2Jsrq1IIU3do0maMoelKWNPfw5LTttPkAJBWWzReZYC2XJGZ5cZZ-pA1WOnP1i0tIL4fKOCu4vCZ1XK9erdvkyty_tc_-7tfS1NfWejureL-lxpi3rs9ZV9_j9Q6PYqXh8J44yzt79j7028J15ekO-MngfY6H6yi_sYTa2kwZ77TS-zVUYBi1vsbtOopV7gpVaLVqYLo5ZrEwUa21V5F4SyKzUGX8J8EHaGYWcQdodhdxD2hmFvEJ68grPVf38CAAD__2I8tp8=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk19v2jwUxu_fT2Gdmxa9XrETSltfZVvTLRMlLETaqiZCGTliUYOd2WZiQnz3KQnrCh0IcpHo_Hn8_I7trMD8KEHA2B_472Oy0CW5i8J78uh_HQ3eBkNyfhuM4_HnQYdsWp7ahhmqic2-lUi-fPQjnxg7KaRFbXBqzfnZKAyG8bl7wYh7wTpnQnzww3s_jh5orZx3SBjd-hF590CeUqAgVY7DbI4GxCNwSClUWk3RGKXr1KppCPIlCEahkNXC1umUwlRpBLECW9gSQUBcI0WY5ai7DCjkaLOibJatfSeFzHHpPcMDhXGVSSNIl_NL58bhl6zXZ_3rXv_mqv_mH8krksmcuIwo-x21gXRNQS3sXyJjsxmC4Gt6PHUgf6K2mN8VpUWNusu30f_U_WWliZLE44KYmpsYm2krEkgS9-oySZjDkoSx55fD4tvm4ydAUOZHdN4lQHZmpBAurCAe3zutc8q0n1QhN0fkbM9Z6WKe6V9b57Oxpp6z1909xX2stEXddbedPf4_UGj3X-xeZsYZZ6-f696r-Ey8vOme0zli73qn0EdoKiUNbtHvW5mtUwqYz7D9h4xa6CmOtJo2Nm0YNromkaOxbZW3QSDbUg34UswPip3DYueg2D0sdg-KezvidP3f7wAAAP__-teFWQ==
