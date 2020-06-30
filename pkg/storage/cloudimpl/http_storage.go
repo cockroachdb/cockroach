@@ -51,8 +51,9 @@ func (e *retryableHTTPError) Error() string {
 	return fmt.Sprintf("retryable http error: %s", e.cause)
 }
 
-// package visible for test.
-var httpRetryOptions = retry.Options{
+// HTTPRetryOptions defines the tunable settings which control the retry of HTTP
+// operations.
+var HTTPRetryOptions = retry.Options{
 	InitialBackoff: 100 * time.Millisecond,
 	MaxBackoff:     2 * time.Second,
 	MaxRetries:     32,
@@ -89,9 +90,10 @@ func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	}}, nil
 }
 
-func makeHTTPStorage(base string, settings *cluster.Settings) (cloud.ExternalStorage, error) {
+// MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
+func MakeHTTPStorage(base string, settings *cluster.Settings) (cloud.ExternalStorage, error) {
 	if base == "" {
-		return nil, errors.Errorf("HTTP storage requested but base path not provided")
+		return nil, errors.Errorf("HTTP storage requested but prefix path not provided")
 	}
 
 	client, err := makeHTTPClient(settings)
@@ -190,7 +192,7 @@ func (r *resumingHTTPReader) sendRequest(
 	// never enter the loop below; in this case we want to return "nil, canceled"
 	err = context.Canceled
 	for attempt, retries := 0,
-		retry.StartWithCtx(r.ctx, httpRetryOptions); retries.Next(); attempt++ {
+		retry.StartWithCtx(r.ctx, HTTPRetryOptions); retries.Next(); attempt++ {
 		resp, err = r.client.req(r.ctx, "GET", r.url, nil, reqHeaders)
 
 		if err == nil {

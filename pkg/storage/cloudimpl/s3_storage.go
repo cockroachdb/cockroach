@@ -57,7 +57,8 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 	return q.Encode()
 }
 
-func makeS3Storage(
+// MakeS3Storage returns an instance of S3 ExternalStorage.
+func MakeS3Storage(
 	ctx context.Context,
 	ioConf base.ExternalIODirConfig,
 	conf *roachpb.ExternalStorage_S3,
@@ -90,12 +91,12 @@ func makeS3Storage(
 	// "": default to `specified`.
 	opts := session.Options{}
 	switch conf.Auth {
-	case "", authParamSpecified:
+	case "", AuthParamSpecified:
 		if conf.AccessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
-				authParamSpecified,
+				AuthParamSpecified,
 				S3AccessKeyParam,
 			)
 		}
@@ -103,12 +104,12 @@ func makeS3Storage(
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
-				authParamSpecified,
+				AuthParamSpecified,
 				S3SecretParam,
 			)
 		}
 		opts.Config.MergeIn(config)
-	case authParamImplicit:
+	case AuthParamImplicit:
 		if ioConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")

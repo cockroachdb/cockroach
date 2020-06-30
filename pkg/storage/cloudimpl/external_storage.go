@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -56,10 +57,16 @@ const (
 
 	// AuthParam is the query parameter for the cluster settings named
 	// key in a URI.
-	AuthParam          = "AUTH"
-	authParamImplicit  = "implicit"
-	authParamDefault   = "default"
-	authParamSpecified = "specified"
+	AuthParam = "AUTH"
+	// AuthParamImplicit is the query parameter for the implicit authentication
+	// mode in a URI.
+	AuthParamImplicit = "implicit"
+	// AuthParamDefault is the query parameter for the default authentication
+	// mode in a URI.
+	AuthParamDefault = "default"
+	// AuthParamSpecified is the query parameter for the specified authentication
+	// mode in a URI.
+	AuthParamSpecified = "specified"
 
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
@@ -72,10 +79,15 @@ const (
 	cloudstorageDefault = ".default"
 	cloudstorageKey     = ".key"
 
-	cloudstorageGSDefault    = cloudstorageGS + cloudstorageDefault
-	cloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
+	cloudstorageGSDefault = cloudstorageGS + cloudstorageDefault
+	// CloudstorageGSDefaultKey is the setting whose value is the JSON key to use
+	// during Google Cloud Storage operations.
+	CloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
 
-	cloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
+	// CloudstorageHTTPCASetting is the setting whose value is the custom root CA
+	// (appended to system's default CAs) for verifying certificates when
+	// interacting with HTTPS storage.
+	CloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
 
 	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
@@ -172,6 +184,7 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		}
 		conf.Provider = roachpb.ExternalStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
+		log.Infof(context.Background(), "THIS IS THE PATH %s", conf.LocalFile.Path)
 		conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
 	case "experimental-workload", "workload":
 		conf.Provider = roachpb.ExternalStorageProvider_Workload
@@ -255,10 +268,10 @@ func MakeExternalStorage(
 			return nil, errors.New("external http access disabled")
 		}
 		telemetry.Count("external-io.http")
-		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
+		return MakeHTTPStorage(dest.HttpPath.BaseUri, settings)
 	case roachpb.ExternalStorageProvider_S3:
 		telemetry.Count("external-io.s3")
-		return makeS3Storage(ctx, conf, dest.S3Config, settings)
+		return MakeS3Storage(ctx, conf, dest.S3Config, settings)
 	case roachpb.ExternalStorageProvider_GoogleCloud:
 		telemetry.Count("external-io.google_cloud")
 		return makeGCSStorage(ctx, conf, dest.GoogleCloudConfig, settings)
@@ -295,13 +308,15 @@ func containsGlob(str string) bool {
 }
 
 var (
-	gcsDefault = settings.RegisterPublicStringSetting(
-		cloudstorageGSDefaultKey,
+	// GcsDefault is the setting which defines the JSON key to use during GCS
+	// operations.
+	GcsDefault = settings.RegisterPublicStringSetting(
+		CloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
 		"",
 	)
 	httpCustomCA = settings.RegisterPublicStringSetting(
-		cloudstorageHTTPCASetting,
+		CloudstorageHTTPCASetting,
 		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
 	)
@@ -315,7 +330,7 @@ var (
 // fails. It knows about specific kinds of errors that need longer retry
 // delays than normal.
 func delayedRetry(ctx context.Context, fn func() error) error {
-	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxDelayedRetryAttempts, func() error {
+	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
 		err := fn()
 		if err == nil {
 			return nil
@@ -366,8 +381,9 @@ func isResumableHTTPError(err error) bool {
 		sysutil.IsErrConnectionRefused(err)
 }
 
-// Maximum number of times the delayedRetry method will re-run the provided function.
-const maxDelayedRetryAttempts = 3
+// MaxDelayedRetryAttempts is the number of times the delayedRetry method will
+// re-run the provided function.
+const MaxDelayedRetryAttempts = 3
 
 // Maximum number of times we can attempt to retry reading from external storage,
 // without making any progress.

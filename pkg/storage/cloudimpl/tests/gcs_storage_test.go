@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package tests
 
 import (
 	"context"
@@ -21,6 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -54,7 +56,7 @@ func (d *antagonisticDialer) DialContext(
 ) (net.Conn, error) {
 	if network == "tcp" && addr == "storage.googleapis.com:443" {
 		// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
-		if *d.numRepeatFailures < maxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
+		if *d.numRepeatFailures < cloudimpl.MaxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
 			*(d.numRepeatFailures)++
 			return nil, econnrefused
 		}
@@ -70,7 +72,7 @@ func (d *antagonisticDialer) DialContext(
 
 func (c *antagonisticConn) Read(b []byte) (int, error) {
 	// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
-	if *c.numRepeatFailures < maxDelayedRetryAttempts-1 && c.rnd.Int()%2 == 0 {
+	if *c.numRepeatFailures < cloudimpl.MaxDelayedRetryAttempts-1 && c.rnd.Int()%2 == 0 {
 		*(c.numRepeatFailures)++
 		return 0, econnreset
 	}
@@ -78,6 +80,7 @@ func (c *antagonisticConn) Read(b []byte) (int, error) {
 }
 
 func TestAntagonisticRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		// This test requires valid GS credential file.
 		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
@@ -102,10 +105,10 @@ func TestAntagonisticRead(t *testing.T) {
 	}()
 
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-	conf, err := ExternalStorageConfFromURI(gsFile, security.RootUser)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, security.RootUser)
 	require.NoError(t, err)
 
-	s, err := MakeExternalStorage(
+	s, err := cloudimpl.MakeExternalStorage(
 		context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
 		nil, nil, nil)
 	require.NoError(t, err)
@@ -120,6 +123,7 @@ func TestAntagonisticRead(t *testing.T) {
 // returns a sentinel error when the `Bucket` or `Object` being read do not
 // exist.
 func TestFileDoesNotExist(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		// This test requires valid GS credential file.
 		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
@@ -129,30 +133,30 @@ func TestFileDoesNotExist(t *testing.T) {
 	{
 		// Invalid gsFile.
 		gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
-		conf, err := ExternalStorageConfFromURI(gsFile, user)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
-		s, err := MakeExternalStorage(
+		s, err := cloudimpl.MakeExternalStorage(
 			context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
 			nil, nil, nil)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
-		require.True(t, errors.Is(err, ErrFileDoesNotExist))
+		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
 	}
 
 	{
 		// Invalid gsBucket.
 		gsFile := "gs://cockroach-fixtures-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-		conf, err := ExternalStorageConfFromURI(gsFile, user)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
-		s, err := MakeExternalStorage(
+		s, err := cloudimpl.MakeExternalStorage(
 			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
 			nil, nil)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
-		require.True(t, errors.Is(err, ErrFileDoesNotExist))
+		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
 	}
 }
