@@ -81,18 +81,18 @@ func (s *SSTSnapshotStorageScratch) createDir() error {
 
 // NewFile adds another file to SSTSnapshotStorageScratch. This file is lazily
 // created when the file is written to the first time. A nonzero value for
-// chunkSize buffers up writes until the buffer is greater than chunkSize.
+// syncSize calls Sync after syncSize bytes have been written since last sync.
 func (s *SSTSnapshotStorageScratch) NewFile(
-	ctx context.Context, chunkSize int64,
+	ctx context.Context, syncSize int64,
 ) (*SSTSnapshotStorageFile, error) {
 	id := len(s.ssts)
 	filename := s.filename(id)
 	s.ssts = append(s.ssts, filename)
 	f := &SSTSnapshotStorageFile{
-		scratch:   s,
-		filename:  filename,
-		ctx:       ctx,
-		chunkSize: chunkSize,
+		scratch:  s,
+		filename: filename,
+		ctx:      ctx,
+		syncSize: syncSize,
 	}
 	return f, nil
 }
@@ -116,6 +116,9 @@ func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) e
 	if _, err := f.Write(data); err != nil {
 		return err
 	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
 	return f.Close()
 }
 
@@ -132,13 +135,13 @@ func (s *SSTSnapshotStorageScratch) Clear() error {
 // SSTSnapshotStorageFile is an SST file managed by a
 // SSTSnapshotStorageScratch.
 type SSTSnapshotStorageFile struct {
-	scratch   *SSTSnapshotStorageScratch
-	created   bool
-	file      fs.File
-	filename  string
-	ctx       context.Context
-	chunkSize int64
-	buffer    []byte
+	scratch        *SSTSnapshotStorageScratch
+	created        bool
+	file           fs.File
+	filename       string
+	ctx            context.Context
+	bytesSinceSync int64
+	syncSize       int64
 }
 
 func (f *SSTSnapshotStorageFile) openFile() error {
@@ -173,23 +176,18 @@ func (f *SSTSnapshotStorageFile) Write(contents []byte) (int, error) {
 		return 0, err
 	}
 	limitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents))
-	if f.chunkSize > 0 {
-		if int64(len(contents)+len(f.buffer)) < f.chunkSize {
-			// Don't write to file yet - buffer write until next time.
-			f.buffer = append(f.buffer, contents...)
-			return len(contents), nil
-		} else if len(f.buffer) > 0 {
-			// Write buffered writes and then empty the buffer.
-			if _, err := f.file.Write(f.buffer); err != nil {
-				return 0, err
-			}
-			f.buffer = f.buffer[:0]
-		}
-	}
 	if _, err := f.file.Write(contents); err != nil {
 		return 0, err
 	}
-	return len(contents), f.file.Sync()
+	var err error
+	if f.syncSize > 0 {
+		f.bytesSinceSync += int64(len(contents))
+		if f.bytesSinceSync >= f.syncSize {
+			f.bytesSinceSync = 0
+			err = f.Sync()
+		}
+	}
+	return len(contents), err
 }
 
 // Close closes the file. Calling this function multiple times is idempotent.
@@ -202,13 +200,6 @@ func (f *SSTSnapshotStorageFile) Close() error {
 	}
 	if f.file == nil {
 		return nil
-	}
-	if len(f.buffer) > 0 {
-		// Write out any buffered data.
-		if _, err := f.file.Write(f.buffer); err != nil {
-			return err
-		}
-		f.buffer = f.buffer[:0]
 	}
 	if err := f.file.Close(); err != nil {
 		return err
