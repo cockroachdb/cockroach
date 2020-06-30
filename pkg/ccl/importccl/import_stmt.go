@@ -858,14 +858,15 @@ func prepareNewTableDescsForIngestion(
 	importTables []jobspb.ImportDetails_Table,
 	parentID sqlbase.ID,
 ) ([]*sqlbase.TableDescriptor, error) {
-	var tableDescs []*sqlbase.TableDescriptor
-	for _, i := range importTables {
+	tableDescs := make([]*sqlbase.TableDescriptor, len(importTables))
+	for i := range importTables {
 		// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
 		//  support user defined schemas.
-		if err := backupccl.CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, i.Desc.Name); err != nil {
+		if err := backupccl.CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID,
+			keys.PublicSchemaID, importTables[i].Desc.Name); err != nil {
 			return nil, err
 		}
-		tableDescs = append(tableDescs, i.Desc)
+		tableDescs[i] = importTables[i].Desc
 	}
 
 	// Verification steps have passed, generate a new table ID if we're
@@ -914,7 +915,8 @@ func prepareNewTableDescsForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteDescriptors(ctx, txn, nil /* databases */, tables, nil, tree.RequestedDescriptors, p.ExecCfg().Settings, seqValKVs); err != nil {
+	if err := backupccl.WriteDescriptors(ctx, txn, nil /* databases */, tables, nil,
+		tree.RequestedDescriptors, p.ExecCfg().Settings, seqValKVs); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
 
@@ -1014,12 +1016,15 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			if err != nil {
 				return err
 			}
-			for i, table := range res {
-				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
-					Name:       details.Tables[i].Name,
-					SeqVal:     details.Tables[i].SeqVal,
-					IsNew:      details.Tables[i].IsNew,
-					TargetCols: details.Tables[i].TargetCols}
+
+			for _, desc := range res {
+				i := newTableDescToIdx[desc]
+				table := details.Tables[i]
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc,
+					Name:       table.Name,
+					SeqVal:     table.SeqVal,
+					IsNew:      table.IsNew,
+					TargetCols: table.TargetCols}
 			}
 		}
 
