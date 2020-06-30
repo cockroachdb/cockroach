@@ -577,9 +577,7 @@ func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
 
 // LockCommunication is part of the ClientComm interface.
 func (icc *internalClientComm) LockCommunication() ClientLock {
-	return &noopClientLock{
-		clientComm: icc,
-	}
+	return (*noopClientLock)(icc)
 }
 
 // Flush is part of the ClientComm interface.
@@ -624,26 +622,24 @@ func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
 
 // noopClientLock is an implementation of ClientLock that says that no results
 // have been communicated to the client.
-type noopClientLock struct {
-	clientComm *internalClientComm
-}
+type noopClientLock internalClientComm
 
 // Close is part of the ClientLock interface.
 func (ncl *noopClientLock) Close() {}
 
 // ClientPos is part of the ClientLock interface.
 func (ncl *noopClientLock) ClientPos() CmdPos {
-	return ncl.clientComm.lastDelivered
+	return ncl.lastDelivered
 }
 
 // RTrim is part of the ClientLock interface.
 func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 	var i int
 	var r resWithPos
-	for i, r = range ncl.clientComm.results {
+	for i, r = range ncl.results {
 		if r.pos >= pos {
 			break
 		}
 	}
-	ncl.clientComm.results = ncl.clientComm.results[:i]
+	ncl.results = ncl.results[:i]
 }
