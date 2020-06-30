@@ -29,38 +29,42 @@ import (
 // parseEWKBRaw creates a geopb.SpatialObject from an EWKB
 // without doing any SRID based checks.
 // You most likely want parseEWKB instead.
-func parseEWKBRaw(in geopb.EWKB) (geopb.SpatialObject, error) {
+func parseEWKBRaw(soType geopb.SpatialObjectType, in geopb.EWKB) (geopb.SpatialObject, error) {
 	t, err := ewkb.Unmarshal(in)
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	return spatialObjectFromGeomT(t)
+	return spatialObjectFromGeomT(t, soType)
 }
 
 // parseAmbiguousText parses a text as a number of different options
 // that is available in the geospatial world using the first character as
 // a heuristic.
 // This matches the PostGIS direct cast from a string to GEOGRAPHY/GEOMETRY.
-func parseAmbiguousText(str string, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
+func parseAmbiguousText(
+	soType geopb.SpatialObjectType, str string, defaultSRID geopb.SRID,
+) (geopb.SpatialObject, error) {
 	if len(str) == 0 {
 		return geopb.SpatialObject{}, fmt.Errorf("geo: parsing empty string to geo type")
 	}
 
 	switch str[0] {
 	case '0':
-		return parseEWKBHex(str, defaultSRID)
+		return parseEWKBHex(soType, str, defaultSRID)
 	case 0x00, 0x01:
-		return parseEWKB([]byte(str), defaultSRID, DefaultSRIDIsHint)
+		return parseEWKB(soType, []byte(str), defaultSRID, DefaultSRIDIsHint)
 	case '{':
-		return parseGeoJSON([]byte(str), defaultSRID)
+		return parseGeoJSON(soType, []byte(str), defaultSRID)
 	}
 
-	return parseEWKT(geopb.EWKT(str), defaultSRID, DefaultSRIDIsHint)
+	return parseEWKT(soType, geopb.EWKT(str), defaultSRID, DefaultSRIDIsHint)
 }
 
 // parseEWKBHex takes a given str assumed to be in EWKB hex and transforms it
 // into a SpatialObject.
-func parseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
+func parseEWKBHex(
+	soType geopb.SpatialObjectType, str string, defaultSRID geopb.SRID,
+) (geopb.SpatialObject, error) {
 	t, err := ewkbhex.Decode(str)
 	if err != nil {
 		return geopb.SpatialObject{}, err
@@ -68,13 +72,16 @@ func parseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.SpatialObject, erro
 	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return spatialObjectFromGeomT(t)
+	return spatialObjectFromGeomT(t, soType)
 }
 
 // parseEWKB takes given bytes assumed to be EWKB and transforms it into a SpatialObject.
 // The defaultSRID will overwrite any SRID set in the EWKB if overwrite is true.
 func parseEWKB(
-	b []byte, defaultSRID geopb.SRID, overwrite defaultSRIDOverwriteSetting,
+	soType geopb.SpatialObjectType,
+	b []byte,
+	defaultSRID geopb.SRID,
+	overwrite defaultSRIDOverwriteSetting,
 ) (geopb.SpatialObject, error) {
 	t, err := ewkb.Unmarshal(b)
 	if err != nil {
@@ -83,21 +90,25 @@ func parseEWKB(
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return spatialObjectFromGeomT(t)
+	return spatialObjectFromGeomT(t, soType)
 }
 
 // parseWKB takes given bytes assumed to be WKB and transforms it into a SpatialObject.
-func parseWKB(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
+func parseWKB(
+	soType geopb.SpatialObjectType, b []byte, defaultSRID geopb.SRID,
+) (geopb.SpatialObject, error) {
 	t, err := wkb.Unmarshal(b, wkbcommon.WKBOptionEmptyPointHandling(wkbcommon.EmptyPointHandlingNaN))
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
 	adjustGeomSRID(t, defaultSRID)
-	return spatialObjectFromGeomT(t)
+	return spatialObjectFromGeomT(t, soType)
 }
 
 // parseGeoJSON takes given bytes assumed to be GeoJSON and transforms it into a SpatialObject.
-func parseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error) {
+func parseGeoJSON(
+	soType geopb.SpatialObjectType, b []byte, defaultSRID geopb.SRID,
+) (geopb.SpatialObject, error) {
 	var t geom.T
 	if err := geojson.Unmarshal(b, &t); err != nil {
 		return geopb.SpatialObject{}, err
@@ -105,7 +116,7 @@ func parseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.SpatialObject, error)
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return spatialObjectFromGeomT(t)
+	return spatialObjectFromGeomT(t, soType)
 }
 
 // adjustGeomSRID adjusts the SRID of a given geom.T.
@@ -149,7 +160,10 @@ const (
 // parseEWKT decodes a WKT string and transforms it into a SpatialObject.
 // The defaultSRID will overwrite any SRID set in the EWKT if overwrite is true.
 func parseEWKT(
-	str geopb.EWKT, defaultSRID geopb.SRID, overwrite defaultSRIDOverwriteSetting,
+	soType geopb.SpatialObjectType,
+	str geopb.EWKT,
+	defaultSRID geopb.SRID,
+	overwrite defaultSRIDOverwriteSetting,
 ) (geopb.SpatialObject, error) {
 	srid := defaultSRID
 	if hasPrefixIgnoreCase(string(str), sridPrefix) {
@@ -179,7 +193,7 @@ func parseEWKT(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	return parseEWKBRaw(ewkb)
+	return parseEWKBRaw(soType, ewkb)
 }
 
 // hasPrefixIgnoreCase returns whether a given str begins with a prefix, ignoring case.

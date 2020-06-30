@@ -118,7 +118,7 @@ func ShortestLineString(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error)
 func distanceLineStringInternal(
 	a *geo.Geometry, b *geo.Geometry, u geodist.DistanceUpdater, emptyBehavior geo.EmptyBehavior,
 ) (*geo.Geometry, error) {
-	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox())}
 	_, err := distanceInternal(a, b, c, emptyBehavior)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func maxDistanceInternal(
 	a *geo.Geometry, b *geo.Geometry, stopAfterGT float64, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
 	u := newGeomMaxDistanceUpdater(stopAfterGT)
-	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox())}
 	return distanceInternal(a, b, c, emptyBehavior)
 }
 
@@ -155,7 +155,7 @@ func minDistanceInternal(
 	a *geo.Geometry, b *geo.Geometry, stopAfterLE float64, emptyBehavior geo.EmptyBehavior,
 ) (float64, error) {
 	u := newGeomMinDistanceUpdater(stopAfterLE)
-	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.BoundingBoxIntersects(b)}
+	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox())}
 	return distanceInternal(a, b, c, emptyBehavior)
 }
 

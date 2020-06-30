@@ -257,6 +257,48 @@ var distanceTestCases = []struct {
 		0,
 		0,
 	},
+	{
+		"LINESTRING to POINT intersecting across the longitudinal boundary",
+		"LINESTRING(179 0, -179 0)",
+		"POINT(179.1 0)",
+		0,
+		0,
+	},
+	{
+		"reversed LINESTRING to POINT intersecting across the longitudinal boundary",
+		"LINESTRING(-179 0, 179 0)",
+		"POINT(179.1 0)",
+		0,
+		0,
+	},
+	{
+		"reversed LINESTRING to POINT not intersecting the linestring crossing the longitudinal boundary but POINT on the other side",
+		"LINESTRING(-179 0, 179 0)",
+		"POINT(170 0)",
+		1000755.71761168,
+		1001875.41713946,
+	},
+	{
+		"LINESTRING to POINT not intersecting the linestring crossing the longitudinal boundary but POINT on the other side",
+		"LINESTRING(179 0, -179 0)",
+		"POINT(170 0)",
+		1000755.71761168,
+		1001875.41713946,
+	},
+	{
+		"POLYGON to POINT lying inside latitudinal boundary",
+		"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+		"POINT (150 88)",
+		0,
+		0,
+	},
+	{
+		"POLYGON to POINT lying outside latitudinal boundary",
+		"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+		"POINT (170 88)",
+		38610.04033289,
+		38783.11312354,
+	},
 }
 
 func TestDistance(t *testing.T) {
