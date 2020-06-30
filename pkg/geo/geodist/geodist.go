@@ -11,13 +11,22 @@
 // Package geodist finds distances between two geospatial shapes.
 package geodist
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s2"
+	"github.com/twpayne/go-geom"
+)
 
-// Point is an interface that represents a geospatial Point.
-type Point interface {
-	IsShape()
-	IsPoint()
+// Point is a union that avoids mallocing pointers for the heap.
+// This is the return value for Edge calls to avoid needing to allocate
+// Point interface structs whilst iterating over the shape.
+type Point struct {
+	GeomCoord geom.Coord
+	GeogPoint s2.Point
 }
+
+// IsShape implements the geodist.Shape interface.
+func (p *Point) IsShape() {}
 
 // Edge is a struct that represents a connection between two points.
 type Edge struct {
@@ -63,7 +72,7 @@ type Shape interface {
 	IsShape()
 }
 
-var _ Shape = (Point)(nil)
+var _ Shape = (*Point)(nil)
 var _ Shape = (LineString)(nil)
 var _ Shape = (LinearRing)(nil)
 var _ Shape = (Polygon)(nil)
@@ -122,24 +131,24 @@ type DistanceCalculator interface {
 // It returns whether the function above should return early.
 func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 	switch a := a.(type) {
-	case Point:
+	case *Point:
 		switch b := b.(type) {
-		case Point:
-			return c.DistanceUpdater().Update(a, b), nil
+		case *Point:
+			return c.DistanceUpdater().Update(*a, *b), nil
 		case LineString:
-			return onPointToLineString(c, a, b), nil
+			return onPointToLineString(c, *a, b), nil
 		case Polygon:
-			return onPointToPolygon(c, a, b), nil
+			return onPointToPolygon(c, *a, b), nil
 		default:
 			return false, errors.Newf("unknown shape: %T", b)
 		}
 	case LineString:
 		switch b := b.(type) {
-		case Point:
+		case *Point:
 			c.DistanceUpdater().FlipGeometries()
 			// defer to restore the order of geometries at the end of the function call.
 			defer c.DistanceUpdater().FlipGeometries()
-			return onPointToLineString(c, b, a), nil
+			return onPointToLineString(c, *b, a), nil
 		case LineString:
 			return onShapeEdgesToShapeEdges(c, a, b), nil
 		case Polygon:
@@ -149,11 +158,11 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 		}
 	case Polygon:
 		switch b := b.(type) {
-		case Point:
+		case *Point:
 			c.DistanceUpdater().FlipGeometries()
 			// defer to restore the order of geometries at the end of the function call.
 			defer c.DistanceUpdater().FlipGeometries()
-			return onPointToPolygon(c, b, a), nil
+			return onPointToPolygon(c, *b, a), nil
 		case LineString:
 			c.DistanceUpdater().FlipGeometries()
 			// defer to restore the order of geometries at the end of the function call.
