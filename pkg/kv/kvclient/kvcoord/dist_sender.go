@@ -701,7 +701,7 @@ func unsetCanForwardReadTimestampFlag(ctx context.Context, ba *roachpb.BatchRequ
 			// Assert this for our own sanity.
 			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
 				log.Fatalf(ctx, "batch unexpected contained requests "+
-					"that need to refresh and an EndTxn request: %s", ba)
+					"that need to refresh and an EndTxn request: %s", ba.String())
 			}
 			return
 		}
@@ -902,6 +902,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	}
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
+	qiBaCopy := qiBa // avoids escape to heap
 
 	runTask := ds.rpcContext.Stopper.RunAsyncTask
 	if ds.disableParallelBatches {
@@ -977,7 +978,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		}
 		// Populate the pre-commit QueryIntent batch response. If we made it
 		// here then we know we can ignore intent missing errors.
-		qiReply.reply = qiBa.CreateReply()
+		qiReply.reply = qiBaCopy.CreateReply()
 		for _, ru := range qiReply.reply.Responses {
 			ru.GetQueryIntent().FoundIntent = true
 		}
