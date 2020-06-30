@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package filetable
+package filetabletest
 
 import (
 	"bytes"
@@ -20,8 +20,10 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,11 +32,12 @@ import (
 )
 
 const database = "defaultdb"
+const qualifiedTableName = database + ".public.file_table_read_writer"
 
 // uploadFile generates random data and copies it to the FileTableSystem via
 // the FileWriter.
 func uploadFile(
-	ctx context.Context, filename string, fileSize, chunkSize int, ft *FileToTableSystem,
+	ctx context.Context, filename string, fileSize, chunkSize int, ft *filetable.FileToTableSystem,
 ) ([]byte, error) {
 	data := make([]byte, fileSize)
 	randGen, _ := randutil.NewPseudoRand()
@@ -63,11 +66,10 @@ func uploadFile(
 func checkNumberOfPayloadChunks(
 	ctx context.Context,
 	t *testing.T,
-	filename, username string,
+	payloadTableName, filename string,
 	expectedNumChunks int,
 	sqlDB *gosql.DB,
 ) {
-	payloadTableName := payloadTableNamePrefix + username
 	var count int
 	err := sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE filename='%s'`,
 		payloadTableName, filename)).Scan(&count)
@@ -77,9 +79,8 @@ func checkNumberOfPayloadChunks(
 
 // Checks that a metadata entry exists for the given filename in the File table.
 func checkMetadataEntryExists(
-	ctx context.Context, t *testing.T, filename, username string, sqlDB *gosql.DB,
+	ctx context.Context, t *testing.T, fileTableName, filename string, sqlDB *gosql.DB,
 ) {
-	fileTableName := fileTableNamePrefix + username
 	var count int
 	err := sqlDB.QueryRowContext(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE filename='%s'`,
 		fileTableName, filename)).Scan(&count)
@@ -92,13 +93,12 @@ func TestListAndDeleteFiles(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = database
 	s, _, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	fileTableReadWriter, err := NewFileToTableSystem(ctx, database,
+	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
-		"root")
+		security.RootUser)
 	require.NoError(t, err)
 
 	// Create first test file with multiple chunks.
@@ -116,7 +116,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	// List files before delete.
-	files, err := fileTableReadWriter.ListFiles(ctx)
+	files, err := fileTableReadWriter.ListFiles(ctx, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"file1", "file2", "file3"}, files)
 
@@ -124,14 +124,14 @@ func TestListAndDeleteFiles(t *testing.T) {
 	require.NoError(t, fileTableReadWriter.DeleteFile(ctx, "file1"))
 
 	// List files.
-	files, err = fileTableReadWriter.ListFiles(ctx)
+	files, err = fileTableReadWriter.ListFiles(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	require.Equal(t, []string{"file2", "file3"}, files)
 
 	// Destroy the filesystem.
-	require.NoError(t, DestroyUserFileSystem(ctx, fileTableReadWriter))
+	require.NoError(t, filetable.DestroyUserFileSystem(ctx, fileTableReadWriter))
 
 	// Attempt to write after the user system has been destroyed.
 	_, err = uploadFile(ctx, "file4", size, chunkSize, fileTableReadWriter)
@@ -143,18 +143,17 @@ func TestReadWriteFile(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = database
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	fileTableReadWriter, err := NewFileToTableSystem(ctx, database,
+	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
-		"root")
+		security.RootUser)
 	require.NoError(t, err)
 
 	testFileName := "testfile"
 
-	isContentEqual := func(filename string, expected []byte, ft *FileToTableSystem) bool {
+	isContentEqual := func(filename string, expected []byte, ft *filetable.FileToTableSystem) bool {
 		reader, err := fileTableReadWriter.ReadFile(ctx, filename)
 		require.NoError(t, err)
 		got, err := ioutil.ReadAll(reader)
@@ -188,10 +187,11 @@ func TestReadWriteFile(t *testing.T) {
 		require.True(t, isContentEqual(testFileName, expected, fileTableReadWriter))
 
 		// Check chunking and metadata entry.
-		checkMetadataEntryExists(ctx, t, testFileName, "root", sqlDB)
+		checkMetadataEntryExists(ctx, t, fileTableReadWriter.GetFQFileTableName(), testFileName,
+			sqlDB)
 		expectedNumChunks := (testCase.fileSize / testCase.chunkSize) +
 			(testCase.fileSize % testCase.chunkSize)
-		checkNumberOfPayloadChunks(ctx, t, testFileName, "root",
+		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQPayloadTableName(), testFileName,
 			expectedNumChunks, sqlDB)
 
 		// Delete file.
@@ -250,10 +250,10 @@ func TestReadWriteFile(t *testing.T) {
 
 		// Check chunking and metadata entry.
 		expectedFileSize := fileSize * 2
-		checkMetadataEntryExists(ctx, t, testFileName, "root", sqlDB)
+		checkMetadataEntryExists(ctx, t, fileTableReadWriter.GetFQFileTableName(), testFileName, sqlDB)
 		expectedNumChunks := (expectedFileSize / chunkSize) +
 			(expectedFileSize % chunkSize)
-		checkNumberOfPayloadChunks(ctx, t, testFileName, "root",
+		checkNumberOfPayloadChunks(ctx, t, fileTableReadWriter.GetFQPayloadTableName(), testFileName,
 			expectedNumChunks, sqlDB)
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
@@ -269,7 +269,6 @@ func TestUserGrants(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = database
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -292,7 +291,7 @@ func TestUserGrants(t *testing.T) {
 	require.NoError(t, err)
 	defer userDB.Close()
 
-	fileTableReadWriter, err := NewFileToTableSystem(ctx, database,
+	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
 		"john")
 	require.NoError(t, err)
@@ -312,16 +311,14 @@ func TestUserGrants(t *testing.T) {
 	require.NoError(t, fileTableReadWriter.DeleteFile(ctx, "file1"))
 
 	// Delete all files to test DROP privilege.
-	require.NoError(t, DestroyUserFileSystem(ctx, fileTableReadWriter))
+	require.NoError(t, filetable.DestroyUserFileSystem(ctx, fileTableReadWriter))
 
 	// Check that there are no grantees on the File and Payload tables as they
 	// should have been dropped above.
-	fileTableName := fileTableNamePrefix + "john"
-	payloadTableName := payloadTableNamePrefix + "john"
-	_, err = getTableGrantees(ctx, fileTableName, conn)
+	_, err = getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.Error(t, err)
 
-	_, err = getTableGrantees(ctx, payloadTableName, conn)
+	_, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.Error(t, err)
 }
 
@@ -354,7 +351,6 @@ func TestDifferentUserDisallowed(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = database
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -383,7 +379,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	require.NoError(t, err)
 	defer userDB.Close()
 
-	fileTableReadWriter, err := NewFileToTableSystem(ctx, database,
+	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
 		"john")
 	require.NoError(t, err)
@@ -404,15 +400,13 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	// Under normal circumstances Doe should have ALL privileges on the file and
 	// payload tables created by john above. FileToTableSystem should have
 	// revoked these privileges.
-	fileTableName := fileTableNamePrefix + "john"
-	payloadTableName := payloadTableNamePrefix + "john"
 
 	// Only grantees on the table should be admin, root and john (5 privileges).
-	grantees, err := getTableGrantees(ctx, fileTableName, conn)
+	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
 	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
 
-	grantees, err = getTableGrantees(ctx, payloadTableName, conn)
+	grantees, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.NoError(t, err)
 	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
 }
@@ -425,7 +419,6 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = database
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -460,7 +453,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	require.NoError(t, err)
 	defer userDB.Close()
 
-	fileTableReadWriter, err := NewFileToTableSystem(ctx, database,
+	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
 		"john")
 	require.NoError(t, err)
@@ -481,15 +474,13 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	// Under normal circumstances Doe should have ALL privileges on the file and
 	// payload tables created by john above. FileToTableSystem should have
 	// revoked these privileges.
-	fileTableName := fileTableNamePrefix + "john"
-	payloadTableName := payloadTableNamePrefix + "john"
-
+	//
 	// Only grantees on the table should be admin, root and john (5 privileges).
-	grantees, err := getTableGrantees(ctx, fileTableName, conn)
+	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
 	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
 
-	grantees, err = getTableGrantees(ctx, payloadTableName, conn)
+	grantees, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.NoError(t, err)
 	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
 }
@@ -501,13 +492,12 @@ func TestDatabaseScope(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = database
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	fileTableReadWriter, err := NewFileToTableSystem(ctx, database,
+	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
-		"root")
+		security.RootUser)
 	require.NoError(t, err)
 
 	// Verify defaultdb has the file we wrote.
@@ -522,9 +512,9 @@ func TestDatabaseScope(t *testing.T) {
 	// Switch database and attempt to read the file.
 	_, err = sqlDB.Exec(`CREATE DATABASE newdb`)
 	require.NoError(t, err)
-	newFileTableReadWriter, err := NewFileToTableSystem(ctx, "newdb",
-		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
-		"root")
+	newFileTableReadWriter, err := filetable.NewFileToTableSystem(ctx,
+		"newdb.file_table_read_writer",
+		s.InternalExecutor().(*sql.InternalExecutor), kvDB, security.RootUser)
 	require.NoError(t, err)
 	reader, err := newFileTableReadWriter.ReadFile(ctx, "file1")
 	require.NoError(t, err)

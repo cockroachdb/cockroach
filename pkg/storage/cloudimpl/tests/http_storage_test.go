@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package tests
 
 import (
 	"bytes"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -84,7 +85,7 @@ func TestPutHttp(t *testing.T) {
 
 		u := testSettings.MakeUpdater()
 		if err := u.Set(
-			cloudstorageHTTPCASetting,
+			cloudimpl.CloudstorageHTTPCASetting,
 			string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
 			"s",
 		); err != nil {
@@ -93,7 +94,7 @@ func TestPutHttp(t *testing.T) {
 
 		cleanup := func() {
 			srv.Close()
-			if err := u.Set(cloudstorageHTTPCASetting, "", "s"); err != nil {
+			if err := u.Set(cloudimpl.CloudstorageHTTPCASetting, "", "s"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -147,11 +148,11 @@ func TestPutHttp(t *testing.T) {
 		srv, _, cleanup := makeServer()
 		defer cleanup()
 
-		conf, err := ExternalStorageConfFromURI(srv.String(), user)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(srv.String(), user)
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+		s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
 			testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -192,9 +193,9 @@ func TestHttpGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	data := []byte("to serve, or not to serve.  c'est la question")
 
-	httpRetryOptions.InitialBackoff = 1 * time.Microsecond
-	httpRetryOptions.MaxBackoff = 10 * time.Millisecond
-	httpRetryOptions.MaxRetries = 100
+	cloudimpl.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
+	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
+	cloudimpl.HTTPRetryOptions.MaxRetries = 100
 
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
@@ -241,7 +242,7 @@ func TestHttpGet(t *testing.T) {
 				return nil
 			})
 
-			store, err := makeHTTPStorage(s.URL, testSettings)
+			store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -276,7 +277,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer s.Close()
 
-	store, err := makeHTTPStorage(s.URL, testSettings)
+	store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -290,10 +291,11 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 }
 
 func TestCanDisableHttp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	conf := base.ExternalIODirConfig{
 		DisableHTTP: true,
 	}
-	s, err := MakeExternalStorage(
+	s, err := cloudimpl.MakeExternalStorage(
 		context.Background(),
 		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
 		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
@@ -302,6 +304,7 @@ func TestCanDisableHttp(t *testing.T) {
 }
 
 func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(fmt.Sprintf("proxied-%s", r.URL)))
 	}))
@@ -318,9 +321,9 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		http.DefaultTransport.(*http.Transport).Proxy = nil
 	}()
 
-	conf, err := ExternalStorageConfFromURI("http://my-server", security.RootUser)
+	conf, err := cloudimpl.ExternalStorageConfFromURI("http://my-server", security.RootUser)
 	require.NoError(t, err)
-	s, err := MakeExternalStorage(
+	s, err := cloudimpl.MakeExternalStorage(
 		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
 		nil, nil)
 	require.NoError(t, err)
