@@ -11,6 +11,7 @@
 package kvcoord
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -20,7 +21,70 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
+
+type mockNodeStore struct {
+	nodes []roachpb.NodeDescriptor
+}
+
+var _ NodeDescStore = &mockNodeStore{}
+
+// GetNodeDesc is part of the NodeDescStore interface.
+func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	for _, nd := range ns.nodes {
+		if nd.NodeID == nodeID {
+			return &nd, nil
+		}
+	}
+	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+}
+
+func TestNewReplicaSlice(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	rd := &roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
+		},
+	}
+	ns := &mockNodeStore{
+		nodes: []roachpb.NodeDescriptor{
+			{
+				NodeID:  1,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  2,
+				Address: util.UnresolvedAddr{},
+			},
+			{
+				NodeID:  3,
+				Address: util.UnresolvedAddr{},
+			},
+		},
+	}
+	rs, err := NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
+
+	// Check that learners are not included.
+	typLearner := roachpb.LEARNER
+	rd.InternalReplicas[2].Type = &typLearner
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	require.NoError(t, err)
+	require.Equal(t, 2, rs.Len())
+
+	// Check that, if the leasehoder points to a learner, that learner is
+	// included.
+	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
+	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
+}
 
 func getStores(rs ReplicaSlice) (r []roachpb.StoreID) {
 	for i := range rs {

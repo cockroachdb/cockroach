@@ -668,7 +668,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 				lease, pendingLease := r.GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
-					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))
+					(pendingLease.Empty() || !r.IsLeaseValid(pendingLease, now))
 			}
 			// We unconditionally send this replica through the GC queue. It's
 			// reasonably likely that the GC queue will do nothing because the replica

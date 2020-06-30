@@ -271,7 +271,7 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				r.mu.state.Desc.StartKey = roachpb.RKey(keys.TableDataMax)
 				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
-				require.EqualError(t, err, "key range /Min-/Max outside of bounds of range /Table/Max-/Max")
+				require.Regexp(t, "key range /Min-/Max outside of bounds of range /Table/Max-/Max", err.Error())
 			},
 		},
 	} {

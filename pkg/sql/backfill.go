@@ -865,7 +865,6 @@ func (sc *SchemaChanger) distBackfill(
 				&cbw,
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 				sc.rangeDescriptorCache,
-				sc.leaseHolderCache,
 				nil, /* txn - the flow does not run wholly in a txn */
 				func(ts hlc.Timestamp) {
 					sc.clock.Update(ts)

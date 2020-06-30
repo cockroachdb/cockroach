@@ -113,7 +113,7 @@ func (f *firstNErrorTransport) NextInternalClient(
 }
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return roachpb.ReplicaDescriptor{}
+	return f.replicas[f.numSent].ReplicaDescriptor
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
@@ -270,6 +270,8 @@ func sendBatch(
 	g := makeGossip(t, stopper, rpcContext)
 
 	desc := new(roachpb.RangeDescriptor)
+	desc.StartKey = roachpb.RKeyMin
+	desc.EndKey = roachpb.RKeyMax
 	for i, addr := range addrs {
 		nd := &roachpb.NodeDescriptor{
 			NodeID:  roachpb.NodeID(i + 1),
@@ -297,6 +299,12 @@ func sendBatch(
 			TransportFactory: transportFactory,
 		},
 	})
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  *desc,
+		Lease: roachpb.Lease{},
+	})
+	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, EvictionToken{}, false /* useReverseScan */)
+	require.NoError(t, err)
 
-	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, desc, false /* withCommit */)
+	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)
 }

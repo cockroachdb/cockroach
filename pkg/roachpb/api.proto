@@ -42,13 +42,6 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
-// RangeInfo describes a range which executed a request. It contains
-// the range descriptor and lease information at the time of execution.
-message RangeInfo {
-  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  Lease lease = 2 [(gogoproto.nullable) = false];
-}
-
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   option (gogoproto.equal) = true;

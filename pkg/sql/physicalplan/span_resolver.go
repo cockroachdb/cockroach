@@ -138,11 +138,10 @@ func NewSpanResolver(
 		st:       st,
 		nodeDesc: nodeDesc,
 		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
-			Settings:         st,
-			Gossip:           gw.DeprecatedOracleGossip(48432),
-			NodeDesc:         nodeDesc,
-			RPCContext:       rpcCtx,
-			LeaseHolderCache: distSender.LeaseHolderCache(),
+			Settings:   st,
+			Gossip:     gw.DeprecatedOracleGossip(48432),
+			NodeDesc:   nodeDesc,
+			RPCContext: rpcCtx,
 		}),
 		distSender: distSender,
 		gossip:     gw,
@@ -151,7 +150,7 @@ func NewSpanResolver(
 
 // spanResolverIterator implements the SpanResolverIterator interface.
 type spanResolverIterator struct {
-	// it is a wrapper RangeIterator.
+	// it is a wrapped RangeIterator.
 	it *kvcoord.RangeIterator
 	// oracle is used to choose a lease holders for ranges when one isn't present
 	// in the cache.
@@ -271,7 +270,7 @@ func (it *spanResolverIterator) ReplicaInfo(
 	}
 
 	repl, err := it.oracle.ChoosePreferredReplica(
-		ctx, it.it.Desc(), it.queryState)
+		ctx, it.it.Desc(), it.it.Lease(), it.queryState)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
