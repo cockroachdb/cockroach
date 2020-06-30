@@ -472,7 +472,7 @@ func (g *Geography) AsS2(emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 	return S2RegionsFromGeom(geomRepr, emptyBehavior)
 }
 
-// BoundingRect returns the bounding rectangle of the given Geography.
+// BoundingRect returns the bounding s2.Rect of the given Geography.
 func (g *Geography) BoundingRect() s2.Rect {
 	bbox := g.spatialObject.BoundingBox
 	if bbox == nil {
@@ -482,6 +482,11 @@ func (g *Geography) BoundingRect() s2.Rect {
 		Lat: r1.Interval{Lo: bbox.LoY, Hi: bbox.HiY},
 		Lng: s1.Interval{Lo: bbox.LoX, Hi: bbox.HiX},
 	}
+}
+
+// BoundingCap returns the bounding s2.Cap of the given Geography.
+func (g *Geography) BoundingCap() s2.Cap {
+	return g.BoundingRect().CapBound()
 }
 
 // isLinearRingCCW returns whether a given linear ring is counter clock wise.

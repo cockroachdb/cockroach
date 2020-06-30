@@ -13,6 +13,7 @@ package geogfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/geo/s1"
 )
 
 // DWithin returns whether a is within distance d of b, i.e. Distance(a, b) <= d.
@@ -25,6 +26,18 @@ func DWithin(
 	}
 	if distance < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
+	}
+	spheroid, err := a.Spheroid()
+	if err != nil {
+		return false, err
+	}
+
+	distanceToExpand := s1.Angle(distance / spheroid.SphereRadius)
+	if useSphereOrSpheroid == UseSpheroid {
+		distanceToExpand *= (1 + SpheroidErrorFraction)
+	}
+	if !a.BoundingCap().Expanded(distanceToExpand).Intersects(b.BoundingCap()) {
+		return false, nil
 	}
 
 	aRegions, err := a.AsS2(geo.EmptyBehaviorError)
@@ -39,10 +52,6 @@ func DWithin(
 		if geo.IsEmptyGeometryError(err) {
 			return false, nil
 		}
-		return false, err
-	}
-	spheroid, err := a.Spheroid()
-	if err != nil {
 		return false, err
 	}
 	maybeClosestDistance, err := distanceGeographyRegions(spheroid, useSphereOrSpheroid, aRegions, bRegions, distance)
