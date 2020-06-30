@@ -372,10 +372,8 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return checkSupportForPlanNode(n.input)
 
-	// TODO(sumeer): When the filtering is only a union expression, we should
-	// distribute, as outlined in the discussion on PR #50158.
 	case *invertedFilterNode:
-		return cannotDistribute, nil
+		return checkSupportForInvertedFilterNode(n)
 
 	case *invertedJoinNode:
 		if err := checkExpr(n.onExpr); err != nil {
@@ -518,6 +516,37 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	default:
 		return cannotDistribute, planNodeNotSupportedErr
 	}
+}
+
+func checkSupportForInvertedFilterNode(n *invertedFilterNode) (distRecommendation, error) {
+	rec, err := checkSupportForPlanNode(n.input)
+	if err != nil {
+		return cannotDistribute, err
+	}
+	// When filtering is a union of inverted spans, it is distributable: place
+	// an inverted filterer on each node, which produce the primary keys in
+	// arbitrary order, and de-duplicate the PKs at the next stage.
+	// The expression is a union of inverted spans iff all the spans have been
+	// promoted to FactoredUnionSpans, in which case the Left and Right
+	// InvertedExpressions are nil.
+	//
+	// TODO(sumeer): Even if the filtering cannot be distributed, the
+	// placement of the inverted filter could be optimized. Specifically, when
+	// the input is a single processor (because the TableReader is reading
+	// span(s) that are all on the same node), we can place the inverted
+	// filterer on that input node. Currently, this approach fails because we
+	// don't know whether the input is a single processor at this stage, and if
+	// we blindly returned shouldDistribute, we encounter situations where
+	// remote TableReaders are feeding an inverted filterer which runs into an
+	// encoding problem with inverted columns. The remote code tries to decode
+	// the inverted column as the original type (e.g. for geospatial, tries to
+	// decode the int cell-id as a geometry) which obviously fails -- this is
+	// related to #50659. Fix this in the distSQLSpecExecFactory.
+	filterRec := cannotDistribute
+	if n.expression.Left == nil && n.expression.Right == nil {
+		filterRec = shouldDistribute
+	}
+	return rec.compose(filterRec), nil
 }
 
 //go:generate stringer -type=NodeStatus
@@ -2236,9 +2265,48 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		InvertedExpr:   *n.expression.ToProto(),
 	}
 
-	plan.AddSingleGroupStage(dsp.gatewayNodeID,
+	// Cases:
+	// - Last stage is a single processor (local or remote): Place the inverted
+	//   filterer on that last stage node. Due to the behavior of
+	//   checkSupportForInvertedFilterNode, the remote case can only happen for
+	//   a distributable filter.
+	// - Last stage has multiple processors that are on different nodes: Filtering
+	//   must be distributable. Place an inverted filterer on each node, which
+	//   produces the primary keys in arbitrary order, and de-duplicate the PKs
+	//   at the next stage.
+	if len(plan.ResultRouters) == 1 {
+		// Last stage is a single processor.
+		lastNodeID := plan.Processors[plan.ResultRouters[0]].Node
+		plan.AddSingleGroupStage(lastNodeID,
+			execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: invertedFiltererSpec,
+			},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+		return plan, nil
+	}
+	// Must be distributable.
+	distributable := n.expression.Left == nil && n.expression.Right == nil
+	if !distributable {
+		return nil, errors.Errorf("expected distributable inverted filterer")
+	}
+	// Instantiate one inverted filterer for every stream.
+	plan.AddNoGroupingStage(
+		execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
+		execinfrapb.PostProcessSpec{}, plan.ResultTypes, execinfrapb.Ordering{})
+	// De-duplicate the PKs. Note that the inverted filterer output includes
+	// the inverted column always set to NULL, so we exclude it from the
+	// distinct columns.
+	distinctColumns := make([]uint32, 0, len(n.resultColumns)-1)
+	for i := 0; i < len(n.resultColumns); i++ {
+		if i == n.invColumn {
+			continue
+		}
+		distinctColumns = append(distinctColumns, uint32(i))
+	}
+	plan.AddSingleGroupStage(
+		dsp.gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{
-			InvertedFilterer: invertedFiltererSpec,
+			Distinct: &execinfrapb.DistinctSpec{DistinctColumns: distinctColumns},
 		},
 		execinfrapb.PostProcessSpec{}, plan.ResultTypes)
 	return plan, nil
