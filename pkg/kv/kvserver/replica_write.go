@@ -142,11 +142,25 @@ func (r *Replica) executeWriteBatch(
 	}
 	g = nil // ownership passed to Raft, prevent misuse
 
-	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
-	// In both cases, we don't need to communicate a MLAI. Furthermore, for lease proposals we
-	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI explicitly
-	// as a side effect of stepping up as leaseholder.
+	// A max lease index of zero is returned when no proposal was made or a lease
+	// was proposed.
 	if maxLeaseIndex != 0 {
+		if r.mergeInProgress() {
+			// The correctness of range merges relies on the invariant that the
+			// LeaseAppliedIndex of the range is not bumped while a range is in its
+			// subsumed state. If this invariant is ever violated, the follower
+			// replicas of the subsumed range (RHS) are free to activate any future
+			// closed timestamp updates even before the merge completes. This would be
+			// a serializability violation.
+			//
+			// See comment block in executeReadOnlyBatchWithServerSideRefreshes for
+			// details.
+			log.Fatalf(ctx, "lease applied index bumped while the range was subsumed")
+		}
+		// In case no proposal was made or a lease was proposed, we don't need to
+		// communicate a MLAI. Furthermore, for lease proposals we cannot communicate
+		// under the lease's epoch. Instead the code calls EmitMLAI explicitly as a
+		// side effect of stepping up as leaseholder.
 		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 

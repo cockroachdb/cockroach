@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -133,6 +134,42 @@ func Subsume(
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
 	reply.FreezeStart = cArgs.EvalCtx.Clock().Now()
+
+	// We prevent followers of the RHS from being able to serve follower reads on
+	// timestamps that fall in the timestamp window representing the range's
+	// subsumed state (i.e. between the subsumption time (FreezeStart) and the
+	// timestamp at which the merge transaction commits or aborts), by requiring
+	// follower replicas to catch up to an MLAI that succeeds the range's current
+	// LeaseAppliedIndex (note that we're tracking lai + 1 below instead of lai).
+	// In case the merge successfully commits, this MLAI will never be caught up
+	// to since the RHS will be destroyed. In case the merge aborts, this ensures
+	// that the followers can only activate the newer closed timestamps once they
+	// catch up to the LAI associated with the merge abort. We need to do this
+	// because the closed timestamps that are broadcast by RHS in this subsumed
+	// state are not going to be reflected in the timestamp cache of the LHS range
+	// after the merge, which can cause a serializability violation.
+	//
+	// Note that we are essentially lying to the closed timestamp tracker here in
+	// order to achieve the effect of unactionable closed timestamp update until
+	// the merge concludes. Tracking lai + 1 here ensures that the follower
+	// replicas need to catch up to at least that index before they are able to
+	// activate _any of the closed timestamps from this point onwards_. In other
+	// words, we will never publish a closed timestamp update for this range below
+	// this lai, regardless of whether a different proposal untracks a lower lai
+	// at any point in the future.
+	//
+	// NB: The above statement relies on the invariant that the LAI that follows a
+	// Subsume request will be applied only after the merge aborts. More
+	// specifically, this means that no intervening request can bump the LAI of
+	// range while it is subsumed. This invariant is upheld because the only Raft
+	// proposals allowed after a range has been subsumed are lease requests, which
+	// do not bump the LAI. In case there is lease transfer on this range while it
+	// is subsumed, we ensure that the initial MLAI update broadcast by the new
+	// leaseholder respects the invariant in question, in much the same way we do
+	// here. Take a look at `EmitMLAI()` in replica_closedts.go for more details.
+	_, untrack := cArgs.EvalCtx.GetTracker().Track(ctx)
+	lease, _ := cArgs.EvalCtx.GetLease()
+	untrack(ctx, ctpb.Epoch(lease.Epoch), desc.RangeID, ctpb.LAI(cArgs.EvalCtx.GetLeaseAppliedIndex()+1))
 
 	return result.Result{
 		Local: result.LocalResult{MaybeWatchForMerge: true},

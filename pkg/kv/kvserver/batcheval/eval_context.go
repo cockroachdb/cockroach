@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -65,6 +66,7 @@ type EvalContext interface {
 	GetFirstIndex() (uint64, error)
 	GetTerm(uint64) (uint64, error)
 	GetLeaseAppliedIndex() uint64
+	GetTracker() closedts.TrackerI
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -175,6 +177,9 @@ func (m *mockEvalCtxImpl) GetTerm(uint64) (uint64, error) {
 	return m.Term, nil
 }
 func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
+	panic("unimplemented")
+}
+func (m *mockEvalCtxImpl) GetTracker() closedts.TrackerI {
 	panic("unimplemented")
 }
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
