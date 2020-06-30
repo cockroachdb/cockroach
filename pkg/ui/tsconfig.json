@@ -13,7 +13,7 @@
     "noImplicitThis": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "outDir": "./dist/",
+    "outDir": "./distlib/types",
     "skipLibCheck": true,
     "sourceMap": true,
     "strictNullChecks": false,

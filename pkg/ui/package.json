@@ -4,6 +4,8 @@
   "main": "index.tsx",
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
+  "main": "distlib/lib-bundle.js",
+  "types": "distlib/types/index.d.ts",
   "scripts": {
     "storybook": "start-storybook -p 9009",
     "cypress": "./opt/node_modules/.bin/cypress",
