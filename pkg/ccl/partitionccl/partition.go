@@ -93,7 +93,9 @@ func valueEncodePartitionTuple(
 
 		var semaCtx tree.SemaContext
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].Type, "partition",
-			&semaCtx, false /* allowImpure */)
+			&semaCtx,
+			tree.VolatilityImmutable,
+		)
 		if err != nil {
 			return nil, err
 		}

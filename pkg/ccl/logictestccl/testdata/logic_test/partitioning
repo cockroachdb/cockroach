@@ -369,14 +369,19 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN ((SELECT 1))
 )
 
-statement error PARTITION p1: now\(\): impure functions are not allowed in partition
+statement error PARTITION p1: now\(\): context-dependent functions are not allowed in partition
 CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (now())
 )
 
-statement error PARTITION p1: uuid_v4\(\): impure functions are not allowed in partition
+statement error PARTITION p1: uuid_v4\(\): volatile functions are not allowed in partition
 CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (uuid_v4() || 'foo')
+)
+
+statement error PARTITION p1: 'now'::TIMESTAMP: partition values must be constant
+CREATE TABLE t (a TIMESTAMP PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN ('now')
 )
 
 statement ok

@@ -246,11 +246,19 @@ var builtins = map[string]builtinDefinition{
 
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
-	"concat": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	"concat": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+			// In Postgres concat can take any arguments, converting them to their
+			// text representation. Since the text representation can depend on the
+			// context (e.g. timezone), the function is Stable. In our case, we only
+			// take String inputs so our version is Immutable.
+			IgnoreVolatilityCheck: true,
+		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var buffer bytes.Buffer
 				length := 0
 				for _, d := range args {
@@ -266,15 +274,23 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDString(buffer.String()), nil
 			},
 			Info:       "Concatenates a comma-separated list of strings.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
-	"concat_ws": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	"concat_ws": makeBuiltin(
+		tree.FunctionProperties{
+			NullableArgs: true,
+			// In Postgres concat_ws can take any arguments, converting them to their
+			// text representation. Since the text representation can depend on the
+			// context (e.g. timezone), the function is Stable. In our case, we only
+			// take String inputs so our version is Immutable.
+			IgnoreVolatilityCheck: true,
+		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
 					return nil, pgerror.Newf(pgcode.UndefinedFunction, errInsufficientArgsFmtString, "concat_ws")
 				}
@@ -304,16 +320,16 @@ var builtins = map[string]builtinDefinition{
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
 				"returns `wow!great`.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		},
 	),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString, IgnoreVolatilityCheck: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.Bytes}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				str := []byte(tree.MustBeDBytes(args[0]))
 				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
@@ -337,15 +353,15 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		}),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString, IgnoreVolatilityCheck: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				str := string(tree.MustBeDString(args[0]))
 				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
@@ -369,7 +385,7 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Encode the string `str` as a byte array using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility: tree.VolatilityStable,
+			Volatility: tree.VolatilityImmutable,
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
@@ -477,7 +493,6 @@ var builtins = map[string]builtinDefinition{
 	"gen_random_uuid": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categoryIDGeneration,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -1698,9 +1713,7 @@ CockroachDB supports the following flags:
 	),
 
 	"random": makeBuiltin(
-		tree.FunctionProperties{
-			Impure: true,
-		},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -1715,7 +1728,6 @@ CockroachDB supports the following flags:
 	"unique_rowid": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categoryIDGeneration,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -1738,7 +1750,6 @@ CockroachDB supports the following flags:
 		tree.FunctionProperties{
 			Category:             categorySequences,
 			DistsqlBlocklist:     true,
-			Impure:               true,
 			HasSequenceArguments: true,
 		},
 		tree.Overload{
@@ -1765,7 +1776,6 @@ CockroachDB supports the following flags:
 		tree.FunctionProperties{
 			Category:             categorySequences,
 			DistsqlBlocklist:     true,
-			Impure:               true,
 			HasSequenceArguments: true,
 		},
 		tree.Overload{
@@ -1791,7 +1801,6 @@ CockroachDB supports the following flags:
 	"lastval": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySequences,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -1814,7 +1823,6 @@ CockroachDB supports the following flags:
 		tree.FunctionProperties{
 			Category:             categorySequences,
 			DistsqlBlocklist:     true,
-			Impure:               true,
 			HasSequenceArguments: true,
 		},
 		tree.Overload{
@@ -1983,7 +1991,7 @@ CockroachDB supports the following flags:
 
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html
 	"age": makeBuiltin(
-		tree.FunctionProperties{Impure: true},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
@@ -2005,7 +2013,7 @@ CockroachDB supports the following flags:
 	),
 
 	"current_date": makeBuiltin(
-		tree.FunctionProperties{Impure: true},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Date),
@@ -2024,7 +2032,7 @@ CockroachDB supports the following flags:
 	"localtime":      txnTimeWithPrecisionBuiltin(false),
 
 	"statement_timestamp": makeBuiltin(
-		tree.FunctionProperties{Impure: true},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
@@ -2047,7 +2055,7 @@ CockroachDB supports the following flags:
 	),
 
 	tree.FollowerReadTimestampFunctionName: makeBuiltin(
-		tree.FunctionProperties{Impure: true},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
@@ -2075,7 +2083,6 @@ return without an error.`,
 	"cluster_logical_timestamp": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2095,7 +2102,7 @@ may increase either contention or retry errors, or both.`,
 	),
 
 	"clock_timestamp": makeBuiltin(
-		tree.FunctionProperties{Impure: true},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
@@ -2118,7 +2125,7 @@ may increase either contention or retry errors, or both.`,
 	),
 
 	"timeofday": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime, Impure: true},
+		tree.FunctionProperties{Category: categoryDateAndTime},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -3204,7 +3211,6 @@ may increase either contention or retry errors, or both.`,
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
 			Undocumented: true,
-			Impure:       true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3250,7 +3256,6 @@ may increase either contention or retry errors, or both.`,
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
 			Undocumented: true,
-			Impure:       true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -3396,7 +3401,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.force_error": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},
@@ -3419,7 +3423,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.notice": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -3450,7 +3453,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.force_assertion_error": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -3467,7 +3469,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.force_panic": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -3487,7 +3488,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.force_log_fatal": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -3513,7 +3513,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Interval}},
@@ -3564,7 +3563,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.no_constant_folding": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Any}},
@@ -3696,7 +3694,6 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
@@ -4178,7 +4175,6 @@ func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (strin
 var uuidV4Impl = makeBuiltin(
 	tree.FunctionProperties{
 		Category: categoryIDGeneration,
-		Impure:   true,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{},
@@ -4298,7 +4294,6 @@ func txnTSImplBuiltin(preferTZOverload bool) builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
 			Category: categoryDateAndTime,
-			Impure:   true,
 		},
 		txnTSOverloads(preferTZOverload)...,
 	)
@@ -4308,7 +4303,6 @@ func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
 			Category: categoryDateAndTime,
-			Impure:   true,
 		},
 		txnTSWithPrecisionOverloads(preferTZOverload)...,
 	)
@@ -4317,7 +4311,7 @@ func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
 func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return makeBuiltin(
-		tree.FunctionProperties{Impure: true},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimeTZ),

@@ -38,7 +38,7 @@ func SanitizeVarFreeExpr(
 	expectedType *types.T,
 	context string,
 	semaCtx *tree.SemaContext,
-	allowImpure bool,
+	maxVolatility tree.Volatility,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.Newf(pgcode.Syntax,
@@ -52,8 +52,22 @@ func SanitizeVarFreeExpr(
 
 	// Ensure that the expression doesn't contain special functions.
 	flags := tree.RejectSpecial
-	if !allowImpure {
-		flags |= tree.RejectImpureFunctions
+
+	switch maxVolatility {
+	case tree.VolatilityImmutable:
+		// TODO(radu): we only check the volatility of functions; we need to check
+		// the volatility of operators and casts as well!
+		flags |= tree.RejectStableFunctions
+		fallthrough
+
+	case tree.VolatilityStable:
+		flags |= tree.RejectVolatileFunctions
+
+	case tree.VolatilityVolatile:
+		// Allow anything (no flags needed).
+
+	default:
+		panic(errors.AssertionFailedf("maxVolatility %s not supported", maxVolatility))
 	}
 	semaCtx.Properties.Require(context, flags)
 
@@ -174,7 +188,7 @@ func MakeColumnDefDescs(
 		// and does not contain invalid functions.
 		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, true, /* allowImpure */
+			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
 		); err != nil {
 			return nil, nil, nil, err
 		}
@@ -235,7 +249,7 @@ func EvalShardBucketCount(
 ) (int32, error) {
 	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
 	typedExpr, err := SanitizeVarFreeExpr(
-		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, true, /* allowImpure */
+		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
 	)
 	if err != nil {
 		return 0, err
