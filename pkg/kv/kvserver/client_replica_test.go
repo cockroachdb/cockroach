@@ -1119,15 +1119,16 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	// below to trap any lease request and infer that it refers to the range we're
 	// interested in.
 	sc.TestingKnobs.DisableSplitQueue = true
-	sc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp) {
+	sc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp, _ roachpb.StoreID, _ roachpb.RangeID) *roachpb.Error {
 		val := leaseAcquisitionTrap.Load()
 		if val == nil {
-			return
+			return nil
 		}
 		trapCallback := val.(func(ts hlc.Timestamp))
 		if trapCallback != nil {
 			trapCallback(ts)
 		}
+		return nil
 	}
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()

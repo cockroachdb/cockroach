@@ -601,7 +601,9 @@ func (r *Replica) requestLeaseLocked(
 	ctx context.Context, status kvserverpb.LeaseStatus,
 ) *leaseRequestHandle {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
-		r.store.TestingKnobs().LeaseRequestEvent(status.Timestamp)
+		if err := r.store.TestingKnobs().LeaseRequestEvent(status.Timestamp, r.StoreID(), r.GetRangeID()); err != nil {
+			return r.mu.pendingLeaseRequest.newResolvedHandle(err)
+		}
 	}
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorRLocked()

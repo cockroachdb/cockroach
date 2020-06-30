@@ -888,6 +888,16 @@ func (r *Replica) getMergeCompleteChRLocked() chan struct{} {
 	return r.mu.mergeComplete
 }
 
+func (r *Replica) mergeInProgress() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mergeInProgressRLocked()
+}
+
+func (r *Replica) mergeInProgressRLocked() bool {
+	return r.mu.mergeComplete != nil
+}
+
 // setLastReplicaDescriptors sets the the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
@@ -1525,10 +1535,6 @@ func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
 	}
-}
-
-func (r *Replica) mergeInProgressRLocked() bool {
-	return r.mu.mergeComplete != nil
 }
 
 func (r *Replica) getReplicaDescriptorByIDRLocked(

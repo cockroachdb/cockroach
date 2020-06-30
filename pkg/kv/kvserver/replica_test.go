@@ -720,15 +720,16 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	tsc := TestStoreConfig(clock)
 	var leaseAcquisitionTrap atomic.Value
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp) {
+	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp, _ roachpb.StoreID, _ roachpb.RangeID) *roachpb.Error {
 		val := leaseAcquisitionTrap.Load()
 		if val == nil {
-			return
+			return nil
 		}
 		trapCallback := val.(func(ts hlc.Timestamp))
 		if trapCallback != nil {
 			trapCallback(ts)
 		}
+		return nil
 	}
 	transferSem := make(chan struct{})
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =

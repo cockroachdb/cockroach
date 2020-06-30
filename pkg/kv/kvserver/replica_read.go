@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -122,12 +123,51 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
+	releaseSubsumeProp := func(_ bool) {}
+	if ba.IsSingleSubsumeRequest() {
+		// We start tracking SubsumeRequests as part of our guarantee to never
+		// broadcast a closed timestamp entry for a range that is in the subsumed
+		// state.
+		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+		r.mu.Lock()
+		epoch := ctpb.Epoch(r.mu.state.Lease.Epoch)
+		lai := r.mu.state.LeaseAppliedIndex
+		r.mu.Unlock()
+		releaseSubsumeProp = func(didSubsume bool) {
+			if didSubsume {
+				// We prevent followers of the RHS from being able to serve follower
+				// reads on timestamps that fall in the timestamp window representing
+				// the range's subsumed state (i.e. between the subsumption time
+				// (FreezeStart) and the timestamp at which the merge transaction
+				// commits or aborts), by requiring follower replicas to catch up to an
+				// MLAI that succeeds the range's current LeaseAppliedIndex. In case the
+				// merge successfully commits, this MLAI will never be caught up to
+				// since the RHS will be destroyed. In case the merge aborts, this
+				// ensures that the followers can only activate the newer closed
+				// timestamps once they catch up to the LAI associated with the merge
+				// abort. We need to do this because the closed timestamps that are
+				// broadcast by RHS in this subsumed state are not going to be reflected
+				// in the timestamp cache of the LHS range after the merge, which can
+				// cause a serializability violation.
+				//
+				// NB: The above statement relies on the invariant that the LAI that
+				// follows a Subsume request will be applied only after the merge
+				// aborts. More specifically, this means that no intervening request can
+				// bump the LAI of range while it is subsumed. This invariant is upheld
+				// because the only Raft proposals allowed after a range has been
+				// subsumed are lease requests, which do not bump the LAI.
+				untrack(ctx, epoch, r.RangeID, ctpb.LAI(lai+1))
+			} else {
+				untrack(ctx, 0, 0, 0)
+			}
+		}
+	}
+
 	for retries := 0; ; retries++ {
 		if retries > 0 {
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
-
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
@@ -142,8 +182,10 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			EncounteredIntents: res.Local.DetachEncounteredIntents(),
 			Metrics:            res.Local.Metrics,
 		}
+		releaseSubsumeProp(false)
 		return nil, res, pErr
 	}
+	releaseSubsumeProp(true)
 	return br, res, nil
 }
 
