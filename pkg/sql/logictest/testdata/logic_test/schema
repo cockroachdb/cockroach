@@ -33,3 +33,6 @@ CREATE SCHEMA pg_catalog
 
 statement error schema .* already exists
 CREATE SCHEMA information_schema
+
+statement error pq: unacceptable schema name \"pg_temp\"
+CREATE SCHEMA pg_temp
