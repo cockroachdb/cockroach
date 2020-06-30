@@ -332,6 +332,20 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	if err != nil {
 		return 0, roachpb.NewError(err)
 	}
+	if maxLeaseIndex != 0 {
+		if r.mergeInProgress() {
+			// The correctness of range merges relies on the invariant that the
+			// LeaseAppliedIndex of the range is not bumped while a range is in its
+			// subsumed state. If this invariant is ever violated, the follower
+			// replicas of the subsumed range (RHS) are free to activate any future
+			// closed timestamp updates even before the merge completes. This would be
+			// a serializability violation.
+			//
+			// See comment block in executeReadOnlyBatchWithServerSideRefreshes for
+			// details.
+			log.Fatalf(ctx, "lease applied index bumped while the range was subsumed")
+		}
+	}
 	return int64(maxLeaseIndex), nil
 }
 
