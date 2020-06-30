@@ -34,6 +34,20 @@ func (r *Replica) EmitMLAI() {
 	if isLeaseholder && epoch > 0 {
 		ctx := r.AnnotateCtx(context.Background())
 		_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-		untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
+		if r.mergeInProgress() {
+			// A critical requirement for the correctness of range merges is that we
+			// don't allow follower reads on closed timestamps that are greater than
+			// the subsumption time of the RHS range. Thus, while a range is subsumed,
+			// we ensure that any intervening closed timestamp updates (until the
+			// merge either commits or aborts) can only be activated *after* the merge
+			// has completed (successfully or otherwise), by requiring that follower
+			// replicas must catch up to an MLAI that succeeds the range's current
+			// lease applied index.
+			// See comment block in executeReadOnlyBatchWithServersideRefreshes() for
+			// more details.
+			untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai+1))
+		} else {
+			untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
+		}
 	}
 }

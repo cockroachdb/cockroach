@@ -321,6 +321,24 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 }
 `)
 
+	fmt.Fprint(f, `
+// CreateRequest creates an empty Request for each of the Method types.
+func CreateRequest(method Method) Request {
+	switch method {`)
+	for _, v := range reqVariants {
+		fmt.Fprintf(f, `
+	case %s:
+		return &%s{}`, v.msgType[:len(v.msgType)-7], v.msgType)
+	}
+	fmt.Fprintf(f, "%s", `
+	default:
+		panic(fmt.Sprintf("unsupported method: %+v", method))
+	}
+	// Unreachable
+	return nil
+}
+`)
+
 	if err := f.Close(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error closing file: ", err)
 		os.Exit(1)
