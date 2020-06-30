@@ -372,10 +372,12 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		return checkSupportForPlanNode(n.input)
 
-	// TODO(sumeer): When the filtering is only a union expression, we should
-	// distribute, as outlined in the discussion on PR #50158.
 	case *invertedFilterNode:
-		return cannotDistribute, nil
+		rec, err := checkSupportForPlanNode(n.input)
+		if err != nil {
+			return cannotDistribute, err
+		}
+		return rec.compose(shouldDistribute), nil
 
 	case *invertedJoinNode:
 		if err := checkExpr(n.onExpr); err != nil {
@@ -2236,9 +2238,64 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		InvertedExpr:   *n.expression.ToProto(),
 	}
 
-	plan.AddSingleGroupStage(dsp.gatewayNodeID,
+	// Cases:
+	// - Last stage is a single processor (local or remote): Place the inverted
+	//   filterer on that last stage node.
+	// - Last stage has multiple processors all on the same node: Same as previous.
+	// - Last stage has multiple processors that are on different nodes:
+	//   - Filtering is distributable: Distributable is true when the filtering
+	//     is a union of inverted spans. Place an inverted filterer on each node,
+	//     which produces the primary keys in arbitrary order, and de-duplicate
+	//     the PKs at the next stage.
+	//   - Filtering is non-distributable: Place the inverted filterer on the
+	//     gateway node.
+	isSingleProcessor := len(plan.ResultRouters) == 1
+	var multipleProcessorsAreOnSameNode bool
+	if !isSingleProcessor {
+		multipleProcessorsAreOnSameNode = true
+		prevStageNode := plan.Processors[plan.ResultRouters[0]].Node
+		for i := 1; i < len(plan.ResultRouters); i++ {
+			if n := plan.Processors[plan.ResultRouters[i]].Node; n != prevStageNode {
+				multipleProcessorsAreOnSameNode = false
+				break
+			}
+		}
+	}
+	rootNodeID := dsp.gatewayNodeID
+	if isSingleProcessor || multipleProcessorsAreOnSameNode {
+		rootNodeID = plan.Processors[plan.ResultRouters[0]].Node
+	}
+	// The expression is a union of inverted spans iff all the spans have been
+	// promoted to FactoredUnionSpans, in which case the Left and Right
+	// InvertedExpressions are nil.
+	distributable := n.expression.Left == nil && n.expression.Right == nil
+	if isSingleProcessor || multipleProcessorsAreOnSameNode || !distributable {
+		plan.AddSingleGroupStage(rootNodeID,
+			execinfrapb.ProcessorCoreUnion{
+				InvertedFilterer: invertedFiltererSpec,
+			},
+			execinfrapb.PostProcessSpec{}, plan.ResultTypes)
+		return plan, nil
+	}
+	// Distribute.
+	// Instantiate one inverted filterer for every stream.
+	plan.AddNoGroupingStage(
+		execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
+		execinfrapb.PostProcessSpec{}, plan.ResultTypes, execinfrapb.Ordering{})
+	// De-duplicate the PKs. Note that the inverted filterer output includes
+	// the inverted column always set to NULL, so we exclude it from the
+	// distinct columns.
+	distinctColumns := make([]uint32, 0, len(n.resultColumns)-1)
+	for i := 0; i < len(n.resultColumns); i++ {
+		if i == n.invColumn {
+			continue
+		}
+		distinctColumns = append(distinctColumns, uint32(i))
+	}
+	plan.AddSingleGroupStage(
+		dsp.gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{
-			InvertedFilterer: invertedFiltererSpec,
+			Distinct: &execinfrapb.DistinctSpec{DistinctColumns: distinctColumns},
 		},
 		execinfrapb.PostProcessSpec{}, plan.ResultTypes)
 	return plan, nil

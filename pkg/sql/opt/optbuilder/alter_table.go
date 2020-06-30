@@ -196,6 +196,14 @@ func getIndexColumnNamesAndTypes(index cat.Index) (colNames []string, colTypes [
 		colNames[i] = string(c.ColName())
 		colTypes[i] = c.DatumType()
 	}
+	if index.IsInverted() && index.GeoConfig() != nil {
+		// TODO(sumeer): special case Array too. JSON is harder since the split
+		// needs to be a Datum and the JSON inverted column is not.
+		//
+		// Geospatial inverted index. The first column is the inverted column and
+		// is an int.
+		colTypes[0] = types.Int
+	}
 	return colNames, colTypes
 }
 
