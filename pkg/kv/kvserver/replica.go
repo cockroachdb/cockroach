@@ -1610,9 +1610,9 @@ func (r *Replica) GetExternalStorage(
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (r *Replica) GetExternalStorageFromURI(
-	ctx context.Context, uri string,
+	ctx context.Context, uri string, user string,
 ) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorageFromURI(ctx, uri)
+	return r.store.cfg.ExternalStorageFromURI(ctx, uri, user)
 }
 
 func (r *Replica) markSystemConfigGossipSuccess() {

@@ -128,7 +128,11 @@ message ReadImportDataSpec {
   // If set, specifies reader parallelism; 0 implies "use default".
   optional int32 readerParallelism = 13 [(gogoproto.nullable) = false];
 
-  // NEXTID: 14
+  // User who initiated the import. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 15 [(gogoproto.nullable) = false];
+
+  // NEXTID: 16
 }
 
 message BackupDataSpec {
@@ -144,6 +148,10 @@ message BackupDataSpec {
   // PKIDs is used to convert result from an ExportRequest into row count
   // information passed back to track progress in the backup job.
   map<uint64, bool> pk_ids = 9 [(gogoproto.customname) = "PKIDs"];
+
+  // User who initiated the backup. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 10 [(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently
@@ -167,6 +175,10 @@ message CSVWriterSpec {
 
   // compression_codec specifies compression used for exported file.
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];
+
+  // User who initiated the export. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 6 [(gogoproto.nullable) = false];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

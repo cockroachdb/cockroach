@@ -238,7 +238,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
-			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
 			if err != nil {
 				return err
 			}

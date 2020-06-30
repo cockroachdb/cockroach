@@ -16,6 +16,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -32,14 +33,11 @@ func TestPutAzure(t *testing.T) {
 		t.Skip("AZURE_CONTAINER env var must be set")
 	}
 
-	testExportStore(t,
-		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
-			bucket, "backup-test",
-			AzureAccountNameParam, url.QueryEscape(accountName),
-			AzureAccountKeyParam, url.QueryEscape(accountKey),
-		),
-		false,
-	)
+	testExportStore(t, fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
+		bucket, "backup-test",
+		AzureAccountNameParam, url.QueryEscape(accountName),
+		AzureAccountKeyParam, url.QueryEscape(accountKey),
+	), false, security.RootUser, nil, nil)
 	testListFiles(
 		t,
 		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
@@ -47,5 +45,6 @@ func TestPutAzure(t *testing.T) {
 			AzureAccountNameParam, url.QueryEscape(accountName),
 			AzureAccountKeyParam, url.QueryEscape(accountKey),
 		),
+		security.RootUser, nil, nil,
 	)
 }

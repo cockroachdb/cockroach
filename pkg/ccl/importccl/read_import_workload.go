@@ -117,6 +117,7 @@ func (w *workloadReader) readFiles(
 	_ map[int32]int64,
 	_ roachpb.IOFileFormat,
 	_ cloud.ExternalStorageFactory,
+	_ string,
 ) error {
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))

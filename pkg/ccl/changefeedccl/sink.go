@@ -77,6 +77,7 @@ func getSink(
 	settings *cluster.Settings,
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	user string,
 ) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
@@ -192,7 +193,7 @@ func getSink(
 		makeSink = func() (Sink, error) {
 			return makeCloudStorageSink(
 				ctx, u.String(), nodeID, fileSize, settings,
-				opts, timestampOracle, makeExternalStorageFromURI,
+				opts, timestampOracle, makeExternalStorageFromURI, user,
 			)
 		}
 	case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:

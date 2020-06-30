@@ -208,7 +208,7 @@ func (rec *SpanSetReplicaEvalContext) GetExternalStorage(
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (rec *SpanSetReplicaEvalContext) GetExternalStorageFromURI(
-	ctx context.Context, uri string,
+	ctx context.Context, uri string, user string,
 ) (cloud.ExternalStorage, error) {
-	return rec.i.GetExternalStorageFromURI(ctx, uri)
+	return rec.i.GetExternalStorageFromURI(ctx, uri, user)
 }
