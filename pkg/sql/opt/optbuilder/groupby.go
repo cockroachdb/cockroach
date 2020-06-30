@@ -270,6 +270,11 @@ func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
 }
 
+// ResolvedType is part of the tree.TypedExpr interface.
+func (a *aggregateInfo) ResolvedType() *types.T {
+	return a.col.typ
+}
+
 var _ tree.Expr = &aggregateInfo{}
 var _ tree.TypedExpr = &aggregateInfo{}
 
