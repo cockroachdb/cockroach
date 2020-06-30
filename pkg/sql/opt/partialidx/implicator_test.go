@@ -48,10 +48,10 @@ import (
 //   The "=>" symbol denotes implication. For example, "a => b" tests if
 //   expression a implies expression b.
 //
-func TestPredicateImplication(t *testing.T) {
+func TestImplicator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata/predicate", func(t *testing.T, path string) {
+	datadriven.Walk(t, "testdata/implicator", func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
@@ -130,7 +130,7 @@ func TestPredicateImplication(t *testing.T) {
 	})
 }
 
-func BenchmarkPredicateImplication(b *testing.B) {
+func BenchmarkImplicator(b *testing.B) {
 	type testCase struct {
 		name, varTypes, filters, pred string
 	}
