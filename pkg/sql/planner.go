@@ -72,6 +72,8 @@ type extendedEvalContext struct {
 
 	Jobs *jobsCollection
 
+	JobsCache *map[sqlbase.ID]*jobs.Job
+
 	schemaAccessors *schemaInterface
 
 	sqlStatsCollector *sqlStatsCollector
