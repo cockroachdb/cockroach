@@ -269,7 +269,7 @@ INSERT INTO parse_test (geom, geog) VALUES
   (ST_GeomFromGeoJSON('{"type":"Point","coordinates":[1,2]}'::jsonb), ST_GeogFromGeoJSON('{"type":"Point","coordinates":[1,2]}'::jsonb)),
   (ST_GeomFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
   (ST_GeomFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex')), ST_GeogFromEWKB(decode('0101000000000000000000F03F000000000000F03F', 'hex'))),
- -- (ST_GeomFromText('POINT EMPTY'), ST_GeogFromText('POINT EMPTY')), # broken as twpayne/go-geom GeoJSON EMPTY handling is broken.
+  (ST_GeomFromText('POINT EMPTY'), ST_GeogFromText('POINT EMPTY')),
   (ST_GeomFromGeoJSON('null':::jsonb), ST_GeogFromGeoJSON('null':::jsonb))
 
 query BB
@@ -304,6 +304,8 @@ POINT (1 1)                                         POINT (1 1)  [1 1 0 0 0 0 0 
 <Point><coordinates>1,1</coordinates></Point>
 POINT (1 1)                                         POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>
+POINT EMPTY                                         POINT EMPTY  [1 1 0 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]  [1 1 0 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]  [0 0 0 0 1 127 248 0 0 0 0 0 0 127 248 0 0 0 0 0 0]  [1 1 0 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates></coordinates></Point>
 NULL                                                NULL  NULL  NULL  NULL  NULL  NULL
 
 
@@ -321,6 +323,7 @@ FROM parse_test ORDER BY id ASC
 {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","bbox":[1,2,1,2],"coordinates":[1,2]}
 {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}
 {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}
+{"type":"Point","coordinates":[]}                                                             {"type":"Point","coordinates":[]}                                                             {"type":"Point","coordinates":[]}
 NULL                                                                                          NULL                                                                                          NULL
 
 # tests casts
@@ -338,6 +341,7 @@ FROM parse_test ORDER BY id ASC
 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]              {"coordinates": [1, 2], "type": "Point"}       0101000000000000000000F03F0000000000000040
 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]            {"coordinates": [1, 1], "type": "Point"}       0101000000000000000000F03F000000000000F03F
 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]            {"coordinates": [1, 1], "type": "Point"}       0101000000000000000000F03F000000000000F03F
+[1 1 0 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]          {"coordinates": [], "type": "Point"}           0101000000000000000000F87F000000000000F87F
 NULL                                                         NULL                                           NULL
 
 query TTT
@@ -354,6 +358,7 @@ FROM parse_test ORDER BY id ASC
 0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040
 0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F
 0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F
+0101000000000000000000F87F000000000000F87F          0101000000000000000000F87F000000000000F87F  0101000000000000000000F87F000000000000F87F
 NULL                                                NULL                                        NULL
 
 
@@ -373,24 +378,25 @@ POINT (1 2)                                                        POINT (1 2)  
 POINT (1 2)                                                        POINT (1 2)       {"type":"Point","coordinates":[1,2]}                                                          {"type":"Point","coordinates":[1,2]}
 POINT (1 1)                                                        POINT (1 1)       {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}
 POINT (1 1)                                                        POINT (1 1)       {"type":"Point","coordinates":[1,1]}                                                          {"type":"Point","coordinates":[1,1]}
+POINT EMPTY                                                        POINT EMPTY       {"type":"Point","coordinates":[]}                                                             {"type":"Point","coordinates":[]}
 NULL                                                               NULL              NULL                                                                                          NULL
 
-query TTTT
+query TTT
 SELECT
-  ST_AsHexWKB(geom),
   ST_AsHexEWKB(geom),
   ST_AsHexEWKB(geom, 'ndr'),
   ST_AsHexEWKB(geom, 'xdr')
 FROM parse_test ORDER BY id ASC
 ----
-0101000000E17A14AE47E1F83F00000000000000C0  0101000000E17A14AE47E1F83F00000000000000C0          0101000000E17A14AE47E1F83F00000000000000C0          00000000013FF8E147AE147AE1C000000000000000
-0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
-0101000000000000000000F03F0000000000000040  0101000020A40F0000000000000000F03F0000000000000040  0101000020A40F0000000000000000F03F0000000000000040  002000000100000FA43FF00000000000004000000000000000
-0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040          00000000013FF00000000000004000000000000000
-0101000000000000000000F03F0000000000000040  0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040          00000000013FF00000000000004000000000000000
-0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F          00000000013FF00000000000003FF0000000000000
-0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F          00000000013FF00000000000003FF0000000000000
-NULL                                        NULL                                                NULL                                                NULL
+0101000000E17A14AE47E1F83F00000000000000C0          0101000000E17A14AE47E1F83F00000000000000C0          00000000013FF8E147AE147AE1C000000000000000
+0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
+0101000020A40F0000000000000000F03F0000000000000040  0101000020A40F0000000000000000F03F0000000000000040  002000000100000FA43FF00000000000004000000000000000
+0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040          00000000013FF00000000000004000000000000000
+0101000000000000000000F03F0000000000000040          0101000000000000000000F03F0000000000000040          00000000013FF00000000000004000000000000000
+0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F          00000000013FF00000000000003FF0000000000000
+0101000000000000000000F03F000000000000F03F          0101000000000000000000F03F000000000000F03F          00000000013FF00000000000003FF0000000000000
+0101000000000000000000F87F000000000000F87F          0101000000000000000000F87F000000000000F87F          00000000017FF80000000000007FF8000000000000
+NULL                                                NULL                                                NULL
 
 query TTTTTTT
 SELECT
@@ -417,6 +423,8 @@ POINT (1 1)                                         SRID=4326;POINT (1 1)  [1 1 
 <Point><coordinates>1,1</coordinates></Point>
 POINT (1 1)                                         SRID=4326;POINT (1 1)  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [0 0 0 0 1 63 240 0 0 0 0 0 0 63 240 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>
+POINT EMPTY                                         SRID=4326;POINT EMPTY  [1 1 0 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]  [1 1 0 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]  [0 0 0 0 1 127 248 0 0 0 0 0 0 127 248 0 0 0 0 0 0]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]  <?xml version="1.0" encoding="UTF-8"?>
+<Point><coordinates></coordinates></Point>
 NULL                                                NULL  NULL  NULL  NULL  NULL  NULL
 
 query TTT
@@ -433,6 +441,7 @@ FROM parse_test ORDER BY id ASC
 {"type":"Point","coordinates":[1,2]}       {"type":"Point","coordinates":[1,2]}       {"type":"Point","bbox":[1,2,1,2],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,2]}
 {"type":"Point","coordinates":[1,1]}       {"type":"Point","coordinates":[1,1]}       {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
 {"type":"Point","coordinates":[1,1]}       {"type":"Point","coordinates":[1,1]}       {"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}
+{"type":"Point","coordinates":[]}          {"type":"Point","coordinates":[]}          {"type":"Point","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[]}
 NULL                                       NULL                                       NULL
 
 # tests casts
@@ -450,6 +459,7 @@ FROM parse_test ORDER BY id ASC
 [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 0 64]             {"coordinates": [1, 2], "type": "Point"}       0101000020E6100000000000000000F03F0000000000000040
 [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]           {"coordinates": [1, 1], "type": "Point"}       0101000020E6100000000000000000F03F000000000000F03F
 [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]           {"coordinates": [1, 1], "type": "Point"}       0101000020E6100000000000000000F03F000000000000F03F
+[1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 248 127 0 0 0 0 0 0 248 127]         {"coordinates": [], "type": "Point"}           0101000020E6100000000000000000F87F000000000000F87F
 NULL                                                                    NULL                                           NULL
 
 query TTT
@@ -466,6 +476,7 @@ FROM parse_test ORDER BY id ASC
 0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040
 0101000020E6100000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F
 0101000020E6100000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F
+0101000020E6100000000000000000F87F000000000000F87F  0101000020E6100000000000000000F87F000000000000F87F  0101000020E6100000000000000000F87F000000000000F87F
 NULL                                                NULL                                                NULL
 
 query TTTT
@@ -483,6 +494,7 @@ FROM parse_test ORDER BY id ASC
 0101000000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0101000020E6100000000000000000F03F0000000000000040  0020000001000010E63FF00000000000004000000000000000
 0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  0020000001000010E63FF00000000000003FF0000000000000
 0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  0020000001000010E63FF00000000000003FF0000000000000
+0101000000000000000000F87F000000000000F87F  0101000020E6100000000000000000F87F000000000000F87F  0101000020E6100000000000000000F87F000000000000F87F  0020000001000010E67FF80000000000007FF8000000000000
 NULL                                        NULL                                                NULL                                                NULL
 
 query TTTTTTTT
