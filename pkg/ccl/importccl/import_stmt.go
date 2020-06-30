@@ -256,7 +256,7 @@ func importPlanHook(
 		} else {
 			for _, file := range filenamePatterns {
 				if cloudimpl.URINeedsGlobExpansion(file) {
-					s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, file)
+					s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, file, p.User())
 					if err != nil {
 						return err
 					}
@@ -606,7 +606,7 @@ func importPlanHook(
 			seqVals := make(map[sqlbase.ID]int64)
 
 			if importStmt.Bundle {
-				store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, files[0])
+				store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, files[0], p.User())
 				if err != nil {
 					return err
 				}
@@ -660,7 +660,8 @@ func importPlanHook(
 					if err != nil {
 						return err
 					}
-					create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
+					create, err = readCreateTableFromStore(ctx, filename,
+						p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 					if err != nil {
 						return err
 					}
@@ -805,7 +806,7 @@ func parseAvroOptions(
 					"either %s or %s option must be set when importing avro record files", avroSchema, avroSchemaURI)
 			}
 
-			store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri)
+			store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
 			if err != nil {
 				return err
 			}

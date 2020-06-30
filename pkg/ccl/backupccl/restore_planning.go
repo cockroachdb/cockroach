@@ -924,7 +924,7 @@ func doRestorePlan(
 	}
 	baseStores := make([]cloud.ExternalStorage, len(from[0]))
 	for i := range from[0] {
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i])
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i], p.User())
 		if err != nil {
 			return errors.Wrapf(err, "failed to open backup storage location")
 		}
@@ -944,6 +944,7 @@ func doRestorePlan(
 
 	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
 		ctx, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from, endTime, encryption,
+		p.User(),
 	)
 	if err != nil {
 		return err

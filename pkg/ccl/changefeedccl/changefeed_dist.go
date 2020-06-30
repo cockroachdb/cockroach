@@ -143,6 +143,7 @@ func distChangefeedFlow(
 		corePlacement[i].Core.ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
 			Watches: watches,
 			Feed:    details,
+			User:    phs.User(),
 		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
@@ -153,6 +154,7 @@ func distChangefeedFlow(
 		TrackedSpans: trackedSpans,
 		Feed:         details,
 		JobID:        jobID,
+		User:         phs.User(),
 	}
 
 	p := sql.MakePhysicalPlan(gatewayNodeID)

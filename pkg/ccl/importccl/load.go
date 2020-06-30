@@ -107,8 +107,7 @@ func Load(
 	database, uri string,
 	ts hlc.Timestamp,
 	loadChunkBytes int64,
-	tempPrefix string,
-	writeToDir string,
+	tempPrefix, writeToDir, user string,
 ) (backupccl.BackupManifest, error) {
 	if loadChunkBytes == 0 {
 		loadChunkBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes / 2
@@ -123,12 +122,12 @@ func Load(
 	semaCtx := tree.MakeSemaContext()
 
 	blobClientFactory := blobs.TestBlobServiceClient(writeToDir)
-	conf, err := cloudimpl.ExternalStorageConfFromURI(uri)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
 	}
 	dir, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobClientFactory)
+		cluster.NoSettings, blobClientFactory, nil, nil)
 	if err != nil {
 		return backupccl.BackupManifest{}, errors.Wrap(err, "export storage from URI")
 	}

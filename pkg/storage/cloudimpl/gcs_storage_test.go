@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -101,11 +102,12 @@ func TestAntagonisticRead(t *testing.T) {
 	}()
 
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-	conf, err := ExternalStorageConfFromURI(gsFile)
+	conf, err := ExternalStorageConfFromURI(gsFile, security.RootUser)
 	require.NoError(t, err)
 
 	s, err := MakeExternalStorage(
-		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+		context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
+		nil, nil, nil)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "")
 	require.NoError(t, err)
@@ -122,15 +124,17 @@ func TestFileDoesNotExist(t *testing.T) {
 		// This test requires valid GS credential file.
 		t.Skip("GOOGLE_APPLICATION_CREDENTIALS env var must be set")
 	}
+	user := security.RootUser
 
 	{
 		// Invalid gsFile.
 		gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
-		conf, err := ExternalStorageConfFromURI(gsFile)
+		conf, err := ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
 		s, err := MakeExternalStorage(
-			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+			context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
+			nil, nil, nil)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
@@ -140,11 +144,12 @@ func TestFileDoesNotExist(t *testing.T) {
 	{
 		// Invalid gsBucket.
 		gsFile := "gs://cockroach-fixtures-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-		conf, err := ExternalStorageConfFromURI(gsFile)
+		conf, err := ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
 		s, err := MakeExternalStorage(
-			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil)
+			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
+			nil, nil)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")

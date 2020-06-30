@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,7 +63,8 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 
 	// TODO(dan): The csv load will be less overhead, use it when we have it.
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := importccl.Load(ctx, db, &stmts, `data`, `nodelocal://0/`, ts, chunkBytes, tempDir, dir)
+	desc, err := importccl.Load(ctx, db, &stmts, `data`, `nodelocal://0/`,
+		ts, chunkBytes, tempDir, dir, security.RootUser)
 	if err != nil {
 		return nil, err
 	}

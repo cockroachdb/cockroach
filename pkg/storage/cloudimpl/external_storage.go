@@ -21,10 +21,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -95,7 +97,7 @@ var ErrListingUnsupported = errors.New("listing is not supported")
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
-func ExternalStorageConfFromURI(path string) (roachpb.ExternalStorage, error) {
+func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	uri, err := url.Parse(path)
 	if err != nil {
@@ -189,12 +191,15 @@ func ExternalStorageFromURI(
 	externalConfig base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
+	user string,
+	ie *sql.InternalExecutor,
+	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {
-	conf, err := ExternalStorageConfFromURI(uri)
+	conf, err := ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -238,6 +243,8 @@ func MakeExternalStorage(
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
+	ie *sql.InternalExecutor,
+	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExternalStorageProvider_LocalFile:
