@@ -1,4 +1,4 @@
-# LogicTest: !fakedist-metadata !3node-tenant
+# LogicTest: local local-vec-off
 
 # EXPLAIN test cases for using invertedFilterer on an inverted geospatial index.
 
