@@ -1014,7 +1014,8 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			if err != nil {
 				return err
 			}
-			for i, table := range res {
+			for _, table := range res {
+				i := newTableDescToIdx[table]
 				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
 					Name:       details.Tables[i].Name,
 					SeqVal:     details.Tables[i].SeqVal,
