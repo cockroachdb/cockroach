@@ -15,7 +15,7 @@ import classNames from "classnames";
 import CopyToClipboard from "react-copy-to-clipboard";
 import { withRouter } from "react-router-dom";
 
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 
 import "./redux.styl";
 

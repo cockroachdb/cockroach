@@ -14,7 +14,7 @@ import {
 } from "src/views/jobs/jobStatusOptions";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
-import { Badge } from "src/components";
+import { Badge } from "ui-modules/src/components";
 import { Line } from "rc-progress";
 
 export class JobStatusBadge extends React.PureComponent<{jobStatus: string}> {

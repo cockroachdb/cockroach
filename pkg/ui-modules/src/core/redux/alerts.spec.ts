@@ -15,8 +15,8 @@ import sinon from "sinon";
 import { createHashHistory } from "history";
 
 import * as protos from "src/js/protos";
-import { API_PREFIX } from "src/util/api";
-import fetchMock from "src/util/fetch-mock";
+import { API_PREFIX } from "src/core/util/api";
+import fetchMock from "src/core/util/fetch-mock";
 
 import { AdminUIState, createAdminUIStore } from "./state";
 import {

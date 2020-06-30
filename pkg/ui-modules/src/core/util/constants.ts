@@ -24,3 +24,6 @@ export const REMOTE_DEBUGGING_ERROR_TEXT = "This information is not available du
 export const serverToClientErrorMessageMap = new Map([
   ["not allowed (due to the 'server.remote_debugging.mode' setting)", REMOTE_DEBUGGING_ERROR_TEXT],
 ]);
+
+export const LOGIN_PAGE = "/login";
+export const LOGOUT_PAGE = "/logout";

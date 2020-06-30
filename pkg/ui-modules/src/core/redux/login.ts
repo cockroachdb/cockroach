@@ -15,11 +15,11 @@ import { createSelector } from "reselect";
 
 import { userLogin, userLogout } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
-import { LOGIN_PAGE, LOGOUT_PAGE } from "src/routes/login";
 import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
 import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
+import { LOGIN_PAGE, LOGOUT_PAGE } from "../../util/constants";
 
 const dataFromServer = getDataFromServer();
 

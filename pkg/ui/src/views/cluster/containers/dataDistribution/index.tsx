@@ -20,18 +20,18 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import {
   refreshDataDistribution,
   refreshNodes,
   refreshLiveness,
   CachedDataReducerState,
-} from "src/redux/apiReducers";
-import { LocalityTree, selectLocalityTree } from "src/redux/localities";
+} from "ui-modules/src/core/redux/apiReducers";
+import { LocalityTree, selectLocalityTree } from "ui-modules/src/core/redux/localities";
 import ReplicaMatrix, { SchemaObject } from "./replicaMatrix";
 import { TreeNode, TreePath } from "./tree";
 import "./index.styl";
-import {selectLivenessRequestStatus, selectNodeRequestStatus} from "src/redux/nodes";
+import {selectLivenessRequestStatus, selectNodeRequestStatus} from "ui-modules/src/core/redux/nodes";
 
 type DataDistributionResponse = cockroach.server.serverpb.DataDistributionResponse;
 type NodeDescriptor = cockroach.roachpb.INodeDescriptor;

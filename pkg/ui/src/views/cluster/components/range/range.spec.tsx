@@ -12,7 +12,7 @@ import React from "react";
 import RangeSelect, {RangeOption} from "src/views/cluster/components/range/index";
 import {mount} from "enzyme";
 import moment from "moment";
-import {TimeWindow} from "src/redux/timewindow";
+import {TimeWindow} from "ui-modules/src/core/redux/timewindow";
 import { assert } from "chai";
 import "src/enzymeInit";
 

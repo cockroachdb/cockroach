@@ -10,7 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import Back from "assets/back-arrow.svg";
+import Back from "src/assets/back-arrow.svg";
 import styles from "./backIcon.module.styl";
 
 const cx = classNames.bind(styles);

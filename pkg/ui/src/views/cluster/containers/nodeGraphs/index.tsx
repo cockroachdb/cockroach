@@ -23,10 +23,10 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import ClusterSummaryBar from "./summaryBar";
 
-import { AdminUIState } from "src/redux/state";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
-import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { refreshNodes, refreshLiveness } from "ui-modules/src/core/redux/apiReducers";
+import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "ui-modules/src/core/redux/hover";
+import { nodesSummarySelector, NodesSummary, LivenessStatus } from "ui-modules/src/core/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 

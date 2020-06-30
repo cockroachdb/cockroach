@@ -15,10 +15,10 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
-import { jobsKey, refreshJobs } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
+import { jobsKey, refreshJobs } from "ui-modules/src/core/redux/apiReducers";
+import { CachedDataReducerState } from "ui-modules/src/core/redux/cachedDataReducer";
+import { LocalSetting } from "ui-modules/src/core/redux/localsettings";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";

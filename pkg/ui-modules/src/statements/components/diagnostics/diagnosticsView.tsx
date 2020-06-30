@@ -13,7 +13,7 @@ import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import moment from "moment";
 import Long from "long";
-import emptyTracingBackground from "assets/statementsPage/emptyTracingBackground.svg";
+import emptyTracingBackground from "src/assets/statementsPage/emptyTracingBackground.svg";
 import classnames from "classnames/bind";
 
 import {
@@ -36,7 +36,7 @@ import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trustIcon } from "src/util/trust";
 
 import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
-import DownloadIcon from "!!raw-loader!assets/download.svg";
+import DownloadIcon from "!!raw-loader!src/assets/download.svg";
 import styles from "./diagnosticsView.module.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;

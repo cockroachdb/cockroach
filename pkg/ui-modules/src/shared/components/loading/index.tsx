@@ -10,7 +10,7 @@
 
 import React, { ReactNode } from "react";
 import { RequestError } from "src/util/api";
-import spinner from "assets/spinner.gif";
+import spinner from "src/assets/spinner.gif";
 import { adminUIAccess } from "src/util/docs";
 import "./index.styl";
 

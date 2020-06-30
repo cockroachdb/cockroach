@@ -11,12 +11,12 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
-import { refreshNonTableStats } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { refreshNonTableStats } from "ui-modules/src/core/redux/apiReducers";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
 import Loading from "src/views/shared/components/loading";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { CachedDataReducerState } from "ui-modules/src/core/redux/cachedDataReducer";
 import { NonTableStatsResponseMessage } from "src/util/api";
 import "src/views/shared/components/sortabletable/sortabletable.styl";
 

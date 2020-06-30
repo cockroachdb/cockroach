@@ -16,7 +16,7 @@ import { Provider } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 import { appAttr, dashboardNameAttr, databaseNameAttr, implicitTxnAttr, nodeIDAttr, rangeIDAttr, statementAttr, tableNameAttr } from "src/util/constants";
@@ -47,10 +47,10 @@ import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
-import StatementDetails from "src/views/statements/statementDetails";
-import StatementsPage from "src/views/statements/statementsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
+
+import { routes as statementRoutes } from "ui-modules/src/statements/routes";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -120,10 +120,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route exact path="/data-distribution" component={ DataDistributionPage } />
 
                   { /* statement statistics */ }
-                  <Route exact path="/statements" component={ StatementsPage }/>
-                  <Route exact path={ `/statements/:${appAttr}`} component={ StatementsPage } />
-                  <Route exact path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
-                  <Route exact path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+                  { statementRoutes.map(routeProps => (<Route {...routeProps} />)) }
 
                   <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
                   <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>

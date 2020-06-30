@@ -13,14 +13,14 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { doLogin, LoginAPIState } from "src/redux/login";
-import { AdminUIState } from "src/redux/state";
-import * as docsURL from "src/util/docs";
+import { doLogin, LoginAPIState } from "ui-modules/src/redux/login";
+import { AdminUIState } from "ui-modules/src/redux/state";
+import * as docsURL from "ui-modules/src/util/docs";
 
 import "./loginPage.styl";
-import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "src/components";
-import { Text, TextTypes } from "src/components";
-import ErrorCircle from "assets/error-circle.svg";
+import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "ui-modules/src/components";
+import { Text, TextTypes } from "ui-modules/src/components";
+import ErrorCircle from "ui-modules/assets/error-circle.svg";
 
 export interface LoginPageProps {
   loginState: LoginAPIState;

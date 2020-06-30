@@ -13,8 +13,8 @@ import React from "react";
 
 import * as protos from "src/js/protos";
 
-import { AdminUIState } from "src/redux/state";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID, KeyedCachedDataReducerState} from "src/redux/apiReducers";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID, KeyedCachedDataReducerState} from "ui-modules/src/core/redux/apiReducers";
 
 import { SortSetting } from "src/views/shared/components/sortabletable";
 

@@ -15,9 +15,9 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
-import { generateTableID, refreshTableDetails, refreshTableStats, refreshDatabaseDetails } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
+import { generateTableID, refreshTableDetails, refreshTableStats, refreshDatabaseDetails } from "ui-modules/src/core/redux/apiReducers";
+import { LocalSetting } from "ui-modules/src/core/redux/localsettings";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { Bytes } from "src/util/format";
 import { TableInfo } from "src/views/databases/data/tableInfo";
@@ -27,8 +27,8 @@ import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button } from "src/components/button";
-import { BackIcon } from "src/components/icon";
+import { Button } from "ui-modules/src/components/button";
+import { BackIcon } from "ui-modules/src/components/icon";
 import SqlBox from "src/views/shared/components/sql/box";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}

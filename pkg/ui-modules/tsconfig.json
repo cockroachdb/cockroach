@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "baseUrl": ".",
+    "module": "esnext",
+    "target": "es6",
+    "sourceMap": true,
+    "moduleResolution": "node",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "strictNullChecks": false,
+    "outDir": "./dist/",
+    "strict": true,
+    "jsx": "react",
+    "lib": ["esnext", "dom"],
+    "declaration": true
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}

@@ -12,10 +12,10 @@ import * as ReactDOM from "react-dom";
 
 import "src/polyfills";
 import "src/protobufInit";
-import { alertDataSync } from "src/redux/alerts";
+import { alertDataSync } from "ui-modules/src/core/redux/alerts";
 import {App} from "src/app";
-import {store, history} from "src/redux/state";
-import "src/redux/analytics";
+import "ui-modules/src/core/redux/analytics";
+import { history, store } from "./store";
 
 ReactDOM.render(
   <App history={history} store={store} />,

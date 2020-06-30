@@ -21,18 +21,18 @@ import {
   nodesSummarySelector,
   partitionedStatuses,
   selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
+} from "ui-modules/src/core/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { refreshNodes, refreshLiveness } from "ui-modules/src/core/redux/apiReducers";
+import { LocalSetting } from "ui-modules/src/core/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { ColumnsConfig, Table, Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
+import { ColumnsConfig, Table, Text, TextTypes, Tooltip, Badge, BadgeProps } from "ui-modules/src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
-import { LocalityTier } from "src/redux/localities";
+import { LocalityTier } from "ui-modules/src/core/redux/localities";
 import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 
 import TableSection from "./tableSection";

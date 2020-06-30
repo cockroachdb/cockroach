@@ -11,7 +11,7 @@
 import React from "react";
 
 import * as docsURL from "src/util/docs";
-import {Anchor} from "src/components";
+import {Anchor} from "ui-modules/src/components";
 import {ReactNode} from "react";
 
 export const CapacityGraphTooltip: React.FunctionComponent<{tooltipSelection: ReactNode}> =

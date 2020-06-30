@@ -14,9 +14,9 @@ import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
 import { Link, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
-import { refreshRaft } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+import { refreshRaft } from "ui-modules/src/core/redux/apiReducers";
+import { CachedDataReducerState } from "ui-modules/src/core/redux/cachedDataReducer";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 /******************************

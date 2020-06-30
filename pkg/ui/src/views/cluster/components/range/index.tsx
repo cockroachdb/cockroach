@@ -10,7 +10,7 @@
 
 import { Button, TimePicker, notification, Calendar, Icon } from "antd";
 import moment, { Moment } from "moment";
-import { TimeWindow } from "src/redux/timewindow";
+import { TimeWindow } from "ui-modules/src/core/redux/timewindow";
 import { trackTimeScaleSelected } from "src/util/analytics";
 import React from "react";
 import "./range.styl";

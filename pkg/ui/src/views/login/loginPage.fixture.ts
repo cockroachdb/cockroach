@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { emptyLoginState } from "src/redux/login";
+import { emptyLoginState } from "ui-modules/src/core/redux/login";
 import { LoginPageProps } from "./loginPage";
 import { createMemoryHistory } from "history";
 import { RouteComponentProps } from "react-router-dom";

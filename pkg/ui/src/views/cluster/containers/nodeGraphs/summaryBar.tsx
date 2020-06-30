@@ -12,7 +12,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import * as d3 from "d3";
 
-import { NodesSummary } from "src/redux/nodes";
+import { NodesSummary } from "ui-modules/src/core/redux/nodes";
 import { Bytes } from "src/util/format";
 import { NanoToMilli } from "src/util/convert";
 
@@ -27,7 +27,7 @@ import {
   SummaryStatMessage,
   SummaryMetricsAggregator,
 } from "src/views/shared/components/summaryBar";
-import { Tooltip, Anchor } from "src/components";
+import { Tooltip, Anchor } from "ui-modules/src/components";
 import { howAreCapacityMetricsCalculated } from "src/util/docs";
 
 interface ClusterSummaryProps {

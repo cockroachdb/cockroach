@@ -12,8 +12,8 @@ import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 
-import { AdminUIState } from "src/redux/state";
-import { selectLoginState, LoginState, getLoginPage } from "src/redux/login";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { selectLoginState, LoginState, getLoginPage } from "ui-modules/src/core/redux/login";
 
 interface RequireLoginProps {
   loginState: LoginState;

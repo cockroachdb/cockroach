@@ -11,11 +11,11 @@
 import { Divider, Icon, Tooltip } from "antd";
 import { Chip } from "src/views/app/components/chip";
 import Modal from "src/views/app/components/modal";
-import { getDisplayName } from "src/redux/nodes";
+import { getDisplayName } from "ui-modules/src/core/redux/nodes";
 import React from "react";
 import { NoConnection } from "..";
 import "./legend.styl";
-import { Text, TextTypes } from "src/components";
+import { Text, TextTypes } from "ui-modules/src/components";
 
 interface ILegendProps {
   stddevMinus2: number;

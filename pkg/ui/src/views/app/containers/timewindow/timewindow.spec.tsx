@@ -17,7 +17,7 @@ import _ from "lodash";
 
 import "src/enzymeInit";
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./";
-import * as timewindow from "src/redux/timewindow";
+import * as timewindow from "ui-modules/src/core/redux/timewindow";
 
 describe("<TimeWindowManager>", function() {
   let spy: sinon.SinonSpy;

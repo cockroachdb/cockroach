@@ -10,7 +10,7 @@ import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
-import { Dropdown } from "src/components/dropdown";
+import { Dropdown } from "ui-modules/src/components/dropdown";
 
 import "./nodesList.styl";
 

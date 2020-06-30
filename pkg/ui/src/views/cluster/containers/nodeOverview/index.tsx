@@ -14,17 +14,17 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshLiveness, refreshNodes } from "ui-modules/src/core/redux/apiReducers";
+import { livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid } from "ui-modules/src/core/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
-import { Button } from "src/components/button";
-import { BackIcon } from "src/components/icon";
+import { Button } from "ui-modules/src/components/button";
+import { BackIcon } from "ui-modules/src/components/icon";
 import "./nodeOverview.styl";
 
 /**

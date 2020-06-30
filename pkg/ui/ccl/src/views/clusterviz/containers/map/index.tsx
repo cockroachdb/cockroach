@@ -20,7 +20,7 @@ import { parseLocalityRoute } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
-import { Dropdown } from "src/components/dropdown";
+import { Dropdown } from "ui-modules/src/components/dropdown";
 import { parseSplatParams } from "src/util/parseSplatParams";
 
 // tslint:disable-next-line:variable-name

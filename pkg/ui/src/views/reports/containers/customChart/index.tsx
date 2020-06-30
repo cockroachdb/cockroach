@@ -15,16 +15,16 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshMetricMetadata, refreshNodes } from "ui-modules/src/core/redux/apiReducers";
+import { nodesSummarySelector, NodesSummary } from "ui-modules/src/core/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-import { MetricsMetadata, metricsMetadataSelector } from "src/redux/metricMetadata";
+import { MetricsMetadata, metricsMetadataSelector } from "ui-modules/src/core/redux/metricMetadata";
 import { INodeStatus } from "src/util/proto";
 
 import { CustomChartState, CustomChartTable } from "./customMetric";

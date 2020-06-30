@@ -17,8 +17,8 @@ import NavigationBar from "src/views/app/components/layoutSidebar";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
-import { clusterIdSelector, clusterNameSelector, singleVersionSelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { clusterIdSelector, clusterNameSelector, singleVersionSelector } from "ui-modules/src/core/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import LoginIndicator from "src/views/app/components/loginIndicator";
 import {
   GlobalNavigation,
@@ -29,7 +29,7 @@ import {
   Text,
   TextTypes,
   Badge,
-} from "src/components";
+} from "ui-modules/src/components";
 
 import "./layout.styl";
 import "./layoutPanel.styl";

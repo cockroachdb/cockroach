@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Tooltip, Anchor } from "src/components";
+import { Tooltip, Anchor } from "ui-modules/src/components";
 import {
   clusterStore,
   nodeLivenessIssues,

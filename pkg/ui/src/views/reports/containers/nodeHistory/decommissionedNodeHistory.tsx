@@ -15,19 +15,19 @@ import { Link, withRouter } from "react-router-dom";
 import { Moment } from "moment";
 import _ from "lodash";
 
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import {
   nodesSummarySelector,
   partitionedStatuses,
-} from "src/redux/nodes";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+} from "ui-modules/src/core/redux/nodes";
+import { refreshLiveness, refreshNodes } from "ui-modules/src/core/redux/apiReducers";
 import { INodeStatus } from "src/util/proto";
 import { LongToMoment } from "src/util/convert";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { LocalSetting } from "src/redux/localsettings";
+import { LocalSetting } from "ui-modules/src/core/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
-import { ColumnsConfig, Table, Text } from "src/components";
+import { ColumnsConfig, Table, Text } from "ui-modules/src/components";
 import { createSelector } from "reselect";
 
 const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(

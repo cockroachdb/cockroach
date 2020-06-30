@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Tooltip, Anchor } from "src/components";
+import { Tooltip, Anchor } from "ui-modules/src/components";
 import { nodeLivenessIssues, howItWork, capacityMetrics } from "src/util/docs";
-import { LivenessStatus } from "src/redux/nodes";
+import { LivenessStatus } from "ui-modules/src/core/redux/nodes";
 import { AggregatedNodeStatus } from ".";
 
 export const getStatusDescription = (status: LivenessStatus) => {

@@ -15,8 +15,8 @@ import { connect } from "react-redux";
 import "./alertbanner.styl";
 
 import { AlertBox } from "src/views/shared/components/alertBox";
-import { Alert, bannerAlertsSelector } from "src/redux/alerts";
-import { AdminUIState } from "src/redux/state";
+import { Alert, bannerAlertsSelector } from "ui-modules/src/core/redux/alerts";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { AlertMessage } from "src/views/shared/components/alertMessage";
 
 interface AlertBannerProps {

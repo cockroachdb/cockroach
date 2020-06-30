@@ -12,10 +12,10 @@ import React from "react";
 import { connect } from "react-redux";
 import { Link, withRouter, RouteComponentProps } from "react-router-dom";
 
-import { SideNavigation } from "src/components";
+import { SideNavigation } from "ui-modules/src/components";
 import "./navigation-bar.styl";
-import {AdminUIState} from "src/redux/state";
-import {isSingleNodeCluster} from "src/redux/nodes";
+import {AdminUIState} from "ui-modules/src/core/redux/state";
+import {isSingleNodeCluster} from "ui-modules/src/core/redux/nodes";
 
 interface RouteParam {
   path: string;

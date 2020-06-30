@@ -12,14 +12,14 @@ import React from "react";
 import { connect } from "react-redux";
 
 import { EmailSubscriptionForm } from "src/views/shared/components/emailSubscriptionForm";
-import { signUpForEmailSubscription } from "src/redux/customAnalytics";
-import { AdminUIState } from "src/redux/state";
-import { clusterIdSelector } from "src/redux/nodes";
+import { signUpForEmailSubscription } from "ui-modules/src/core/redux/customAnalytics";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { clusterIdSelector } from "ui-modules/src/core/redux/nodes";
 
 import "./emailSubscription.styl";
-import { loadUIData, RELEASE_NOTES_SIGNUP_DISMISSED_KEY, saveUIData } from "src/redux/uiData";
-import { dismissReleaseNotesSignupForm } from "src/redux/uiDataSelectors";
-import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
+import { loadUIData, RELEASE_NOTES_SIGNUP_DISMISSED_KEY, saveUIData } from "ui-modules/src/core/redux/uiData";
+import { dismissReleaseNotesSignupForm } from "ui-modules/src/core/redux/uiDataSelectors";
+import { emailSubscriptionAlertLocalSetting } from "ui-modules/src/core/redux/alerts";
 
 type EmailSubscriptionProps = MapDispatchToProps & MapStateToProps;
 

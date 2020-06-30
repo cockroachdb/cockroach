@@ -10,7 +10,7 @@
 
 import {cockroach} from "src/js/protos";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {BadgeStatus} from "src/components";
+import {BadgeStatus} from "ui-modules/src/components";
 
 export enum JobStatusVisual {
   BadgeOnly,

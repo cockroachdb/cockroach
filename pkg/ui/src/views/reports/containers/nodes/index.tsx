@@ -18,9 +18,9 @@ import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshLiveness, refreshNodes } from "ui-modules/src/core/redux/apiReducers";
+import { nodesSummarySelector, NodesSummary } from "ui-modules/src/core/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { LongToMoment } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
 import { getFilters, localityToString, NodeFilterList } from "src/views/reports/components/nodeFilterList";

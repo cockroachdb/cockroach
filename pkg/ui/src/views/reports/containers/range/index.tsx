@@ -23,9 +23,9 @@ import {
   refreshAllocatorRange,
   refreshRange,
   refreshRangeLog,
-} from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+} from "ui-modules/src/core/redux/apiReducers";
+import { CachedDataReducerState } from "ui-modules/src/core/redux/cachedDataReducer";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { rangeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";

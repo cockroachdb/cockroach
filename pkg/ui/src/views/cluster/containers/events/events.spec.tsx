@@ -18,7 +18,7 @@ import * as sinon from "sinon";
 import "src/enzymeInit";
 import * as protos from  "src/js/protos";
 import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "src/views/cluster/containers/events";
-import { refreshEvents } from "src/redux/apiReducers";
+import { refreshEvents } from "ui-modules/src/core/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 

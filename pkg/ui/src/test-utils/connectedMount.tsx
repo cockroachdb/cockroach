@@ -16,7 +16,7 @@ import { ConnectedRouter } from "connected-react-router";
 import { createMemoryHistory } from "history";
 
 import "src/enzymeInit";
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
+import { AdminUIState, createAdminUIStore } from "ui-modules/src/core/redux/state";
 
 export function connectedMount(nodeFactory: (store: Store<AdminUIState>) => React.ReactNode) {
   const history = createMemoryHistory({

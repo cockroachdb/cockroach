@@ -14,7 +14,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { CachedDataReducerState } from "ui-modules/src/core/redux/cachedDataReducer";
 
 interface ConnectionTableColumn {
   title: string;

@@ -5,6 +5,7 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "scripts": {
+    "build": "webpack --config webpack.app.js --env.dist=ccl",
     "storybook": "start-storybook -p 9009",
     "cypress": "./opt/node_modules/.bin/cypress",
     "cypress:open": "yarn cypress open",
@@ -43,6 +44,7 @@
     "redux-saga": "^1.1.3",
     "redux-thunk": "^2.2.0",
     "reselect": "^3.0.0",
+    "ui-modules": "../ui-modules",
     "whatwg-fetch": "^2.0.3"
   },
   "devDependencies": {

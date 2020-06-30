@@ -10,7 +10,7 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Tooltip} from "src/components";
+import {Tooltip} from "ui-modules/src/components";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
 

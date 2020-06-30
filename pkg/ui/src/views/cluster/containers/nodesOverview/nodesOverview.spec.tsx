@@ -15,12 +15,12 @@ import { times } from "lodash";
 import Long from "long";
 
 import { decommissionedNodesTableDataSelector, liveNodesTableDataSelector, NodeList, NodeStatusRow } from "./index";
-import { AdminUIState } from "src/redux/state";
-import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { LocalSetting } from "ui-modules/src/core/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
-import { livenessByNodeIDSelector } from "src/redux/nodes";
+import { livenessByNodeIDSelector } from "ui-modules/src/core/redux/nodes";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
 

@@ -16,8 +16,8 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
-import { storesRequestKey, refreshStores } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { storesRequestKey, refreshStores } from "ui-modules/src/core/redux/apiReducers";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import Loading from "src/views/shared/components/loading";

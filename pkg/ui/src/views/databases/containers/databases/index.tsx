@@ -18,8 +18,8 @@ import { withRouter, RouteComponentProps } from "react-router-dom";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 
-import { AdminUIState } from "src/redux/state";
-import { refreshDatabases } from "src/redux/apiReducers";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { refreshDatabases } from "ui-modules/src/core/redux/apiReducers";
 import { Pick } from "src/util/pick";
 
 import DatabaseSummaryTables from "src/views/databases/containers/databaseTables";

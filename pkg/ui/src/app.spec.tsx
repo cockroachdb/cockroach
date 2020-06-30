@@ -16,7 +16,7 @@ import { mount, ReactWrapper } from "enzyme";
 
 import "src/enzymeInit";
 import { App } from "src/app";
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
+import { AdminUIState, createAdminUIStore } from "ui-modules/src/core/redux/state";
 
 import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 import NodeList from "src/views/clusterviz/containers/map/nodeList";

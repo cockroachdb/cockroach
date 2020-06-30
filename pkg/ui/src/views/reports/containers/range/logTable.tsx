@@ -12,7 +12,7 @@ import _ from "lodash";
 import React from "react";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { CachedDataReducerState } from "ui-modules/src/core/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";

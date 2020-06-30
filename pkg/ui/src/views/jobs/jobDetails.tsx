@@ -10,26 +10,26 @@
 
 import { Col, Row } from "antd";
 import _ from "lodash";
-import { TimestampToMoment } from "src/util/convert";
+import { TimestampToMoment } from "ui-modules/src/core/util/convert";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router-dom";
 import { cockroach } from "src/js/protos";
-import { CachedDataReducerState, jobsKey, refreshJobs } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import { getMatchParamByName } from "src/util/query";
+import { CachedDataReducerState, jobsKey, refreshJobs } from "ui-modules/src/core/redux/apiReducers";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
+import { getMatchParamByName } from "ui-modules/src/core/util/query";
 import { showSetting, statusSetting, typeSetting } from ".";
-import Loading from "../shared/components/loading";
-import SqlBox from "../shared/components/sql/box";
-import { SummaryCard } from "../shared/components/summaryCard";
+import Loading from "ui-modules/src/shared/components/loading";
+import SqlBox from "ui-modules/src/shared/components/sql/box";
+import { SummaryCard } from "ui-modules/src/shared/components/summaryCard";
 
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { Button } from "src/components/button";
-import { BackIcon } from "src/components/icon";
-import { DATE_FORMAT } from "src/util/format";
+import { Button } from "ui-modules/src/components/button";
+import { BackIcon } from "ui-modules/src/components/icon";
+import { DATE_FORMAT } from "ui-modules/src/core/util/format";
 import { JobStatusCell } from "./jobStatusCell";
 import "src/views/shared/components/summaryCard/styles.styl";
 

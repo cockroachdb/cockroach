@@ -17,9 +17,9 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { refreshLiveness, refreshNodes } from "ui-modules/src/core/redux/apiReducers";
+import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessRequestStatus, selectNodeRequestStatus } from "ui-modules/src/core/redux/nodes";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
 import { trackFilter, trackCollapseNodes } from "src/util/analytics";

@@ -17,19 +17,19 @@ import Long from "long";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 
-import { Button, DownloadFile, DownloadFileRef, Text, TextTypes, Tooltip } from "src/components";
+import { Button, DownloadFile, DownloadFileRef, Text, TextTypes, Tooltip } from "ui-modules/src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
   selectStatementDiagnosticsReports, selectStatementByFingerprint, statementDiagnosticsReportsInFlight,
-} from "src/redux/statements/statementsSelectors";
+} from "ui-modules/src/core/redux/statements/statementsSelectors";
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
-} from "src/redux/apiReducers";
+} from "ui-modules/src/core/redux/apiReducers";
 import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";

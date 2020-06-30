@@ -11,9 +11,9 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "ui-modules/src/core/redux/apiReducers";
+import { LocalSetting } from "ui-modules/src/core/redux/localsettings";
+import { AdminUIState } from "ui-modules/src/core/redux/state";
 import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, tableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";

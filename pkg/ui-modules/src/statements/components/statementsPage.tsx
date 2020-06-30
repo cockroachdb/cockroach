@@ -28,21 +28,21 @@ import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, fl
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
 import { Pick } from "src/util/pick";
-import { PrintTime } from "src/views/reports/containers/range/print";
+import { PrintTime } from "src/shared/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import { Search } from "../app/components/Search";
+import { Search } from "src/shared/components/Search";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
-import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
+import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 import {
   selectLastDiagnosticsReportPerStatement,
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
-import { ISortedTablePagination } from "../shared/components/sortedtable";
+import { ISortedTablePagination } from "src/shared/components/sortedtable";
 import { statementsTable } from "src/util/docs";
 import styles from "./statementsPage.module.styl";
 import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
