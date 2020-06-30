@@ -3939,3 +3939,38 @@ scalar-group-by
  └── aggregations
       └── const-agg [as=percentile_cont:6]
            └── percentile_cont:6
+
+# Regression test for #46914.
+exec-ddl
+CREATE TABLE t0(c0 INT)
+----
+
+build format=(show-types,show-scalars)
+SELECT * FROM t0 GROUP BY t0.c0 HAVING min((CASE WHEN false THEN NULL END):::FLOAT) IS NOT NAN
+----
+project
+ ├── columns: c0:1(int)
+ └── select
+      ├── columns: c0:1(int) min:4(float!null)
+      ├── group-by
+      │    ├── columns: c0:1(int) min:4(float)
+      │    ├── grouping columns: c0:1(int)
+      │    ├── project
+      │    │    ├── columns: column3:3(float) c0:1(int)
+      │    │    ├── scan t0
+      │    │    │    └── columns: c0:1(int) rowid:2(int!null)
+      │    │    └── projections
+      │    │         └── case [as=column3:3, type=float]
+      │    │              ├── true [type=bool]
+      │    │              ├── when [type=float]
+      │    │              │    ├── false [type=bool]
+      │    │              │    └── cast: FLOAT8 [type=float]
+      │    │              │         └── null [type=unknown]
+      │    │              └── null [type=float]
+      │    └── aggregations
+      │         └── min [as=min:4, type=float]
+      │              └── variable: column3:3 [type=float]
+      └── filters
+           └── ne [type=bool]
+                ├── variable: min:4 [type=float]
+                └── const: NaN [type=float]
