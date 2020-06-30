@@ -174,13 +174,13 @@ func (c constBoolOp) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -272,13 +272,13 @@ func (c constDecimalOp) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i].Set(&c.constVal)
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i].Set(&c.constVal)
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -320,13 +320,13 @@ func (c constInt16Op) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -368,13 +368,13 @@ func (c constInt32Op) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -416,13 +416,13 @@ func (c constInt64Op) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -464,13 +464,13 @@ func (c constFloat64Op) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -512,13 +512,13 @@ func (c constTimestampOp) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},
@@ -560,13 +560,13 @@ func (c constIntervalOp) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			} else {
 				col = col[0:n]
 				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					col[i] = c.constVal
+					col.Set(i, c.constVal) //gcassert:inline
 				}
 			}
 		},

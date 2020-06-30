@@ -486,7 +486,14 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 }
 
 func set(family types.Family, target, i, new string) string {
-	return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+	// Assert that the .Set call is inlined by Go, except in the case
+	// of the DatumVec .Set which isn't inlinable.
+	maybeInline := " //gcassert:inline"
+	switch family {
+	case typeconv.DatumVecCanonicalTypeFamily, types.BytesFamily:
+		maybeInline = ""
+	}
+	return fmt.Sprintf("%s.Set(%s, %s)%s", target, i, new, maybeInline)
 }
 
 // Set is a function that should only be used in templates.

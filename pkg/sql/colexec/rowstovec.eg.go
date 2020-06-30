@@ -63,7 +63,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(bool)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				}
@@ -119,7 +119,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(apd.Decimal)
-							col[i].Set(&castV)
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				}
@@ -146,7 +146,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(int16)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				case 32:
@@ -170,7 +170,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(int32)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				case -1:
@@ -195,7 +195,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(int64)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				}
@@ -223,7 +223,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(float64)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				}
@@ -251,7 +251,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(time.Time)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				}
@@ -279,7 +279,7 @@ func EncDatumRowsToColVec(
 							}
 
 							castV := v.(duration.Duration)
-							col[i] = castV
+							col.Set(i, castV) //gcassert:inline
 						}
 					}
 				}

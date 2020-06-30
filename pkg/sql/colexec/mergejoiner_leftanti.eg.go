@@ -34171,7 +34171,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34301,7 +34301,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx].Set(&val)
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34365,7 +34365,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34426,7 +34426,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34488,7 +34488,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34553,7 +34553,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34618,7 +34618,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34683,7 +34683,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34816,7 +34816,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -34940,7 +34940,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx].Set(&val)
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35001,7 +35001,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35059,7 +35059,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35118,7 +35118,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35180,7 +35180,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35242,7 +35242,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35304,7 +35304,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35438,7 +35438,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35566,7 +35566,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx].Set(&val)
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35629,7 +35629,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35689,7 +35689,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35750,7 +35750,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35814,7 +35814,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35878,7 +35878,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -35942,7 +35942,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											} else {
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36073,7 +36073,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36195,7 +36195,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx].Set(&val)
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36255,7 +36255,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36312,7 +36312,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36370,7 +36370,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36431,7 +36431,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36492,7 +36492,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36553,7 +36553,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftGroupsFromBatch(
 											{
 												val = srcCol.Get(srcStartIdx) //gcassert:inline
 												for i := 0; i < toAppend; i++ {
-													outCol[outStartIdx] = val
+													outCol.Set(outStartIdx, val) //gcassert:inline
 													outStartIdx++
 												}
 											}
@@ -36717,7 +36717,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -36815,7 +36815,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx].Set(&val)
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -36863,7 +36863,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -36908,7 +36908,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -36954,7 +36954,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -37003,7 +37003,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -37052,7 +37052,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -37101,7 +37101,7 @@ func (o *mergeJoinLeftAntiOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx) //gcassert:inline
 									for i := 0; i < toAppend; i++ {
-										outCol[outStartIdx] = val
+										outCol.Set(outStartIdx, val) //gcassert:inline
 										outStartIdx++
 									}
 								}
@@ -37287,7 +37287,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37423,7 +37423,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx].Set(&v)
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37490,7 +37490,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37554,7 +37554,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37619,7 +37619,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37687,7 +37687,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37755,7 +37755,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37823,7 +37823,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -37963,7 +37963,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38095,7 +38095,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx].Set(&v)
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38160,7 +38160,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38222,7 +38222,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38285,7 +38285,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38351,7 +38351,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38417,7 +38417,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38483,7 +38483,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx]) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                                //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38625,7 +38625,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38761,7 +38761,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx].Set(&v)
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38828,7 +38828,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38892,7 +38892,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -38957,7 +38957,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39025,7 +39025,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39093,7 +39093,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39161,7 +39161,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 													out.Nulls().SetNull(outStartIdx)
 												} else {
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39301,7 +39301,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39433,7 +39433,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx].Set(&v)
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39498,7 +39498,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39560,7 +39560,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39623,7 +39623,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39689,7 +39689,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39755,7 +39755,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39821,7 +39821,7 @@ func (o *mergeJoinLeftAntiOp) buildRightGroupsFromBatch(
 											if toAppend == 1 {
 												{
 													v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-													outCol[outStartIdx] = v
+													outCol.Set(outStartIdx, v)                           //gcassert:inline
 												}
 											} else {
 												out.Copy(
@@ -39994,7 +39994,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40052,7 +40052,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx].Set(&v)
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40080,7 +40080,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40105,7 +40105,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40131,7 +40131,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40160,7 +40160,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40189,7 +40189,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(
@@ -40218,7 +40218,7 @@ func (o *mergeJoinLeftAntiOp) buildRightBufferedGroup(
 										out.Nulls().SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx) //gcassert:inline
-										outCol[outStartIdx] = v
+										outCol.Set(outStartIdx, v)                           //gcassert:inline
 									}
 								} else {
 									out.Copy(

@@ -52,7 +52,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -67,7 +67,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -78,7 +78,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -89,7 +89,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -118,7 +118,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -138,7 +138,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -154,7 +154,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -170,7 +170,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -198,7 +198,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -218,7 +218,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -234,7 +234,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -250,7 +250,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -275,7 +275,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -295,7 +295,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -311,7 +311,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -327,7 +327,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -353,7 +353,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -373,7 +373,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = 1
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -389,7 +389,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -405,7 +405,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = 1
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -436,7 +436,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 									r = v
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -451,7 +451,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 									r = v
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -462,7 +462,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 								r = v
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -473,7 +473,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 								r = v
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -497,7 +497,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v.Sign() != 0
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -512,7 +512,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v.Sign() != 0
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -523,7 +523,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v.Sign() != 0
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -534,7 +534,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v.Sign() != 0
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -563,7 +563,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -578,7 +578,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -589,7 +589,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -600,7 +600,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -622,7 +622,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int32(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -639,7 +639,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int32(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -652,7 +652,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int32(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -665,7 +665,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int32(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -688,7 +688,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -705,7 +705,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -718,7 +718,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -731,7 +731,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -757,7 +757,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -774,7 +774,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -787,7 +787,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -800,7 +800,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -826,7 +826,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = *apd.New(int64(v), 0)
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -843,7 +843,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = *apd.New(int64(v), 0)
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -856,7 +856,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = *apd.New(int64(v), 0)
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -869,7 +869,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = *apd.New(int64(v), 0)
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -895,7 +895,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = float64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -912,7 +912,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = float64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -925,7 +925,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = float64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -938,7 +938,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = float64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -966,7 +966,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int16(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -983,7 +983,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int16(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -996,7 +996,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int16(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1009,7 +1009,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int16(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1029,7 +1029,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1044,7 +1044,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1055,7 +1055,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1066,7 +1066,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1089,7 +1089,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1106,7 +1106,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1119,7 +1119,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1132,7 +1132,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1158,7 +1158,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1175,7 +1175,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1188,7 +1188,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1201,7 +1201,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1227,7 +1227,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = *apd.New(int64(v), 0)
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1244,7 +1244,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = *apd.New(int64(v), 0)
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1257,7 +1257,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = *apd.New(int64(v), 0)
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1270,7 +1270,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = *apd.New(int64(v), 0)
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1296,7 +1296,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = float64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1313,7 +1313,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = float64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1326,7 +1326,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = float64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1339,7 +1339,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = float64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1368,7 +1368,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int16(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1385,7 +1385,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int16(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1398,7 +1398,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int16(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1411,7 +1411,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int16(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1433,7 +1433,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int32(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1450,7 +1450,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = int32(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1463,7 +1463,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int32(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1476,7 +1476,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = int32(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1497,7 +1497,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1512,7 +1512,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1523,7 +1523,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1534,7 +1534,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1560,7 +1560,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1577,7 +1577,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1590,7 +1590,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1603,7 +1603,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1629,7 +1629,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = *apd.New(int64(v), 0)
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1646,7 +1646,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = *apd.New(int64(v), 0)
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1659,7 +1659,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = *apd.New(int64(v), 0)
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1672,7 +1672,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = *apd.New(int64(v), 0)
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1698,7 +1698,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = float64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1715,7 +1715,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = float64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1728,7 +1728,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = float64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1741,7 +1741,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = float64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1772,7 +1772,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1787,7 +1787,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 									r = v
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1798,7 +1798,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1809,7 +1809,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 								r = v
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1835,7 +1835,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1852,7 +1852,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 									r = v != 0
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1865,7 +1865,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1878,7 +1878,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 
 								r = v != 0
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -1911,7 +1911,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = tmpDec
 									}
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -1935,7 +1935,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = tmpDec
 									}
 
-									outputCol[i].Set(&r)
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -1955,7 +1955,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = tmpDec
 								}
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -1975,7 +1975,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = tmpDec
 								}
 
-								outputCol[i].Set(&r)
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -2003,7 +2003,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									}
 									r = int16(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -2023,7 +2023,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									}
 									r = int16(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -2039,7 +2039,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 								r = int16(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2055,7 +2055,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 								r = int16(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -2080,7 +2080,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									}
 									r = int32(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -2100,7 +2100,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									}
 									r = int32(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -2116,7 +2116,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 								r = int32(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2132,7 +2132,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 								r = int32(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -2158,7 +2158,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									}
 									r = int64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -2178,7 +2178,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									}
 									r = int64(v)
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -2194,7 +2194,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 								r = int64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2210,7 +2210,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								}
 								r = int64(v)
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}
@@ -2249,7 +2249,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = _castedDatum == tree.DBoolTrue
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						} else {
@@ -2272,7 +2272,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 										r = _castedDatum == tree.DBoolTrue
 									}
 
-									outputCol[i] = r
+									outputCol.Set(i, r) //gcassert:inline
 								}
 							}
 						}
@@ -2291,7 +2291,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = _castedDatum == tree.DBoolTrue
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
@@ -2310,7 +2310,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 									r = _castedDatum == tree.DBoolTrue
 								}
 
-								outputCol[i] = r
+								outputCol.Set(i, r) //gcassert:inline
 							}
 						}
 					}

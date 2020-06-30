@@ -154,7 +154,7 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -201,7 +201,7 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -250,7 +250,7 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -297,7 +297,7 @@ func (a *minBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -347,7 +347,7 @@ func (a *minBoolOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -692,7 +692,7 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -731,7 +731,7 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -772,7 +772,7 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -811,7 +811,7 @@ func (a *minDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -853,7 +853,7 @@ func (a *minDecimalOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -943,7 +943,7 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -993,7 +993,7 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1045,7 +1045,7 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1095,7 +1095,7 @@ func (a *minInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1148,7 +1148,7 @@ func (a *minInt16OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1238,7 +1238,7 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1288,7 +1288,7 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1340,7 +1340,7 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1390,7 +1390,7 @@ func (a *minInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1443,7 +1443,7 @@ func (a *minInt32OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1533,7 +1533,7 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1583,7 +1583,7 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1635,7 +1635,7 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1685,7 +1685,7 @@ func (a *minInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1738,7 +1738,7 @@ func (a *minInt64OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1828,7 +1828,7 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1886,7 +1886,7 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -1946,7 +1946,7 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2004,7 +2004,7 @@ func (a *minFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2065,7 +2065,7 @@ func (a *minFloat64OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -2155,7 +2155,7 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2201,7 +2201,7 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2249,7 +2249,7 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2295,7 +2295,7 @@ func (a *minTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2344,7 +2344,7 @@ func (a *minTimestampOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -2434,7 +2434,7 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2473,7 +2473,7 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2514,7 +2514,7 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2553,7 +2553,7 @@ func (a *minIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2595,7 +2595,7 @@ func (a *minIntervalOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -2944,7 +2944,7 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -2991,7 +2991,7 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3040,7 +3040,7 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3087,7 +3087,7 @@ func (a *maxBoolOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3137,7 +3137,7 @@ func (a *maxBoolOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -3482,7 +3482,7 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3521,7 +3521,7 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3562,7 +3562,7 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3601,7 +3601,7 @@ func (a *maxDecimalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3643,7 +3643,7 @@ func (a *maxDecimalOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -3733,7 +3733,7 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3783,7 +3783,7 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3835,7 +3835,7 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3885,7 +3885,7 @@ func (a *maxInt16OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -3938,7 +3938,7 @@ func (a *maxInt16OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4028,7 +4028,7 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4078,7 +4078,7 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4130,7 +4130,7 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4180,7 +4180,7 @@ func (a *maxInt32OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4233,7 +4233,7 @@ func (a *maxInt32OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4323,7 +4323,7 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4373,7 +4373,7 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4425,7 +4425,7 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4475,7 +4475,7 @@ func (a *maxInt64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4528,7 +4528,7 @@ func (a *maxInt64OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4618,7 +4618,7 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4676,7 +4676,7 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4736,7 +4736,7 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4794,7 +4794,7 @@ func (a *maxFloat64OrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4855,7 +4855,7 @@ func (a *maxFloat64OrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4945,7 +4945,7 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -4991,7 +4991,7 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5039,7 +5039,7 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5085,7 +5085,7 @@ func (a *maxTimestampOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5134,7 +5134,7 @@ func (a *maxTimestampOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -5224,7 +5224,7 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5263,7 +5263,7 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5304,7 +5304,7 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5343,7 +5343,7 @@ func (a *maxIntervalOrderedAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx] = a.curAgg
+								a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -5385,7 +5385,7 @@ func (a *maxIntervalOrderedAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }

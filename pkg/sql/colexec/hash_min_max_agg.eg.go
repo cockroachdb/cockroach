@@ -297,7 +297,7 @@ func (a *minBoolHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -703,7 +703,7 @@ func (a *minDecimalHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -948,7 +948,7 @@ func (a *minInt16HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1193,7 +1193,7 @@ func (a *minInt32HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1438,7 +1438,7 @@ func (a *minInt64HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1715,7 +1715,7 @@ func (a *minFloat64HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -1944,7 +1944,7 @@ func (a *minTimestampHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -2145,7 +2145,7 @@ func (a *minIntervalHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -2587,7 +2587,7 @@ func (a *maxBoolHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -2993,7 +2993,7 @@ func (a *maxDecimalHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx].Set(&a.curAgg)
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -3238,7 +3238,7 @@ func (a *maxInt16HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -3483,7 +3483,7 @@ func (a *maxInt32HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -3728,7 +3728,7 @@ func (a *maxInt64HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4005,7 +4005,7 @@ func (a *maxFloat64HashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4234,7 +4234,7 @@ func (a *maxTimestampHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
@@ -4435,7 +4435,7 @@ func (a *maxIntervalHashAgg) Flush() {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(a.curIdx)
 	} else {
-		a.col[a.curIdx] = a.curAgg
+		a.col.Set(a.curIdx, a.curAgg) //gcassert:inline
 	}
 	a.curIdx++
 }
