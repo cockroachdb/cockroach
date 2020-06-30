@@ -46,7 +46,8 @@ message GetOperation {
 message ScanOperation {
   bytes key = 1;
   bytes end_key = 2;
-  Result result = 3 [(gogoproto.nullable) = false];
+  bool for_update = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
 }
 
 message PutOperation {
