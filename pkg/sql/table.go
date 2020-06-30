@@ -81,24 +81,12 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		}
 	}
 	var job *jobs.Job
-	// Iterate through the queued jobs to find an existing schema change job for
-	// this table, if it exists.
-	// TODO (lucy): Looking up each job to determine this is not ideal. Maybe
-	// we need some additional state in extraTxnState to help with lookups.
-	for _, jobID := range *p.extendedEvalCtx.Jobs {
-		var err error
-		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
-		if err != nil {
-			return err
-		}
-		schemaDetails, ok := j.Details().(jobspb.SchemaChangeDetails)
-		if !ok {
-			continue
-		}
-		if schemaDetails.TableID == tableDesc.ID {
-			job = j
-			break
-		}
+	if cachedJob, ok := (*p.extendedEvalCtx.JobsCache)[tableDesc.ID]; ok {
+		job = cachedJob
+	}
+
+	if p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterJobsCacheLookup != nil {
+		p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterJobsCacheLookup(job)
 	}
 
 	var spanList []jobspb.ResumeSpanList
@@ -133,6 +121,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		if err != nil {
 			return err
 		}
+		(*p.extendedEvalCtx.JobsCache)[tableDesc.ID] = newJob
 		// Only add a MutationJob if there's an associated mutation.
 		// TODO (lucy): get rid of this when we get rid of MutationJobs.
 		if mutationID != sqlbase.InvalidMutationID {

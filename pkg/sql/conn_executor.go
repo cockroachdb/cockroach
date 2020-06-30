@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -637,6 +638,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager,
 		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache)
 	ex.extraTxnState.txnRewindPos = -1
+	ex.extraTxnState.jobsCache = make(map[sqlbase.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -937,6 +939,11 @@ type connExecutor struct {
 		// that staged them commits.
 		jobs jobsCollection
 
+		// jobsCache is a map of TableIDs to Jobs.
+		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
+		// queued up for the given table.
+		jobsCache map[sqlbase.ID]*jobs.Job
+
 		// autoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not
 		// stateOpen.
@@ -1149,6 +1156,7 @@ func (ex *connExecutor) resetExtraTxnState(
 	ctx context.Context, dbCacheHolder *databaseCacheHolder, ev txnEvent,
 ) error {
 	ex.extraTxnState.jobs = nil
+	ex.extraTxnState.jobsCache = make(map[sqlbase.ID]*jobs.Job)
 
 	ex.extraTxnState.descCollection.ReleaseAll(ctx)
 
@@ -1990,6 +1998,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		DistSQLPlanner:    ex.server.cfg.DistSQLPlanner,
 		TxnModesSetter:    ex,
 		Jobs:              &ex.extraTxnState.jobs,
+		JobsCache:         &ex.extraTxnState.jobsCache,
 		schemaAccessors:   scInterface,
 		sqlStatsCollector: ex.statsCollector,
 	}

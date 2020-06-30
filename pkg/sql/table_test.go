@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -439,5 +440,72 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		if _, err := sqlDB.Exec("DROP TABLE t"); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestJobsCache verifies that a job for a given table gets cached and reused
+// for following schema changes in the same transaction.
+func TestJobsCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	foundInCache := false
+	runAfterJobsCacheLookup := func(job *jobs.Job) {
+		if job != nil {
+			foundInCache = true
+		}
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLExecutor = &ExecutorTestingKnobs{
+		RunAfterJobsCacheLookup: runAfterJobsCacheLookup,
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// ALTER TABLE t1 ADD COLUMN x INT should have created a job for the table
+	// we're altering.
+	// Further schema changes to the table should have an existing cache
+	// entry for the job.
+	if _, err := sqlDB.Exec(`
+CREATE TABLE t1();
+BEGIN;
+ALTER TABLE t1 ADD COLUMN x INT;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+ALTER TABLE t1 ADD COLUMN y INT;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if !foundInCache {
+		t.Fatal("expected a job to be found in cache for table t1, " +
+			"but a job was not found")
+	}
+
+	// Verify that the cache is cleared once the transaction ends.
+	// Commit the old transaction.
+	if _, err := sqlDB.Exec(`
+COMMIT;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	foundInCache = false
+
+	if _, err := sqlDB.Exec(`
+BEGIN;
+ALTER TABLE t1 ADD COLUMN z INT;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if foundInCache {
+		t.Fatal("expected a job to not be found in cache for table t1, " +
+			"but a job was found")
 	}
 }

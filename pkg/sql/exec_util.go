@@ -782,6 +782,10 @@ type ExecutorTestingKnobs struct {
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
 	WithStatementTrace func(span opentracing.Span, stmt string)
+
+	// RunAfterJobsCacheLookup is called after the JobsCache is checked for
+	// a given table id.
+	RunAfterJobsCacheLookup func(*jobs.Job)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
