@@ -89,7 +89,6 @@ const (
 	ExplainFlagVerbose ExplainFlag = 1 + iota
 	ExplainFlagSymVars
 	ExplainFlagTypes
-	ExplainFlagNoNormalize
 	ExplainFlagAnalyze
 	ExplainFlagEnv
 	ExplainFlagCatalog
@@ -97,13 +96,12 @@ const (
 )
 
 var explainFlagStrings = [...]string{
-	ExplainFlagVerbose:     "VERBOSE",
-	ExplainFlagSymVars:     "SYMVARS",
-	ExplainFlagTypes:       "TYPES",
-	ExplainFlagNoNormalize: "NONORMALIZE",
-	ExplainFlagAnalyze:     "ANALYZE",
-	ExplainFlagEnv:         "ENV",
-	ExplainFlagCatalog:     "CATALOG",
+	ExplainFlagVerbose: "VERBOSE",
+	ExplainFlagSymVars: "SYMVARS",
+	ExplainFlagTypes:   "TYPES",
+	ExplainFlagAnalyze: "ANALYZE",
+	ExplainFlagEnv:     "ENV",
+	ExplainFlagCatalog: "CATALOG",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
