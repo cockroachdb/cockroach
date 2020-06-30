@@ -1014,12 +1014,15 @@ func (r *importResumer) prepareTableDescsForIngestion(
 			if err != nil {
 				return err
 			}
-			for i, table := range res {
-				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: table,
-					Name:       details.Tables[i].Name,
-					SeqVal:     details.Tables[i].SeqVal,
-					IsNew:      details.Tables[i].IsNew,
-					TargetCols: details.Tables[i].TargetCols}
+
+			for _, desc := range res {
+				i := newTableDescToIdx[desc]
+				table := details.Tables[i]
+				importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc,
+					Name:       table.Name,
+					SeqVal:     table.SeqVal,
+					IsNew:      table.IsNew,
+					TargetCols: table.TargetCols}
 			}
 		}
 
