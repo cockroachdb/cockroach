@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/url"
+	"os"
 	"sort"
 	"testing"
 
@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -281,16 +280,7 @@ func TestUserGrants(t *testing.T) {
 	_, err = sqlDB.Exec(fmt.Sprintf("GRANT CREATE ON DATABASE %s TO john", database))
 	require.NoError(t, err)
 
-	// Switch to non-admin user.
-	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("john"), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer userDB.Close()
-
+	// Operate under non-admin user.
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
 		"john")
@@ -369,16 +359,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	_, err = sqlDB.Exec(fmt.Sprintf("GRANT ALL ON DATABASE %s TO doe", database))
 	require.NoError(t, err)
 
-	// Switch to non-admin user john.
-	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("john"), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer userDB.Close()
-
+	// Operate under non-admin user john.
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
 		"john")
@@ -387,20 +368,10 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter)
 	require.NoError(t, err)
 
-	// Switch to non-admin user doe who should not have access to john's tables.
-	pgURL, cleanupGoDB = sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("doe"), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err = gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer userDB.Close()
-
 	// Under normal circumstances Doe should have ALL privileges on the file and
-	// payload tables created by john above. FileToTableSystem should have
-	// revoked these privileges.
-
+	// payload tables created by john above. FileToTableSystem should have revoked
+	// these privileges.
+	//
 	// Only grantees on the table should be admin, root and john (5 privileges).
 	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
@@ -443,16 +414,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	_, err = sqlDB.Exec(`GRANT allprivilege TO doe`)
 	require.NoError(t, err)
 
-	// Switch to non-admin user john.
-	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("john"), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer userDB.Close()
-
+	// Operate under non-admin user john.
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB,
 		"john")
@@ -460,16 +422,6 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 
 	_, err = uploadFile(ctx, "file1", 1024, 10, fileTableReadWriter)
 	require.NoError(t, err)
-
-	// Switch to non-admin user doe.
-	pgURL, cleanupGoDB = sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.ServingSQLAddr(), "notAdmin", url.User("doe"), false, /* withCerts */
-	)
-	defer cleanupGoDB()
-	pgURL.RawQuery = "sslmode=disable"
-	userDB, err = gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer userDB.Close()
 
 	// Under normal circumstances Doe should have ALL privileges on the file and
 	// payload tables created by john above. FileToTableSystem should have
@@ -516,9 +468,6 @@ func TestDatabaseScope(t *testing.T) {
 		"newdb.file_table_read_writer",
 		s.InternalExecutor().(*sql.InternalExecutor), kvDB, security.RootUser)
 	require.NoError(t, err)
-	reader, err := newFileTableReadWriter.ReadFile(ctx, "file1")
-	require.NoError(t, err)
-	newDBContent, err := ioutil.ReadAll(reader)
-	require.NoError(t, err)
-	require.Empty(t, newDBContent)
+	_, err = newFileTableReadWriter.ReadFile(ctx, "file1")
+	require.True(t, os.IsNotExist(err))
 }

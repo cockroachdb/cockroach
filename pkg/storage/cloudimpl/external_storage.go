@@ -14,6 +14,7 @@ import (
 	"context"
 	"io"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -184,13 +184,26 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		}
 		conf.Provider = roachpb.ExternalStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
-		log.Infof(context.Background(), "THIS IS THE PATH %s", conf.LocalFile.Path)
 		conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
 	case "experimental-workload", "workload":
 		conf.Provider = roachpb.ExternalStorageProvider_Workload
 		if conf.WorkloadConfig, err = ParseWorkloadConfig(uri); err != nil {
 			return conf, err
 		}
+	case "userfile":
+		qualifiedTableName := uri.Host
+		if qualifiedTableName == "" {
+			return conf, errors.Errorf("host component of userfile URI must be a qualified table name")
+		}
+
+		if user == "" {
+			return conf, errors.Errorf("user creating the FileTable ExternalStorage must be specified")
+		}
+
+		conf.Provider = roachpb.ExternalStorageProvider_FileTable
+		conf.FileTableConfig.User = user
+		conf.FileTableConfig.QualifiedTableName = qualifiedTableName
+		conf.FileTableConfig.Path = uri.Path
 	default:
 		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
 	}
@@ -281,6 +294,9 @@ func MakeExternalStorage(
 	case roachpb.ExternalStorageProvider_Workload:
 		telemetry.Count("external-io.workload")
 		return makeWorkloadStorage(dest.WorkloadConfig)
+	case roachpb.ExternalStorageProvider_FileTable:
+		telemetry.Count("external-io.filetable")
+		return makeFileTableStorage(ctx, dest.FileTableConfig, ie, kvDB)
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
@@ -379,6 +395,14 @@ func isResumableHTTPError(err error) bool {
 	return errors.Is(err, io.ErrUnexpectedEOF) ||
 		sysutil.IsErrConnectionReset(err) ||
 		sysutil.IsErrConnectionRefused(err)
+}
+
+func getPrefixBeforeWildcard(p string) string {
+	globIndex := strings.IndexAny(p, "*?[")
+	if globIndex < 0 {
+		return p
+	}
+	return path.Dir(p[:globIndex])
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
