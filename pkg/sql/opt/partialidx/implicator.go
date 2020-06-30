@@ -190,7 +190,6 @@ func (im *Implicator) FiltersImplyPredicate(
 	for _, f := range filters {
 		op := f.Condition.Op()
 		if f.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
-			// TODO: try not doing this if it already exists in the cache.
 			im.cacheConstraint(f.Condition, f.ScalarProps().Constraints, f.ScalarProps().TightConstraints)
 		}
 	}
@@ -435,20 +434,22 @@ func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 // cacheConstraint caches a constraint set and a tight boolean for the given
 // scalar expression.
 func (im *Implicator) cacheConstraint(e opt.ScalarExpr, c *constraint.Set, tight bool) {
-	im.constraintCache[e] = constraintResult{
-		c:     c,
-		tight: tight,
+	if _, ok := im.constraintCache[e]; !ok {
+		im.constraintCache[e] = constraintResult{
+			c:     c,
+			tight: tight,
+		}
 	}
 }
 
-// fetchConstraint returns a constraint set, tight boolean, and true the cache
-// contains and entry for the given scalar expression. It returns ok = false if
-// the scalar expression does not exist in the cache.
-func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (c *constraint.Set, tight bool, ok bool) {
+// fetchConstraint returns a constraint set, tight boolean, and true if the
+// cache contains an entry for the given scalar expression. It returns
+// ok = false if the scalar expression does not exist in the cache.
+func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (_ *constraint.Set, tight bool, ok bool) {
 	if res, ok := im.constraintCache[e]; ok {
 		return res.c, res.tight, true
 	}
-	return c, tight, false
+	return nil, false, false
 }
 
 // simplifyFiltersExpr returns a new FiltersExpr with any expressions in e that
