@@ -48,7 +48,8 @@ func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 
 // covers is the internal calculation for Covers.
 func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
-	if !a.BoundingBoxIntersects(b) {
+	// Rect "contains" is a version of covers.
+	if !a.BoundingRect().Contains(b.BoundingRect()) {
 		return false, nil
 	}
 
