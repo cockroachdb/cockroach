@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/spf13/cobra"
 )
 
@@ -84,7 +85,7 @@ type csvTSWriter struct {
 func (w csvTSWriter) Emit(data *tspb.TimeSeriesData) error {
 	for _, d := range data.Datapoints {
 		if err := w.w.Write(
-			[]string{data.Name, time.Unix(0, d.TimestampNanos).In(time.UTC).Format(time.RFC3339), data.Source, fmt.Sprint(d.Value)},
+			[]string{data.Name, timeutil.Unix(0, d.TimestampNanos).In(time.UTC).Format(time.RFC3339), data.Source, fmt.Sprint(d.Value)},
 		); err != nil {
 			return err
 		}
@@ -112,7 +113,7 @@ func (w rawTSWriter) Emit(data *tspb.TimeSeriesData) error {
 		fmt.Fprintf(w.w, "%s %s\n", data.Name, data.Source)
 	}
 	for _, d := range data.Datapoints {
-		fmt.Fprintf(w.w, "%s %v\n", d.TimestampNanos, d.Value)
+		fmt.Fprintf(w.w, "%v %v\n", d.TimestampNanos, d.Value)
 	}
 	return nil
 }
