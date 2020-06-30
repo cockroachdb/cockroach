@@ -66,6 +66,11 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
       windowValid: moment.duration(10, "seconds"),
       sampleSize: moment.duration(10, "seconds"),
     },
+    "Past 30 Minutes": {
+      windowSize: moment.duration(30, "minutes"),
+      windowValid: moment.duration(30, "seconds"),
+      sampleSize: moment.duration(30, "seconds"),
+    },
     "Past 1 Hour": {
       windowSize: moment.duration(1, "hour"),
       windowValid: moment.duration(1, "minute"),
