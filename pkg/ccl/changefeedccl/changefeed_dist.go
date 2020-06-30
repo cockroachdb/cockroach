@@ -175,7 +175,6 @@ func distChangefeedFlow(
 		resultRows,
 		tree.Rows,
 		execCfg.RangeDescriptorCache,
-		execCfg.LeaseHolderCache,
 		noTxn,
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/biogo/store/llrb"
@@ -99,11 +98,6 @@ type RangeDescriptorCache struct {
 // RangeDescriptorCache implements the kvbase interface.
 var _ kvbase.RangeDescriptorCache = (*RangeDescriptorCache)(nil)
 
-type lookupResult struct {
-	desc       *roachpb.RangeDescriptor
-	evictToken *EvictionToken
-}
-
 // makeLookupRequestKey constructs a key for the lookupRequest group with the
 // goal of mapping all requests which are inferred to be looking for the same
 // descriptor onto the same request key to establish request coalescing.
@@ -118,7 +112,7 @@ type lookupResult struct {
 //           the stale descriptor because only the right half will be sending to
 //           the wrong range. Once this stale descriptor is evicted, keys from
 //           both halves of the split will miss the cache. Because both sides of
-//           the split will now map to the same lookupResult, it is important to
+//           the split will now map to the same EvictionToken, it is important to
 //           use EvictAndReplace if possible to insert one of the two new descriptors.
 //           This way, no requests to that descriptor will ever miss the cache and
 //           risk being coalesced into the other request. If this is not possible,
@@ -207,37 +201,213 @@ func (rdc *RangeDescriptorCache) stringLocked() string {
 	return buf.String()
 }
 
-// EvictionToken holds eviction state between calls to LookupRangeDescriptor.
+// EvictionToken holds eviction state between calls to Lookup.
 type EvictionToken struct {
 	// rdc is the cache that produced this token - and that will be modified by
 	// Evict().
 	rdc *RangeDescriptorCache
 
-	// desc is the descriptor that this EvictionToken refers to - the descriptor
-	// that Evict() will evict from rdc.
-	desc *roachpb.RangeDescriptor
+	// entry is the cache entry that this EvictionToken refers to - the entry that
+	// Evict() will evict from rdc.
+	entry *kvbase.RangeCacheEntry
 	// nextDesc, if not nil, is the descriptor that should replace desc if desc
 	// proves to be stale - i.e. nextDesc is inserted in the cache automatically
 	// by Evict(). This is used when the range descriptor lookup that populated
 	// the cache returned an intent in addition to the current descriptor value.
+	//
+	// TODO(andrei): It's weird that nextDesc hangs from an EvictionToken, instead
+	// of from a cache entry. Hanging from a particular token, only one actor has
+	// the opportunity to use this nextDesc; if another actor races to evict the
+	// respective cache entry and wins, nextDesc becomes useless.
 	nextDesc *roachpb.RangeDescriptor
-
-	evictOnce sync.Once // assures that desc is only evicted once
 }
 
 func (rdc *RangeDescriptorCache) makeEvictionToken(
-	desc *roachpb.RangeDescriptor, nextDesc *roachpb.RangeDescriptor,
-) *EvictionToken {
-	return &EvictionToken{
+	entry *kvbase.RangeCacheEntry, nextDesc *roachpb.RangeDescriptor,
+) EvictionToken {
+	return EvictionToken{
 		rdc:      rdc,
-		desc:     desc,
+		entry:    entry,
 		nextDesc: nextDesc,
 	}
 }
 
+// Empty returns true if the token is not populated.
+func (et EvictionToken) Empty() bool {
+	return et == (EvictionToken{})
+}
+
+// Desc returns the RangeDescriptor that was retrieved from the cache. The
+// result is to be considered immutable.
+func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
+	return &et.entry.Desc
+}
+
+// Lease returns the lease that was retrieved from the cache. If the cache
+// didn't have any lease information, returns nil. The result is to be
+// considered immutable.
+//
+// If a non-nil lease is returned, it will correspond to one of the replicas in
+// et.Desc().
+func (et EvictionToken) Lease() *roachpb.Lease {
+	if et.entry.Lease.Empty() {
+		return nil
+	}
+	return &et.entry.Lease
+}
+
+// UpdateLease updates the leaseholder for the token's cache entry to the
+// specified lease, and returns an updated EvictionToken, tied to the new cache
+// entry.
+//
+// UpdateLease also acts as a synchronization point between the caller and the
+// RangeDescriptorCache. In the spirit of a Compare-And-Swap operation (but
+// unfortunately not quite as simple), it returns updated information (besides
+// the lease) from the cache in case the EvictionToken was no longer up to date
+// with the cache entry from whence it came.
+//
+// The updated token might have a newer descriptor than before and/or a newer
+// lease than the one passed-in - in case the cache already had a more recent
+// entry. The returned entry has a descriptor compatible to the original one
+// (same range id and key span).
+//
+// If the passed-in lease is incompatible with the cached descriptor (i.e. the
+// leaseholder is not a replica in the cached descriptor), then the existing
+// entry is evicted and an empty token is returned. The caller should take an
+// empty returned token to mean that the information it was working with is too
+// stale to be useful, and it should use a range iterator again to get an
+// updated cache entry.
+//
+// The bool retval is true if the requested update was performed (i.e. the
+// passed-in lease was compatible with the descriptor and more recent than the
+// cached lease).
+func (et EvictionToken) UpdateLease(
+	ctx context.Context, lease *roachpb.Lease,
+) (EvictionToken, bool) {
+	// If the lease we've been given is older than what the cache entry already has,
+	// then short-circuit and don't evict the current entry.
+	{
+		shouldUpdate, _ := et.entry.UpdateLease(lease)
+		if !shouldUpdate {
+			return et, false
+		}
+	}
+
+	// Notes for what follows: We can't simply update the cache
+	// entry in place since entries are immutable. So, we're going to evict the
+	// old cache entry and insert a new one, and then change this eviction token
+	// to point to the new entry. Note that the eviction token itself does not
+	// count as having been evicted (we don't use et.evictOnce), and so the caller
+	// can continue using it.
+
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+
+	// Evict our entry and, in the process, see if the cache has a more recent
+	// entry.
+	evicted, curEntry := et.rdc.evictLocked(ctx, et.entry)
+	if !evicted && curEntry == nil {
+		// The cache doesn't know what range we're talking about. We must have very
+		// stale info.
+		return EvictionToken{}, false
+	}
+	// If we got a more recent entry, that's the entry we'll try to update.
+	if !evicted {
+		et.entry = curEntry
+	}
+
+	shouldUpdate, updatedEntry := et.entry.UpdateLease(lease)
+	if !shouldUpdate {
+		return et, false
+	}
+	// Replace the entry.
+	if !evicted {
+		et.rdc.mustEvictLocked(ctx, et.entry)
+	}
+	// updatedEntry == nil means that lease is incompatible with the descriptor in
+	// the entry. The descriptor must be stale (and we evicted it), but we have no
+	// replacement for it.
+	if updatedEntry == nil {
+		return EvictionToken{}, false
+	}
+	et.entry = updatedEntry
+	et.rdc.mustInsertLocked(ctx, updatedEntry)
+	return et, true
+
+}
+
+// ClearLease evicts information about the current lease from the cache, if the
+// cache entry referenced by the token is still in the cache.
+//
+// Similarly to UpdateLease(), ClearLease() acts as a synchronization point
+// between the caller and the RangeDescriptorCache. The caller might get an
+// updated token (besides the lease).
+//
+// Returns the updated EvictionToken. Note that this updated token might have a
+// newer descriptor than before and/or still have a lease in it - in case the
+// cache already had a more recent entry. The returned descriptor is compatible
+// (same range id and key span) to the original one. Returns an empty token if
+// the cache has a more recent entry, but the current descriptor is
+// incompatible. Callers should interpret such a response as a signal that they
+// should use a range iterator again to get updated ranges.
+func (et EvictionToken) ClearLease(ctx context.Context) EvictionToken {
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+
+	if et.entry.Lease.Empty() {
+		log.Fatalf(ctx, "attempting to clear lease from cache entry without lease")
+	}
+
+	var replacementEntry *kvbase.RangeCacheEntry
+	ok, newerEntry := et.rdc.evictLocked(ctx, et.entry)
+	if ok {
+		// This is the happy case: our entry was in the cache and we just evicted
+		// it. We'll now insert a replacement without a lease.
+		replacementEntry = &kvbase.RangeCacheEntry{
+			Desc: et.entry.Desc,
+			// No lease.
+			Lease: roachpb.Lease{},
+		}
+	} else if newerEntry != nil {
+		// We're trying to clear a lease, but we find out that the cache might have
+		// newer version of the entry. If that newer version has a different lease,
+		// we don't clear anything. Note that we look at the lease's replica, not
+		// sequence; the idea is that this clearing of a lease comes in response to
+		// trying the known leaseholder and failing - so it's a particular node that
+		// we have a problem with, not a particular lease (i.e. we want to evict
+		// even a newer lease, but with the same leaseholder).
+		if newerEntry.Lease.Replica != et.entry.Lease.Replica {
+			et.entry = newerEntry
+			return et
+		}
+		// The newer entry has the same lease, so we still want to clear it. We
+		// replace the entry, but keep the possibly newer descriptor.
+		et.rdc.mustEvictLocked(ctx, newerEntry)
+		replacementEntry = &kvbase.RangeCacheEntry{
+			Desc:  newerEntry.Desc,
+			Lease: roachpb.Lease{},
+		}
+	} else {
+		// The cache doesn't have info about this range any more, or the range keys
+		// have changed. Let's bail, it's unclear if there's anything to be updated.
+		return EvictionToken{}
+	}
+
+	if replacementEntry == nil {
+		log.Fatalf(ctx, "programming error; we should have a replacement")
+	}
+	et.entry = replacementEntry
+	et.rdc.mustInsertLocked(ctx, et.entry)
+	return et
+}
+
+func descsCompatible(a, b *roachpb.RangeDescriptor) bool {
+	return (a.RangeID == b.RangeID) && (a.RSpan().Equal(b.RSpan()))
+}
+
 // Evict instructs the EvictionToken to evict the RangeDescriptor it was created
 // with from the RangeDescriptorCache.
-func (et *EvictionToken) Evict(ctx context.Context) {
+func (et EvictionToken) Evict(ctx context.Context) {
 	et.EvictAndReplace(ctx)
 }
 
@@ -245,29 +415,31 @@ func (et *EvictionToken) Evict(ctx context.Context) {
 // created with from the RangeDescriptorCache. It also allows the user to provide
 // new RangeDescriptors to insert into the cache, all atomically. When called without
 // arguments, EvictAndReplace will behave the same as Evict.
-func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachpb.RangeDescriptor) {
-	et.evictOnce.Do(func() {
-		et.rdc.rangeCache.Lock()
-		defer et.rdc.rangeCache.Unlock()
-		et.rdc.evictCachedRangeDescriptorLocked(ctx, et.desc)
-		if len(newDescs) > 0 {
-			log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
-			et.rdc.insertRangeDescriptorsLocked(ctx, newDescs...)
-		} else if et.nextDesc != nil {
-			log.Eventf(ctx, "evicting cached range descriptor with replacement from token")
-			et.rdc.insertRangeDescriptorsLocked(ctx, *et.nextDesc)
-		} else {
-			log.Eventf(ctx, "evicting cached range descriptor")
-		}
-	})
+func (et EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachpb.RangeInfo) {
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+	et.rdc.evictLocked(ctx, et.entry)
+	if len(newDescs) > 0 {
+		log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
+		et.rdc.insertLocked(ctx, newDescs...)
+	} else if et.nextDesc != nil {
+		log.Eventf(ctx, "evicting cached range descriptor with replacement from token")
+		et.rdc.insertLocked(ctx, roachpb.RangeInfo{
+			Desc: *et.nextDesc,
+			// We don't know anything about the new lease.
+			Lease: roachpb.Lease{},
+		})
+	} else {
+		log.Eventf(ctx, "evicting cached range descriptor")
+	}
 }
 
-// LookupRangeDescriptorWithEvictionToken attempts to locate a descriptor for the range
-// containing the given Key. This is done by first trying the cache, and then
-// querying the two-level lookup table of range descriptors which cockroach
-// maintains. The function should be provided with an EvictionToken if one was
-// acquired from this function on a previous lookup. If not, an empty
-// EvictionToken can be provided.
+// LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
+// lease) for the range containing the given key. This is done by first trying
+// the cache, and then querying the two-level lookup table of range descriptors
+// which cockroach maintains. The function should be provided with an
+// EvictionToken if one was acquired from this function on a previous lookup. If
+// not, a nil EvictionToken can be provided.
 //
 // This method first looks up the specified key in the first level of
 // range metadata, which returns the location of the key within the
@@ -276,49 +448,57 @@ func (et *EvictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 // value resides. Range descriptors retrieved during each search are
 // cached for subsequent lookups.
 //
-// This method returns the RangeDescriptor for the range containing
-// the key's data and a token to manage evicting the RangeDescriptor
-// if it is found to be stale, or an error if any occurred.
-func (rdc *RangeDescriptorCache) LookupRangeDescriptorWithEvictionToken(
-	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
-	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, useReverseScan)
+// The returned EvictionToken contains the descriptor and, possibly, the lease.
+// It can also be used to evict information from the cache if it's found to be
+// stale.
+func (rdc *RangeDescriptorCache) LookupWithEvictionToken(
+	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (EvictionToken, error) {
+	tok, err := rdc.lookupInternal(ctx, key, evictToken, useReverseScan)
+	if err != nil {
+		return EvictionToken{}, err
+	}
+	return tok, nil
 }
 
-// LookupRangeDescriptor presents a simpler interface for looking up a
+// Lookup presents a simpler interface for looking up a
 // RangeDescriptor for a key without the eviction tokens or scan direction
-// control of LookupRangeDescriptorWithEvictionToken. This method is exported
+// control of LookupWithEvictionToken. This method is exported
 // to lower level clients through the kvbase.RangeDescriptorCache interface.
-func (rdc *RangeDescriptorCache) LookupRangeDescriptor(
+func (rdc *RangeDescriptorCache) Lookup(
 	ctx context.Context, key roachpb.RKey,
-) (*roachpb.RangeDescriptor, error) {
-	rd, _, err := rdc.lookupRangeDescriptorInternal(ctx, key, nil, false)
-	return rd, err
+) (*kvbase.RangeCacheEntry, error) {
+	tok, err := rdc.lookupInternal(
+		ctx, key, EvictionToken{}, false /* useReverseScan */)
+	if err != nil {
+		return nil, err
+	}
+	return tok.entry, nil
 }
 
-// lookupRangeDescriptorInternal is called from LookupRangeDescriptor or from tests.
+// lookupInternal is called from Lookup or from tests.
 //
 // If a WaitGroup is supplied, it is signaled when the request is
 // added to the inflight request map (with or without merging) or the
 // function finishes. Used for testing.
-func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
-	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+func (rdc *RangeDescriptorCache) lookupInternal(
+	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (EvictionToken, error) {
 	// Retry while we're hitting lookupCoalescingErrors.
 	for {
-		desc, newToken, err := rdc.tryLookupRangeDescriptor(ctx, key, evictToken, useReverseScan)
+		newToken, err := rdc.tryLookup(ctx, key, evictToken, useReverseScan)
 		if errors.HasType(err, (lookupCoalescingError{})) {
 			log.VEventf(ctx, 2, "bad lookup coalescing; retrying: %s", err)
 			continue
 		}
 		if err != nil {
-			return nil, nil, err
+			return EvictionToken{}, err
 		}
-		return desc, newToken, nil
+		return newToken, nil
 	}
 }
 
-// lookupCoalescingError is returned by tryLookupRangeDescriptor() when the
+// lookupCoalescingError is returned by tryLookup() when the
 // descriptor database lookup failed because this request was grouped with
 // another request for another key, and the grouping proved bad since that other
 // request returned a descriptor that doesn't cover our request. The lookup
@@ -341,15 +521,15 @@ func newLookupCoalescingError(key roachpb.RKey, wrongDesc *roachpb.RangeDescript
 	}
 }
 
-// tryLookupRangeDescriptor can return a lookupCoalescingError.
-func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
-	ctx context.Context, key roachpb.RKey, evictToken *EvictionToken, useReverseScan bool,
-) (*roachpb.RangeDescriptor, *EvictionToken, error) {
+// tryLookup can return a lookupCoalescingError.
+func (rdc *RangeDescriptorCache) tryLookup(
+	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
+) (EvictionToken, error) {
 	rdc.rangeCache.RLock()
-	if desc, _ := rdc.getCachedRangeDescriptorLocked(key, useReverseScan); desc != nil {
+	if entry, _ := rdc.getCachedLocked(key, useReverseScan); entry != nil {
 		rdc.rangeCache.RUnlock()
-		returnToken := rdc.makeEvictionToken(desc, nil /* nextDesc */)
-		return desc, returnToken, nil
+		returnToken := rdc.makeEvictionToken(entry, nil /* nextDesc */)
+		return returnToken, nil
 	}
 
 	if log.V(2) {
@@ -357,12 +537,12 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	}
 
 	var prevDesc *roachpb.RangeDescriptor
-	if evictToken != nil {
-		prevDesc = evictToken.desc
+	if !evictToken.Empty() {
+		prevDesc = evictToken.Desc()
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
 	resC, leader := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
-		var lookupRes lookupResult
+		var lookupRes EvictionToken
 		if err := rdc.stopper.RunTaskWithErr(ctx, "rangecache: range lookup", func(ctx context.Context) error {
 			ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
 			defer tracing.FinishSpan(reqSpan)
@@ -384,23 +564,10 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 				return err
 			}
 
-			switch len(rs) {
-			case 0:
+			switch {
+			case len(rs) == 0:
 				return fmt.Errorf("no range descriptors returned for %s", key)
-			case 1:
-				desc := &rs[0]
-				lookupRes = lookupResult{
-					desc:       desc,
-					evictToken: rdc.makeEvictionToken(desc, nil /* nextDesc */),
-				}
-			case 2:
-				desc := &rs[0]
-				nextDesc := &rs[1]
-				lookupRes = lookupResult{
-					desc:       desc,
-					evictToken: rdc.makeEvictionToken(desc, nextDesc),
-				}
-			default:
+			case len(rs) > 2:
 				panic(fmt.Sprintf("more than 2 matching range descriptors returned for %s: %v", key, rs))
 			}
 
@@ -413,9 +580,48 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 
 			// Insert the descriptor and the prefetched ones. We don't insert rs[1]
 			// (if any), since it overlaps with rs[0]; rs[1] will be handled by
-			// rs[0]'s eviction token.
-			rdc.insertRangeDescriptorsLocked(ctx, rs[0:1:1]... /* this is rs[0], avoiding an allocation */)
-			rdc.insertRangeDescriptorsLocked(ctx, preRs...)
+			// rs[0]'s eviction token. Note that ranges for which the cache has more
+			// up-to-date information will not be clobbered - for example ranges for
+			// which the cache has the prefetched descriptor already plus a lease.
+			newEntries := make([]*kvbase.RangeCacheEntry, len(preRs)+1)
+			newEntries[0] = &kvbase.RangeCacheEntry{
+				Desc: rs[0],
+				// We don't have any lease information.
+				Lease: roachpb.Lease{},
+			}
+			for i, preR := range preRs {
+				newEntries[i+1] = &kvbase.RangeCacheEntry{Desc: preR}
+			}
+			insertedEntries := rdc.insertLockedInner(ctx, newEntries)
+			// entry corresponds to rs[0], which is the descriptor covering the key
+			// we're interested in.
+			entry := insertedEntries[0]
+			// There's 3 cases here:
+			// 1. We succeeded in inserting rs[0].
+			// 2. We didn't succeed in inserting rs[0], but insertedEntries[0] still was non-nil. This
+			// means that the cache had a newer version of the descriptor. In that
+			// case it's all good, we just pretend that that's the version we were inserting; we put it in our
+			// token and continue.
+			// 3. insertedEntries[0] is nil. The cache has newer entries in them and
+			// they're not compatible with the descriptor we were trying to insert.
+			// This case should be rare, since very recently (before starting the
+			// singleflight), the cache didn't have any entry for the requested key.
+			// We'll continue with the stale rs[0]; we'll pretend that we did by
+			// putting a dummy entry in the eviction token. This will make eviction
+			// no-ops (which makes sense - there'll be nothing to evict since we
+			// didn't insert anything).
+			// TODO(andrei): It'd be better to retry the cache/database lookup in case 3.
+			if entry == nil {
+				entry = &kvbase.RangeCacheEntry{
+					Desc:  rs[0],
+					Lease: roachpb.Lease{},
+				}
+			}
+			if len(rs) == 1 {
+				lookupRes = rdc.makeEvictionToken(entry, nil /* nextDesc */)
+			} else {
+				lookupRes = rdc.makeEvictionToken(entry, &rs[1] /* nextDesc */)
+			}
 			return nil
 		}); err != nil {
 			return nil, err
@@ -440,14 +646,14 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	select {
 	case res = <-resC:
 	case <-ctx.Done():
-		return nil, nil, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
+		return EvictionToken{}, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
 	}
 
 	var s string
 	if res.Err != nil {
 		s = res.Err.Error()
 	} else {
-		s = res.Val.(lookupResult).desc.String()
+		s = res.Val.(EvictionToken).entry.String()
 	}
 	if res.Shared {
 		log.Eventf(ctx, "looked up range descriptor with shared request: %s", s)
@@ -455,7 +661,7 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 		log.Eventf(ctx, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
-		return nil, nil, res.Err
+		return EvictionToken{}, res.Err
 	}
 
 	// We might get a descriptor that doesn't contain the key we're looking for
@@ -467,16 +673,16 @@ func (rdc *RangeDescriptorCache) tryLookupRangeDescriptor(
 	// a retry at a higher level inside the cache. Note that the retry might find
 	// the descriptor it's looking for in the cache if it was pre-fetched by the
 	// original lookup.
-	lookupRes := res.Val.(lookupResult)
-	desc := lookupRes.desc
+	lookupRes := res.Val.(EvictionToken)
+	desc := &lookupRes.entry.Desc
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
 	if useReverseScan {
 		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 	}
 	if !containsFn(desc, key) {
-		return nil, nil, newLookupCoalescingError(key, desc)
+		return EvictionToken{}, newLookupCoalescingError(key, desc)
 	}
-	return desc, lookupRes.evictToken, nil
+	return lookupRes, nil
 }
 
 // performRangeLookup handles delegating the range lookup to the cache's
@@ -515,7 +721,7 @@ func (rdc *RangeDescriptorCache) EvictByKey(ctx context.Context, descKey roachpb
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
 
-	cachedDesc, entry := rdc.getCachedRangeDescriptorLocked(descKey, false /* inverted */)
+	cachedDesc, entry := rdc.getCachedLocked(descKey, false /* inverted */)
 	if cachedDesc == nil {
 		return false
 	}
@@ -524,56 +730,73 @@ func (rdc *RangeDescriptorCache) EvictByKey(ctx context.Context, descKey roachpb
 	return true
 }
 
-// evictCachedRangeDescriptorLocked evicts desc from the cache. If desc is not
-// in the cache, it's a no-op. The caller needs to holds a write lock on
-// rdc.rangeCache.
+// evictLocked evicts entry from the cache. If entry is not in the cache
+// (according to pointer equality), the cache is not touched. The caller needs
+// to holds a write lock on rdc.rangeCache.
 //
-// Returns true if the descriptor was evicted from the cache.
-func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
-	ctx context.Context, desc *roachpb.RangeDescriptor,
-) bool {
-	cachedDesc, entry := rdc.getCachedRangeDescriptorLocked(desc.StartKey, false /* inverted */)
-	if cachedDesc == nil {
-		return false
+// entry must have come from the cache on a previous lookup.
+//
+// Returns true if the entry was evicted from the cache. If false is returned,
+// but the cache has an entry that's "compatible" (same range id and key span)
+// and newer, that entry is returned. The caller can use this returned entry as
+// more recent data than the version it was trying to evict.
+func (rdc *RangeDescriptorCache) evictLocked(
+	ctx context.Context, entry *kvbase.RangeCacheEntry,
+) (ok bool, updatedEntry *kvbase.RangeCacheEntry) {
+	cachedEntry, rawEntry := rdc.getCachedLocked(entry.Desc.StartKey, false /* inverted */)
+	if cachedEntry != entry {
+		if cachedEntry != nil &&
+			descsCompatible(&cachedEntry.Desc, &entry.Desc) &&
+			// cachedEntry is almost certainly newer than entry, but we still check
+			// explicitly. I think it's theoretically possible for cachedEntry to be
+			// older in case entry was evicted due to memory pressure, and an old
+			// entry somehow was inserted afterwards.
+			cachedEntry.NewerThan(entry) {
+			return false, cachedEntry
+		}
+		return false, nil
 	}
 
-	// Note that we're doing a "compare-and-erase": we want to clean the cache
-	// only if it equals the passed-in descriptor. We use Generation to determine
-	// if the range descriptors are equal. If the range descriptors are not equal,
-	// then likely some other caller already evicted previously, and we can save
-	// work by not doing it again (which would prompt another expensive lookup).
-	if desc.Generation != cachedDesc.Generation {
-		return false
-	}
-
-	log.VEventf(ctx, 2, "evict cached descriptor: desc=%s", cachedDesc)
-	rdc.rangeCache.cache.DelEntry(entry)
-	return true
+	log.VEventf(ctx, 2, "evict cached descriptor: desc=%s", cachedEntry)
+	rdc.rangeCache.cache.DelEntry(rawEntry)
+	return true, nil
 }
 
-// GetCachedRangeDescriptor retrieves the descriptor of the range which contains
+// mustEvictLocked is like evictLocked, except it asserts that the eviction was
+// successful (i.e. that entry is present in the cache). This is used when we're
+// evicting an entry that we just looked up, under the lock.
+func (rdc *RangeDescriptorCache) mustEvictLocked(
+	ctx context.Context, entry *kvbase.RangeCacheEntry,
+) {
+	ok, newer := rdc.evictLocked(ctx, entry)
+	if !ok {
+		log.Fatalf(ctx, "failed to evict %s. newer: %v", entry, newer)
+	}
+}
+
+// GetCached retrieves the descriptor of the range which contains
 // the given key. It returns nil if the descriptor is not found in the cache.
 //
 // `inverted` determines the behavior at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
-func (rdc *RangeDescriptorCache) GetCachedRangeDescriptor(
+func (rdc *RangeDescriptorCache) GetCached(
 	key roachpb.RKey, inverted bool,
-) *roachpb.RangeDescriptor {
+) *kvbase.RangeCacheEntry {
 	rdc.rangeCache.RLock()
 	defer rdc.rangeCache.RUnlock()
-	desc, _ := rdc.getCachedRangeDescriptorLocked(key, inverted)
-	return desc
+	entry, _ := rdc.getCachedLocked(key, inverted)
+	return entry
 }
 
-// getCachedRangeDescriptorLocked is like GetCachedRangeDescriptor, but it
-// assumes that the caller holds a read lock on rdc.rangeCache.
+// getCachedLocked is like GetCached, but it assumes that the caller holds a
+// read lock on rdc.rangeCache.
 //
-// In addition to GetCachedRangeDescriptor, it also returns an internal cache
-// Entry that can be used for descriptor eviction.
-func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
+// In addition to GetCached, it also returns an internal cache Entry that can be
+// used for descriptor eviction.
+func (rdc *RangeDescriptorCache) getCachedLocked(
 	key roachpb.RKey, inverted bool,
-) (*roachpb.RangeDescriptor, *cache.Entry) {
+) (*kvbase.RangeCacheEntry, *cache.Entry) {
 	// The cache is indexed using the end-key of the range, but the
 	// end-key is non-inverted by default.
 	var metaKey roachpb.RKey
@@ -583,11 +806,12 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 		metaKey = keys.RangeMetaKey(key)
 	}
 
-	entry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(metaKey))
+	rawEntry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(metaKey))
 	if !ok {
 		return nil, nil
 	}
-	desc := entry.Value.(*roachpb.RangeDescriptor)
+	entry := rdc.getValue(rawEntry)
+	desc := &entry.Desc
 
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
 	if inverted {
@@ -598,60 +822,113 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 	if !containsFn(desc, key) {
 		return nil, nil
 	}
-	return desc, entry
+	return entry, rawEntry
 }
 
-// InsertRangeDescriptors inserts the provided descriptors in the cache.
-// This is a no-op for the descriptors that are already present in the cache.
-func (rdc *RangeDescriptorCache) InsertRangeDescriptors(
-	ctx context.Context, rs ...roachpb.RangeDescriptor,
-) {
+// Insert inserts range info into the cache.
+//
+// This is a no-op for the ranges that already have the same, or newer, info in
+// the cache.
+func (rdc *RangeDescriptorCache) Insert(ctx context.Context, rs ...roachpb.RangeInfo) {
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
-	rdc.insertRangeDescriptorsLocked(ctx, rs...)
+	rdc.insertLocked(ctx, rs...)
 }
 
-// insertRangeDescriptorsLocked is like InsertRangeDescriptors, but it assumes
-// that the caller holds a write lock on rdc.rangeCache.
-func (rdc *RangeDescriptorCache) insertRangeDescriptorsLocked(
-	ctx context.Context, rs ...roachpb.RangeDescriptor,
+// mustInsertLocked is like Insert(), but it takes a single RangeInfo and it
+// fatals if the entry fails to be inserted. It's used when it's known that
+// there's nothing in the cache conflicting with the ent because we've just
+// successfully evicted a similar entry.
+func (rdc *RangeDescriptorCache) mustInsertLocked(
+	ctx context.Context, ent *kvbase.RangeCacheEntry,
 ) {
-	for i := range rs {
-		if !rs[i].IsInitialized() {
-			panic(fmt.Sprintf("inserting uninitialized desc: %s", rs[i]))
+	entry := rdc.insertLockedInner(ctx, []*kvbase.RangeCacheEntry{ent})[0]
+	if entry == nil {
+		log.Fatalf(ctx, "unexpected failure to insert desc: %s", ent)
+	}
+}
+
+// insertLocked is like Insert, but it assumes that the caller holds a write
+// lock on rdc.rangeCache. It also returns the inserted cache values, suitable
+// for putting in eviction tokens. Any element in the returned array can be nil
+// if inserting the respective RangeInfo failed because it was found to be
+// stale.
+func (rdc *RangeDescriptorCache) insertLocked(
+	ctx context.Context, rs ...roachpb.RangeInfo,
+) []*kvbase.RangeCacheEntry {
+	entries := make([]*kvbase.RangeCacheEntry, len(rs))
+	for i, r := range rs {
+		entries[i] = &kvbase.RangeCacheEntry{
+			Desc:  r.Desc,
+			Lease: r.Lease,
+		}
+	}
+	return rdc.insertLockedInner(ctx, entries)
+}
+
+func (rdc *RangeDescriptorCache) insertLockedInner(
+	ctx context.Context, rs []*kvbase.RangeCacheEntry,
+) []*kvbase.RangeCacheEntry {
+	// entries will have the same element as rs, except the ones that couldn't be
+	// inserted for which the slots will remain nil.
+	entries := make([]*kvbase.RangeCacheEntry, len(rs))
+	for i, ent := range rs {
+		if !ent.Desc.IsInitialized() {
+			log.Fatalf(ctx, "inserting uninitialized desc: %s", ent)
+		}
+		if !ent.Lease.Empty() {
+			replID := ent.Lease.Replica.ReplicaID
+			_, ok := ent.Desc.GetReplicaDescriptorByID(replID)
+			if !ok {
+				log.Fatalf(ctx, "leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
+					replID, ent.Desc, ent.Lease)
+			}
 		}
 		// Note: we append the end key of each range to meta records
 		// so that calls to rdc.rangeCache.cache.Ceil() for a key will return
 		// the correct range.
 
-		// Before adding a new descriptor, make sure we clear out any
-		// pre-existing, overlapping descriptor which might have been
+		// Before adding a new entry, make sure we clear out any
+		// pre-existing, overlapping entries which might have been
 		// re-inserted due to concurrent range lookups.
-		ok := rdc.clearOlderOverlapping(ctx, &rs[i])
+		ok, newerEntry := rdc.clearOlderOverlapping(ctx, ent)
 		if !ok {
-			// The descriptor is already in the cache, or is stale.
+			// The descriptor we tried to insert is already in the cache, or is stale.
+			// We might have gotten a newer cache entry, if the descriptor in the
+			// cache is similar enough. If that's the case, we'll use it.
+			// NB: entries[i] stays nil if newerEntry is nil.
+			entries[i] = newerEntry
 			continue
 		}
-		rangeKey := keys.RangeMetaKey(rs[i].EndKey)
+		rangeKey := keys.RangeMetaKey(ent.Desc.EndKey)
 		if log.V(2) {
-			log.Infof(ctx, "adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
+			log.Infof(ctx, "adding cache entry: key=%s value=%s", rangeKey, ent)
 		}
-		rdc.rangeCache.cache.Add(rangeCacheKey(rangeKey), &rs[i])
+		rdc.rangeCache.cache.Add(rangeCacheKey(rangeKey), ent)
+		entries[i] = ent
 	}
+	return entries
+}
+
+func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *kvbase.RangeCacheEntry {
+	return entry.Value.(*kvbase.RangeCacheEntry)
 }
 
 // clearOlderOverlapping clears any stale cache entries which overlap the
-// specified descriptor. Returns false if any any overlapping newer descriptor
-// is found (or if the descriptor we're trying to insert is already in the
-// cache).
+// specified descriptor. Returns true if the clearing succeeds, and false if any
+// overlapping newer descriptor is found (or if the descriptor we're trying to
+// insert is already in the cache). If false is returned, a cache entry might
+// also be returned - a cache entry that's similar (same descriptor range id and
+// key span) to the one we were trying to insert, but newer (or identical). Such
+// an entry might not exist, in which case false, nil will be returned.
 //
 // Note that even if false is returned, older descriptors are still cleared from
 // the cache.
 func (rdc *RangeDescriptorCache) clearOlderOverlapping(
-	ctx context.Context, desc *roachpb.RangeDescriptor,
-) bool {
-	startMeta := keys.RangeMetaKey(desc.StartKey)
-	endMeta := keys.RangeMetaKey(desc.EndKey)
+	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
+) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
+	startMeta := keys.RangeMetaKey(newEntry.Desc.StartKey)
+	endMeta := keys.RangeMetaKey(newEntry.Desc.EndKey)
 	var entriesToEvict []*cache.Entry
 	newest := true
 
@@ -660,19 +937,25 @@ func (rdc *RangeDescriptorCache) clearOlderOverlapping(
 	// we should evict an existing [/Min, /Max) descriptor.
 	entry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(endMeta))
 	if ok {
-		cached := entry.Value.(*roachpb.RangeDescriptor)
+		cached := rdc.getValue(entry)
 		// It might be possible that the range descriptor immediately following
 		// desc.EndKey does not contain desc.EndKey, so we explicitly check that it
 		// overlaps. For example, if we are inserting ["a", "c"), we don't want to
 		// check ["c", "d"). We do, however, want to check ["b", "c"), which is why
 		// the end key is inclusive.
-		if cached.StartKey.Less(desc.EndKey) && !cached.EndKey.Less(desc.EndKey) {
-			if desc.Generation <= cached.Generation {
+		if cached.Desc.StartKey.Less(newEntry.Desc.EndKey) && !cached.Desc.EndKey.Less(newEntry.Desc.EndKey) {
+			if newEntry.NewerThan(cached) {
+				entriesToEvict = append(entriesToEvict, entry)
+			} else {
 				// A newer descriptor already exists in cache.
 				newest = false
-			}
-			if newest {
-				entriesToEvict = append(entriesToEvict, entry)
+
+				// If we found a similar, but newer, descriptor, return it. There's no
+				// point in continuing - there cannot be any other overlapping
+				// descriptors in the cache.
+				if descsCompatible(&cached.Desc, &newEntry.Desc) {
+					return false, cached
+				}
 			}
 		}
 	}
@@ -687,22 +970,20 @@ func (rdc *RangeDescriptorCache) clearOlderOverlapping(
 	// lot of concurrency. For example, if ranges ["a", "b") and ["b", "c") are
 	// merged, we should clear both of these if we are inserting ["a", "c").
 	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) bool {
-		descriptor := e.Value.(*roachpb.RangeDescriptor)
-		// Check generations to see if we evict.
-		if desc.Generation <= descriptor.Generation {
-			newest = false
-		} else {
+		cached := rdc.getValue(e)
+		if newEntry.NewerThan(cached) {
 			entriesToEvict = append(entriesToEvict, e)
+		} else {
+			newest = false
 		}
 		return false
 	}, rangeCacheKey(startMeta.Next()), rangeCacheKey(endMeta))
 
 	for _, e := range entriesToEvict {
 		if log.V(2) {
-			log.Infof(ctx, "clearing overlapping descriptor: key=%s desc=%s",
-				e.Key, e.Value.(*roachpb.RangeDescriptor))
+			log.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rdc.getValue(e))
 		}
 		rdc.rangeCache.cache.DelEntry(e)
 	}
-	return newest
+	return newest, nil
 }

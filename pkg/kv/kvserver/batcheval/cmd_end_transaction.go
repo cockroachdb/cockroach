@@ -940,7 +940,7 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
-		if (leftLease == roachpb.Lease{}) {
+		if leftLease.Empty() {
 			log.Fatalf(ctx, "LHS of split has no lease")
 		}
 

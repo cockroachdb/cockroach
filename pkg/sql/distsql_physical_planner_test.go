@@ -41,12 +41,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
@@ -248,22 +250,23 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 }
 
 // Test that DistSQLReceiver uses inbound metadata to update the
-// RangeDescriptorCache and the LeaseHolderCache.
+// RangeDescriptorCache.
 func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
 	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stop.NewStopper())
-	leaseCache := kvcoord.NewLeaseHolderCache(size)
 	r := MakeDistSQLReceiver(
 		context.Background(), nil /* resultWriter */, tree.Rows,
-		rangeCache, leaseCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
+		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
+
+	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
 
 	descs := []roachpb.RangeDescriptor{
-		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
-		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
+		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c"), InternalReplicas: replicas},
+		{RangeID: 2, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e"), InternalReplicas: replicas},
+		{RangeID: 3, StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z"), InternalReplicas: replicas},
 	}
 
 	// Push some metadata and check that the caches are updated with it.
@@ -271,13 +274,17 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
-				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
-					NodeID: 1, StoreID: 1, ReplicaID: 1}},
+				Lease: roachpb.Lease{
+					Replica: roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1},
+					Start:   hlc.MinTimestamp,
+				},
 			},
 			{
 				Desc: descs[1],
-				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
-					NodeID: 2, StoreID: 2, ReplicaID: 2}},
+				Lease: roachpb.Lease{
+					Replica: roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2},
+					Start:   hlc.MinTimestamp,
+				},
 			},
 		}})
 	if status != execinfra.NeedMoreRows {
@@ -287,8 +294,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],
-				Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
-					NodeID: 3, StoreID: 3, ReplicaID: 3}},
+				Lease: roachpb.Lease{
+					Replica: roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3},
+					Start:   hlc.MinTimestamp,
+				},
 			},
 		}})
 	if status != execinfra.NeedMoreRows {
@@ -296,18 +305,10 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	for i := range descs {
-		desc := rangeCache.GetCachedRangeDescriptor(descs[i].StartKey, false /* inclusive */)
-		if desc == nil {
-			t.Fatalf("failed to find range for key: %s", descs[i].StartKey)
-		}
-		if !desc.Equal(descs[i]) {
-			t.Fatalf("expected: %+v, got: %+v", descs[i], desc)
-		}
-
-		_, ok := leaseCache.Lookup(context.Background(), descs[i].RangeID)
-		if !ok {
-			t.Fatalf("didn't find lease for RangeID: %d", descs[i].RangeID)
-		}
+		ri := rangeCache.GetCached(descs[i].StartKey, false /* inclusive */)
+		require.NotNilf(t, ri, "failed to find range for key: %s", descs[i].StartKey)
+		require.Equal(t, descs[i], ri.Desc)
+		require.False(t, ri.Lease.Empty())
 	}
 }
 
