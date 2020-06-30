@@ -347,7 +347,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -385,7 +385,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 bool
@@ -394,7 +394,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -441,7 +441,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -479,7 +479,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 bool
@@ -488,7 +488,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -545,7 +545,7 @@ func (p partitionerBool) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -562,7 +562,7 @@ func (p partitionerBool) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -601,7 +601,7 @@ func (p partitionerBool) partitionWithOrder(
 			{
 				var __retval_0 bool
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -641,7 +641,7 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 	}
 
 	col := colVec.Bool()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -663,7 +663,7 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -706,7 +706,7 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -826,7 +826,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col.Get(checkIdx)
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -856,7 +856,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 []byte
@@ -865,7 +865,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col.Get(checkIdx)
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -904,7 +904,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col.Get(checkIdx)
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -934,7 +934,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 []byte
@@ -943,7 +943,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col.Get(checkIdx)
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -994,7 +994,7 @@ func (p partitionerBytes) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col.Get(len(order) - 1)
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -1011,7 +1011,7 @@ func (p partitionerBytes) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col.Get(checkIdx)
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -1042,7 +1042,7 @@ func (p partitionerBytes) partitionWithOrder(
 			{
 				var __retval_0 []byte
 				{
-					v := col.Get(checkIdx)
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -1074,7 +1074,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.Bytes()
-	_ = col.Get(n - 1)
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -1096,7 +1096,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col.Get(checkIdx)
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -1131,7 +1131,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col.Get(checkIdx)
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -1243,7 +1243,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -1273,7 +1273,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 apd.Decimal
@@ -1282,7 +1282,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -1321,7 +1321,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -1351,7 +1351,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 apd.Decimal
@@ -1360,7 +1360,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -1409,7 +1409,7 @@ func (p partitionerDecimal) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -1426,7 +1426,7 @@ func (p partitionerDecimal) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -1457,7 +1457,7 @@ func (p partitionerDecimal) partitionWithOrder(
 			{
 				var __retval_0 apd.Decimal
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -1489,7 +1489,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 	}
 
 	col := colVec.Decimal()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -1511,7 +1511,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -1546,7 +1546,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -1658,7 +1658,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -1699,7 +1699,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 int16
@@ -1708,7 +1708,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -1758,7 +1758,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -1799,7 +1799,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 int16
@@ -1808,7 +1808,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -1868,7 +1868,7 @@ func (p partitionerInt16) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -1885,7 +1885,7 @@ func (p partitionerInt16) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -1927,7 +1927,7 @@ func (p partitionerInt16) partitionWithOrder(
 			{
 				var __retval_0 int16
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -1970,7 +1970,7 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.Int16()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -1992,7 +1992,7 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -2038,7 +2038,7 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -2161,7 +2161,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -2202,7 +2202,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 int32
@@ -2211,7 +2211,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -2261,7 +2261,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -2302,7 +2302,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 int32
@@ -2311,7 +2311,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -2371,7 +2371,7 @@ func (p partitionerInt32) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -2388,7 +2388,7 @@ func (p partitionerInt32) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -2430,7 +2430,7 @@ func (p partitionerInt32) partitionWithOrder(
 			{
 				var __retval_0 int32
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -2473,7 +2473,7 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.Int32()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -2495,7 +2495,7 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -2541,7 +2541,7 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -2664,7 +2664,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -2705,7 +2705,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 int64
@@ -2714,7 +2714,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -2764,7 +2764,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -2805,7 +2805,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 int64
@@ -2814,7 +2814,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -2874,7 +2874,7 @@ func (p partitionerInt64) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -2891,7 +2891,7 @@ func (p partitionerInt64) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -2933,7 +2933,7 @@ func (p partitionerInt64) partitionWithOrder(
 			{
 				var __retval_0 int64
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -2976,7 +2976,7 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.Int64()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -2998,7 +2998,7 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -3044,7 +3044,7 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -3167,7 +3167,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -3216,7 +3216,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 float64
@@ -3225,7 +3225,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -3283,7 +3283,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -3332,7 +3332,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 float64
@@ -3341,7 +3341,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -3409,7 +3409,7 @@ func (p partitionerFloat64) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -3426,7 +3426,7 @@ func (p partitionerFloat64) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -3476,7 +3476,7 @@ func (p partitionerFloat64) partitionWithOrder(
 			{
 				var __retval_0 float64
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -3527,7 +3527,7 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 	}
 
 	col := colVec.Float64()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -3549,7 +3549,7 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -3603,7 +3603,7 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -3734,7 +3734,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -3771,7 +3771,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 time.Time
@@ -3780,7 +3780,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -3826,7 +3826,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -3863,7 +3863,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 time.Time
@@ -3872,7 +3872,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -3928,7 +3928,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -3945,7 +3945,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -3983,7 +3983,7 @@ func (p partitionerTimestamp) partitionWithOrder(
 			{
 				var __retval_0 time.Time
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -4022,7 +4022,7 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 	}
 
 	col := colVec.Timestamp()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -4044,7 +4044,7 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -4086,7 +4086,7 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -4205,7 +4205,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -4235,7 +4235,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for _, idx := range sel {
 				{
 					var __retval_0 duration.Duration
@@ -4244,7 +4244,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -4283,7 +4283,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 								outputCol[outputIdx] = true
 							}
 						} else {
-							v := col[checkIdx]
+							v := col.Get(checkIdx) //gcassert:inline
 							if lastValNull {
 								// The previous value was null while the current is not.
 								outputCol[outputIdx] = true
@@ -4313,7 +4313,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = col[n-1]
+			_ = col.Get(n - 1) //gcassert:inline
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 duration.Duration
@@ -4322,7 +4322,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 							checkIdx  int = idx
 							outputIdx int = idx
 						)
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						var unique bool
 
 						{
@@ -4371,7 +4371,7 @@ func (p partitionerInterval) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = col[len(order)-1]
+	_ = col.Get(len(order) - 1) //gcassert:inline
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -4388,7 +4388,7 @@ func (p partitionerInterval) partitionWithOrder(
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -4419,7 +4419,7 @@ func (p partitionerInterval) partitionWithOrder(
 			{
 				var __retval_0 duration.Duration
 				{
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{
@@ -4451,7 +4451,7 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 	}
 
 	col := colVec.Interval()
-	_ = col[n-1]
+	_ = col.Get(n - 1) //gcassert:inline
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -4473,7 +4473,7 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 							outputCol[outputIdx] = true
 						}
 					} else {
-						v := col[checkIdx]
+						v := col.Get(checkIdx) //gcassert:inline
 						if lastValNull {
 							// The previous value was null while the current is not.
 							outputCol[outputIdx] = true
@@ -4508,7 +4508,7 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 						checkIdx  int = idx
 						outputIdx int = idx
 					)
-					v := col[checkIdx]
+					v := col.Get(checkIdx) //gcassert:inline
 					var unique bool
 
 					{

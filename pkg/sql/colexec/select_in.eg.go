@@ -473,7 +473,7 @@ func (si *selectInOpBool) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInBool(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -482,9 +482,9 @@ func (si *selectInOpBool) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInBool(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -495,7 +495,7 @@ func (si *selectInOpBool) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInBool(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -504,9 +504,9 @@ func (si *selectInOpBool) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInBool(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -555,7 +555,7 @@ func (pi *projectInOpBool) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInBool(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -570,7 +570,7 @@ func (pi *projectInOpBool) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInBool(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -584,7 +584,7 @@ func (pi *projectInOpBool) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInBool(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -595,7 +595,7 @@ func (pi *projectInOpBool) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInBool(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -702,7 +702,7 @@ func (si *selectInOpBytes) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col.Get(i)
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInBytes(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -711,9 +711,9 @@ func (si *selectInOpBytes) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1)
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col.Get(i)
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInBytes(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -724,7 +724,7 @@ func (si *selectInOpBytes) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col.Get(i)
+					v := col.Get(i) //gcassert:inline
 					if cmpInBytes(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -733,9 +733,9 @@ func (si *selectInOpBytes) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1)
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col.Get(i)
+					v := col.Get(i) //gcassert:inline
 					if cmpInBytes(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -784,7 +784,7 @@ func (pi *projectInOpBytes) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col.Get(i)
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInBytes(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -801,7 +801,7 @@ func (pi *projectInOpBytes) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col.Get(i)
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInBytes(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -815,7 +815,7 @@ func (pi *projectInOpBytes) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col.Get(i)
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInBytes(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -828,7 +828,7 @@ func (pi *projectInOpBytes) Next(ctx context.Context) coldata.Batch {
 			_ = 0
 			_ = n
 			for i := 0; i < n; i++ {
-				v := col.Get(i)
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInBytes(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -935,7 +935,7 @@ func (si *selectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInDecimal(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -944,9 +944,9 @@ func (si *selectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInDecimal(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -957,7 +957,7 @@ func (si *selectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInDecimal(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -966,9 +966,9 @@ func (si *selectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInDecimal(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1017,7 +1017,7 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInDecimal(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1032,7 +1032,7 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInDecimal(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1046,7 +1046,7 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInDecimal(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1057,7 +1057,7 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInDecimal(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1175,7 +1175,7 @@ func (si *selectInOpInt16) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInt16(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1184,9 +1184,9 @@ func (si *selectInOpInt16) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInt16(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1197,7 +1197,7 @@ func (si *selectInOpInt16) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInt16(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1206,9 +1206,9 @@ func (si *selectInOpInt16) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInt16(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1257,7 +1257,7 @@ func (pi *projectInOpInt16) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInt16(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1272,7 +1272,7 @@ func (pi *projectInOpInt16) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInt16(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1286,7 +1286,7 @@ func (pi *projectInOpInt16) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInt16(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1297,7 +1297,7 @@ func (pi *projectInOpInt16) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInt16(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1415,7 +1415,7 @@ func (si *selectInOpInt32) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInt32(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1424,9 +1424,9 @@ func (si *selectInOpInt32) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInt32(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1437,7 +1437,7 @@ func (si *selectInOpInt32) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInt32(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1446,9 +1446,9 @@ func (si *selectInOpInt32) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInt32(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1497,7 +1497,7 @@ func (pi *projectInOpInt32) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInt32(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1512,7 +1512,7 @@ func (pi *projectInOpInt32) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInt32(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1526,7 +1526,7 @@ func (pi *projectInOpInt32) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInt32(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1537,7 +1537,7 @@ func (pi *projectInOpInt32) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInt32(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1655,7 +1655,7 @@ func (si *selectInOpInt64) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInt64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1664,9 +1664,9 @@ func (si *selectInOpInt64) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInt64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1677,7 +1677,7 @@ func (si *selectInOpInt64) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInt64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1686,9 +1686,9 @@ func (si *selectInOpInt64) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInt64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1737,7 +1737,7 @@ func (pi *projectInOpInt64) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInt64(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1752,7 +1752,7 @@ func (pi *projectInOpInt64) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInt64(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -1766,7 +1766,7 @@ func (pi *projectInOpInt64) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInt64(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1777,7 +1777,7 @@ func (pi *projectInOpInt64) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInt64(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -1903,7 +1903,7 @@ func (si *selectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInFloat64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1912,9 +1912,9 @@ func (si *selectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInFloat64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1925,7 +1925,7 @@ func (si *selectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInFloat64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1934,9 +1934,9 @@ func (si *selectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInFloat64(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -1985,7 +1985,7 @@ func (pi *projectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInFloat64(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -2000,7 +2000,7 @@ func (pi *projectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInFloat64(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -2014,7 +2014,7 @@ func (pi *projectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInFloat64(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -2025,7 +2025,7 @@ func (pi *projectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInFloat64(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -2139,7 +2139,7 @@ func (si *selectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInTimestamp(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2148,9 +2148,9 @@ func (si *selectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInTimestamp(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2161,7 +2161,7 @@ func (si *selectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInTimestamp(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2170,9 +2170,9 @@ func (si *selectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInTimestamp(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2221,7 +2221,7 @@ func (pi *projectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInTimestamp(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -2236,7 +2236,7 @@ func (pi *projectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInTimestamp(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -2250,7 +2250,7 @@ func (pi *projectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInTimestamp(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -2261,7 +2261,7 @@ func (pi *projectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInTimestamp(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -2368,7 +2368,7 @@ func (si *selectInOpInterval) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInterval(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2377,9 +2377,9 @@ func (si *selectInOpInterval) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if !nulls.NullAt(i) && cmpInInterval(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2390,7 +2390,7 @@ func (si *selectInOpInterval) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInterval(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2399,9 +2399,9 @@ func (si *selectInOpInterval) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col[n-1]
+				_ = col.Get(n - 1) //gcassert:inline
 				for i := 0; i < n; i++ {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					if cmpInInterval(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -2450,7 +2450,7 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInterval(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -2465,7 +2465,7 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := col[i]
+					v := col.Get(i) //gcassert:inline
 					cmpRes := cmpInInterval(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -2479,7 +2479,7 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInterval(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -2490,7 +2490,7 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = col[0:n]
 			for i := 0; i < n; i++ {
-				v := col[i]
+				v := col.Get(i) //gcassert:inline
 				cmpRes := cmpInInterval(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)

@@ -451,11 +451,13 @@ func (b *argWidthOverloadBase) GoTypeSliceName() string {
 }
 
 func get(family types.Family, target, i string) string {
-	switch family {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf("%s.Get(%s)", target, i)
+	// Assert that the .Get call is inlined by Go, except in the case
+	// of the DatumVec .Get which isn't inlinable.
+	maybeInline := " //gcassert:inline"
+	if family == typeconv.DatumVecCanonicalTypeFamily {
+		maybeInline = ""
 	}
-	return fmt.Sprintf("%s[%s]", target, i)
+	return fmt.Sprintf("%s.Get(%s)%s", target, i, maybeInline)
 }
 
 // Get is a function that should only be used in templates.

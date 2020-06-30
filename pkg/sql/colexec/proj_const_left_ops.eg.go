@@ -63,7 +63,7 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -71,11 +71,11 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -88,16 +88,16 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -148,7 +148,7 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -156,11 +156,11 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -173,16 +173,16 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -233,7 +233,7 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -241,11 +241,11 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -258,16 +258,16 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -318,7 +318,7 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -326,11 +326,11 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -343,16 +343,16 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -403,7 +403,7 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -411,11 +411,11 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -428,16 +428,16 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -488,7 +488,7 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -496,11 +496,11 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -513,16 +513,16 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -573,7 +573,7 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -581,11 +581,11 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -598,16 +598,16 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -658,7 +658,7 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -666,11 +666,11 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -683,16 +683,16 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -743,7 +743,7 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -751,11 +751,11 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -768,16 +768,16 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) & int64(arg)
 
@@ -929,7 +929,7 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -937,11 +937,11 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -954,16 +954,16 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1014,7 +1014,7 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1022,11 +1022,11 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1039,16 +1039,16 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1099,7 +1099,7 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1107,11 +1107,11 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1124,16 +1124,16 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1184,7 +1184,7 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1192,11 +1192,11 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1209,16 +1209,16 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1269,7 +1269,7 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1277,11 +1277,11 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1294,16 +1294,16 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1354,7 +1354,7 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1362,11 +1362,11 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1379,16 +1379,16 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1439,7 +1439,7 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1447,11 +1447,11 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1464,16 +1464,16 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1524,7 +1524,7 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1532,11 +1532,11 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1549,16 +1549,16 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1609,7 +1609,7 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1617,11 +1617,11 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1634,16 +1634,16 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) | int64(arg)
 
@@ -1795,7 +1795,7 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1803,11 +1803,11 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1820,16 +1820,16 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1880,7 +1880,7 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1888,11 +1888,11 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1905,16 +1905,16 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1965,7 +1965,7 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1973,11 +1973,11 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -1990,16 +1990,16 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2050,7 +2050,7 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2058,11 +2058,11 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2075,16 +2075,16 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2135,7 +2135,7 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2143,11 +2143,11 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2160,16 +2160,16 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2220,7 +2220,7 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2228,11 +2228,11 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2245,16 +2245,16 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2305,7 +2305,7 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2313,11 +2313,11 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2330,16 +2330,16 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2390,7 +2390,7 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2398,11 +2398,11 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2415,16 +2415,16 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2475,7 +2475,7 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2483,11 +2483,11 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2500,16 +2500,16 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				projCol[i] = int64(p.constArg) ^ int64(arg)
 
@@ -2661,7 +2661,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -2676,11 +2676,11 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -2700,7 +2700,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -2714,9 +2714,9 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -2774,7 +2774,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -2789,11 +2789,11 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -2813,7 +2813,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -2827,9 +2827,9 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -2887,7 +2887,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -2902,11 +2902,11 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -2926,7 +2926,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -2940,9 +2940,9 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -3000,7 +3000,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -3014,11 +3014,11 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -3037,7 +3037,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -3050,9 +3050,9 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -3109,7 +3109,7 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3123,11 +3123,11 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3146,7 +3146,7 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3159,9 +3159,9 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3218,7 +3218,7 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3232,11 +3232,11 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3255,7 +3255,7 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3268,9 +3268,9 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3327,7 +3327,7 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3341,11 +3341,11 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3364,7 +3364,7 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3377,9 +3377,9 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3436,7 +3436,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -3452,11 +3452,11 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -3477,7 +3477,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -3492,9 +3492,9 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -3678,7 +3678,7 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3692,11 +3692,11 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3715,7 +3715,7 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3728,9 +3728,9 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3787,7 +3787,7 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3801,11 +3801,11 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3824,7 +3824,7 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3837,9 +3837,9 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3896,7 +3896,7 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3910,11 +3910,11 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -3933,7 +3933,7 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -3946,9 +3946,9 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4005,7 +4005,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -4021,11 +4021,11 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -4046,7 +4046,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -4061,9 +4061,9 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -4247,7 +4247,7 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -4261,11 +4261,11 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -4284,7 +4284,7 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4297,9 +4297,9 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4356,7 +4356,7 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -4370,11 +4370,11 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -4393,7 +4393,7 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4406,9 +4406,9 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4465,7 +4465,7 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -4479,11 +4479,11 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) + int64(arg)
@@ -4502,7 +4502,7 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4515,9 +4515,9 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) + int64(arg)
@@ -4574,7 +4574,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -4590,11 +4590,11 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -4615,7 +4615,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -4630,9 +4630,9 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -4816,7 +4816,7 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -4827,11 +4827,11 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -4847,7 +4847,7 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -4857,9 +4857,9 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -4913,17 +4913,17 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = duration.Add(p.constArg, arg)
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = duration.Add(p.constArg, arg)
 				}
 			}
@@ -4934,14 +4934,14 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = duration.Add(p.constArg, arg)
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = duration.Add(p.constArg, arg)
 			}
 		}
@@ -4990,17 +4990,17 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = duration.Add(arg, p.constArg)
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = duration.Add(arg, p.constArg)
 				}
 			}
@@ -5011,14 +5011,14 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = duration.Add(arg, p.constArg)
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = duration.Add(arg, p.constArg)
 			}
 		}
@@ -5067,17 +5067,17 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Add(arg)
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Add(arg)
 				}
 			}
@@ -5088,14 +5088,14 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Add(arg)
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Add(arg)
 			}
 		}
@@ -5269,7 +5269,7 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInterval{Duration: arg}
 					var _nonDatumArgAsDatum tree.Datum
@@ -5289,7 +5289,7 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInterval{Duration: arg}
 					var _nonDatumArgAsDatum tree.Datum
@@ -5310,7 +5310,7 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInterval{Duration: arg}
 				var _nonDatumArgAsDatum tree.Datum
@@ -5327,7 +5327,7 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInterval{Duration: arg}
 				var _nonDatumArgAsDatum tree.Datum
@@ -5386,7 +5386,7 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -5406,7 +5406,7 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -5427,7 +5427,7 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -5444,7 +5444,7 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -5503,7 +5503,7 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -5523,7 +5523,7 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -5544,7 +5544,7 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -5561,7 +5561,7 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -5620,7 +5620,7 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -5640,7 +5640,7 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -5661,7 +5661,7 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -5678,7 +5678,7 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -5737,7 +5737,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -5752,11 +5752,11 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -5776,7 +5776,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -5790,9 +5790,9 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -5850,7 +5850,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -5865,11 +5865,11 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -5889,7 +5889,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -5903,9 +5903,9 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -5963,7 +5963,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -5978,11 +5978,11 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -6002,7 +6002,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -6016,9 +6016,9 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -6076,7 +6076,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -6090,11 +6090,11 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -6113,7 +6113,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -6126,9 +6126,9 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -6185,7 +6185,7 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6199,11 +6199,11 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6222,7 +6222,7 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6235,9 +6235,9 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6294,7 +6294,7 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6308,11 +6308,11 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6331,7 +6331,7 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6344,9 +6344,9 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6403,7 +6403,7 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6417,11 +6417,11 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6440,7 +6440,7 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6453,9 +6453,9 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6512,7 +6512,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -6528,11 +6528,11 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -6553,7 +6553,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -6568,9 +6568,9 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -6754,7 +6754,7 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6768,11 +6768,11 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6791,7 +6791,7 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6804,9 +6804,9 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6863,7 +6863,7 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6877,11 +6877,11 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6900,7 +6900,7 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6913,9 +6913,9 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -6972,7 +6972,7 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -6986,11 +6986,11 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7009,7 +7009,7 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7022,9 +7022,9 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7081,7 +7081,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -7097,11 +7097,11 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -7122,7 +7122,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -7137,9 +7137,9 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -7323,7 +7323,7 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7337,11 +7337,11 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7360,7 +7360,7 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7373,9 +7373,9 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7432,7 +7432,7 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7446,11 +7446,11 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7469,7 +7469,7 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7482,9 +7482,9 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7541,7 +7541,7 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7555,11 +7555,11 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						result := int64(p.constArg) - int64(arg)
@@ -7578,7 +7578,7 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7591,9 +7591,9 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					result := int64(p.constArg) - int64(arg)
@@ -7650,7 +7650,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -7666,11 +7666,11 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -7691,7 +7691,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -7706,9 +7706,9 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -7892,7 +7892,7 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -7903,11 +7903,11 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -7923,7 +7923,7 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -7933,9 +7933,9 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -7989,7 +7989,7 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					nanos := p.constArg.Sub(arg).Nanoseconds()
 					projCol[i] = duration.MakeDuration(nanos, 0, 0)
@@ -7998,11 +7998,11 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					nanos := p.constArg.Sub(arg).Nanoseconds()
 					projCol[i] = duration.MakeDuration(nanos, 0, 0)
@@ -8016,7 +8016,7 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				nanos := p.constArg.Sub(arg).Nanoseconds()
 				projCol[i] = duration.MakeDuration(nanos, 0, 0)
@@ -8024,9 +8024,9 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				nanos := p.constArg.Sub(arg).Nanoseconds()
 				projCol[i] = duration.MakeDuration(nanos, 0, 0)
@@ -8078,17 +8078,17 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 				}
 			}
@@ -8099,14 +8099,14 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 			}
 		}
@@ -8155,17 +8155,17 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Sub(arg)
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Sub(arg)
 				}
 			}
@@ -8176,14 +8176,14 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Sub(arg)
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Sub(arg)
 			}
 		}
@@ -8458,7 +8458,7 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInterval{Duration: arg}
 					var _nonDatumArgAsDatum tree.Datum
@@ -8478,7 +8478,7 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInterval{Duration: arg}
 					var _nonDatumArgAsDatum tree.Datum
@@ -8499,7 +8499,7 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInterval{Duration: arg}
 				var _nonDatumArgAsDatum tree.Datum
@@ -8516,7 +8516,7 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInterval{Duration: arg}
 				var _nonDatumArgAsDatum tree.Datum
@@ -8575,7 +8575,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DBytes(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8597,7 +8597,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DBytes(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8618,7 +8618,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i)
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DBytes(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8637,7 +8637,7 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 			_ = n
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i)
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DBytes(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8696,7 +8696,7 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8716,7 +8716,7 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8737,7 +8737,7 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8754,7 +8754,7 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8813,7 +8813,7 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8833,7 +8833,7 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8854,7 +8854,7 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8871,7 +8871,7 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8930,7 +8930,7 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8950,7 +8950,7 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -8971,7 +8971,7 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -8988,7 +8988,7 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -9047,7 +9047,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9062,11 +9062,11 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9086,7 +9086,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9100,9 +9100,9 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9160,7 +9160,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9175,11 +9175,11 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9199,7 +9199,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9213,9 +9213,9 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9273,7 +9273,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9288,11 +9288,11 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9312,7 +9312,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9326,9 +9326,9 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9386,7 +9386,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9400,11 +9400,11 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -9423,7 +9423,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9436,9 +9436,9 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -9495,7 +9495,7 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					f, err := p.constArg.Float64()
 					if err != nil {
@@ -9506,11 +9506,11 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					f, err := p.constArg.Float64()
 					if err != nil {
@@ -9526,7 +9526,7 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				f, err := p.constArg.Float64()
 				if err != nil {
@@ -9536,9 +9536,9 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				f, err := p.constArg.Float64()
 				if err != nil {
@@ -9592,7 +9592,7 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -9614,11 +9614,11 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -9645,7 +9645,7 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -9666,9 +9666,9 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -9733,7 +9733,7 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -9755,11 +9755,11 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -9786,7 +9786,7 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -9807,9 +9807,9 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -9874,7 +9874,7 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -9896,11 +9896,11 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -9927,7 +9927,7 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -9948,9 +9948,9 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10015,7 +10015,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -10031,11 +10031,11 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -10056,7 +10056,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -10071,9 +10071,9 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -10132,17 +10132,17 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
@@ -10153,14 +10153,14 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.Mul(int64(p.constArg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.Mul(int64(p.constArg))
 			}
 		}
@@ -10209,7 +10209,7 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10231,11 +10231,11 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10262,7 +10262,7 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10283,9 +10283,9 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10350,7 +10350,7 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10372,11 +10372,11 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10403,7 +10403,7 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10424,9 +10424,9 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10491,7 +10491,7 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10513,11 +10513,11 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10544,7 +10544,7 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10565,9 +10565,9 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10632,7 +10632,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -10648,11 +10648,11 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -10673,7 +10673,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -10688,9 +10688,9 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -10749,17 +10749,17 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
@@ -10770,14 +10770,14 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.Mul(int64(p.constArg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.Mul(int64(p.constArg))
 			}
 		}
@@ -10826,7 +10826,7 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10848,11 +10848,11 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10879,7 +10879,7 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10900,9 +10900,9 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -10967,7 +10967,7 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -10989,11 +10989,11 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -11020,7 +11020,7 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -11041,9 +11041,9 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -11108,7 +11108,7 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -11130,11 +11130,11 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						_left, _right := int64(p.constArg), int64(arg)
@@ -11161,7 +11161,7 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -11182,9 +11182,9 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					_left, _right := int64(p.constArg), int64(arg)
@@ -11249,7 +11249,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -11265,11 +11265,11 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -11290,7 +11290,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -11305,9 +11305,9 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -11366,17 +11366,17 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			}
@@ -11387,14 +11387,14 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.Mul(int64(p.constArg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.Mul(int64(p.constArg))
 			}
 		}
@@ -11443,7 +11443,7 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -11454,11 +11454,11 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -11474,7 +11474,7 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -11484,9 +11484,9 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -11540,17 +11540,17 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.MulFloat(float64(p.constArg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = arg.MulFloat(float64(p.constArg))
 				}
 			}
@@ -11561,14 +11561,14 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.MulFloat(float64(p.constArg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = arg.MulFloat(float64(p.constArg))
 			}
 		}
@@ -11617,17 +11617,17 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
@@ -11638,14 +11638,14 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Mul(int64(arg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Mul(int64(arg))
 			}
 		}
@@ -11694,17 +11694,17 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
@@ -11715,14 +11715,14 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Mul(int64(arg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Mul(int64(arg))
 			}
 		}
@@ -11771,17 +11771,17 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			}
@@ -11792,14 +11792,14 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Mul(int64(arg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.Mul(int64(arg))
 			}
 		}
@@ -11848,17 +11848,17 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.MulFloat(float64(arg))
 				}
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 					projCol[i] = p.constArg.MulFloat(float64(arg))
 				}
 			}
@@ -11869,14 +11869,14 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.MulFloat(float64(arg))
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 				projCol[i] = p.constArg.MulFloat(float64(arg))
 			}
 		}
@@ -11925,7 +11925,7 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					f, err := arg.Float64()
 					if err != nil {
@@ -11936,11 +11936,11 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					f, err := arg.Float64()
 					if err != nil {
@@ -11956,7 +11956,7 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				f, err := arg.Float64()
 				if err != nil {
@@ -11966,9 +11966,9 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				f, err := arg.Float64()
 				if err != nil {
@@ -12022,7 +12022,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12041,11 +12041,11 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12069,7 +12069,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12087,9 +12087,9 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12151,7 +12151,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12170,11 +12170,11 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12198,7 +12198,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12216,9 +12216,9 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12280,7 +12280,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12299,11 +12299,11 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12327,7 +12327,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12345,9 +12345,9 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12409,7 +12409,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12427,11 +12427,11 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12454,7 +12454,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12471,9 +12471,9 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12534,7 +12534,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -12552,11 +12552,11 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -12579,7 +12579,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -12596,9 +12596,9 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -12659,7 +12659,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -12677,11 +12677,11 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -12704,7 +12704,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -12721,9 +12721,9 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -12784,7 +12784,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -12802,11 +12802,11 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -12829,7 +12829,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -12846,9 +12846,9 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -12909,7 +12909,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12929,11 +12929,11 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -12958,7 +12958,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -12977,9 +12977,9 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -13042,7 +13042,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13060,11 +13060,11 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13087,7 +13087,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13104,9 +13104,9 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13167,7 +13167,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13185,11 +13185,11 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13212,7 +13212,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13229,9 +13229,9 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13292,7 +13292,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13310,11 +13310,11 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13337,7 +13337,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13354,9 +13354,9 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13417,7 +13417,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -13437,11 +13437,11 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -13466,7 +13466,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -13485,9 +13485,9 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -13550,7 +13550,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13568,11 +13568,11 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13595,7 +13595,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13612,9 +13612,9 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13675,7 +13675,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13693,11 +13693,11 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13720,7 +13720,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13737,9 +13737,9 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13800,7 +13800,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13818,11 +13818,11 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -13845,7 +13845,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13862,9 +13862,9 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -13925,7 +13925,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -13945,11 +13945,11 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -13974,7 +13974,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -13993,9 +13993,9 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14058,7 +14058,7 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14073,11 +14073,11 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14097,7 +14097,7 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14111,9 +14111,9 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14171,7 +14171,7 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					if arg == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14181,11 +14181,11 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					if arg == 0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14200,7 +14200,7 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				if arg == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14209,9 +14209,9 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				if arg == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14264,7 +14264,7 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					if arg == 0.0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14274,11 +14274,11 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					if arg == 0.0 {
 						colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14293,7 +14293,7 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				if arg == 0.0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14302,9 +14302,9 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				if arg == 0.0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -14357,7 +14357,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14376,11 +14376,11 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14404,7 +14404,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14422,9 +14422,9 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14486,7 +14486,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14505,11 +14505,11 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14533,7 +14533,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14551,9 +14551,9 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14615,7 +14615,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14634,11 +14634,11 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14662,7 +14662,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14680,9 +14680,9 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14744,7 +14744,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14762,11 +14762,11 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -14789,7 +14789,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14806,9 +14806,9 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -14869,7 +14869,7 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -14882,11 +14882,11 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -14904,7 +14904,7 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -14916,9 +14916,9 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -14974,7 +14974,7 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -14987,11 +14987,11 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15009,7 +15009,7 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15021,9 +15021,9 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15079,7 +15079,7 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15092,11 +15092,11 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15114,7 +15114,7 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15126,9 +15126,9 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15184,7 +15184,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -15204,11 +15204,11 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -15233,7 +15233,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -15252,9 +15252,9 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -15317,7 +15317,7 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15330,11 +15330,11 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15352,7 +15352,7 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15364,9 +15364,9 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15422,7 +15422,7 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15435,11 +15435,11 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15457,7 +15457,7 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15469,9 +15469,9 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15527,7 +15527,7 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15540,11 +15540,11 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15562,7 +15562,7 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15574,9 +15574,9 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15632,7 +15632,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -15652,11 +15652,11 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -15681,7 +15681,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -15700,9 +15700,9 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -15765,7 +15765,7 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15778,11 +15778,11 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15800,7 +15800,7 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15812,9 +15812,9 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15870,7 +15870,7 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15883,11 +15883,11 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15905,7 +15905,7 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15917,9 +15917,9 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -15975,7 +15975,7 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -15988,11 +15988,11 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -16010,7 +16010,7 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -16022,9 +16022,9 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -16080,7 +16080,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16100,11 +16100,11 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16129,7 +16129,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16148,9 +16148,9 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16213,7 +16213,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16228,11 +16228,11 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16252,7 +16252,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16266,9 +16266,9 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16326,7 +16326,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16345,11 +16345,11 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16373,7 +16373,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16391,9 +16391,9 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16455,7 +16455,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16474,11 +16474,11 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16502,7 +16502,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16520,9 +16520,9 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16584,7 +16584,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16603,11 +16603,11 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16631,7 +16631,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16649,9 +16649,9 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16713,7 +16713,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16731,11 +16731,11 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -16758,7 +16758,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16775,9 +16775,9 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -16838,7 +16838,7 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -16851,11 +16851,11 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -16873,7 +16873,7 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -16885,9 +16885,9 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -16943,7 +16943,7 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -16956,11 +16956,11 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -16978,7 +16978,7 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -16990,9 +16990,9 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17048,7 +17048,7 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17061,11 +17061,11 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17083,7 +17083,7 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17095,9 +17095,9 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17153,7 +17153,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -17173,11 +17173,11 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -17202,7 +17202,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -17221,9 +17221,9 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -17286,7 +17286,7 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17299,11 +17299,11 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17321,7 +17321,7 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17333,9 +17333,9 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17391,7 +17391,7 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17404,11 +17404,11 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17426,7 +17426,7 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17438,9 +17438,9 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17496,7 +17496,7 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17509,11 +17509,11 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17531,7 +17531,7 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17543,9 +17543,9 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17601,7 +17601,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -17621,11 +17621,11 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -17650,7 +17650,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -17669,9 +17669,9 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -17734,7 +17734,7 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17747,11 +17747,11 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17769,7 +17769,7 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17781,9 +17781,9 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17839,7 +17839,7 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17852,11 +17852,11 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17874,7 +17874,7 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17886,9 +17886,9 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17944,7 +17944,7 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17957,11 +17957,11 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) == 0 {
@@ -17979,7 +17979,7 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -17991,9 +17991,9 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) == 0 {
@@ -18049,7 +18049,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18069,11 +18069,11 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18098,7 +18098,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18117,9 +18117,9 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18182,7 +18182,7 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18197,11 +18197,11 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18221,7 +18221,7 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18235,9 +18235,9 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18295,7 +18295,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18310,11 +18310,11 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18334,7 +18334,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18348,9 +18348,9 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18408,7 +18408,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18423,11 +18423,11 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18447,7 +18447,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18461,9 +18461,9 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18521,7 +18521,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18536,11 +18536,11 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18560,7 +18560,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18574,9 +18574,9 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18634,7 +18634,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18648,11 +18648,11 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -18671,7 +18671,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18684,9 +18684,9 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -18743,7 +18743,7 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18763,11 +18763,11 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18792,7 +18792,7 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18811,9 +18811,9 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18876,7 +18876,7 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18896,11 +18896,11 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18925,7 +18925,7 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -18944,9 +18944,9 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19009,7 +19009,7 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19029,11 +19029,11 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19058,7 +19058,7 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19077,9 +19077,9 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19142,7 +19142,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -19158,11 +19158,11 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -19183,7 +19183,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -19198,9 +19198,9 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -19259,7 +19259,7 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19279,11 +19279,11 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19308,7 +19308,7 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19327,9 +19327,9 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19392,7 +19392,7 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19412,11 +19412,11 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19441,7 +19441,7 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19460,9 +19460,9 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19525,7 +19525,7 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19545,11 +19545,11 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19574,7 +19574,7 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19593,9 +19593,9 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19658,7 +19658,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -19674,11 +19674,11 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -19699,7 +19699,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -19714,9 +19714,9 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -19775,7 +19775,7 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19795,11 +19795,11 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19824,7 +19824,7 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19843,9 +19843,9 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19908,7 +19908,7 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19928,11 +19928,11 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19957,7 +19957,7 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -19976,9 +19976,9 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -20041,7 +20041,7 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -20061,11 +20061,11 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -20090,7 +20090,7 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -20109,9 +20109,9 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					leftTmpDec, rightTmpDec := &_overloadHelper.tmpDec1, &_overloadHelper.tmpDec2
@@ -20174,7 +20174,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -20190,11 +20190,11 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -20215,7 +20215,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -20230,9 +20230,9 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -20291,7 +20291,7 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -20302,11 +20302,11 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 
@@ -20322,7 +20322,7 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -20332,9 +20332,9 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 
@@ -20388,7 +20388,7 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						var r = []byte{}
@@ -20403,11 +20403,11 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1)
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						var r = []byte{}
@@ -20425,7 +20425,7 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i)
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					var r = []byte{}
@@ -20439,9 +20439,9 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1)
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col.Get(i)
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					var r = []byte{}
@@ -20598,7 +20598,7 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20612,11 +20612,11 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20635,7 +20635,7 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20648,9 +20648,9 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20707,7 +20707,7 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20721,11 +20721,11 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20744,7 +20744,7 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20757,9 +20757,9 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20816,7 +20816,7 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20830,11 +20830,11 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20853,7 +20853,7 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20866,9 +20866,9 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20925,7 +20925,7 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20939,11 +20939,11 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20962,7 +20962,7 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -20975,9 +20975,9 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21034,7 +21034,7 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21048,11 +21048,11 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21071,7 +21071,7 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21084,9 +21084,9 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21143,7 +21143,7 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21157,11 +21157,11 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21180,7 +21180,7 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21193,9 +21193,9 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21252,7 +21252,7 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21266,11 +21266,11 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21289,7 +21289,7 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21302,9 +21302,9 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21361,7 +21361,7 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21375,11 +21375,11 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21398,7 +21398,7 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21411,9 +21411,9 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21470,7 +21470,7 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21484,11 +21484,11 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21507,7 +21507,7 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21520,9 +21520,9 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21579,7 +21579,7 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -21599,7 +21599,7 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -21620,7 +21620,7 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -21637,7 +21637,7 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -21696,7 +21696,7 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -21716,7 +21716,7 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -21737,7 +21737,7 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -21754,7 +21754,7 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -21813,7 +21813,7 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -21833,7 +21833,7 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -21854,7 +21854,7 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -21871,7 +21871,7 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -21930,7 +21930,7 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21944,11 +21944,11 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21967,7 +21967,7 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -21980,9 +21980,9 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22039,7 +22039,7 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22053,11 +22053,11 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22076,7 +22076,7 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22089,9 +22089,9 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22148,7 +22148,7 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22162,11 +22162,11 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22185,7 +22185,7 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22198,9 +22198,9 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22257,7 +22257,7 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22271,11 +22271,11 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22294,7 +22294,7 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22307,9 +22307,9 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22366,7 +22366,7 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22380,11 +22380,11 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22403,7 +22403,7 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22416,9 +22416,9 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22475,7 +22475,7 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22489,11 +22489,11 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22512,7 +22512,7 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22525,9 +22525,9 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22584,7 +22584,7 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22598,11 +22598,11 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22621,7 +22621,7 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22634,9 +22634,9 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22693,7 +22693,7 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22707,11 +22707,11 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22730,7 +22730,7 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22743,9 +22743,9 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22802,7 +22802,7 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22816,11 +22816,11 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					{
 						if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22839,7 +22839,7 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22852,9 +22852,9 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col = col[0:n]
-			_ = projCol[n-1]
+			_ = projCol.Get(n - 1) //gcassert:inline
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				{
 					if int64(arg) < 0 || int64(arg) >= 64 {
@@ -22911,7 +22911,7 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -22931,7 +22931,7 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -22952,7 +22952,7 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -22969,7 +22969,7 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23028,7 +23028,7 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23048,7 +23048,7 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23069,7 +23069,7 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23086,7 +23086,7 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23145,7 +23145,7 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23165,7 +23165,7 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23186,7 +23186,7 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23203,7 +23203,7 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23262,7 +23262,7 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DString(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23284,7 +23284,7 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i)
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DString(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23305,7 +23305,7 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i)
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DString(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23324,7 +23324,7 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 			_ = n
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i)
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DString(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23383,7 +23383,7 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23403,7 +23403,7 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23424,7 +23424,7 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23441,7 +23441,7 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23500,7 +23500,7 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23520,7 +23520,7 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23541,7 +23541,7 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23558,7 +23558,7 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23617,7 +23617,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23637,7 +23637,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col[i]
+					arg := col.Get(i) //gcassert:inline
 
 					_convertedNativeElem := tree.DInt(arg)
 					var _nonDatumArgAsDatum tree.Datum
@@ -23658,7 +23658,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum
@@ -23675,7 +23675,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 			col = col[0:n]
 			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col[i]
+				arg := col.Get(i) //gcassert:inline
 
 				_convertedNativeElem := tree.DInt(arg)
 				var _nonDatumArgAsDatum tree.Datum

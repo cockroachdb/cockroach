@@ -49,7 +49,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v
 									outputCol[i] = r
@@ -58,13 +58,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v
 									outputCol[i] = r
@@ -75,7 +75,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v
 								outputCol[i] = r
@@ -83,10 +83,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v
 								outputCol[i] = r
@@ -110,7 +110,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = 0
@@ -124,13 +124,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = 0
@@ -146,7 +146,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = 0
@@ -159,10 +159,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = 0
@@ -190,7 +190,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									r = 0
@@ -204,13 +204,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									r = 0
@@ -226,7 +226,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								r = 0
@@ -239,10 +239,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								r = 0
@@ -267,7 +267,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									r = 0
@@ -281,13 +281,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									r = 0
@@ -303,7 +303,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								r = 0
@@ -316,10 +316,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								r = 0
@@ -345,7 +345,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									r = 0
@@ -359,13 +359,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									r = 0
@@ -381,7 +381,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								r = 0
@@ -394,10 +394,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								r = 0
@@ -433,7 +433,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 									r = v
 									outputCol[i].Set(&r)
@@ -442,13 +442,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 									r = v
 									outputCol[i].Set(&r)
@@ -459,7 +459,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 								r = v
 								outputCol[i].Set(&r)
@@ -467,10 +467,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 								r = v
 								outputCol[i].Set(&r)
@@ -494,7 +494,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v.Sign() != 0
 									outputCol[i] = r
@@ -503,13 +503,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 									r = v.Sign() != 0
 									outputCol[i] = r
@@ -520,7 +520,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v.Sign() != 0
 								outputCol[i] = r
@@ -528,10 +528,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 								r = v.Sign() != 0
 								outputCol[i] = r
@@ -560,7 +560,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 									r = v
 									outputCol[i] = r
@@ -569,13 +569,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 									r = v
 									outputCol[i] = r
@@ -586,7 +586,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 								r = v
 								outputCol[i] = r
@@ -594,10 +594,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 								r = v
 								outputCol[i] = r
@@ -617,7 +617,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									r = int32(v)
@@ -628,13 +628,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									r = int32(v)
@@ -647,7 +647,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								r = int32(v)
@@ -657,10 +657,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								r = int32(v)
@@ -683,7 +683,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									r = int64(v)
@@ -694,13 +694,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									r = int64(v)
@@ -713,7 +713,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								r = int64(v)
@@ -723,10 +723,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								r = int64(v)
@@ -752,7 +752,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -763,13 +763,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -782,7 +782,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -792,10 +792,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -821,7 +821,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									r = *apd.New(int64(v), 0)
@@ -832,13 +832,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									r = *apd.New(int64(v), 0)
@@ -851,7 +851,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								r = *apd.New(int64(v), 0)
@@ -861,10 +861,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								r = *apd.New(int64(v), 0)
@@ -890,7 +890,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = float64(v)
@@ -901,13 +901,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = float64(v)
@@ -920,7 +920,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = float64(v)
@@ -930,10 +930,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = float64(v)
@@ -961,7 +961,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									r = int16(v)
@@ -972,13 +972,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									r = int16(v)
@@ -991,7 +991,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								r = int16(v)
@@ -1001,10 +1001,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								r = int16(v)
@@ -1026,7 +1026,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 									r = v
 									outputCol[i] = r
@@ -1035,13 +1035,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 									r = v
 									outputCol[i] = r
@@ -1052,7 +1052,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 								r = v
 								outputCol[i] = r
@@ -1060,10 +1060,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 								r = v
 								outputCol[i] = r
@@ -1084,7 +1084,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									r = int64(v)
@@ -1095,13 +1095,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									r = int64(v)
@@ -1114,7 +1114,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								r = int64(v)
@@ -1124,10 +1124,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								r = int64(v)
@@ -1153,7 +1153,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -1164,13 +1164,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -1183,7 +1183,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -1193,10 +1193,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -1222,7 +1222,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									r = *apd.New(int64(v), 0)
@@ -1233,13 +1233,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									r = *apd.New(int64(v), 0)
@@ -1252,7 +1252,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								r = *apd.New(int64(v), 0)
@@ -1262,10 +1262,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								r = *apd.New(int64(v), 0)
@@ -1291,7 +1291,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = float64(v)
@@ -1302,13 +1302,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = float64(v)
@@ -1321,7 +1321,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = float64(v)
@@ -1331,10 +1331,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = float64(v)
@@ -1363,7 +1363,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									r = int16(v)
@@ -1374,13 +1374,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									r = int16(v)
@@ -1393,7 +1393,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								r = int16(v)
@@ -1403,10 +1403,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								r = int16(v)
@@ -1428,7 +1428,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									r = int32(v)
@@ -1439,13 +1439,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									r = int32(v)
@@ -1458,7 +1458,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								r = int32(v)
@@ -1468,10 +1468,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								r = int32(v)
@@ -1494,7 +1494,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 									r = v
 									outputCol[i] = r
@@ -1503,13 +1503,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 									r = v
 									outputCol[i] = r
@@ -1520,7 +1520,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 								r = v
 								outputCol[i] = r
@@ -1528,10 +1528,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 								r = v
 								outputCol[i] = r
@@ -1555,7 +1555,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -1566,13 +1566,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -1585,7 +1585,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -1595,10 +1595,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -1624,7 +1624,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									r = *apd.New(int64(v), 0)
@@ -1635,13 +1635,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									r = *apd.New(int64(v), 0)
@@ -1654,7 +1654,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								r = *apd.New(int64(v), 0)
@@ -1664,10 +1664,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								r = *apd.New(int64(v), 0)
@@ -1693,7 +1693,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = float64(v)
@@ -1704,13 +1704,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 
 									r = float64(v)
@@ -1723,7 +1723,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = float64(v)
@@ -1733,10 +1733,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 
 								r = float64(v)
@@ -1769,7 +1769,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 									r = v
 									outputCol[i] = r
@@ -1778,13 +1778,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r float64
 									r = v
 									outputCol[i] = r
@@ -1795,7 +1795,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 								r = v
 								outputCol[i] = r
@@ -1803,10 +1803,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r float64
 								r = v
 								outputCol[i] = r
@@ -1830,7 +1830,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -1841,13 +1841,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r bool
 
 									r = v != 0
@@ -1860,7 +1860,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -1870,10 +1870,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r bool
 
 								r = v != 0
@@ -1899,7 +1899,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									{
@@ -1917,13 +1917,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r apd.Decimal
 
 									{
@@ -1943,7 +1943,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								{
@@ -1960,10 +1960,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r apd.Decimal
 
 								{
@@ -1995,7 +1995,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
@@ -2009,13 +2009,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int16
 
 									if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
@@ -2031,7 +2031,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
@@ -2044,10 +2044,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int16
 
 								if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
@@ -2072,7 +2072,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
@@ -2086,13 +2086,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int32
 
 									if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
@@ -2108,7 +2108,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
@@ -2121,10 +2121,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int32
 
 								if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
@@ -2150,7 +2150,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
@@ -2164,13 +2164,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := inputCol[i]
+									v := inputCol.Get(i) //gcassert:inline
 									var r int64
 
 									if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
@@ -2186,7 +2186,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
@@ -2199,10 +2199,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol[0:n]
-							_ = inputCol[n-1]
-							_ = outputCol[n-1]
+							_ = inputCol.Get(n - 1)  //gcassert:inline
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
-								v := inputCol[i]
+								v := inputCol.Get(i) //gcassert:inline
 								var r int64
 
 								if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
@@ -2256,7 +2256,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol.Slice(0, n)
 							_ = inputCol.Get(n - 1)
-							_ = outputCol[n-1]
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
@@ -2297,7 +2297,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = inputCol.Slice(0, n)
 							_ = inputCol.Get(n - 1)
-							_ = outputCol[n-1]
+							_ = outputCol.Get(n - 1) //gcassert:inline
 							for i := 0; i < n; i++ {
 								v := inputCol.Get(i)
 								var r bool
