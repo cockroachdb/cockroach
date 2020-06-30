@@ -129,6 +129,89 @@ func TestCartesianBoundingBoxIntersects(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			require.Equal(t, tc.expected, tc.a.Intersects(tc.b))
+			require.Equal(t, tc.expected, tc.b.Intersects(tc.a))
+		})
+	}
+}
+
+func TestCartesianBoundingBoxCovers(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		a        *CartesianBoundingBox
+		b        *CartesianBoundingBox
+		expected bool
+	}{
+		{
+			desc:     "same bounding box covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			expected: true,
+		},
+		{
+			desc:     "nested bounding box covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0.1, HiX: 0.9, LoY: 0.1, HiY: 0.9}},
+			expected: true,
+		},
+		{
+			desc:     "side touching bounding box covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0.1, HiX: 0.9, LoY: 0.1, HiY: 0.9}},
+			expected: true,
+		},
+		{
+			desc:     "top touching bounding box covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0.1, HiX: 0.9, LoY: 0, HiY: 1}},
+			expected: true,
+		},
+		{
+			desc:     "reversed nested bounding box does not cover",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0.1, HiX: 0.9, LoY: 0.1, HiY: 0.9}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			expected: false,
+		},
+		{
+			desc:     "overlapping bounding box from the left covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0.5, HiX: 1.5, LoY: 0.5, HiY: 1.5}},
+			expected: false,
+		},
+		{
+			desc:     "overlapping bounding box from the right covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0.5, HiX: 1.5, LoY: 0.5, HiY: 1.5}},
+			expected: false,
+		},
+		{
+			desc:     "touching bounding box covers",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2}},
+			expected: false,
+		},
+		{
+			desc:     "bounding box that is left does not cover",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 1.5, HiX: 2, LoY: 0, HiY: 1}},
+			expected: false,
+		},
+		{
+			desc:     "higher bounding box does not cover",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 1.5, HiY: 2}},
+			expected: false,
+		},
+		{
+			desc:     "completely disjoint bounding box does not cover",
+			a:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 1, LoY: 0, HiY: 1}},
+			b:        &CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: -3, HiX: -2, LoY: 1.5, HiY: 2}},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.a.Covers(tc.b))
 		})
 	}
 }

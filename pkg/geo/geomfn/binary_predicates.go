@@ -20,7 +20,7 @@ func Covers(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
 	return geos.Covers(a.EWKB(), b.EWKB())
@@ -31,7 +31,7 @@ func CoveredBy(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
 		return false, nil
 	}
 	return geos.CoveredBy(a.EWKB(), b.EWKB())
@@ -42,7 +42,7 @@ func Contains(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
 	return geos.Contains(a.EWKB(), b.EWKB())
@@ -53,7 +53,7 @@ func ContainsProperly(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
 	return geos.RelatePattern(a.EWKB(), b.EWKB(), "T**FF*FF*")
@@ -81,7 +81,7 @@ func Equals(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.Empty() && b.Empty() {
 		return true, nil
 	}
-	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
 	return geos.Equals(a.EWKB(), b.EWKB())
@@ -125,7 +125,7 @@ func Within(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
 		return false, nil
 	}
 	return geos.Within(a.EWKB(), b.EWKB())

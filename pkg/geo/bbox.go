@@ -46,6 +46,21 @@ func (b *CartesianBoundingBox) AddPoint(x, y float64) {
 	b.HiY = math.Max(b.HiY, y)
 }
 
+// Buffer adds n units to each side of the bounding box.
+func (b *CartesianBoundingBox) Buffer(n float64) *CartesianBoundingBox {
+	if b == nil {
+		return nil
+	}
+	return &CartesianBoundingBox{
+		BoundingBox: geopb.BoundingBox{
+			LoX: b.LoX - n,
+			HiX: b.HiX + n,
+			LoY: b.LoY - n,
+			HiY: b.HiY + n,
+		},
+	}
+}
+
 // Intersects returns whether the BoundingBoxes intersect.
 // Empty bounding boxes never intersect.
 func (b *CartesianBoundingBox) Intersects(o *CartesianBoundingBox) bool {
@@ -58,6 +73,18 @@ func (b *CartesianBoundingBox) Intersects(o *CartesianBoundingBox) bool {
 		return false
 	}
 	return true
+}
+
+// Covers returns whether the BoundingBox covers the other bounding box.
+// Empty bounding boxes never cover.
+func (b *CartesianBoundingBox) Covers(o *CartesianBoundingBox) bool {
+	if b == nil || o == nil {
+		return false
+	}
+	return b.LoX <= o.LoX && o.LoX <= b.HiX &&
+		b.LoX <= o.HiX && o.HiX <= b.HiX &&
+		b.LoY <= o.LoY && o.LoY <= b.HiY &&
+		b.LoY <= o.HiY && o.HiY <= b.HiY
 }
 
 // boundingBoxFromGeomT returns a bounding box from a given geom.T.
