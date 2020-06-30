@@ -96,7 +96,7 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	testCases := []struct {
 		t             GeospatialType
 		srid          geopb.SRID
-		shapeType     geopb.ShapeType
+		shape         geopb.ShapeType
 		errorContains string
 	}{
 		{MustParseGeometry("POINT(1.0 1.0)"), 0, geopb.ShapeType_Geometry, ""},
@@ -108,8 +108,8 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%#v_fits_%d_%s", tc.t, tc.srid, tc.shapeType), func(t *testing.T) {
-			err := GeospatialTypeFitsColumnMetadata(tc.t, tc.srid, tc.shapeType)
+		t.Run(fmt.Sprintf("%#v_fits_%d_%s", tc.t, tc.srid, tc.shape), func(t *testing.T) {
+			err := GeospatialTypeFitsColumnMetadata(tc.t, tc.srid, tc.shape)
 			if tc.errorContains != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.errorContains)
@@ -120,86 +120,101 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	}
 }
 
-func TestSpatialObjectFromGeom(t *testing.T) {
+func TestSpatialObjectFromGeomT(t *testing.T) {
 	testCases := []struct {
-		desc string
-		g    geom.T
-		ret  geopb.SpatialObject
+		desc   string
+		soType geopb.SpatialObjectType
+		g      geom.T
+		ret    geopb.SpatialObject
 	}{
 		{
 			"point",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomPoint,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "0101000000000000000000F03F0000000000000040"),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_Point,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 1, MinY: 2, MaxY: 2},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 1, LoY: 2, HiY: 2},
 			},
 		},
 		{
 			"linestring",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomLineString,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040"),
 				SRID:        4326,
 				ShapeType:   geopb.ShapeType_LineString,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
 			},
 		},
 		{
 			"polygon",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomPolygon,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "01030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F"),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_Polygon,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
 			},
 		},
 		{
 			"multipoint",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomMultiPoint,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "0104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_MultiPoint,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
 			},
 		},
 		{
 			"multilinestring",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomMultiLineString,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "010500000002000000010200000002000000000000000000F03F000000000000F03F000000000000004000000000000000400102000000020000000000000000000840000000000000084000000000000010400000000000001040"),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_MultiLineString,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 4, MinY: 1, MaxY: 4},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 4, LoY: 1, HiY: 4},
 			},
 		},
 		{
 			"multipolygon",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomMultiPolygon,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "01060000000200000001030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F0103000000010000000400000000000000000008400000000000000840000000000000104000000000000010400000000000000840000000000000104000000000000008400000000000000840"),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_MultiPolygon,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 4, MinY: 1, MaxY: 4},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 4, LoY: 1, HiY: 4},
 			},
 		},
 		{
 			"geometrycollection",
+			geopb.SpatialObjectType_GeometryType,
 			testGeomGeometryCollection,
 			geopb.SpatialObject{
+				Type:        geopb.SpatialObjectType_GeometryType,
 				EWKB:        mustDecodeEWKBFromString(t, "0107000000020000000101000000000000000000F03F00000000000000400104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
 				SRID:        0,
 				ShapeType:   geopb.ShapeType_GeometryCollection,
-				BoundingBox: &geopb.BoundingBox{MinX: 1, MaxX: 2, MinY: 1, MaxY: 2},
+				BoundingBox: &geopb.BoundingBox{LoX: 1, HiX: 2, LoY: 1, HiY: 2},
 			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			so, err := spatialObjectFromGeomT(tc.g)
+			so, err := spatialObjectFromGeomT(tc.g, tc.soType)
 			require.NoError(t, err)
 			require.Equal(t, tc.ret, so)
 		})
@@ -468,6 +483,48 @@ func TestGeographyAsS2(t *testing.T) {
 			shapes, err := g.AsS2(EmptyBehaviorOmit)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedOmit, shapes)
+		})
+	}
+}
+
+func TestGeometryAsGeography(t *testing.T) {
+	for _, tc := range []struct {
+		geom string
+		geog string
+	}{
+		{"POINT(1 0)", "SRID=4326;POINT(1 0)"},
+		{"SRID=4004;POINT(1 0)", "SRID=4004;POINT(1 0)"},
+	} {
+		t.Run(tc.geom, func(t *testing.T) {
+			geom, err := ParseGeometry(tc.geom)
+			require.NoError(t, err)
+			geog, err := ParseGeography(tc.geog)
+			require.NoError(t, err)
+
+			to, err := geom.AsGeography()
+			require.NoError(t, err)
+			require.Equal(t, geog, to)
+		})
+	}
+}
+
+func TestGeographyAsGeometry(t *testing.T) {
+	for _, tc := range []struct {
+		geom string
+		geog string
+	}{
+		{"SRID=4326;POINT(1 0)", "SRID=4326;POINT(1 0)"},
+		{"SRID=4004;POINT(1 0)", "SRID=4004;POINT(1 0)"},
+	} {
+		t.Run(tc.geom, func(t *testing.T) {
+			geom, err := ParseGeometry(tc.geom)
+			require.NoError(t, err)
+			geog, err := ParseGeography(tc.geog)
+			require.NoError(t, err)
+
+			to, err := geog.AsGeometry()
+			require.NoError(t, err)
+			require.Equal(t, geom, to)
 		})
 	}
 }

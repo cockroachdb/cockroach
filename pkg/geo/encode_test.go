@@ -30,7 +30,7 @@ func TestEWKBToWKT(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToWKT(so.EWKB, tc.maxDecimalDigits)
 			require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestEWKBToEWKT(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToEWKT(so.EWKB, tc.maxDecimalDigits)
 			require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestEWKBToWKB(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToWKB(so.EWKB, DefaultEWKBEncodingFormat)
 			require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestEWKBToGeoJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToGeoJSON(so.EWKB, 6, tc.flag)
 			require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestEWKBToWKBHex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToWKBHex(so.EWKB)
 			require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestEWKBToKML(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			so, err := parseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToKML(so.EWKB)
 			require.NoError(t, err)
