@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -19,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 type createSchemaNode struct {
@@ -78,6 +81,13 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 			return nil
 		}
 		return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", n.Schema)
+	}
+
+	// Schemas starting with "pg_" are not allowed.
+	if strings.HasPrefix(n.Schema, sessiondata.PgSchemaPrefix) {
+		err := pgerror.Newf(pgcode.ReservedName, "unacceptable schema name %q", n.Schema)
+		err = errors.WithDetail(err, `The prefix "pg_" is reserved for system schemas.`)
+		return err
 	}
 
 	// Ensure that the cluster version is high enough to create the schema.
