@@ -67,6 +67,7 @@ template <bool reverse> class mvccScanner {
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
+        most_recent_timestamp_(),
         peeked_(false),
         iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
@@ -109,6 +110,7 @@ template <bool reverse> class mvccScanner {
       return results_;
     }
     getAndAdvance();
+    maybeFailOnMoreRecent();
     return fillResults();
   }
 
@@ -133,6 +135,7 @@ template <bool reverse> class mvccScanner {
 
     while (getAndAdvance()) {
     }
+    maybeFailOnMoreRecent();
 
     if (max_keys_ > 0 && kvs_->Count() == max_keys_ && advanceKey()) {
       if (reverse) {
@@ -257,11 +260,13 @@ template <bool reverse> class mvccScanner {
     return true;
   }
 
-  bool writeTooOldError(DBTimestamp ts) {
-    results_.write_too_old_timestamp = ts;
+  void maybeFailOnMoreRecent() {
+    if (results_.status.len != 0 || most_recent_timestamp_ == kZeroTimestamp) {
+      return;
+    }
+    results_.write_too_old_timestamp = most_recent_timestamp_;
     kvs_->Clear();
     intents_->Clear();
-    return false;
   }
 
   bool uncertaintyError(DBTimestamp ts) {
@@ -290,7 +295,13 @@ template <bool reverse> class mvccScanner {
         // 2. Our txn's read timestamp is less than the most recent
         // version's timestamp and the scanner has been configured
         // to throw a write too old error on more recent versions.
-        return writeTooOldError(cur_timestamp_);
+        // Merge the current timestamp with the maximum timestamp
+			  // we've seen so we know to return an error, but then keep
+        // scanning so that we can return the largest possible time.
+        if (cur_timestamp_ > most_recent_timestamp_) {
+          most_recent_timestamp_ = cur_timestamp_;
+        }
+        return advanceKey();
       }
 
       if (check_uncertainty_) {
@@ -771,6 +782,11 @@ template <bool reverse> class mvccScanner {
   DBScanResults results_;
   std::unique_ptr<chunkedBuffer> kvs_;
   std::unique_ptr<rocksdb::WriteBatch> intents_;
+  // most_recent_timestamp_ stores the largest timestamp observed that is
+  // above the scan timestamp. Only applicable if fail_on_more_recent_ is
+  // true. If set and no other error is hit, a WriteToOld error will be
+  // returned from the scan.
+  DBTimestamp most_recent_timestamp_;
   std::string key_buf_;
   std::string saved_buf_;
   bool peeked_;

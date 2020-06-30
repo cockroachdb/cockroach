@@ -159,6 +159,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 
 	if lResult.AcquiredLocks != nil {
 		// These will all be unreplicated locks.
+		log.Eventf(ctx, "acquiring %d unreplicated locks", len(lResult.AcquiredLocks))
 		for i := range lResult.AcquiredLocks {
 			r.concMgr.OnLockAcquired(ctx, &lResult.AcquiredLocks[i])
 		}
