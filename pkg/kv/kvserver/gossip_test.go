@@ -140,6 +140,10 @@ func TestGossipFirstRange(t *testing.T) {
 // restarted after losing its data) without the cluster breaking.
 func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Skipping as part of test-infra-team flaky test cleanup.
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/50024")
+
 	if testing.Short() {
 		// As of Nov 2018 it takes 3.6s.
 		t.Skip("short")
