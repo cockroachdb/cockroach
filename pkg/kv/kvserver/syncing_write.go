@@ -25,8 +25,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// bulkIOWriteBurst is the burst for the BulkIOWriteLimiter.
-const bulkIOWriteBurst = 2 * 1024 * 1024 // 2MB
+// bulkIOWriteBurst is the burst for the BulkIOWriteLimiter. It is also used as
+// the default value for the kv.bulk_sst.sync_size and kv.snapshot_sst.sync_size
+// cluster settings.
+const bulkIOWriteBurst = 512 << 10 // 512 KB
 
 const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
 
