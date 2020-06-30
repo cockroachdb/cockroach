@@ -2911,7 +2911,6 @@ The calculations are done on a sphere.`,
 		tree.FunctionProperties{
 			Class:    tree.SQLClass,
 			Category: categoryGeospatial,
-			Impure:   true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{

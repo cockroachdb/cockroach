@@ -141,6 +141,11 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		StreamingMemAccount: &acc,
 		DiskQueueCfg:        colcontainer.DiskQueueCfg{FS: tempFS},
 		FDSemaphore:         colexecbase.NewTestingSemaphore(256),
+
+		// TODO(yuzefovich): adjust expression generator to not produce
+		// mixed-type timestamp-related expressions and then disallow the
+		// fallback again.
+		ProcessorConstructor: rowexec.NewProcessor,
 	}
 	var spilled bool
 	if args.forceDiskSpill {

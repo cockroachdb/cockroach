@@ -42,27 +42,31 @@ func TestValidateExpr(t *testing.T) {
 		expectedValid bool
 		expectedExpr  string
 		typ           *types.T
-		allowImpure   bool
+		maxVolatility tree.Volatility
 	}{
 		// De-qualify column names.
-		{"bar.a", true, "a", types.Bool, false},
-		{"foo.bar.a", true, "a", types.Bool, false},
-		{"bar.b = 0", true, "b = 0:::INT8", types.Bool, false},
-		{"foo.bar.b = 0", true, "b = 0:::INT8", types.Bool, false},
-		{"bar.a AND foo.bar.b = 0", true, "a AND (b = 0:::INT8)", types.Bool, false},
+		{"bar.a", true, "a", types.Bool, tree.VolatilityImmutable},
+		{"foo.bar.a", true, "a", types.Bool, tree.VolatilityImmutable},
+		{"bar.b = 0", true, "b = 0:::INT8", types.Bool, tree.VolatilityImmutable},
+		{"foo.bar.b = 0", true, "b = 0:::INT8", types.Bool, tree.VolatilityImmutable},
+		{"bar.a AND foo.bar.b = 0", true, "a AND (b = 0:::INT8)", types.Bool, tree.VolatilityImmutable},
 
 		// Validates the type of the expression.
-		{"concat(c, c)", true, "concat(c, c)", types.String, false},
-		{"concat(c, c)", false, "", types.Int, false},
-		{"b + 1", true, "b + 1:::INT8", types.Int, false},
-		{"b + 1", false, "", types.Bool, false},
+		{"concat(c, c)", true, "concat(c, c)", types.String, tree.VolatilityImmutable},
+		{"concat(c, c)", false, "", types.Int, tree.VolatilityImmutable},
+		{"b + 1", true, "b + 1:::INT8", types.Int, tree.VolatilityImmutable},
+		{"b + 1", false, "", types.Bool, tree.VolatilityImmutable},
 
 		// Validates that the expression has no variable expressions.
-		{"$1", false, "", types.Any, false},
+		{"$1", false, "", types.Any, tree.VolatilityImmutable},
 
-		// Validates that impure functions are allowed or disallowed.
-		{"now()", true, "now():::TIMESTAMPTZ", types.TimestampTZ, true},
-		{"now()", false, "", types.Any, false},
+		// Validates the volatility check.
+		{"now()", true, "now():::TIMESTAMPTZ", types.TimestampTZ, tree.VolatilityVolatile},
+		{"now()", true, "now():::TIMESTAMPTZ", types.TimestampTZ, tree.VolatilityStable},
+		{"now()", false, "", types.Any, tree.VolatilityImmutable},
+		{"uuid_v4()::STRING", true, "uuid_v4()::STRING", types.String, tree.VolatilityVolatile},
+		{"uuid_v4()::STRING", false, "", types.String, tree.VolatilityStable},
+		{"uuid_v4()::STRING", false, "", types.String, tree.VolatilityImmutable},
 	}
 
 	for _, d := range testData {
@@ -79,7 +83,7 @@ func TestValidateExpr(t *testing.T) {
 				d.typ,
 				"test-validate-expr",
 				&semaCtx,
-				d.allowImpure,
+				d.maxVolatility,
 				&tn,
 			)
 

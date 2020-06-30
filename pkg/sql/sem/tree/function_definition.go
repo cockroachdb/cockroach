@@ -57,14 +57,6 @@ type FunctionProperties struct {
 	// be NULL and should act accordingly.
 	NullableArgs bool
 
-	// Impure is set to true when a function potentially returns a
-	// different value when called in the same statement with the same
-	// parameters. e.g.: random(), clock_timestamp(). Some functions
-	// like now() return the same value in the same statement, but
-	// different values in separate statements, and should not be marked
-	// as impure.
-	Impure bool
-
 	// DistsqlBlocklist is set to true when a function depends on
 	// members of the EvalContext that are not marshaled by DistSQL
 	// (e.g. planner). Currently used for DistSQL to determine if

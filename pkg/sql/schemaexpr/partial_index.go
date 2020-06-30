@@ -52,7 +52,7 @@ func NewIndexPredicateValidator(
 //   - It results in a boolean.
 //   - It refers only to columns in the table.
 //   - It does not include subqueries.
-//   - It does not include mutable, aggregate, window, or set returning
+//   - It does not include non-immutable, aggregate, window, or set returning
 //     functions.
 //
 func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
@@ -63,7 +63,7 @@ func (v *IndexPredicateValidator) Validate(expr tree.Expr) (tree.Expr, error) {
 		types.Bool,
 		"index predicate",
 		v.semaCtx,
-		false, /* allowImpure */
+		tree.VolatilityImmutable,
 		&v.tableName,
 	)
 	if err != nil {

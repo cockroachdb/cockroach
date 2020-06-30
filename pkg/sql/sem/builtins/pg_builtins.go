@@ -1083,11 +1083,7 @@ SELECT description
 	),
 
 	"pg_sleep": makeBuiltin(
-		tree.FunctionProperties{
-			// pg_sleep is marked as impure so it doesn't get executed during
-			// normalization.
-			Impure: true,
-		},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"seconds", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1744,7 +1740,6 @@ SELECT description
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
 			DistsqlBlocklist: true,
-			Impure:           true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"new_value", types.String}, {"is_local", types.Bool}},

@@ -1350,8 +1350,9 @@ INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
 CREATE TABLE d.expr (
 	x d.greeting,
   y d.greeting DEFAULT 'hello',
-	z d.greeting[] AS (enum_range(x, 'hi')) STORED,
-  CHECK (x < 'hi')
+	z bool AS (y = 'howdy') STORED,
+  CHECK (x < 'hi'),
+	CHECK (x = ANY enum_range(y, 'hi'))
 );
 `)
 		// Now backup the database.
@@ -1367,7 +1368,7 @@ CREATE TABLE d.expr (
 		// Insert a row into the expr table so that all of the expressions are
 		// evaluated and checked.
 		sqlDB.Exec(t, `INSERT INTO d.expr VALUES ('howdy')`)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM d.expr`, [][]string{{"howdy", "hello", "{howdy,hi}"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.expr`, [][]string{{"howdy", "hello", "false"}})
 		sqlDB.ExpectErr(t, `pq: failed to satisfy CHECK constraint`, `INSERT INTO d.expr VALUES ('hi')`)
 
 		// We should be able to use the restored types to create new tables.

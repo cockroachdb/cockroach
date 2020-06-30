@@ -512,7 +512,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 			typ,
 			"", /* context */
 			&h.semaCtx,
-			true, /* allowImpure */
+			tree.VolatilityVolatile,
 		)
 		if err != nil {
 			tb.Fatalf("%v", err)

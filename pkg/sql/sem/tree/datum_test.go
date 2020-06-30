@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
+func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 	expr, err := parser.ParseExpr(datumExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
@@ -50,7 +50,11 @@ func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
-	return typedExpr
+	d, err := typedExpr.Eval(evalCtx)
+	if err != nil {
+		t.Fatalf("%s: %v", datumExpr, err)
+	}
+	return d
 }
 
 func TestDatumOrdering(t *testing.T) {
@@ -229,9 +233,8 @@ func TestDatumOrdering(t *testing.T) {
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, td := range testData {
-		expr := prepareExpr(t, td.datumExpr)
+		d := prepareExpr(t, td.datumExpr)
 
-		d := expr.(tree.Datum)
 		prevVal, hasPrev := d.Prev(ctx)
 		nextVal, hasNext := d.Next(ctx)
 		if td.prev == noPrev {
