@@ -695,6 +695,10 @@ type ExecutorTestingKnobs struct {
 	// OnTempObjectsCleanupDone will trigger when the temporary objects cleanup
 	// job is done.
 	OnTempObjectsCleanupDone func()
+
+	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
+	// a given table id.
+	RunAfterSCJobsCacheLookup func(*jobs.Job)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
