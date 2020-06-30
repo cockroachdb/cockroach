@@ -228,6 +228,11 @@ func (*geomGeodistPoint) IsShape() {}
 // Point implements the geodist.Point interface.
 func (*geomGeodistPoint) IsPoint() {}
 
+// PointUnion implements the geodist.Point interface.
+func (p *geomGeodistPoint) PointUnion() geodist.PointUnion {
+	return geodist.PointUnion{GeomCoord: p.Coord}
+}
+
 // geomGeodistLineString implements geodist.LineString.
 type geomGeodistLineString struct {
 	*geom.LineString
@@ -244,8 +249,8 @@ func (*geomGeodistLineString) IsLineString() {}
 // Edge implements the geodist.LineString interface.
 func (g *geomGeodistLineString) Edge(i int) geodist.Edge {
 	return geodist.Edge{
-		V0: &geomGeodistPoint{Coord: g.LineString.Coord(i)},
-		V1: &geomGeodistPoint{Coord: g.LineString.Coord(i + 1)},
+		V0: geodist.PointUnion{GeomCoord: g.LineString.Coord(i)},
+		V1: geodist.PointUnion{GeomCoord: g.LineString.Coord(i + 1)},
 	}
 }
 
@@ -255,8 +260,8 @@ func (g *geomGeodistLineString) NumEdges() int {
 }
 
 // Vertex implements the geodist.LineString interface.
-func (g *geomGeodistLineString) Vertex(i int) geodist.Point {
-	return &geomGeodistPoint{Coord: g.LineString.Coord(i)}
+func (g *geomGeodistLineString) Vertex(i int) geodist.PointUnion {
+	return geodist.PointUnion{GeomCoord: g.LineString.Coord(i)}
 }
 
 // NumVertexes implements the geodist.LineString interface.
@@ -280,8 +285,8 @@ func (*geomGeodistLinearRing) IsLinearRing() {}
 // Edge implements the geodist.LinearRing interface.
 func (g *geomGeodistLinearRing) Edge(i int) geodist.Edge {
 	return geodist.Edge{
-		V0: &geomGeodistPoint{Coord: g.LinearRing.Coord(i)},
-		V1: &geomGeodistPoint{Coord: g.LinearRing.Coord(i + 1)},
+		V0: geodist.PointUnion{GeomCoord: g.LinearRing.Coord(i)},
+		V1: geodist.PointUnion{GeomCoord: g.LinearRing.Coord(i + 1)},
 	}
 }
 
@@ -291,8 +296,8 @@ func (g *geomGeodistLinearRing) NumEdges() int {
 }
 
 // Vertex implements the geodist.LinearRing interface.
-func (g *geomGeodistLinearRing) Vertex(i int) geodist.Point {
-	return &geomGeodistPoint{Coord: g.LinearRing.Coord(i)}
+func (g *geomGeodistLinearRing) Vertex(i int) geodist.PointUnion {
+	return geodist.PointUnion{GeomCoord: g.LinearRing.Coord(i)}
 }
 
 // NumVertexes implements the geodist.LinearRing interface.
@@ -334,8 +339,8 @@ type geomGeodistEdgeCrosser struct {
 var _ geodist.EdgeCrosser = (*geomGeodistEdgeCrosser)(nil)
 
 // ChainCrossing implements geodist.EdgeCrosser.
-func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Point) {
-	nextEdgeV1 := p.(*geomGeodistPoint).Coord
+func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.PointUnion) (bool, geodist.PointUnion) {
+	nextEdgeV1 := p.GeomCoord
 	result := lineintersector.LineIntersectsLine(
 		c.strategy,
 		c.edgeV0,
@@ -345,9 +350,9 @@ func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.P
 	)
 	c.nextEdgeV0 = nextEdgeV1
 	if result.HasIntersection() {
-		return true, &geomGeodistPoint{result.Intersection()[0]}
+		return true, geodist.PointUnion{GeomCoord: result.Intersection()[0]}
 	}
-	return false, nil
+	return false, geodist.PointUnion{}
 }
 
 // geomMinDistanceUpdater finds the minimum distance using geom calculations.
@@ -384,9 +389,9 @@ func (u *geomMinDistanceUpdater) Distance() float64 {
 }
 
 // Update implements the geodist.DistanceUpdater interface.
-func (u *geomMinDistanceUpdater) Update(aInterface geodist.Point, bInterface geodist.Point) bool {
-	a := aInterface.(*geomGeodistPoint).Coord
-	b := bInterface.(*geomGeodistPoint).Coord
+func (u *geomMinDistanceUpdater) Update(aUnion geodist.PointUnion, bUnion geodist.PointUnion) bool {
+	a := aUnion.GeomCoord
+	b := bUnion.GeomCoord
 
 	dist := coordNorm(coordSub(a, b))
 	if dist < u.currentValue {
@@ -404,9 +409,9 @@ func (u *geomMinDistanceUpdater) Update(aInterface geodist.Point, bInterface geo
 }
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
-func (u *geomMinDistanceUpdater) OnIntersects(p geodist.Point) bool {
-	u.coordA = p.(*geomGeodistPoint).Coord
-	u.coordB = p.(*geomGeodistPoint).Coord
+func (u *geomMinDistanceUpdater) OnIntersects(p geodist.PointUnion) bool {
+	u.coordA = p.GeomCoord
+	u.coordB = p.GeomCoord
 	u.currentValue = 0
 	return true
 }
@@ -458,9 +463,9 @@ func (u *geomMaxDistanceUpdater) Distance() float64 {
 }
 
 // Update implements the geodist.DistanceUpdater interface.
-func (u *geomMaxDistanceUpdater) Update(aInterface geodist.Point, bInterface geodist.Point) bool {
-	a := aInterface.(*geomGeodistPoint).Coord
-	b := bInterface.(*geomGeodistPoint).Coord
+func (u *geomMaxDistanceUpdater) Update(aUnion geodist.PointUnion, bUnion geodist.PointUnion) bool {
+	a := aUnion.GeomCoord
+	b := bUnion.GeomCoord
 
 	dist := coordNorm(coordSub(a, b))
 	if dist > u.currentValue {
@@ -478,7 +483,7 @@ func (u *geomMaxDistanceUpdater) Update(aInterface geodist.Point, bInterface geo
 }
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
-func (u *geomMaxDistanceUpdater) OnIntersects(p geodist.Point) bool {
+func (u *geomMaxDistanceUpdater) OnIntersects(p geodist.PointUnion) bool {
 	return false
 }
 
@@ -512,13 +517,13 @@ func (c *geomDistanceCalculator) BoundingBoxIntersects() bool {
 
 // NewEdgeCrosser implements geodist.DistanceCalculator.
 func (c *geomDistanceCalculator) NewEdgeCrosser(
-	edge geodist.Edge, startPoint geodist.Point,
+	edge geodist.Edge, startPoint geodist.PointUnion,
 ) geodist.EdgeCrosser {
 	return &geomGeodistEdgeCrosser{
 		strategy:   &lineintersector.NonRobustLineIntersector{},
-		edgeV0:     edge.V0.(*geomGeodistPoint).Coord,
-		edgeV1:     edge.V1.(*geomGeodistPoint).Coord,
-		nextEdgeV0: startPoint.(*geomGeodistPoint).Coord,
+		edgeV0:     edge.V0.GeomCoord,
+		edgeV1:     edge.V1.GeomCoord,
+		nextEdgeV0: startPoint.GeomCoord,
 	}
 }
 
@@ -552,7 +557,7 @@ func findPointSide(p geom.Coord, eV0 geom.Coord, eV1 geom.Coord) pointSide {
 
 // PointInLinearRing implements geodist.DistanceCalculator.
 func (c *geomDistanceCalculator) PointInLinearRing(
-	point geodist.Point, polygon geodist.LinearRing,
+	point geodist.PointUnion, polygon geodist.LinearRing,
 ) bool {
 	// This is done using the winding number algorithm, also known as the
 	// "non-zero rule".
@@ -561,11 +566,11 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 	// See also: https://en.wikipedia.org/wiki/Winding_number
 	// See also: https://en.wikipedia.org/wiki/Nonzero-rule
 	windingNumber := 0
-	p := point.(*geomGeodistPoint).Coord
+	p := point.GeomCoord
 	for edgeIdx := 0; edgeIdx < polygon.NumEdges(); edgeIdx++ {
 		e := polygon.Edge(edgeIdx)
-		eV0 := e.V0.(*geomGeodistPoint).Coord
-		eV1 := e.V1.(*geomGeodistPoint).Coord
+		eV0 := e.V0.GeomCoord
+		eV1 := e.V1.GeomCoord
 		// Same vertex; none of these checks will pass.
 		if coordEqual(eV0, eV1) {
 			continue
@@ -604,11 +609,11 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 
 // ClosestPointToEdge implements geodist.DistanceCalculator.
 func (c *geomDistanceCalculator) ClosestPointToEdge(
-	edge geodist.Edge, pointInterface geodist.Point,
-) (geodist.Point, bool) {
-	eV0 := edge.V0.(*geomGeodistPoint).Coord
-	eV1 := edge.V1.(*geomGeodistPoint).Coord
-	p := pointInterface.(*geomGeodistPoint).Coord
+	edge geodist.Edge, pointUnion geodist.PointUnion,
+) (geodist.PointUnion, bool) {
+	eV0 := edge.V0.GeomCoord
+	eV1 := edge.V1.GeomCoord
+	p := pointUnion.GeomCoord
 
 	// Edge is a single point. Closest point must be any edge vertex.
 	if coordEqual(eV0, eV1) {
@@ -634,10 +639,10 @@ func (c *geomDistanceCalculator) ClosestPointToEdge(
 	//      r>1      P is on the forward extension of AB
 	//      0<r<1    P is interior to AB
 	if coordEqual(p, eV0) {
-		return pointInterface, true
+		return pointUnion, true
 	}
 	if coordEqual(p, eV1) {
-		return pointInterface, true
+		return pointUnion, true
 	}
 
 	ac := coordSub(p, eV0)
@@ -645,7 +650,7 @@ func (c *geomDistanceCalculator) ClosestPointToEdge(
 
 	r := coordDot(ac, ab) / coordNorm2(ab)
 	if r < 0 || r > 1 {
-		return pointInterface, false
+		return pointUnion, false
 	}
-	return &geomGeodistPoint{Coord: coordAdd(eV0, coordMul(ab, r))}, true
+	return geodist.PointUnion{GeomCoord: coordAdd(eV0, coordMul(ab, r))}, true
 }

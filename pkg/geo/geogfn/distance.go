@@ -62,6 +62,11 @@ func (*s2GeodistPoint) IsShape() {}
 // Point implements the geodist.Point interface.
 func (*s2GeodistPoint) IsPoint() {}
 
+// PointUnion implements the geodist.Point interface.
+func (p *s2GeodistPoint) PointUnion() geodist.PointUnion {
+	return geodist.PointUnion{GeogPoint: p.Point}
+}
+
 // s2GeodistLineString implements geodist.LineString.
 type s2GeodistLineString struct {
 	*s2.Polyline
@@ -77,7 +82,10 @@ func (*s2GeodistLineString) IsLineString() {}
 
 // Edge implements the geodist.LineString interface.
 func (g *s2GeodistLineString) Edge(i int) geodist.Edge {
-	return geodist.Edge{V0: &s2GeodistPoint{Point: (*g.Polyline)[i]}, V1: &s2GeodistPoint{Point: (*g.Polyline)[i+1]}}
+	return geodist.Edge{
+		V0: geodist.PointUnion{GeogPoint: (*g.Polyline)[i]},
+		V1: geodist.PointUnion{GeogPoint: (*g.Polyline)[i+1]},
+	}
 }
 
 // NumEdges implements the geodist.LineString interface.
@@ -86,8 +94,10 @@ func (g *s2GeodistLineString) NumEdges() int {
 }
 
 // Vertex implements the geodist.LineString interface.
-func (g *s2GeodistLineString) Vertex(i int) geodist.Point {
-	return &s2GeodistPoint{Point: (*g.Polyline)[i]}
+func (g *s2GeodistLineString) Vertex(i int) geodist.PointUnion {
+	return geodist.PointUnion{
+		GeogPoint: (*g.Polyline)[i],
+	}
 }
 
 // NumVertexes implements the geodist.LineString interface.
@@ -110,7 +120,10 @@ func (*s2GeodistLinearRing) IsLinearRing() {}
 
 // Edge implements the geodist.LinearRing interface.
 func (g *s2GeodistLinearRing) Edge(i int) geodist.Edge {
-	return geodist.Edge{V0: &s2GeodistPoint{Point: g.Loop.Vertex(i)}, V1: &s2GeodistPoint{Point: g.Loop.Vertex(i + 1)}}
+	return geodist.Edge{
+		V0: geodist.PointUnion{GeogPoint: g.Loop.Vertex(i)},
+		V1: geodist.PointUnion{GeogPoint: g.Loop.Vertex(i + 1)},
+	}
 }
 
 // NumEdges implements the geodist.LinearRing interface.
@@ -119,8 +132,10 @@ func (g *s2GeodistLinearRing) NumEdges() int {
 }
 
 // Vertex implements the geodist.LinearRing interface.
-func (g *s2GeodistLinearRing) Vertex(i int) geodist.Point {
-	return &s2GeodistPoint{Point: g.Loop.Vertex(i)}
+func (g *s2GeodistLinearRing) Vertex(i int) geodist.PointUnion {
+	return geodist.PointUnion{
+		GeogPoint: g.Loop.Vertex(i),
+	}
 }
 
 // NumVertexes implements the geodist.LinearRing interface.
@@ -159,10 +174,10 @@ type s2GeodistEdgeCrosser struct {
 var _ geodist.EdgeCrosser = (*s2GeodistEdgeCrosser)(nil)
 
 // ChainCrossing implements geodist.EdgeCrosser.
-func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Point) {
+func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.PointUnion) (bool, geodist.PointUnion) {
 	// Returns nil for the intersection point as we don't require the intersection
 	// point as we do not have to implement ShortestLine in geography.
-	return c.EdgeCrosser.ChainCrossingSign(p.(*s2GeodistPoint).Point) != s2.DoNotCross, nil
+	return c.EdgeCrosser.ChainCrossingSign(p.GeogPoint) != s2.DoNotCross, geodist.PointUnion{}
 }
 
 // distanceGeographyRegions calculates the distance between two sets of regions.
@@ -266,10 +281,10 @@ func (u *geographyMinDistanceUpdater) Distance() float64 {
 
 // Update implements the geodist.DistanceUpdater interface.
 func (u *geographyMinDistanceUpdater) Update(
-	aInterface geodist.Point, bInterface geodist.Point,
+	aUnion geodist.PointUnion, bUnion geodist.PointUnion,
 ) bool {
-	a := aInterface.(*s2GeodistPoint).Point
-	b := bInterface.(*s2GeodistPoint).Point
+	a := aUnion.GeogPoint
+	b := bUnion.GeogPoint
 
 	sphereDistance := s2.ChordAngleBetweenPoints(a, b)
 	if sphereDistance < u.minD {
@@ -286,7 +301,7 @@ func (u *geographyMinDistanceUpdater) Update(
 }
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
-func (u *geographyMinDistanceUpdater) OnIntersects(p geodist.Point) bool {
+func (u *geographyMinDistanceUpdater) OnIntersects(p geodist.PointUnion) bool {
 	u.minD = 0
 	return true
 }
@@ -323,22 +338,22 @@ func (c *geographyDistanceCalculator) BoundingBoxIntersects() bool {
 
 // NewEdgeCrosser implements geodist.DistanceCalculator.
 func (c *geographyDistanceCalculator) NewEdgeCrosser(
-	edge geodist.Edge, startPoint geodist.Point,
+	edge geodist.Edge, startPoint geodist.PointUnion,
 ) geodist.EdgeCrosser {
 	return &s2GeodistEdgeCrosser{
 		EdgeCrosser: s2.NewChainEdgeCrosser(
-			edge.V0.(*s2GeodistPoint).Point,
-			edge.V1.(*s2GeodistPoint).Point,
-			startPoint.(*s2GeodistPoint).Point,
+			edge.V0.GeogPoint,
+			edge.V1.GeogPoint,
+			startPoint.GeogPoint,
 		),
 	}
 }
 
 // PointInLinearRing implements geodist.DistanceCalculator.
 func (c *geographyDistanceCalculator) PointInLinearRing(
-	point geodist.Point, polygon geodist.LinearRing,
+	point geodist.PointUnion, polygon geodist.LinearRing,
 ) bool {
-	return polygon.(*s2GeodistLinearRing).ContainsPoint(point.(*s2GeodistPoint).Point)
+	return polygon.(*s2GeodistLinearRing).ContainsPoint(point.GeogPoint)
 }
 
 // ClosestPointToEdge implements geodist.DistanceCalculator.
@@ -351,11 +366,11 @@ func (c *geographyDistanceCalculator) PointInLinearRing(
 // For visualization and more, see: Section 6 / Figure 4 of
 // "Projective configuration theorems: old wine into new wineskins", Tabachnikov, Serge, 2016/07/16
 func (c *geographyDistanceCalculator) ClosestPointToEdge(
-	edge geodist.Edge, pointInterface geodist.Point,
-) (geodist.Point, bool) {
-	eV0 := edge.V0.(*s2GeodistPoint).Point
-	eV1 := edge.V1.(*s2GeodistPoint).Point
-	point := pointInterface.(*s2GeodistPoint).Point
+	edge geodist.Edge, pointUnion geodist.PointUnion,
+) (geodist.PointUnion, bool) {
+	eV0 := edge.V0.GeogPoint
+	eV1 := edge.V1.GeogPoint
+	point := pointUnion.GeogPoint
 
 	// Project the point onto the normal of the edge. A great circle passing through
 	// the normal and the point will intersect with the great circle represented
@@ -371,7 +386,7 @@ func (c *geographyDistanceCalculator) ClosestPointToEdge(
 	// We then check whether the given point lies on the geodesic of the edge,
 	// as the above algorithm only generates a point on the great circle
 	// represented by the edge.
-	return &s2GeodistPoint{Point: closestPoint}, (&s2.Polyline{eV0, eV1}).IntersectsCell(s2.CellFromPoint(closestPoint))
+	return geodist.PointUnion{GeogPoint: closestPoint}, (&s2.Polyline{eV0, eV1}).IntersectsCell(s2.CellFromPoint(closestPoint))
 }
 
 // regionToGeodistShape converts the s2 Region to a geodist object.
