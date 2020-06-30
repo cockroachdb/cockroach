@@ -1452,6 +1452,8 @@ func TestParse(t *testing.T) {
 		{`BACKUP DATABASE foo TO ($1, $2)`},
 		{`BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'`},
 
+		{`BACKUP TENANT 36 TO 'bar'`},
+
 		{`RESTORE TABLE foo FROM 'bar'`},
 		{`EXPLAIN RESTORE TABLE foo FROM 'bar'`},
 		{`RESTORE TABLE foo FROM $1`},
@@ -1469,6 +1471,8 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo FROM $1, ($2, $3)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
+
+		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
 
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
