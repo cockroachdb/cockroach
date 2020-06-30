@@ -175,7 +175,8 @@ func (dsp *DistSQLPlanner) setupFlows(
 							VecFDSemaphore: dsp.distSQLSrv.VecFDSemaphore,
 						},
 						NodeID: evalCtx.NodeID,
-					}, spec.Processors, localState.IsLocal, recv, scheduledOnRemoteNode,
+					}, spec.Processors, localState.IsLocal, recv,
+					scheduledOnRemoteNode, false, /* disableProcessorWrapping */
 				); err != nil {
 					// Vectorization attempt failed with an error.
 					returnVectorizationSetupError := false

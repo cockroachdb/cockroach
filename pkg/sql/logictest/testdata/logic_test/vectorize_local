@@ -189,3 +189,14 @@ query I
 SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
 ----
 4
+
+# Check that joinReader core is wrapped when the explain query is run with
+# (VEC, DEBUG) options - that core is the only exception to disabling of
+# wrapping.
+query T
+EXPLAIN (VEC, DEBUG) SELECT c.a FROM c JOIN d ON d.b = c.b
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colfetcher.colBatchScan

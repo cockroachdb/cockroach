@@ -1287,3 +1287,9 @@ NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
 NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
 NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
 NULL  1984-01-07 00:00:00 +0000 +0000  f96fd19a-d2a9-4d98-81dd-97e3fc2a45d2
+
+# Check that EXPLAIN (VEC, DEBUG) returns the reason for attempting to wrap
+# a processor into the vectorized flow. (Note that sqrdiff function is needed
+# in a distributed setting.)
+statement error pq: unable to vectorize execution plan: unsupported columnar aggregate function (STDDEV|SQRDIFF)
+EXPLAIN (VEC, DEBUG) SELECT stddev(0) FROM a

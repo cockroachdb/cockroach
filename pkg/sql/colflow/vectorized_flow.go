@@ -228,6 +228,7 @@ func (f *vectorizedFlow) Setup(
 		diskQueueCfg,
 		f.countingSemaphore,
 		false, /* forceExprDeserialization */
+		false, /* disableProcessorWrapping */
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
@@ -434,6 +435,7 @@ type vectorizedFlowCreator struct {
 	nodeDialer                     *nodedialer.Dialer
 	flowID                         execinfrapb.FlowID
 	exprHelper                     colexec.ExprHelper
+	disableProcessorWrapping       bool
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
@@ -470,6 +472,7 @@ func newVectorizedFlowCreator(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	forceExprDeserialization bool,
+	disableProcessorWrapping bool,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -484,6 +487,7 @@ func newVectorizedFlowCreator(
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
 		exprHelper:                     colexec.NewExprHelper(forceExprDeserialization),
+		disableProcessorWrapping:       disableProcessorWrapping,
 	}
 }
 
@@ -952,14 +956,15 @@ func (s *vectorizedFlowCreator) setupFlow(
 			inputs = append(inputs, input)
 		}
 
-		args := colexec.NewColOperatorArgs{
-			Spec:                 pspec,
-			Inputs:               inputs,
-			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
-			ProcessorConstructor: rowexec.NewProcessor,
-			DiskQueueCfg:         s.diskQueueCfg,
-			FDSemaphore:          s.fdSemaphore,
-			ExprHelper:           s.exprHelper,
+		args := &colexec.NewColOperatorArgs{
+			Spec:                     pspec,
+			Inputs:                   inputs,
+			StreamingMemAccount:      s.newStreamingMemAccount(flowCtx),
+			ProcessorConstructor:     rowexec.NewProcessor,
+			DiskQueueCfg:             s.diskQueueCfg,
+			FDSemaphore:              s.fdSemaphore,
+			ExprHelper:               s.exprHelper,
+			DisableProcessorWrapping: s.disableProcessorWrapping,
 		}
 		result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 		// Even when err is non-nil, it is possible that the buffering memory
@@ -1181,6 +1186,9 @@ func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 // - scheduledOnRemoteNode indicates whether the flow that processorSpecs
 // represent is scheduled to be run on a remote node (different from the one
 // performing this check).
+// - disableProcessorWrapping indicates whether wrapping of row-execution
+// processors into the vectorized flow is prohibited (the only processor core
+// that ignores this flag is JoinReader).
 func SupportsVectorized(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -1188,6 +1196,7 @@ func SupportsVectorized(
 	isPlanLocal bool,
 	output execinfra.RowReceiver,
 	scheduledOnRemoteNode bool,
+	disableProcessorWrapping bool,
 ) (leaves []execinfra.OpNode, err error) {
 	if output == nil {
 		output = &execinfra.RowChannel{}
@@ -1204,7 +1213,7 @@ func SupportsVectorized(
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
 		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, forceExprDeserialization,
+		flowCtx.Cfg.VecFDSemaphore, forceExprDeserialization, disableProcessorWrapping,
 	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying

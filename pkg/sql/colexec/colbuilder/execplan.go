@@ -265,7 +265,7 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 func (r opResult) createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	args colexec.NewColOperatorArgs,
+	args *colexec.NewColOperatorArgs,
 	input colexecbase.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
@@ -403,38 +403,45 @@ func (r opResult) createDiskBackedSort(
 // it is a buffering processor). This is not a problem for memory accounting
 // because each processor does that on its own, so the used memory will be
 // accounted for.
+// - causeToWrap is an error that prompted us to wrap a processor core into the
+// vectorized plan (for example, it could be an unsupported processor core, an
+// unsupported function, etc).
 func (r opResult) createAndWrapRowSource(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	args *colexec.NewColOperatorArgs,
 	inputs []colexecbase.Operator,
 	inputTypes [][]*types.T,
-	streamingMemAccount *mon.BoundAccount,
 	spec *execinfrapb.ProcessorSpec,
-	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
+	causeToWrap error,
 ) error {
-	if processorConstructor == nil {
+	if args.ProcessorConstructor == nil {
 		// TODO(yuzefovich): update unit tests to remove panic-catcher when
 		// fallback to rowexec is not allowed.
 		return errors.New("processorConstructor is nil")
 	}
-	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
-		spec.Core.JoinReader == nil {
-		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
+	if spec.Core.JoinReader == nil {
+		if args.DisableProcessorWrapping {
+			return causeToWrap
+		}
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto {
+			return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=201auto mode")
+		}
 	}
 	c, err := wrapRowSources(
 		ctx,
 		flowCtx,
 		inputs,
 		inputTypes,
-		streamingMemAccount,
+		args.StreamingMemAccount,
 		spec.ProcessorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter because
 			// all processors expect a single output. Passing nil is ok here
 			// because when wrapping the processor, the materializer will be its
 			// output, and it will be set up in wrapRowSources.
-			proc, err := processorConstructor(
+			proc, err := args.ProcessorConstructor(
 				ctx, flowCtx, spec.ProcessorID, &spec.Core, &spec.Post, inputs,
 				[]execinfra.RowReceiver{nil}, /* outputs */
 				nil,                          /* localProcessors */
@@ -495,7 +502,7 @@ func (r opResult) createAndWrapRowSource(
 
 // NewColOperator creates a new columnar operator according to the given spec.
 func NewColOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, args colexec.NewColOperatorArgs,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, args *colexec.NewColOperatorArgs,
 ) (r colexec.NewColOperatorResult, err error) {
 	result := opResult{NewColOperatorResult: &r}
 	// Make sure that we clean up memory monitoring infrastructure in case of an
@@ -523,7 +530,6 @@ func NewColOperator(
 	streamingMemAccount := args.StreamingMemAccount
 	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
-	processorConstructor := args.ProcessorConstructor
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexec.NewDefaultExprHelper()
 	}
@@ -577,8 +583,7 @@ func NewColOperator(
 			copy(inputTypes[inputIdx], input.ColumnTypes)
 		}
 
-		err = result.createAndWrapRowSource(ctx, flowCtx, inputs, inputTypes,
-			streamingMemAccount, spec, processorConstructor, factory)
+		err = result.createAndWrapRowSource(ctx, flowCtx, args, inputs, inputTypes, spec, factory, err)
 		// The wrapped processors need to be passed the post-process specs,
 		// since they inspect them to figure out information about needed
 		// columns. This means that we'll let those processors do any renders
@@ -819,7 +824,7 @@ func NewColOperator(
 							diskQueueCfg,
 							args.FDSemaphore,
 							func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colexecbase.Operator, error) {
-								sortArgs := args
+								sortArgs := *args
 								if !args.TestingKnobs.DelegateFDAcquisitions {
 									// Set the FDSemaphore to nil. This indicates that no FDs
 									// should be acquired. The external hash joiner will do this
@@ -827,7 +832,7 @@ func NewColOperator(
 									sortArgs.FDSemaphore = nil
 								}
 								return result.createDiskBackedSort(
-									ctx, flowCtx, sortArgs, input, inputTypes,
+									ctx, flowCtx, &sortArgs, input, inputTypes,
 									execinfrapb.Ordering{Columns: orderingCols},
 									0 /* matchLen */, maxNumberPartitions, spec.ProcessorID,
 									&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-", factory)
@@ -853,7 +858,7 @@ func NewColOperator(
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.InnerJoin {
 				if err =
 					result.planAndMaybeWrapOnExprAsFilter(
-						ctx, flowCtx, core.HashJoiner.OnExpr, streamingMemAccount, processorConstructor, factory, args.ExprHelper,
+						ctx, flowCtx, args, core.HashJoiner.OnExpr, factory,
 					); err != nil {
 					return r, err
 				}
@@ -916,7 +921,7 @@ func NewColOperator(
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapOnExprAsFilter(
-					ctx, flowCtx, *onExpr, streamingMemAccount, processorConstructor, factory, args.ExprHelper,
+					ctx, flowCtx, args, *onExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1071,7 +1076,7 @@ func NewColOperator(
 		Op:          result.Op,
 		ColumnTypes: result.ColumnTypes,
 	}
-	err = ppr.planPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, factory, args.ExprHelper)
+	err = ppr.planPostProcessSpec(ctx, flowCtx, args, post, factory)
 	if err != nil {
 		log.VEventf(
 			ctx, 2,
@@ -1092,15 +1097,13 @@ func NewColOperator(
 				copy(inputTypes[inputIdx], input.ColumnTypes)
 			}
 			result.resetToState(ctx, resultPreSpecPlanningStateShallowCopy)
-			err = result.createAndWrapRowSource(
-				ctx, flowCtx, inputs, inputTypes, streamingMemAccount, spec, processorConstructor, factory,
-			)
+			err = result.createAndWrapRowSource(ctx, flowCtx, args, inputs, inputTypes, spec, factory, err)
 			if err != nil {
 				// There was an error wrapping the TableReader.
 				return r, err
 			}
 		} else {
-			err = result.wrapPostProcessSpec(ctx, flowCtx, post, streamingMemAccount, processorConstructor, factory)
+			err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, factory, err)
 		}
 	} else {
 		// The result can be updated with the post process result.
@@ -1115,11 +1118,9 @@ func NewColOperator(
 func (r opResult) planAndMaybeWrapOnExprAsFilter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	args *colexec.NewColOperatorArgs,
 	onExpr execinfrapb.Expression,
-	streamingMemAccount *mon.BoundAccount,
-	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
-	helper colexec.ExprHelper,
 ) error {
 	// We will plan other Operators on top of r.Op, so we need to account for the
 	// internal memory explicitly.
@@ -1131,7 +1132,7 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 		ColumnTypes: r.ColumnTypes,
 	}
 	if err := ppr.planFilterExpr(
-		ctx, flowCtx.NewEvalCtx(), onExpr, streamingMemAccount, factory, helper,
+		ctx, flowCtx.NewEvalCtx(), onExpr, args.StreamingMemAccount, factory, args.ExprHelper,
 	); err != nil {
 		// ON expression planning failed. Fall back to planning the filter
 		// using row execution.
@@ -1142,7 +1143,7 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 		)
 
 		onExprAsFilter := &execinfrapb.PostProcessSpec{Filter: onExpr}
-		return r.wrapPostProcessSpec(ctx, flowCtx, onExprAsFilter, streamingMemAccount, processorConstructor, factory)
+		return r.wrapPostProcessSpec(ctx, flowCtx, args, onExprAsFilter, factory, err)
 	}
 	r.updateWithPostProcessResult(ppr)
 	return nil
@@ -1156,10 +1157,10 @@ func (r opResult) planAndMaybeWrapOnExprAsFilter(
 func (r opResult) wrapPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	args *colexec.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
-	streamingMemAccount *mon.BoundAccount,
-	processorConstructor execinfra.ProcessorConstructor,
 	factory coldata.ColumnFactory,
+	causeToWrap error,
 ) error {
 	noopSpec := &execinfrapb.ProcessorSpec{
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -1168,8 +1169,7 @@ func (r opResult) wrapPostProcessSpec(
 		Post: *post,
 	}
 	return r.createAndWrapRowSource(
-		ctx, flowCtx, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes},
-		streamingMemAccount, noopSpec, processorConstructor, factory,
+		ctx, flowCtx, args, []colexecbase.Operator{r.Op}, [][]*types.T{r.ColumnTypes}, noopSpec, factory, causeToWrap,
 	)
 }
 
@@ -1178,14 +1178,13 @@ func (r opResult) wrapPostProcessSpec(
 func (r *postProcessResult) planPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	args *colexec.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
-	streamingMemAccount *mon.BoundAccount,
 	factory coldata.ColumnFactory,
-	helper colexec.ExprHelper,
 ) error {
 	if !post.Filter.Empty() {
 		if err := r.planFilterExpr(
-			ctx, flowCtx.NewEvalCtx(), post.Filter, streamingMemAccount, factory, helper,
+			ctx, flowCtx.NewEvalCtx(), post.Filter, args.StreamingMemAccount, factory, args.ExprHelper,
 		); err != nil {
 			return err
 		}
@@ -1198,13 +1197,13 @@ func (r *postProcessResult) planPostProcessSpec(
 		var renderedCols []uint32
 		for _, renderExpr := range post.RenderExprs {
 			var renderInternalMem int
-			expr, err := helper.ProcessExpr(renderExpr, flowCtx.EvalCtx, r.ColumnTypes)
+			expr, err := args.ExprHelper.ProcessExpr(renderExpr, flowCtx.EvalCtx, r.ColumnTypes)
 			if err != nil {
 				return err
 			}
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, renderInternalMem, err = planProjectionOperators(
-				ctx, flowCtx.NewEvalCtx(), expr, r.ColumnTypes, r.Op, streamingMemAccount, factory,
+				ctx, flowCtx.NewEvalCtx(), expr, r.ColumnTypes, r.Op, args.StreamingMemAccount, factory,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)

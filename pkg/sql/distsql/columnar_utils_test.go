@@ -135,7 +135,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		columnarizers[i] = c
 	}
 
-	constructorArgs := colexec.NewColOperatorArgs{
+	constructorArgs := &colexec.NewColOperatorArgs{
 		Spec:                args.pspec,
 		Inputs:              columnarizers,
 		StreamingMemAccount: &acc,

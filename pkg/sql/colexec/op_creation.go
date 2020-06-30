@@ -25,7 +25,7 @@ import (
 // TestNewColOperator is a test helper that's always aliased to builder.NewColOperator.
 // We inject this at test time, so tests can use NewColOperator from colexec
 // package.
-var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
+var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
 ) (r NewColOperatorResult, err error)
 
 // NewColOperatorArgs is a helper struct that encompasses all of the input
@@ -38,7 +38,11 @@ type NewColOperatorArgs struct {
 	DiskQueueCfg         colcontainer.DiskQueueCfg
 	FDSemaphore          semaphore.Semaphore
 	ExprHelper           ExprHelper
-	TestingKnobs         struct {
+	// DisableProcessorWrapping indicates whether wrapping of row-execution
+	// processors into the vectorized flow is prohibited (the only processor
+	// core that ignores this flag is JoinReader).
+	DisableProcessorWrapping bool
+	TestingKnobs             struct {
 		// UseStreamingMemAccountForBuffering specifies whether to use
 		// StreamingMemAccount when creating buffering operators and should only be
 		// set to 'true' in tests. The idea behind this flag is reducing the number
