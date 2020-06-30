@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -60,7 +61,7 @@ func RegisterReadWriteCommand(
 	impl func(context.Context, storage.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
-		DeclareKeys: declare,
+		DeclareKeys: maybeWrapDeclareKeysFunc(method, declare),
 		EvalRW:      impl,
 	})
 }
@@ -73,7 +74,7 @@ func RegisterReadOnlyCommand(
 	impl func(context.Context, storage.Reader, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
-		DeclareKeys: declare,
+		DeclareKeys: maybeWrapDeclareKeysFunc(method, declare),
 		EvalRO:      impl,
 	})
 }
@@ -96,4 +97,38 @@ func UnregisterCommand(method roachpb.Method) {
 func LookupCommand(method roachpb.Method) (Command, bool) {
 	cmd, ok := cmds[method]
 	return cmd, ok
+}
+
+func assertSerializesWith(method roachpb.Method, inner, other declareKeysFunc) declareKeysFunc {
+	return func(desc *roachpb.RangeDescriptor, h roachpb.Header, request roachpb.Request, latchSpans, lockSpans *spanset.SpanSet) {
+		inner(desc, h, request, latchSpans, lockSpans)
+
+		var otherLatchSpans, otherLockSpans spanset.SpanSet
+		other(desc, h, nil, &otherLatchSpans, &otherLockSpans)
+		if !otherLatchSpans.Intersects(latchSpans) {
+			panic("request " + method.String() + " does not serialize with Subsume")
+		}
+	}
+}
+
+// No request that bumps the lease applied index of a range should be evaluated
+// concurrently with a Subsume request. For more details, see the comment block
+// at the beginning of executeReadOnlyBatchWithServersideRefreshes().
+func assertSerializesWithSubsume(method roachpb.Method, inner declareKeysFunc) declareKeysFunc {
+	return assertSerializesWith(
+		method,
+		inner,
+		func(desc *roachpb.RangeDescriptor, h roachpb.Header, _ roachpb.Request, latchSpans, lockSpans *spanset.SpanSet) {
+			r := &roachpb.SubsumeRequest{RightDesc: *desc}
+			declareKeysSubsume(desc, h, r, latchSpans, lockSpans)
+		},
+	)
+}
+
+func maybeWrapDeclareKeysFunc(method roachpb.Method, inner declareKeysFunc) declareKeysFunc {
+	if !util.RaceEnabled {
+		return inner
+	}
+	inner = assertSerializesWithSubsume(method, inner)
+	return inner
 }

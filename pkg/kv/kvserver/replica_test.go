@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -716,7 +717,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	tsc := TestStoreConfig(clock)
 	var leaseAcquisitionTrap atomic.Value
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp) {
+	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp, _ roachpb.StoreID, _ roachpb.RangeID) {
 		val := leaseAcquisitionTrap.Load()
 		if val == nil {
 			return
@@ -921,6 +922,16 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 
 func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if util.RaceEnabled {
+		// On race builds, we assert that every request serializes with a
+		// hypothetical Subsume request on that range, as that is a critical
+		// correctness invariant for range merges. As this test tries to send a Get
+		// request on a key that is outside the bounds of the range, it will not
+		// serialize with a Subsume request on this range and cause the assertion to
+		// fire.
+		// See comment above assertSerializesWithSubsume() for more details.
+		t.Skipf("Skipping under race.")
+	}
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
