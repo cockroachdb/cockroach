@@ -1,0 +1,145 @@
+# LogicTest: 5node
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1 1)'),
+  (2, 'LINESTRING(1 1, 2 2)'),
+  (3, 'POINT(3 3)'),
+  (4, 'LINESTRING(4 4, 5 5)'),
+  (5, 'LINESTRING(40 40, 41 41)'),
+  (6, 'POLYGON((1 1, 5 1, 5 5, 1 5, 1 1))'),
+  (7, 'LINESTRING(1 1, 3 3)')
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+3
+6
+7
+
+query I
+SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+6
+7
+
+# Not distributed.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU19P2z4Uff99iqv7Qquf19pOWqifykbYMhXK0rINkQplzRWLKHZmuxMT6nef0nRAYHTghyT3z7nnHDu-RfdjgQon0Sh6N4WlXcBhMj6C8-jryWg_PobWQTyZTj6N2rBpuaobLslc-OzbguDLhyiJwPmLQnuyjubetXaOTkfT-GQcH09bLdmRIDuyzaAVdDgEHd5u7yj1PhofRdPkjFWzrtswTg6iBN6ewdUMGWqT03F2TQ7VOQqcMSytmZNzxlap23VDnN-g4gwLXS59lZ4xnBtLqG7RF35BqHBaiUwoy8l2OTLMyWfFYj224r0odE43wzs7yHBSZtop6ArRkwMpejzs8_5e2B_s9t_8JbkLmc4h3APjv5N1OFsxNEt_r8j57JJQiRV7uepY_yTrKT8sFp4s2a5oSv9Tj25KC0bDUChwlW5wPrNepZimwW4vTbnkacr5_aO3fxCdpgik8390fU4RHnljOF56BUPxrEv5GpcfTaE3RyOb_kpbXGf2V-NcNtRsKJ9lD17DPjHWk-0GTeah-B8Z1vuuHv_WXPCQ10tu3oKL-mOwP7hbXIRP4vvOxtoLn8Q76uHtGMr2C_Y9fI3zhFxptKOG8-cm89WMIeWXVN87Z5Z2TifWzNc0dThe49aJnJyvq6IOYl2XKoEPwWIrWG4Hy63gYDs42AoOH4Fnq_9-BwAA___NL5NZ
+
+# The inverted filterer handles five inverted index rows with decoded
+# datums, where the first column is the PK (k) and the second is the cellid
+# and is sorted in cellid order.
+#  7, 1152921521786716160
+#  2, 1152921526081683456
+#  6, 1152921573326323712
+#  7, 1152921574400065536
+#  3, 1152921574740070469
+# To test distribution, we inject a split after the third row and relocate
+# the second part of the inverted index. Both inverted filterers will produce 7,
+# which will need to be de-duplicated.
+
+statement ok
+ALTER INDEX geo_table@geom_index SPLIT AT VALUES (1152921574000000000)
+
+query TI colnames,rowsort
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+----
+replicas  lease_holder
+{1}       1
+{1}       1
+
+# Not distributed, since both ranges of the index are on the same node,
+# which is also the gateway node.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU19P2z4Uff99iqv7Qquf19pOWqifykbYMhXK0rINkQplzRWLKHZmuxMT6nef0nRAYHTghyT3z7nnHDu-RfdjgQon0Sh6N4WlXcBhMj6C8-jryWg_PobWQTyZTj6N2rBpuaobLslc-OzbguDLhyiJwPmLQnuyjubetXaOTkfT-GQcH09bLdmRIDuyzaAVdDgEHd5u7yj1PhofRdPkjFWzrtswTg6iBN6ewdUMGWqT03F2TQ7VOQqcMSytmZNzxlap23VDnN-g4gwLXS59lZ4xnBtLqG7RF35BqHBaiUwoy8l2OTLMyWfFYj224r0odE43wzs7yHBSZtop6ArRkwMpejzs8_5e2B_s9t_8JbkLmc4h3APjv5N1OFsxNEt_r8j57JJQiRV7uepY_yTrKT8sFp4s2a5oSv9Tj25KC0bDUChwlW5wPrNepZimwW4vTbnkacr5_aO3fxCdpgik8390fU4RHnljOF56BUPxrEv5GpcfTaE3RyOb_kpbXGf2V-NcNtRsKJ9lD17DPjHWk-0GTeah-B8Z1vuuHv_WXPCQ10tu3oKL-mOwP7hbXIRP4vvOxtoLn8Q76uHtGMr2C_Y9fI3zhFxptKOG8-cm89WMIeWXVN87Z5Z2TifWzNc0dThe49aJnJyvq6IOYl2XKoEPwWIrWG4Hy63gYDs42AoOH4Fnq_9-BwAA___NL5NZ
+
+statement ok
+ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+----
+start_key             end_key               replicas  lease_holder
+NULL                  /1152921574000000000  {1}       1
+/1152921574000000000  NULL                  {2}       2
+
+# Distributed.
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+3
+6
+7
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzUU19v2j4Uff99Cuu-FPTLwHb-UPxEN9ItEy1doNuqBlUZueqiUpvZZupU8d2nEFYaStOyt_khyb2-x_cc5557MD9mIGAUDsJ3Y7LQM3IcD0_IZfj1bHAUnZJGPxqNR58GTbIuuSkLrlFd2fTbDMmXD2EcEmOvcmlRG5xa0zg4OR-Mo7NhdDpuNHiLE97iTYc03BYlbos2mwdCvA-HJ-E4vnCKs26bZBj3w5i8vSA3E3BAqgxP01s0IC6BgQMcJg7MtZqiMUoX6ftVUZTdgaAO5HK-sEV64sBUaQRxDza3MwQB44JojGmGuk3BgQxtms9WRxe9r3KZ4V3vQRI4MJqn0gjSZsznXc586gU0OPSCbid4syPZIanMCOsSZb-jNjBZOqAWdsPI2PQaQbCl83rWkfyJ2mJ2nM8satRtXqX-Zz-8m2uiJOkxQUzBmxibaisSSBK34ycJ5TRJKN08_KN-eJ4AQZm9UPU5AbLS5h2-pI0_q20jaSGVzlBjVlEyWe5Q38-NzeXUtr2q6l4xDMOFFaTHnuXi7nPPH1Uu18PhV3vNdX6b6l-VyVi3dnr82e7ePt1HSlvU7WBb5f_gQPnnxba5KKMeLRdfvxll5Uf3qPuwKPOexJvKyjr0nsQH4rFHe7z5inv3K8rZ613J_sqVHa-gHfi--8iVm2TpSv7i5LJ9WD9xpfuPunKHthjNXEmDW-7cfTItXIvZNZYWN2qhp3im1XTVpgyHK9wqkaGx5S4rg0iWWwXBx2BWC-YVMNsG81qwW9_ZrQV79WCvFtypB_u14KAeHOx1YZPlf78DAAD__58IeKk=
+
+# Data is distributed, but the filterer can't be distributed since it is not a union.
+query I
+SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+6
+7
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU99P2zAQft9fcboXWs1rbScU6qeyEbZMhbK004ZIhUJzYhEhzmwXgVD_9ylNBwTWjvohyf347vvuLn5A-ztHheNgGHyawNzkcBSNjuE8-Hk6PAhPoHUYjifjb8M2rFKu64Qr0hcuucwJfnwJogCsu5jpWzKUXt63do6_Dyfh6Sg8mbRasiNBdmSbQcvrcPA6vN3eUepzMDoOJtEZq0rdtGEUHQYRfDyD6ykyLHRKJ8kNWVTnKHDKsDR6RtZqU7kelglheoeKM8yKcu4q95ThTBtC9YAuczmhwkmlMaIkJdPlyDAll2T5smzFe5EVKd0NHrtBhuMyKayCrhC7si_FLvd7vLfv9_p7vQ__cO5BUqTg74N2v8hYnC4Y6rl7UmRdckWoxIK9XXVY3JJxlB5luSNDpiua0v_Gg7vSgC5gIBTYSjdYlxinYoxjb283jrnkccz5_x4IVKRbokSM8KJ3hqO5UzAQa6cgt5nCV50Vq9XJZv-lyW4Sc9_Y24qaDeRadm8b9rE2jkzXazIPxHtkWO9FvfjrueA-r49cvQUX9Uf_oP94uPBf2U-ZjbPvv7J31PPLM5DtN4zd36bxiGypC0uNxtdV5ospQ0qvqL6WVs_NjE6Nni1panO0xC0dKVlXR0VthEUdqgQ-B4uNYLkZLDeCvc1gbyPYfwGeLt79CQAA__84vJpP
+
+# Move all the index data that will be read to node 2 while the query executes
+# at node 1. The filtering moves to node 2 when it is distributable.
+
+statement ok
+ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index]
+----
+start_key             end_key               replicas  lease_holder
+NULL                  /1152921574000000000  {2}       2
+/1152921574000000000  NULL                  {2}       2
+
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+3
+6
+7
+
+# Filtering is placed at node 2.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU9FP204Mfv_9FZZfaPU72rtLWug9lY2wZSotS8s2RCqUNRaLKLns7joxof7vU5oOCIwAfmhj-_tsfz75Fu3PJSqcBqPg_QxWZglH0eQYzoNvJ6ODcAytw3A6m34etWELuaoAl6QvXPJ9SfD1YxAFYN1FljsylhbOtnaOT0ez8GQSjmetluxIkB3ZZtDyOhy8Dm-3d5T6EEyOg1l0xspa122YRIdBBO_O4GqODHOd0ji5JovqHAUylDhnWBi9IGu1KcO3G1CY3qDiDLO8WLkyPGe40IZQ3aLL3JJQ4Vjv6qLrI8OUXJItN7A1Q71y9yTrkktC1VuzB4VFc-FZuYGIkpRMl9fKYynqIstTuhne7QoZTosktwq6QvTkQIoe9_u8v-_3B3v93X8E9yDJU_D3QbsfZCw-N7V4y9Rh_ouMo_QoWzoyZLqiPvrffHBTGNA5DIUCW84N1iXGqRjj2NvrxTGXPI45v__pHRwGpzEC5ekLqC8xwiNtDCcrp2AonlUp36Lyk87y7dPIur7CZNeJ-V17l21rNpTPdvfe0n2qjSPT9eqdh-J_ZFjtXT2-GS64zyuT23_BRfUxOBjcGRf-E_8eWbN9_4m_ox6e3lC2X7F3v6b8hWOLyBY6t_Sqa-PrOUNKL6k6aKtXZkEnRi82bSp3suFtAilZV2V7lRPmVaoc8CFZNJJlM1k2kr1mstdI9pvJfiOZPyLP1__9CQAA__9URsVw
+
+query I
+SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+6
+7
+
+# Filtering is at gateway node since the filter is not distributable.
+query T
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU99P2zAQft9fcboXWs1rbScU6qeyEbZMhbK004ZIhUJzYhEhzmwXgVD_9ylNBwTWjvohyf347vvuLn5A-ztHheNgGHyawNzkcBSNjuE8-Hk6PAhPoHUYjifjb8M2rFKu64Qr0hcuucwJfnwJogCsu5jpWzKUXt63do6_Dyfh6Sg8mbRasiNBdmSbQcvrcPA6vN3eUepzMDoOJtEZq0rdtGEUHQYRfDyD6ykyLHRKJ8kNWVTnKHDKsDR6RtZqU7kelglheoeKM8yKcu4q95ThTBtC9YAuczmhwkmlMaIkJdPlyDAll2T5smzFe5EVKd0NHrtBhuMyKayCrhC7si_FLvd7vLfv9_p7vQ__cO5BUqTg74N2v8hYnC4Y6rl7UmRdckWoxIK9XXVY3JJxlB5luSNDpiua0v_Gg7vSgC5gIBTYSjdYlxinYoxjb283jrnkccz5_x4IVKRbokSM8KJ3hqO5UzAQa6cgt5nCV50Vq9XJZv-lyW4Sc9_Y24qaDeRadm8b9rE2jkzXazIPxHtkWO9FvfjrueA-r49cvQUX9Uf_oP94uPBf2U-ZjbPvv7J31PPLM5DtN4zd36bxiGypC0uNxtdV5ospQ0qvqL6WVs_NjE6Nni1panO0xC0dKVlXR0VthEUdqgQ-B4uNYLkZLDeCvc1gbyPYfwGeLt79CQAA__84vJpP
