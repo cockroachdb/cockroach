@@ -186,14 +186,6 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	return out.Body, nil
 }
 
-func getPrefixBeforeWildcard(p string) string {
-	globIndex := strings.IndexAny(p, "*?[")
-	if globIndex < 0 {
-		return p
-	}
-	return path.Dir(p[:globIndex])
-}
-
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 

@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -299,7 +300,9 @@ func newChunkWriter(
 ) *chunkWriter {
 	execSessionDataOverride := sqlbase.InternalExecutorSessionDataOverride{User: username}
 	pw := &payloadWriter{
-		filename, ie, ctx, txn, 0, execSessionDataOverride, fileTableName, payloadTableName}
+		filename, ie, ctx, txn, 0,
+		execSessionDataOverride, fileTableName,
+		payloadTableName}
 	bytesBuffer := bytes.NewBuffer(make([]byte, 0, chunkSize))
 	return &chunkWriter{
 		bytesBuffer, pw, execSessionDataOverride,
@@ -395,9 +398,12 @@ func (f *fileReader) Close() error {
 }
 
 func newFileReader(
-	ctx context.Context, filename, username, payloadTableName string, ie *sql.InternalExecutor,
+	ctx context.Context,
+	filename, username, fileTableName, payloadTableName string,
+	ie *sql.InternalExecutor,
 ) (io.ReadCloser, error) {
-	fileTableReader, err := newFileTableReader(ctx, filename, username, payloadTableName, ie)
+	fileTableReader, err := newFileTableReader(ctx, filename, username, fileTableName,
+		payloadTableName, ie)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +411,9 @@ func newFileReader(
 }
 
 func newFileTableReader(
-	ctx context.Context, filename, username, payloadTableName string, ie *sql.InternalExecutor,
+	ctx context.Context,
+	filename, username, fileTableName, payloadTableName string,
+	ie *sql.InternalExecutor,
 ) (io.Reader, error) {
 	query := fmt.Sprintf(`SELECT payload FROM %s WHERE filename='%s'`, payloadTableName, filename)
 	rows, err := ie.QueryEx(
@@ -414,6 +422,23 @@ func newFileTableReader(
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// If no payload entries were found, check for a metadata entry. If that does
+	// not exist either, return an does not exist error.
+	if len(rows) == 0 {
+		query := fmt.Sprintf(`SELECT filename FROM %s WHERE filename='%s'`, fileTableName, filename)
+		metadataRows, err := ie.QueryEx(
+			ctx, "get-filename-metadata", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: username}, query,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(metadataRows) == 0 {
+			return nil, os.ErrNotExist
+		}
 	}
 
 	// Verify that all the payloads are bytes and assemble bytes of filename.
@@ -430,7 +455,8 @@ func newFileTableReader(
 // file from the Payload table. In the future we might want to implement a pull
 // x rows system, or a scan based interface.
 func (f *FileToTableSystem) ReadFile(ctx context.Context, filename string) (io.ReadCloser, error) {
-	var reader, err = newFileReader(ctx, filename, f.username, f.GetFQPayloadTableName(), f.ie)
+	var reader, err = newFileReader(ctx, filename, f.username, f.GetFQFileTableName(),
+		f.GetFQPayloadTableName(), f.ie)
 	return reader, err
 }
 
@@ -451,7 +477,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(ctx context.Context)
 	tableExistenceQuery := fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name='%s' OR table_name='%s'`,
 		databaseSchema, fileTableName, payloadTableName)
 	rows, err := f.ie.QueryEx(ctx, "tables-exist", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: f.username},
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		tableExistenceQuery)
 	if err != nil {
 		return false, err

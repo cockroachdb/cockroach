@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[118];
+  static const ::google::protobuf::internal::ParseTable schema[119];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -192,6 +192,9 @@ extern ExternalStorageDefaultTypeInternal _ExternalStorage_default_instance_;
 class ExternalStorage_Azure;
 class ExternalStorage_AzureDefaultTypeInternal;
 extern ExternalStorage_AzureDefaultTypeInternal _ExternalStorage_Azure_default_instance_;
+class ExternalStorage_FileTable;
+class ExternalStorage_FileTableDefaultTypeInternal;
+extern ExternalStorage_FileTableDefaultTypeInternal _ExternalStorage_FileTable_default_instance_;
 class ExternalStorage_GCS;
 class ExternalStorage_GCSDefaultTypeInternal;
 extern ExternalStorage_GCSDefaultTypeInternal _ExternalStorage_GCS_default_instance_;
@@ -460,6 +463,7 @@ template<> ::cockroach::roachpb::ExportResponse* Arena::CreateMaybeMessage<::coc
 template<> ::cockroach::roachpb::ExportResponse_File* Arena::CreateMaybeMessage<::cockroach::roachpb::ExportResponse_File>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_Azure* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Azure>(Arena*);
+template<> ::cockroach::roachpb::ExternalStorage_FileTable* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_FileTable>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_GCS* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_GCS>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_Http* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_Http>(Arena*);
 template<> ::cockroach::roachpb::ExternalStorage_LocalFilePath* Arena::CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_LocalFilePath>(Arena*);
@@ -618,12 +622,13 @@ enum ExternalStorageProvider {
   GoogleCloud = 4,
   Azure = 5,
   Workload = 6,
+  FileTable = 7,
   ExternalStorageProvider_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   ExternalStorageProvider_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ExternalStorageProvider_IsValid(int value);
 const ExternalStorageProvider ExternalStorageProvider_MIN = Unknown;
-const ExternalStorageProvider ExternalStorageProvider_MAX = Workload;
+const ExternalStorageProvider ExternalStorageProvider_MAX = FileTable;
 const int ExternalStorageProvider_ARRAYSIZE = ExternalStorageProvider_MAX + 1;
 
 enum MVCCFilter {
@@ -10428,6 +10433,145 @@ class ExternalStorage_Workload : public ::google::protobuf::MessageLite /* @@pro
 };
 // -------------------------------------------------------------------
 
+class ExternalStorage_FileTable : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage.FileTable) */ {
+ public:
+  ExternalStorage_FileTable();
+  virtual ~ExternalStorage_FileTable();
+
+  ExternalStorage_FileTable(const ExternalStorage_FileTable& from);
+
+  inline ExternalStorage_FileTable& operator=(const ExternalStorage_FileTable& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ExternalStorage_FileTable(ExternalStorage_FileTable&& from) noexcept
+    : ExternalStorage_FileTable() {
+    *this = ::std::move(from);
+  }
+
+  inline ExternalStorage_FileTable& operator=(ExternalStorage_FileTable&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ExternalStorage_FileTable& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ExternalStorage_FileTable* internal_default_instance() {
+    return reinterpret_cast<const ExternalStorage_FileTable*>(
+               &_ExternalStorage_FileTable_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    78;
+
+  void Swap(ExternalStorage_FileTable* other);
+  friend void swap(ExternalStorage_FileTable& a, ExternalStorage_FileTable& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ExternalStorage_FileTable* New() const final {
+    return CreateMaybeMessage<ExternalStorage_FileTable>(NULL);
+  }
+
+  ExternalStorage_FileTable* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<ExternalStorage_FileTable>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const ExternalStorage_FileTable& from);
+  void MergeFrom(const ExternalStorage_FileTable& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ExternalStorage_FileTable* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string user = 1;
+  void clear_user();
+  static const int kUserFieldNumber = 1;
+  const ::std::string& user() const;
+  void set_user(const ::std::string& value);
+  #if LANG_CXX11
+  void set_user(::std::string&& value);
+  #endif
+  void set_user(const char* value);
+  void set_user(const char* value, size_t size);
+  ::std::string* mutable_user();
+  ::std::string* release_user();
+  void set_allocated_user(::std::string* user);
+
+  // string qualified_table_name = 2;
+  void clear_qualified_table_name();
+  static const int kQualifiedTableNameFieldNumber = 2;
+  const ::std::string& qualified_table_name() const;
+  void set_qualified_table_name(const ::std::string& value);
+  #if LANG_CXX11
+  void set_qualified_table_name(::std::string&& value);
+  #endif
+  void set_qualified_table_name(const char* value);
+  void set_qualified_table_name(const char* value, size_t size);
+  ::std::string* mutable_qualified_table_name();
+  ::std::string* release_qualified_table_name();
+  void set_allocated_qualified_table_name(::std::string* qualified_table_name);
+
+  // string path = 3;
+  void clear_path();
+  static const int kPathFieldNumber = 3;
+  const ::std::string& path() const;
+  void set_path(const ::std::string& value);
+  #if LANG_CXX11
+  void set_path(::std::string&& value);
+  #endif
+  void set_path(const char* value);
+  void set_path(const char* value, size_t size);
+  ::std::string* mutable_path();
+  ::std::string* release_path();
+  void set_allocated_path(::std::string* path);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.ExternalStorage.FileTable)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr user_;
+  ::google::protobuf::internal::ArenaStringPtr qualified_table_name_;
+  ::google::protobuf::internal::ArenaStringPtr path_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ExternalStorage) */ {
  public:
   ExternalStorage();
@@ -10462,7 +10606,7 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_ExternalStorage_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    78;
+    79;
 
   void Swap(ExternalStorage* other);
   friend void swap(ExternalStorage& a, ExternalStorage& b) {
@@ -10517,6 +10661,7 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
   typedef ExternalStorage_GCS GCS;
   typedef ExternalStorage_Azure Azure;
   typedef ExternalStorage_Workload Workload;
+  typedef ExternalStorage_FileTable FileTable;
 
   // accessors -------------------------------------------------------
 
@@ -10590,6 +10735,17 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::ExternalStorage_Workload* mutable_workloadconfig();
   void set_allocated_workloadconfig(::cockroach::roachpb::ExternalStorage_Workload* workloadconfig);
 
+  bool has_filetableconfig() const;
+  void clear_filetableconfig();
+  static const int kFileTableConfigFieldNumber = 8;
+  private:
+  const ::cockroach::roachpb::ExternalStorage_FileTable& _internal_filetableconfig() const;
+  public:
+  const ::cockroach::roachpb::ExternalStorage_FileTable& filetableconfig() const;
+  ::cockroach::roachpb::ExternalStorage_FileTable* release_filetableconfig();
+  ::cockroach::roachpb::ExternalStorage_FileTable* mutable_filetableconfig();
+  void set_allocated_filetableconfig(::cockroach::roachpb::ExternalStorage_FileTable* filetableconfig);
+
   // .cockroach.roachpb.ExternalStorageProvider provider = 1;
   void clear_provider();
   static const int kProviderFieldNumber = 1;
@@ -10606,6 +10762,7 @@ class ExternalStorage : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::ExternalStorage_S3* s3config_;
   ::cockroach::roachpb::ExternalStorage_Azure* azureconfig_;
   ::cockroach::roachpb::ExternalStorage_Workload* workloadconfig_;
+  ::cockroach::roachpb::ExternalStorage_FileTable* filetableconfig_;
   int provider_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -10646,7 +10803,7 @@ class WriteBatchRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_WriteBatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    79;
+    80;
 
   void Swap(WriteBatchRequest* other);
   friend void swap(WriteBatchRequest& a, WriteBatchRequest& b) {
@@ -10779,7 +10936,7 @@ class WriteBatchResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_WriteBatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    80;
+    81;
 
   void Swap(WriteBatchResponse* other);
   friend void swap(WriteBatchResponse& a, WriteBatchResponse& b) {
@@ -10885,7 +11042,7 @@ class FileEncryptionOptions : public ::google::protobuf::MessageLite /* @@protoc
                &_FileEncryptionOptions_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    81;
+    82;
 
   void Swap(FileEncryptionOptions* other);
   friend void swap(FileEncryptionOptions& a, FileEncryptionOptions& b) {
@@ -11013,7 +11170,7 @@ class ExportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ExportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    83;
+    84;
 
   void Swap(ExportRequest* other);
   friend void swap(ExportRequest& a, ExportRequest& b) {
@@ -11223,7 +11380,7 @@ class BulkOpSummary : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BulkOpSummary_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    85;
+    86;
 
   void Swap(BulkOpSummary* other);
   friend void swap(BulkOpSummary& a, BulkOpSummary& b) {
@@ -11354,7 +11511,7 @@ class ExportResponse_File : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ExportResponse_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    86;
+    87;
 
   void Swap(ExportResponse_File* other);
   friend void swap(ExportResponse_File& a, ExportResponse_File& b) {
@@ -11530,7 +11687,7 @@ class ExportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ExportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    87;
+    88;
 
   void Swap(ExportResponse* other);
   friend void swap(ExportResponse& a, ExportResponse& b) {
@@ -11662,7 +11819,7 @@ class ImportRequest_File : public ::google::protobuf::MessageLite /* @@protoc_in
                &_ImportRequest_File_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    88;
+    89;
 
   void Swap(ImportRequest_File* other);
   friend void swap(ImportRequest_File& a, ImportRequest_File& b) {
@@ -11798,7 +11955,7 @@ class ImportRequest_TableRekey : public ::google::protobuf::MessageLite /* @@pro
                &_ImportRequest_TableRekey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    89;
+    90;
 
   void Swap(ImportRequest_TableRekey* other);
   friend void swap(ImportRequest_TableRekey& a, ImportRequest_TableRekey& b) {
@@ -11913,7 +12070,7 @@ class ImportRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ImportRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    90;
+    91;
 
   void Swap(ImportRequest* other);
   friend void swap(ImportRequest& a, ImportRequest& b) {
@@ -12083,7 +12240,7 @@ class ImportResponse : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_ImportResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    91;
+    92;
 
   void Swap(ImportResponse* other);
   friend void swap(ImportResponse& a, ImportResponse& b) {
@@ -12201,7 +12358,7 @@ class AdminScatterRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_AdminScatterRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    92;
+    93;
 
   void Swap(AdminScatterRequest* other);
   friend void swap(AdminScatterRequest& a, AdminScatterRequest& b) {
@@ -12314,7 +12471,7 @@ class AdminScatterResponse_Range : public ::google::protobuf::MessageLite /* @@p
                &_AdminScatterResponse_Range_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    93;
+    94;
 
   void Swap(AdminScatterResponse_Range* other);
   friend void swap(AdminScatterResponse_Range& a, AdminScatterResponse_Range& b) {
@@ -12420,7 +12577,7 @@ class AdminScatterResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_AdminScatterResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    94;
+    95;
 
   void Swap(AdminScatterResponse* other);
   friend void swap(AdminScatterResponse& a, AdminScatterResponse& b) {
@@ -12540,7 +12697,7 @@ class AdminVerifyProtectedTimestampRequest : public ::google::protobuf::MessageL
                &_AdminVerifyProtectedTimestampRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    95;
+    96;
 
   void Swap(AdminVerifyProtectedTimestampRequest* other);
   friend void swap(AdminVerifyProtectedTimestampRequest& a, AdminVerifyProtectedTimestampRequest& b) {
@@ -12684,7 +12841,7 @@ class AdminVerifyProtectedTimestampResponse : public ::google::protobuf::Message
                &_AdminVerifyProtectedTimestampResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    96;
+    97;
 
   void Swap(AdminVerifyProtectedTimestampResponse* other);
   friend void swap(AdminVerifyProtectedTimestampResponse& a, AdminVerifyProtectedTimestampResponse& b) {
@@ -12809,7 +12966,7 @@ class AddSSTableRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_AddSSTableRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    97;
+    98;
 
   void Swap(AddSSTableRequest* other);
   friend void swap(AddSSTableRequest& a, AddSSTableRequest& b) {
@@ -12956,7 +13113,7 @@ class AddSSTableResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_AddSSTableResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    98;
+    99;
 
   void Swap(AddSSTableResponse* other);
   friend void swap(AddSSTableResponse& a, AddSSTableResponse& b) {
@@ -13062,7 +13219,7 @@ class RefreshRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RefreshRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    99;
+    100;
 
   void Swap(RefreshRequest* other);
   friend void swap(RefreshRequest& a, RefreshRequest& b) {
@@ -13180,7 +13337,7 @@ class RefreshResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_RefreshResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    100;
+    101;
 
   void Swap(RefreshResponse* other);
   friend void swap(RefreshResponse& a, RefreshResponse& b) {
@@ -13286,7 +13443,7 @@ class RefreshRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RefreshRangeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    101;
+    102;
 
   void Swap(RefreshRangeRequest* other);
   friend void swap(RefreshRangeRequest& a, RefreshRangeRequest& b) {
@@ -13404,7 +13561,7 @@ class RefreshRangeResponse : public ::google::protobuf::MessageLite /* @@protoc_
                &_RefreshRangeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    102;
+    103;
 
   void Swap(RefreshRangeResponse* other);
   friend void swap(RefreshRangeResponse& a, RefreshRangeResponse& b) {
@@ -13510,7 +13667,7 @@ class SubsumeRequest : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SubsumeRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    103;
+    104;
 
   void Swap(SubsumeRequest* other);
   friend void swap(SubsumeRequest& a, SubsumeRequest& b) {
@@ -13640,7 +13797,7 @@ class SubsumeResponse : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_SubsumeResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    104;
+    105;
 
   void Swap(SubsumeResponse* other);
   friend void swap(SubsumeResponse& a, SubsumeResponse& b) {
@@ -13777,7 +13934,7 @@ class RangeStatsRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_RangeStatsRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    105;
+    106;
 
   void Swap(RangeStatsRequest* other);
   friend void swap(RangeStatsRequest& a, RangeStatsRequest& b) {
@@ -13883,7 +14040,7 @@ class RangeStatsResponse : public ::google::protobuf::MessageLite /* @@protoc_in
                &_RangeStatsResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    106;
+    107;
 
   void Swap(RangeStatsResponse* other);
   friend void swap(RangeStatsResponse& a, RangeStatsResponse& b) {
@@ -14056,7 +14213,7 @@ class RequestUnion : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_RequestUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    107;
+    108;
 
   void Swap(RequestUnion* other);
   friend void swap(RequestUnion& a, RequestUnion& b) {
@@ -14823,7 +14980,7 @@ class ResponseUnion : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_ResponseUnion_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    108;
+    109;
 
   void Swap(ResponseUnion* other);
   friend void swap(ResponseUnion& a, ResponseUnion& b) {
@@ -15529,7 +15686,7 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    109;
+    110;
 
   void Swap(Header* other);
   friend void swap(Header& a, Header& b) {
@@ -15727,7 +15884,7 @@ class BatchRequest : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_BatchRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    110;
+    111;
 
   void Swap(BatchRequest* other);
   friend void swap(BatchRequest& a, BatchRequest& b) {
@@ -15845,7 +16002,7 @@ class BatchResponse_Header : public ::google::protobuf::MessageLite /* @@protoc_
                &_BatchResponse_Header_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    111;
+    112;
 
   void Swap(BatchResponse_Header* other);
   friend void swap(BatchResponse_Header& a, BatchResponse_Header& b) {
@@ -16001,7 +16158,7 @@ class BatchResponse : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_BatchResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    112;
+    113;
 
   void Swap(BatchResponse* other);
   friend void swap(BatchResponse& a, BatchResponse& b) {
@@ -16121,7 +16278,7 @@ class RangeFeedRequest : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_RangeFeedRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    113;
+    114;
 
   void Swap(RangeFeedRequest* other);
   friend void swap(RangeFeedRequest& a, RangeFeedRequest& b) {
@@ -16246,7 +16403,7 @@ class RangeFeedValue : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedValue_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    114;
+    115;
 
   void Swap(RangeFeedValue* other);
   friend void swap(RangeFeedValue& a, RangeFeedValue& b) {
@@ -16378,7 +16535,7 @@ class RangeFeedCheckpoint : public ::google::protobuf::MessageLite /* @@protoc_i
                &_RangeFeedCheckpoint_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    115;
+    116;
 
   void Swap(RangeFeedCheckpoint* other);
   friend void swap(RangeFeedCheckpoint& a, RangeFeedCheckpoint& b) {
@@ -16496,7 +16653,7 @@ class RangeFeedError : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedError_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    116;
+    117;
 
   void Swap(RangeFeedError* other);
   friend void swap(RangeFeedError& a, RangeFeedError& b) {
@@ -16602,7 +16759,7 @@ class RangeFeedEvent : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_RangeFeedEvent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    117;
+    118;
 
   void Swap(RangeFeedEvent* other);
   friend void swap(RangeFeedEvent& a, RangeFeedEvent& b) {
@@ -25593,6 +25750,169 @@ inline void ExternalStorage_Workload::set_batch_end(::google::protobuf::int64 va
 
 // -------------------------------------------------------------------
 
+// ExternalStorage_FileTable
+
+// string user = 1;
+inline void ExternalStorage_FileTable::clear_user() {
+  user_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ExternalStorage_FileTable::user() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.FileTable.user)
+  return user_.GetNoArena();
+}
+inline void ExternalStorage_FileTable::set_user(const ::std::string& value) {
+  
+  user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.FileTable.user)
+}
+#if LANG_CXX11
+inline void ExternalStorage_FileTable::set_user(::std::string&& value) {
+  
+  user_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.FileTable.user)
+}
+#endif
+inline void ExternalStorage_FileTable::set_user(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.FileTable.user)
+}
+inline void ExternalStorage_FileTable::set_user(const char* value, size_t size) {
+  
+  user_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.FileTable.user)
+}
+inline ::std::string* ExternalStorage_FileTable::mutable_user() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.FileTable.user)
+  return user_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ExternalStorage_FileTable::release_user() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.FileTable.user)
+  
+  return user_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ExternalStorage_FileTable::set_allocated_user(::std::string* user) {
+  if (user != NULL) {
+    
+  } else {
+    
+  }
+  user_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), user);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.FileTable.user)
+}
+
+// string qualified_table_name = 2;
+inline void ExternalStorage_FileTable::clear_qualified_table_name() {
+  qualified_table_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ExternalStorage_FileTable::qualified_table_name() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+  return qualified_table_name_.GetNoArena();
+}
+inline void ExternalStorage_FileTable::set_qualified_table_name(const ::std::string& value) {
+  
+  qualified_table_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+}
+#if LANG_CXX11
+inline void ExternalStorage_FileTable::set_qualified_table_name(::std::string&& value) {
+  
+  qualified_table_name_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+}
+#endif
+inline void ExternalStorage_FileTable::set_qualified_table_name(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  qualified_table_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+}
+inline void ExternalStorage_FileTable::set_qualified_table_name(const char* value, size_t size) {
+  
+  qualified_table_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+}
+inline ::std::string* ExternalStorage_FileTable::mutable_qualified_table_name() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+  return qualified_table_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ExternalStorage_FileTable::release_qualified_table_name() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+  
+  return qualified_table_name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ExternalStorage_FileTable::set_allocated_qualified_table_name(::std::string* qualified_table_name) {
+  if (qualified_table_name != NULL) {
+    
+  } else {
+    
+  }
+  qualified_table_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), qualified_table_name);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.FileTable.qualified_table_name)
+}
+
+// string path = 3;
+inline void ExternalStorage_FileTable::clear_path() {
+  path_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ExternalStorage_FileTable::path() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.FileTable.path)
+  return path_.GetNoArena();
+}
+inline void ExternalStorage_FileTable::set_path(const ::std::string& value) {
+  
+  path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ExternalStorage.FileTable.path)
+}
+#if LANG_CXX11
+inline void ExternalStorage_FileTable::set_path(::std::string&& value) {
+  
+  path_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.ExternalStorage.FileTable.path)
+}
+#endif
+inline void ExternalStorage_FileTable::set_path(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.ExternalStorage.FileTable.path)
+}
+inline void ExternalStorage_FileTable::set_path(const char* value, size_t size) {
+  
+  path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.ExternalStorage.FileTable.path)
+}
+inline ::std::string* ExternalStorage_FileTable::mutable_path() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.FileTable.path)
+  return path_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ExternalStorage_FileTable::release_path() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.FileTable.path)
+  
+  return path_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ExternalStorage_FileTable::set_allocated_path(::std::string* path) {
+  if (path != NULL) {
+    
+  } else {
+    
+  }
+  path_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), path);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.FileTable.path)
+}
+
+// -------------------------------------------------------------------
+
 // ExternalStorage
 
 // .cockroach.roachpb.ExternalStorageProvider provider = 1;
@@ -25929,6 +26249,59 @@ inline void ExternalStorage::set_allocated_workloadconfig(::cockroach::roachpb::
   }
   workloadconfig_ = workloadconfig;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.WorkloadConfig)
+}
+
+inline bool ExternalStorage::has_filetableconfig() const {
+  return this != internal_default_instance() && filetableconfig_ != NULL;
+}
+inline void ExternalStorage::clear_filetableconfig() {
+  if (GetArenaNoVirtual() == NULL && filetableconfig_ != NULL) {
+    delete filetableconfig_;
+  }
+  filetableconfig_ = NULL;
+}
+inline const ::cockroach::roachpb::ExternalStorage_FileTable& ExternalStorage::_internal_filetableconfig() const {
+  return *filetableconfig_;
+}
+inline const ::cockroach::roachpb::ExternalStorage_FileTable& ExternalStorage::filetableconfig() const {
+  const ::cockroach::roachpb::ExternalStorage_FileTable* p = filetableconfig_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ExternalStorage.FileTableConfig)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::ExternalStorage_FileTable*>(
+      &::cockroach::roachpb::_ExternalStorage_FileTable_default_instance_);
+}
+inline ::cockroach::roachpb::ExternalStorage_FileTable* ExternalStorage::release_filetableconfig() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ExternalStorage.FileTableConfig)
+  
+  ::cockroach::roachpb::ExternalStorage_FileTable* temp = filetableconfig_;
+  filetableconfig_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::ExternalStorage_FileTable* ExternalStorage::mutable_filetableconfig() {
+  
+  if (filetableconfig_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::ExternalStorage_FileTable>(GetArenaNoVirtual());
+    filetableconfig_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ExternalStorage.FileTableConfig)
+  return filetableconfig_;
+}
+inline void ExternalStorage::set_allocated_filetableconfig(::cockroach::roachpb::ExternalStorage_FileTable* filetableconfig) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete filetableconfig_;
+  }
+  if (filetableconfig) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      filetableconfig = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, filetableconfig, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  filetableconfig_ = filetableconfig;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ExternalStorage.FileTableConfig)
 }
 
 // -------------------------------------------------------------------
@@ -34297,6 +34670,8 @@ inline void RangeFeedEvent::set_allocated_error(::cockroach::roachpb::RangeFeedE
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
