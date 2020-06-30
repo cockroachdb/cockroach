@@ -89,21 +89,21 @@ const (
 	ExplainFlagVerbose ExplainFlag = 1 + iota
 	ExplainFlagSymVars
 	ExplainFlagTypes
-	ExplainFlagNoNormalize
 	ExplainFlagAnalyze
 	ExplainFlagEnv
 	ExplainFlagCatalog
+	ExplainFlagDebug
 	numExplainFlags = iota
 )
 
 var explainFlagStrings = [...]string{
-	ExplainFlagVerbose:     "VERBOSE",
-	ExplainFlagSymVars:     "SYMVARS",
-	ExplainFlagTypes:       "TYPES",
-	ExplainFlagNoNormalize: "NONORMALIZE",
-	ExplainFlagAnalyze:     "ANALYZE",
-	ExplainFlagEnv:         "ENV",
-	ExplainFlagCatalog:     "CATALOG",
+	ExplainFlagVerbose: "VERBOSE",
+	ExplainFlagSymVars: "SYMVARS",
+	ExplainFlagTypes:   "TYPES",
+	ExplainFlagAnalyze: "ANALYZE",
+	ExplainFlagEnv:     "ENV",
+	ExplainFlagCatalog: "CATALOG",
+	ExplainFlagDebug:   "DEBUG",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -171,26 +171,6 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 	for i := range options {
 		options[i] = strings.ToUpper(options[i])
 	}
-	find := func(o string) bool {
-		for i := range options {
-			if options[i] == o {
-				return true
-			}
-		}
-		return false
-	}
-
-	if find("DEBUG") {
-		if !find("ANALYZE") {
-			return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
-		}
-		if len(options) != 2 {
-			return nil, pgerror.Newf(
-				pgcode.Syntax, "EXPLAIN ANALYZE (DEBUG) cannot be used in conjunction with other flags")
-		}
-		return &ExplainAnalyzeDebug{Statement: stmt}, nil
-	}
-
 	var opts ExplainOptions
 	for _, opt := range options {
 		opt = strings.ToUpper(opt)
@@ -206,6 +186,17 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 			return nil, pgerror.Newf(pgcode.Syntax, "unsupported EXPLAIN option: %s", opt)
 		}
 		opts.Flags[flag] = true
+	}
+	if opts.Flags[ExplainFlagDebug] {
+		if !opts.Flags[ExplainFlagAnalyze] {
+			return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
+		}
+		if len(options) != 2 {
+			return nil, pgerror.Newf(pgcode.Syntax,
+				"EXPLAIN ANALYZE (DEBUG) cannot be used in conjunction with other flags",
+			)
+		}
+		return &ExplainAnalyzeDebug{Statement: stmt}, nil
 	}
 	if opts.Mode == 0 {
 		// Default mode is ExplainPlan.
