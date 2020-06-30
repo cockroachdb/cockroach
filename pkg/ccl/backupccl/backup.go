@@ -348,7 +348,7 @@ func spansForAllTableIndexes(
 	// in them that we didn't already get above e.g. indexes or tables that are
 	// not in latest because they were dropped during the time window in question.
 	for _, rev := range revs {
-		if tbl := rev.Desc.GetTable(); tbl != nil {
+		if tbl := rev.Desc.GetTable(); tbl != nil && tbl.State != sqlbase.TableDescriptor_DROP {
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
