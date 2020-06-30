@@ -249,8 +249,8 @@ type Factory interface {
 	//
 	// The node produces the columns in the input and (unless join type is
 	// LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
-	// condition can refer to these using IndexedVars. Note that lookupCols does
-	// not include the inverted column.
+	// condition can refer to these using IndexedVars. Note that lookupCols
+	// includes the inverted column.
 	ConstructInvertedJoin(
 		joinType sqlbase.JoinType,
 		invertedExpr tree.TypedExpr,

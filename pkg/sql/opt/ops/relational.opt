@@ -361,6 +361,10 @@ define InvertedJoinPrivate {
     # the cat.Table.Index() method in order to fetch the cat.Index metadata.
     Index IndexOrdinal
 
+    # InvertedCol is the inverted column in the index that is referenced by
+    # InvertedExpr.
+    InvertedCol ColumnID
+
     # InputCol is the column (produced by the input) that will be bound to
     # InvertedExpr and used to determine the keys to scan in the inverted
     # index.
