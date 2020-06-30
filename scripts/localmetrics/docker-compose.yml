@@ -1,0 +1,25 @@
+version: '2.0'
+
+services:
+  grafana:
+    build: ./grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    links:
+      - postgres
+    # It's already in the container, but by mounting it we can edit these files
+    # without rebuilding the container.
+    volumes:
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+  postgres:
+    image: postgres:12.3-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      PGDATA: /postgres-data
+    ports:
+      - 5432:5432
+    volumes:
+      - ./postgres-data:/postgres-data
