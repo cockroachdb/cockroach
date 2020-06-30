@@ -217,7 +217,27 @@ func (f *SSTSnapshotStorageFile) Close() error {
 	return nil
 }
 
-// Sync syncs the file to disk. Implements writeCloseSyncer in engine.
+// Flush flushes the internal buffer to disk. No-op if chunkSize == 0 or if the
+// buffer is empty. Implements flusher for pebble's SSTWriter.
+func (f *SSTSnapshotStorageFile) Flush() error {
+	if err := f.openFile(); err != nil {
+		return err
+	}
+	if len(f.buffer) > 0 {
+		// Write buffered writes and then empty the buffer.
+		if _, err := f.file.Write(f.buffer); err != nil {
+			return err
+		}
+		f.buffer = f.buffer[:0]
+	}
+	return nil
+}
+
+// Sync syncs the file to disk. Also flushes the buffer if it's non-empty.
+// Implements writeCloseSyncer in engine.
 func (f *SSTSnapshotStorageFile) Sync() error {
+	if err := f.Flush(); err != nil {
+		return err
+	}
 	return f.file.Sync()
 }
