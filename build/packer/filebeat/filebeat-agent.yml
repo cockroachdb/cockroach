@@ -24,5 +24,4 @@ processors:
 output.logstash:
   enabled: true
   timeout: 15
-  # Static Interal IP of ELK instance
-  hosts: ["10.124.0.2:5044"]
+  hosts: ["triptolemus.cockroachlabs.com:5044"]
