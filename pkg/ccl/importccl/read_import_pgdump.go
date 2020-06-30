@@ -395,6 +395,62 @@ func readPostgresStmt(
 		if match == "" || match == name {
 			createSeq[name] = stmt
 		}
+	// Some SELECT statements mutate schema. Search for those here. If it is not exactly a SELECT that mutates
+	// schema, ignore it.
+	case *tree.Select:
+		switch sel := stmt.Select.(type) {
+		case *tree.SelectClause:
+			for _, selExpr := range sel.Exprs {
+				switch expr := selExpr.Expr.(type) {
+				case *tree.FuncExpr:
+					// Look for function calls that mutate schema (this is actually a thing).
+					semaCtx := tree.MakeSemaContext()
+					if _, err := expr.TypeCheck(ctx, &semaCtx, nil /* desired */); err != nil {
+						return err
+					}
+					ov := expr.ResolvedOverload()
+					// Search for a SQLFn, which returns a SQL string to execute.
+					fn := ov.SQLFn
+					if fn == nil {
+						// This is some other function type, which we don't care about.
+						continue
+					}
+					// Attempt to convert all func exprs to datums.
+					datums := make(tree.Datums, len(expr.Exprs))
+					for i, ex := range expr.Exprs {
+						d, ok := ex.(tree.Datum)
+						if !ok {
+							// We got something that wasn't a datum so we can't call the
+							// overload. Since this is a SQLFn and the user would have
+							// expected us to execute it, we have to error.
+							return errors.Errorf("unsupported statement: %s", stmt)
+						}
+						datums[i] = d
+					}
+					// Now that we have all of the datums, we can execute the overload.
+					fnSQL, err := fn(evalCtx, datums)
+					if err != nil {
+						return err
+					}
+					// We have some sql. Parse and process it.
+					fnStmts, err := parser.Parse(fnSQL)
+					if err != nil {
+						return err
+					}
+					for _, fnStmt := range fnStmts {
+						switch ast := fnStmt.AST.(type) {
+						case *tree.AlterTable:
+							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, ast); err != nil {
+								return err
+							}
+						default:
+							// We only support ALTER statements returned from a SQLFn.
+							return errors.Errorf("unsupported statement: %s", stmt)
+						}
+					}
+				}
+			}
+		}
 	}
 	return nil
 }

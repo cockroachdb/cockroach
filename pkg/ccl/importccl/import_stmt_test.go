@@ -4016,6 +4016,46 @@ func TestImportPgDump(t *testing.T) {
 	}
 }
 
+// TestImportPgDumpGeo tests that a file with SQLFn classes can be
+// imported. These are functions like AddGeometryColumn which create and
+// execute SQL when called (!). They are, for example, used by shp2pgsql
+// (https://manpages.debian.org/stretch/postgis/shp2pgsql.1.en.html).
+func TestImportPgDumpGeo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const nodes = 1
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "pgdump")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Import geo.sql.
+	sqlDB.Exec(t, `CREATE DATABASE importdb; SET DATABASE = importdb`)
+	sqlDB.Exec(t, "IMPORT PGDUMP 'nodelocal://0/geo.sql'")
+
+	// Execute geo.sql.
+	sqlDB.Exec(t, `CREATE DATABASE execdb; SET DATABASE = execdb`)
+	geoSQL, err := ioutil.ReadFile(filepath.Join(baseDir, "geo.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.Exec(t, string(geoSQL))
+
+	// Verify both created tables are identical.
+	importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
+	// Families are slightly different due to the geom column being last
+	// in exec and rowid being last in import, so swap that in import to
+	// match exec.
+	importCreate[0][0] = strings.Replace(importCreate[0][0], "geom, rowid", "rowid, geom", 1)
+	sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
+
+	importSelect := sqlDB.QueryStr(t, "SELECT * FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks")
+	sqlDB.CheckQueryResults(t, "SELECT * FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks", importSelect)
+}
+
 func TestImportCockroachDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
