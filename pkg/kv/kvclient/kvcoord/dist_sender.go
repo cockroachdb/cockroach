@@ -674,6 +674,40 @@ func splitBatchAndCheckForRefreshSpans(
 	return parts
 }
 
+// unsetCanForwardReadTimestampFlag ensures that if a batch is going to
+// be split across ranges and any of its requests would need to refresh
+// on read timestamp bumps, it does not have its CanForwardReadTimestamp
+// flag set. It would be incorrect to allow part of a batch to perform a
+// server-side refresh if another part of the batch that was sent to a
+// different range would also need to refresh. Such behavior could cause
+// a transaction to observe an inconsistent snapshot and violate
+// serializability.
+func unsetCanForwardReadTimestampFlag(ctx context.Context, ba *roachpb.BatchRequest) {
+	if !ba.CanForwardReadTimestamp {
+		// Already unset.
+		return
+	}
+	for _, req := range ba.Requests {
+		if roachpb.NeedsRefresh(req.GetInner()) {
+			// Unset the flag.
+			ba.CanForwardReadTimestamp = false
+
+			// We would need to also unset the CanCommitAtHigherTimestamp flag
+			// on any EndTxn request in the batch, but it turns out that because
+			// we call this function when a batch is split across ranges, we'd
+			// already have bailed if the EndTxn wasn't a parallel commit — and
+			// if it was a parallel commit then we must not have any requests
+			// that need to refresh (see txnCommitter.canCommitInParallel).
+			// Assert this for our own sanity.
+			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+				log.Fatalf(ctx, "batch unexpected contained requests "+
+					"that need to refresh and an EndTxn request: %s", ba.String())
+			}
+			return
+		}
+	}
+}
+
 // Send implements the batch.Sender interface. It subdivides the Batch
 // into batches admissible for sending (preventing certain illegal
 // mixtures of requests), executes each individual part (which may
@@ -868,6 +902,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	}
 	qiBatchIdx := batchIdx + 1
 	qiResponseCh := make(chan response, 1)
+	qiBaCopy := qiBa // avoids escape to heap
 
 	runTask := ds.rpcContext.Stopper.RunAsyncTask
 	if ds.disableParallelBatches {
@@ -943,7 +978,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 		}
 		// Populate the pre-commit QueryIntent batch response. If we made it
 		// here then we know we can ignore intent missing errors.
-		qiReply.reply = qiBa.CreateReply()
+		qiReply.reply = qiBaCopy.CreateReply()
 		for _, ru := range qiReply.reply.Responses {
 			ru.GetQueryIntent().FoundIntent = true
 		}
@@ -1131,6 +1166,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			return nil, errNo1PCTxn
 		}
 	}
+	// Make sure the CanForwardReadTimestamp flag is set to false, if necessary.
+	unsetCanForwardReadTimestampFlag(ctx, &ba)
 
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
