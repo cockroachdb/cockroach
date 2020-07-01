@@ -80,14 +80,14 @@ func makeGCSStorage(
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
 	switch conf.Auth {
-	case "", authParamDefault:
+	case "", AuthParamDefault:
 		var key string
 		if settings != nil {
-			key = gcsDefault.Get(&settings.SV)
+			key = GcsDefault.Get(&settings.SV)
 		}
 		// We expect a key to be present if default is specified.
-		if conf.Auth == authParamDefault && key == "" {
-			return nil, errors.Errorf("expected settings value for %s", cloudstorageGSDefaultKey)
+		if conf.Auth == AuthParamDefault && key == "" {
+			return nil, errors.Errorf("expected settings value for %s", CloudstorageGSDefaultKey)
 		}
 		if key != "" {
 			source, err := google.JWTConfigFromJSON([]byte(key), scope)
@@ -96,12 +96,12 @@ func makeGCSStorage(
 			}
 			opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
 		}
-	case authParamSpecified:
+	case AuthParamSpecified:
 		if conf.Credentials == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
-				authParamSpecified,
+				AuthParamSpecified,
 				CredentialsParam,
 			)
 		}
@@ -114,7 +114,7 @@ func makeGCSStorage(
 			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
 		}
 		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
-	case authParamImplicit:
+	case AuthParamImplicit:
 		if ioConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for gs due to --external-io-implicit-credentials flag")
