@@ -74,7 +74,7 @@ func TestTableSet(t *testing.T) {
 		{remove{2, 4}, ""},
 	}
 
-	set := &tableSet{}
+	set := &descriptorSet{}
 	for i, d := range testData {
 		switch op := d.op.(type) {
 		case insert:
@@ -115,10 +115,10 @@ func TestTableSet(t *testing.T) {
 	}
 }
 
-func getNumVersions(ts *tableState) int {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return len(ts.mu.active.data)
+func getNumVersions(ds *descriptorState) int {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	return len(ds.mu.active.data)
 }
 
 func TestPurgeOldVersions(t *testing.T) {
@@ -614,7 +614,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		// reference equality to determine whether we were reacquiring the same
 		// lease, which is no longer feasible after the 20.2 descriptor interface
 		// changes. This is mostly fine because async lease removal doesn't require
-		// the tableState lock anyway, so it's not that relevant to this test.
+		// the descriptorState lock anyway, so it's not that relevant to this test.
 		if err := tracker.WaitForRemoval(); err != nil {
 			t.Fatal(err)
 		}
@@ -712,15 +712,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 }
 
 // Test one possible outcome of a race between a lease acquisition (the first
-// case through tableState.acquire(), the second through
-// tableState.acquireFreshestFromStore()) and a release of the lease that was
+// case through descriptorState.acquire(), the second through
+// descriptorState.acquireFreshestFromStore()) and a release of the lease that was
 // just acquired. Precisely:
 // 1. Thread 1 calls either acquireFreshestFromStore() or acquire().
-// 2. Thread 1 releases the lock on tableState and starts acquisition of a lease
+// 2. Thread 1 releases the lock on descriptorState and starts acquisition of a lease
 //    from the store, blocking until it's finished.
 // 3. Thread 2 calls acquire(). The lease has not been acquired yet, so it
 //    also enters the acquisition code path (calling DoChan).
-// 4. Thread 2 proceeds to release the lock on tableState waiting for the
+// 4. Thread 2 proceeds to release the lock on descriptorState waiting for the
 //    in-flight acquisition.
 // 4. The lease is acquired from the store and the waiting routines are
 //    unblocked.
@@ -728,7 +728,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // 5. Thread 1 wakes up. At this point, a naive implementation would use the
 //    newly acquired lease, which would be incorrect. The test checks that
 //    acquireFreshestFromStore() or acquire() notices, after re-acquiring the
-//    tableState lock, that the new lease has been released and acquires a new
+//    descriptorState lock, that the new lease has been released and acquires a new
 //    one.
 func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
