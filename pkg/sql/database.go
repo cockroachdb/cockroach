@@ -34,7 +34,8 @@ func (p *planner) renameDatabase(
 	ctx context.Context, oldDesc *sqlbase.ImmutableDatabaseDescriptor, newName string,
 ) error {
 	oldName := oldDesc.GetName()
-	newDesc := sqlbase.NewMutableDatabaseDescriptor(*oldDesc.DatabaseDesc())
+	newDesc := sqlbase.NewMutableExistingDatabaseDescriptor(*oldDesc.DatabaseDesc())
+	newDesc.Version++
 	newDesc.SetName(newName)
 	if err := newDesc.Validate(); err != nil {
 		return err
