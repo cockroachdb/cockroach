@@ -360,7 +360,7 @@ func (tc *Collection) GetTableVersion(
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
 	for _, table := range tc.leasedTables {
-		if lease.NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tn.Table()) {
+		if lease.NameMatchesDescriptor(table, dbID, schemaID, tn.Table()) {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
 			return table, nil
 		}
@@ -694,8 +694,8 @@ func (tc *Collection) getUncommittedTable(
 		}
 
 		// Do we know about a table with this name?
-		if lease.NameMatchesTable(
-			&mutTbl.TableDescriptor,
+		if lease.NameMatchesDescriptor(
+			mutTbl,
 			dbID,
 			schemaID,
 			tn.Table(),

@@ -217,7 +217,7 @@ func (s storage) acquire(
 			return sqlbase.ErrDescriptorNotFound
 		}
 		// TODO (lucy): We need a more general concept of an offline descriptor that
-		// can't be leased. For now we just have a special case for tables.
+		// can't be leased. For now we just have a special case for descriptors.
 		if tableDesc := desc.TableDesc(); tableDesc != nil {
 			if err := sqlbase.FilterTableState(tableDesc); err != nil {
 				return err
@@ -359,11 +359,11 @@ var ErrDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 // time by first waiting for all nodes to be on the current (pre-update) version
 // of the table desc.
 //
-// The update closure for all tables is called after the wait. The map argument
+// The update closure for all descriptors is called after the wait. The map argument
 // is a map of the table descriptors with the IDs given in tableIDs, and the
 // closure mutates those descriptors. The txn argument closure is intended to be
 // used for updating jobs. Note that it can't be used for anything except
-// writing to system tables, since we set the system config trigger to write the
+// writing to system descriptors, since we set the system config trigger to write the
 // schema changes.
 //
 // The closure may be called multiple times if retries occur; make sure it does
@@ -383,7 +383,7 @@ func (m *Manager) PublishMultiple(
 	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		// Wait until there are no unexpired leases on the previous versions
-		// of the tables.
+		// of the descriptors.
 		expectedVersions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
 		for _, id := range tableIDs {
 			expected, err := m.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
@@ -539,7 +539,7 @@ func NewIDVersionPrev(desc *sqlbase.TableDescriptor) IDVersion {
 	return IDVersion{Name: desc.Name, ID: desc.ID, Version: desc.Version - 1}
 }
 
-// CountLeases returns the number of unexpired leases for a number of tables
+// CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
 	ctx context.Context, executor sqlutil.InternalExecutor, tables []IDVersion, at hlc.Timestamp,
@@ -1316,112 +1316,112 @@ var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*ManagerTestingKnobs) ModuleTestingKnobs() {}
 
-type tableNameCacheKey struct {
-	dbID                sqlbase.ID
-	schemaID            sqlbase.ID
-	normalizeTabledName string
+// nameCacheKey is a key for the descriptor cache, with the same fields
+// as the system.namespace key: name is the descriptor name; parentID is
+// populated for schemas, descriptors, and types; and parentSchemaID is
+// populated for descriptors and types.
+type nameCacheKey struct {
+	parentID       sqlbase.ID
+	parentSchemaID sqlbase.ID
+	name           string
 }
 
-// tableNameCache is a cache of table name -> latest table version mappings.
+// nameCache is a cache of descriptor name -> latest version mappings.
 // The Manager updates the cache every time a lease is acquired or released
-// from the store. The cache maintains the latest version for each table name.
+// from the store. The cache maintains the latest version for each name.
 // All methods are thread-safe.
-type tableNameCache struct {
-	mu     syncutil.Mutex
-	tables map[tableNameCacheKey]*descriptorVersionState
+type nameCache struct {
+	mu          syncutil.Mutex
+	descriptors map[nameCacheKey]*descriptorVersionState
 }
 
-// Resolves a (database ID, table name) to the table descriptor's ID.
-// Returns a valid descriptorVersionState for the table with that name,
-// if the name had been previously cached and the cache has a table
+// Resolves a (qualified) name to the descriptor's ID.
+// Returns a valid descriptorVersionState for descriptor with that name,
+// if the name had been previously cached and the cache has a descriptor
 // version that has not expired. Returns nil otherwise.
-// This method handles normalizing the table name.
-// The table's refcount is incremented before returning, so the caller
+// This method handles normalizing the descriptor name.
+// The descriptor's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
-func (c *tableNameCache) get(
-	dbID sqlbase.ID, schemaID sqlbase.ID, tableName string, timestamp hlc.Timestamp,
+func (c *nameCache) get(
+	parentID sqlbase.ID, parentSchemaID sqlbase.ID, name string, timestamp hlc.Timestamp,
 ) *descriptorVersionState {
 	c.mu.Lock()
-	table, ok := c.tables[makeTableNameCacheKey(dbID, schemaID, tableName)]
+	desc, ok := c.descriptors[makeNameCacheKey(parentID, parentSchemaID, name)]
 	c.mu.Unlock()
 	if !ok {
 		return nil
 	}
-	table.mu.Lock()
-	if table.mu.lease == nil {
-		table.mu.Unlock()
+	desc.mu.Lock()
+	if desc.mu.lease == nil {
+		desc.mu.Unlock()
 		// This get() raced with a release operation. Remove this cache
 		// entry if needed.
-		c.remove(table)
+		c.remove(desc)
 		return nil
 	}
 
-	defer table.mu.Unlock()
+	defer desc.mu.Unlock()
 
-	if !NameMatchesTable(
-		table.TableDesc(),
-		dbID,
-		schemaID,
-		tableName,
-	) {
+	if !NameMatchesDescriptor(desc, parentID, parentSchemaID, name) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
-			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
-			dbID, tableName, table.GetID(), table.TableDesc().ParentID, table.GetName()))
+			"Cache entry: (%d, %d, %q) -> %d. Lease: (%d, %d, %q).",
+			parentID, parentSchemaID, name,
+			desc.GetID(),
+			desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()),
+		)
 	}
 
-	// Expired table. Don't hand it out.
-	if table.hasExpired(timestamp) {
+	// Expired descriptor. Don't hand it out.
+	if desc.hasExpired(timestamp) {
 		return nil
 	}
 
-	table.incRefcountLocked()
-	return table
+	desc.incRefcountLocked()
+	return desc
 }
 
-func (c *tableNameCache) insert(table *descriptorVersionState) {
+func (c *nameCache) insert(desc *descriptorVersionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := makeTableNameCacheKey(table.TableDesc().ParentID, table.TableDesc().GetParentSchemaID(), table.GetName())
-	existing, ok := c.tables[key]
+	key := makeNameCacheKey(desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName())
+	existing, ok := c.descriptors[key]
 	if !ok {
-		c.tables[key] = table
+		c.descriptors[key] = desc
 		return
 	}
 	// If we already have a lease in the cache for this name, see if this one is
 	// better (higher version or later expiration).
-	if table.GetVersion() > existing.GetVersion() ||
-		(table.GetVersion() == existing.GetVersion() && table.hasValidExpiration(existing)) {
-		// Overwrite the old table. The new one is better. From now on, we want
+	if desc.GetVersion() > existing.GetVersion() ||
+		(desc.GetVersion() == existing.GetVersion() && desc.hasValidExpiration(existing)) {
+		// Overwrite the old lease. The new one is better. From now on, we want
 		// clients to use the new one.
-		c.tables[key] = table
+		c.descriptors[key] = desc
 	}
 }
 
-func (c *tableNameCache) remove(table *descriptorVersionState) {
+func (c *nameCache) remove(desc *descriptorVersionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := makeTableNameCacheKey(table.TableDesc().ParentID, table.TableDesc().GetParentSchemaID(), table.GetName())
-	existing, ok := c.tables[key]
+	key := makeNameCacheKey(desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName())
+	existing, ok := c.descriptors[key]
 	if !ok {
-		// Table for lease not found in table name cache. This can happen if we had
-		// a more recent lease on the table in the tableNameCache, then the table
-		// gets dropped, then the more recent lease is remove()d - which clears the
-		// cache.
+		// Descriptor for lease not found in name cache. This can happen if we had
+		// a more recent lease on the descriptor in the nameCache, then the
+		// descriptor gets dropped, then the more recent lease is remove()d - which
+		// clears the cache.
 		return
 	}
-	// If this was the lease that the cache had for the table name, remove it.
-	// If the cache had some other table, this remove is a no-op.
-	if existing == table {
-		delete(c.tables, key)
+	// If this was the lease that the cache had for the descriptor name, remove
+	// it. If the cache had some other descriptor, this remove is a no-op.
+	if existing == desc {
+		delete(c.descriptors, key)
 	}
 }
 
-func makeTableNameCacheKey(
-	dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
-) tableNameCacheKey {
-	return tableNameCacheKey{dbID, schemaID, tableName}
+func makeNameCacheKey(parentID sqlbase.ID, parentSchemaID sqlbase.ID, name string) nameCacheKey {
+	return nameCacheKey{parentID, parentSchemaID, name}
 }
 
 // Manager manages acquiring and releasing per-table leases. It also
@@ -1435,7 +1435,7 @@ func makeTableNameCacheKey(
 // Exported only for testing.
 //
 // The locking order is:
-// Manager.mu > descriptorState.mu > tableNameCache.mu > descriptorVersionState.mu
+// Manager.mu > descriptorState.mu > nameCache.mu > descriptorVersionState.mu
 type Manager struct {
 	storage storage
 	mu      struct {
@@ -1453,7 +1453,7 @@ type Manager struct {
 	// should only be used if we currently have an active lease on the respective
 	// id; otherwise, the mapping may well be stale.
 	// Not protected by mu.
-	tableNames   tableNameCache
+	tableNames   nameCache
 	testingKnobs ManagerTestingKnobs
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
@@ -1495,8 +1495,8 @@ func NewLeaseManager(
 			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
 		},
 		testingKnobs: testingKnobs,
-		tableNames: tableNameCache{
-			tables: make(map[tableNameCacheKey]*descriptorVersionState),
+		tableNames: nameCache{
+			descriptors: make(map[nameCacheKey]*descriptorVersionState),
 		},
 		ambientCtx: ambientCtx,
 		stopper:    stopper,
@@ -1510,13 +1510,14 @@ func NewLeaseManager(
 	return lm
 }
 
-// NameMatchesTable returns true if the provided name and IDs match this
+// NameMatchesDescriptor returns true if the provided name and IDs match this
 // descriptor.
-func NameMatchesTable(
-	table *sqlbase.TableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
+func NameMatchesDescriptor(
+	desc catalog.Descriptor, parentID sqlbase.ID, parentSchemaID sqlbase.ID, name string,
 ) bool {
-	return table.ParentID == dbID && table.Name == tableName &&
-		table.GetParentSchemaID() == schemaID
+	return desc.GetParentID() == parentID &&
+		desc.GetParentSchemaID() == parentSchemaID &&
+		desc.GetName() == name
 }
 
 // findNewest returns the newest table version state for the tableID.
@@ -1592,7 +1593,7 @@ func (m *Manager) AcquireByName(
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	if !NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
+	if !NameMatchesDescriptor(table, dbID, schemaID, tableName) {
 		// We resolved name `tableName`, but the lease has a different name in it.
 		// That can mean two things. Assume the table is being renamed from A to B.
 		// a) `tableName` is A. The transaction doing the RENAME committed (so the
@@ -1625,7 +1626,7 @@ func (m *Manager) AcquireByName(
 		// resolve the current or the old name.
 		//
 		// TODO(vivek): check if the entire above comment is indeed true. Review the
-		// use of NameMatchesTable() throughout this function.
+		// use of NameMatchesDescriptor() throughout this function.
 		if err := m.Release(table); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
@@ -1636,7 +1637,7 @@ func (m *Manager) AcquireByName(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		if !NameMatchesTable(&table.TableDescriptor, dbID, schemaID, tableName) {
+		if !NameMatchesDescriptor(table, dbID, schemaID, tableName) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(table); err != nil {
@@ -1754,10 +1755,10 @@ func (m *Manager) Release(desc *sqlbase.ImmutableTableDescriptor) error {
 	if t == nil {
 		return errors.Errorf("table %d not found", desc.ID)
 	}
-	// TODO(pmattis): Can/should we delete from Manager.tables if the
+	// TODO(pmattis): Can/should we delete from Manager.descriptors if the
 	// descriptorState becomes empty?
-	// TODO(andrei): I think we never delete from Manager.tables... which
-	// could be bad if a lot of tables keep being created. I looked into cleaning
+	// TODO(andrei): I think we never delete from Manager.descriptors... which
+	// could be bad if a lot of descriptors keep being created. I looked into cleaning
 	// up a bit, but it seems tricky to do with the current locking which is split
 	// between Manager and descriptorState.
 	l, err := t.release(desc, m.removeOnceDereferenced())
@@ -1824,7 +1825,7 @@ func (m *Manager) findTableState(tableID sqlbase.ID, create bool) *descriptorSta
 }
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
-// leases for tables received in the latest system configuration via gossip or
+// leases for descriptors received in the latest system configuration via gossip or
 // rangefeeds. This function must be passed a non-nil gossip if
 // VersionRangefeedLeases is not active.
 func (m *Manager) RefreshLeases(
@@ -1844,8 +1845,8 @@ func (m *Manager) refreshLeases(
 		for {
 			select {
 			case table := <-tableUpdateCh:
-				// NB: We allow nil tables to be sent to synchronize the updating of
-				// tables.
+				// NB: We allow nil descriptors to be sent to synchronize the updating of
+				// descriptors.
 				if table == nil {
 					continue
 				}
@@ -2061,7 +2062,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 	tableUpdateChan chan<- *sqlbase.TableDescriptor,
 ) {
 	cfg := rawG.GetSystemConfig()
-	// Read all tables and their versions
+	// Read all descriptors and their versions
 	if log.V(2) {
 		log.Info(ctx, "received a new config; will refresh leases")
 	}
@@ -2173,7 +2174,7 @@ func (m *Manager) getResolvedTimestamp() hlc.Timestamp {
 // that will continuously have their lease refreshed.
 var tableLeaseRefreshLimit = settings.RegisterIntSetting(
 	"sql.tablecache.lease.refresh_limit",
-	"maximum number of tables to periodically refresh leases for",
+	"maximum number of descriptors to periodically refresh leases for",
 	50,
 )
 
@@ -2209,7 +2210,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 	if limit <= 0 {
 		return
 	}
-	// Construct a list of tables needing their leases to be reacquired.
+	// Construct a list of descriptors needing their leases to be reacquired.
 	m.mu.Lock()
 	ids := make([]sqlbase.ID, 0, len(m.mu.tables))
 	var i int64
