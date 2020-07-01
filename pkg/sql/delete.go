@@ -183,7 +183,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	colIdx := 0
 	indexes := d.run.td.tableDesc().Indexes
 	for i := range indexes {
-		index := indexes[i]
+		index := &indexes[i]
 		if index.IsPartial() {
 			val, err := tree.GetBool(partialIndexDelVals[colIdx])
 			if err != nil {
@@ -193,7 +193,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			if !val {
 				// If the value of the column for the index predicate expression
 				// is false, the row should not be removed from the partial
-				// index.
+				// index because it does not exist.
 				ignoreIndexes.Add(int(index.ID))
 			}
 
