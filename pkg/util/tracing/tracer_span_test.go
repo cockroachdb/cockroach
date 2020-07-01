@@ -91,3 +91,34 @@ event:root 5
 `
 	require.Equal(t, exp, stripped)
 }
+
+func TestRecordingInRecording(t *testing.T) {
+	tr := NewTracer()
+
+	root := tr.StartSpan("root", Recordable)
+	StartRecording(root, SnowballRecording)
+	child := tr.StartSpan("child", opentracing.ChildOf(root.Context()), Recordable)
+	StartRecording(child, SnowballRecording)
+	grandChild := tr.StartSpan("grandchild", opentracing.ChildOf(child.Context()))
+	grandChild.Finish()
+	child.Finish()
+	root.Finish()
+
+	rootRec := GetRecording(root)
+	require.NoError(t, TestingCheckRecordedSpans(rootRec, `
+span root:
+	tags: sb=1
+span child:
+	tags: sb=1
+span grandchild:
+	tags: sb=1
+`))
+
+	childRec := GetRecording(child)
+	require.NoError(t, TestingCheckRecordedSpans(childRec, `
+span child:
+	tags: sb=1
+span grandchild:
+	tags: sb=1
+`))
+}
