@@ -435,9 +435,7 @@ func (m *Manager) PublishMultiple(
 						descsToUpdate[id].Version, versions[id])
 				}
 
-				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn, m.storage.settings); err != nil {
-					return err
-				}
+				descsToUpdate[id].MaybeIncrementVersion()
 				if err := descsToUpdate[id].ValidateTable(); err != nil {
 					return err
 				}

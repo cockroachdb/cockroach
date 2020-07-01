@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -168,6 +169,23 @@ func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
 // TypeName implements the DescriptorProto interface.
 func (desc *TypeDescriptor) TypeName() string {
 	return "type"
+}
+
+// MaybeIncrementVersion implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) MaybeIncrementVersion() {
+	// Already incremented, no-op.
+	if desc.Version == desc.ClusterVersion.Version+1 {
+		return
+	}
+	desc.Version++
+	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// Immutable implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) Immutable() DescriptorInterface {
+	// TODO (lucy): Should the immutable descriptor constructors always make a
+	// copy, so we don't have to do it here?
+	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*TypeDescriptor))
 }
 
 // MakeTypesT creates a types.T from the input type descriptor.
