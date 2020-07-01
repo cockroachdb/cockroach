@@ -1003,7 +1003,7 @@ func TestHashJoiner(t *testing.T) {
 				for _, tc := range tc.mutateTypes() {
 					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
 						spec := createSpecForHashJoiner(tc)
-						args := NewColOperatorArgs{
+						args := &NewColOperatorArgs{
 							Spec:                spec,
 							Inputs:              sources,
 							StreamingMemAccount: testMemAcc,
@@ -1184,7 +1184,7 @@ func TestHashJoinerProjection(t *testing.T) {
 
 	leftSource := newOpTestInput(1, leftTuples, leftTypes)
 	rightSource := newOpTestInput(1, rightTuples, rightTypes)
-	args := NewColOperatorArgs{
+	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              []colexecbase.Operator{leftSource, rightSource},
 		StreamingMemAccount: testMemAcc,

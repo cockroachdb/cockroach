@@ -159,6 +159,8 @@ func buildStatementBundle(
 	b.addStatement()
 	b.addOptPlans()
 	b.addExecPlan()
+	// TODO(yuzefovich): consider adding some variant of EXPLAIN (VEC) output
+	// of the query to the bundle.
 	b.addDistSQLDiagrams()
 	traceJSON := b.addTrace()
 	b.addEnv(ctx)
