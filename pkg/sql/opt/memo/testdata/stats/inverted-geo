@@ -1,0 +1,167 @@
+exec-ddl
+CREATE TABLE t (i int PRIMARY KEY, g GEOMETRY, INVERTED INDEX (g))
+----
+
+# Histogram boundaries are from a `POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0,
+# 0.0 1.0, 0.0 0.0))` row.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 7000,
+    "distinct_count": 7,
+    "null_count": 0,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[{
+      "num_eq":1000,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\xfd0555555555555555"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd0fffffff00000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd1000000100000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd1aaaaaab00000000"
+    }]
+  }
+]'
+----
+
+# Selecting from within the polygon means the histogram will estimate
+# many rows returned, thus making a search on the PK favorable.
+memo
+SELECT * FROM t WHERE ST_INTERSECTS('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
+ ├── G1: (limit G2 G3 ordering=+1)
+ │    └── [presentation: i:1,g:2]
+ │         ├── best: (limit G2="[ordering: +1] [limit hint: 1.00]" G3 ordering=+1)
+ │         └── cost: 776.30
+ ├── G2: (select G4 G5) (select G6 G5)
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (select G4="[ordering: +1] [limit hint: 3.00]" G5)
+ │    │    └── cost: 776.28
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 8050.04
+ ├── G3: (const 1)
+ ├── G4: (scan t)
+ │    ├── [ordering: +1] [limit hint: 3.00]
+ │    │    ├── best: (scan t)
+ │    │    └── cost: 6.26
+ │    └── []
+ │         ├── best: (scan t)
+ │         └── cost: 7280.02
+ ├── G5: (filters G7)
+ ├── G6: (index-join G8 t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 1.29]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 16053.08
+ │    └── []
+ │         ├── best: (index-join G8 t,cols=(1,2))
+ │         └── cost: 15300.03
+ ├── G7: (function G9 st_intersects)
+ ├── G8: (inverted-filter G10 &{span expression
+ │    ├── tight: false
+ │    ├── to read
+ │    │    ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │    │    ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+ │    │    └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │    └── union spans
+ │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+ │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │    2})
+ │    ├── [ordering: +1] [limit hint: 1.29]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 3903.07
+ │    └── []
+ │         ├── best: (inverted-filter G10 &{span expression
+ │         │    ├── tight: false
+ │         │    ├── to read
+ │         │    │    ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │    │    ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+ │         │    │    └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         │    └── union spans
+ │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+ │         │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         │    2})
+ │         └── cost: 3150.02
+ ├── G9: (scalar-list G11 G12)
+ ├── G10: (scan t@secondary)
+ │    └── []
+ │         ├── best: (scan t@secondary)
+ │         └── cost: 3120.01
+ ├── G11: (const '010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F')
+ └── G12: (variable g)
+
+# Selecting from outside the polygon means the histogram will estimate few rows returned, thus making a search of the inverted index favorable.
+memo
+SELECT * FROM t WHERE ST_INTERSECTS('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
+ ├── G1: (limit G2 G3 ordering=+1)
+ │    └── [presentation: i:1,g:2]
+ │         ├── best: (limit G2="[ordering: +1] [limit hint: 1.00]" G3 ordering=+1)
+ │         └── cost: 0.08
+ ├── G2: (select G4 G5) (select G6 G5)
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (select G6="[ordering: +1] [limit hint: 0.00]" G5)
+ │    │    └── cost: 0.06
+ │    └── []
+ │         ├── best: (select G6 G5)
+ │         └── cost: 0.05
+ ├── G3: (const 1)
+ ├── G4: (scan t)
+ │    ├── [ordering: +1] [limit hint: 3.00]
+ │    │    ├── best: (scan t)
+ │    │    └── cost: 6.26
+ │    └── []
+ │         ├── best: (scan t)
+ │         └── cost: 7280.02
+ ├── G5: (filters G7)
+ ├── G6: (index-join G8 t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 0.00]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 0.04
+ │    └── []
+ │         ├── best: (index-join G8 t,cols=(1,2))
+ │         └── cost: 0.03
+ ├── G7: (function G9 st_intersects)
+ ├── G8: (inverted-filter G10 &{span expression
+ │    ├── tight: false
+ │    ├── to read: ["\x87\xff", "\x87\xff"]
+ │    └── union spans: ["\x87\xff", "\x87\xff"]
+ │    2})
+ │    ├── [ordering: +1] [limit hint: 0.00]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 0.03
+ │    └── []
+ │         ├── best: (inverted-filter G10 &{span expression
+ │         │    ├── tight: false
+ │         │    ├── to read: ["\x87\xff", "\x87\xff"]
+ │         │    └── union spans: ["\x87\xff", "\x87\xff"]
+ │         │    2})
+ │         └── cost: 0.02
+ ├── G9: (scalar-list G11 G12)
+ ├── G10: (scan t@secondary)
+ │    └── []
+ │         ├── best: (scan t@secondary)
+ │         └── cost: 0.01
+ ├── G11: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
+ └── G12: (variable g)
