@@ -102,9 +102,9 @@ func (w *LeaseRemovalTracker) LeaseRemovedNotification(
 func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	past := clock.Now().GoTime().Add(-time.Millisecond)
 
-	m.tableNames.mu.Lock()
-	for _, table := range m.tableNames.descriptors {
+	m.names.mu.Lock()
+	for _, table := range m.names.descriptors {
 		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
-	m.tableNames.mu.Unlock()
+	m.names.mu.Unlock()
 }
