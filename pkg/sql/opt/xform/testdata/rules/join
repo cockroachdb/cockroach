@@ -1195,6 +1195,58 @@ memo (optimized, ~7KB, required=[presentation: a:4,b:5,n:2,m:1])
  ├── G6: (variable a)
  └── G7: (variable m)
 
+# Lookup semi-join with index that contains all columns in the join condition.
+opt
+SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a)
+----
+semi-join (lookup abcd@secondary)
+ ├── columns: m:1(int) n:2(int)
+ ├── key columns: [1] = [4]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters (true)
+
+# We should not generate a lookup semi-join when the index doesn't contain all
+# columns in the join condition.
+opt
+SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
+----
+semi-join (hash)
+ ├── columns: m:1(int) n:2(int)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ ├── scan abcd
+ │    └── columns: a:4(int) c:6(int)
+ └── filters
+      ├── m = a [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── n = c [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
+# Lookup anti-join with index that contains all columns in the join condition.
+opt
+SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a)
+----
+anti-join (lookup abcd@secondary)
+ ├── columns: m:1(int) n:2(int)
+ ├── key columns: [1] = [4]
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ └── filters (true)
+
+# We should not generate a lookup anti-join when the index doesn't contain all
+# columns in the join condition.
+opt
+SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
+----
+anti-join (hash)
+ ├── columns: m:1(int) n:2(int)
+ ├── scan small
+ │    └── columns: m:1(int) n:2(int)
+ ├── scan abcd
+ │    └── columns: a:4(int) c:6(int)
+ └── filters
+      ├── m = a [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+      └── n = c [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter
 # --------------------------------------------------

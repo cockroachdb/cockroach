@@ -1232,8 +1232,20 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			continue
 		}
 
-		// Case 2 (see function comment).
+		// All code that follows is for case 2 (see function comment).
+
 		if scanPrivate.Flags.NoIndexJoin {
+			continue
+		}
+		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
+			// We cannot use a non-covering index for semi and anti join. Note that
+			// since the semi/anti join doesn't pass through any columns, "non
+			// covering" here means that not all columns in the ON condition are
+			// available.
+			//
+			// TODO(radu): We could create a semi/anti join on top of an inner join if
+			// the lookup columns form a key (to guarantee that input rows are not
+			// duplicated by the inner join).
 			continue
 		}
 
