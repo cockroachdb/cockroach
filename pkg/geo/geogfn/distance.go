@@ -21,6 +21,12 @@ import (
 	"github.com/golang/geo/s2"
 )
 
+// SpheroidErrorFraction is an error fraction to compensate for using a sphere
+// to calculate the distance for what is actually a spheroid. The distance
+// calculation has an error that is bounded by (2 * spheroid.Flattening)%.
+// This 5% margin is pretty safe.
+const SpheroidErrorFraction = 0.05
+
 // Distance returns the distance between geographies a and b on a sphere or spheroid.
 // Returns a geo.EmptyGeometryError if any of the Geographies are EMPTY.
 func Distance(
@@ -216,12 +222,6 @@ func distanceGeographyRegions(
 	}
 	return minDistance, nil
 }
-
-// SpheroidErrorFraction is an error fraction to compensate for using a sphere
-// to calculate the distance for what is actually a spheroid. The distance
-// calculation has an error that is bounded by (2 * spheroid.Flattening)%.
-// This 5% margin is pretty safe.
-const SpheroidErrorFraction = 0.05
 
 // geographyMinDistanceUpdater finds the minimum distance using a sphere.
 // Methods will return early if it finds a minimum distance <= stopAfterLE.
