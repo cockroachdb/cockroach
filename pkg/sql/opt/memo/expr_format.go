@@ -1257,6 +1257,10 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tab.Name())
 
+	case *InvertedFilterPrivate:
+		col := f.Memo.metadata.ColumnMeta(t.InvertedColumn)
+		fmt.Fprintf(f.Buffer, " %s", col.Alias)
+
 	case *LookupJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
 		if t.Index == cat.PrimaryIndex {
