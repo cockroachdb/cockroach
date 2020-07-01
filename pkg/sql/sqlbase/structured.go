@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1691,31 +1690,14 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 	}
 }
 
-// MaybeIncrementVersion increments the version of a descriptor if necessary.
-func (desc *MutableTableDescriptor) MaybeIncrementVersion(
-	ctx context.Context, txn *kv.Txn, settings *cluster.Settings,
-) error {
+// MaybeIncrementVersion implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
 	if desc.Version == desc.ClusterVersion.Version+1 {
-		return nil
+		return
 	}
 	desc.Version++
-
-	// Before 19.2 we needed to observe the transaction CommitTimestamp to ensure
-	// that ModificationTime reflected the timestamp at which the transaction
-	// committed. Starting in 19.2 we use a zero-valued ModificationTime when
-	// incrementing the version and then upon reading use the MVCC timestamp to
-	// populate the ModificationTime.
-	//
-	// TODO(ajwerner): remove this check in 20.1.
-	var modTime hlc.Timestamp
-	if !settings.Version.IsActive(ctx, clusterversion.VersionTableDescModificationTimeFromMVCC) {
-		modTime = txn.CommitTimestamp()
-	}
-	desc.ModificationTime = modTime
-	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-		desc.ID, desc.Name, desc.Version, modTime.GoTime())
-	return nil
+	desc.ModificationTime = hlc.Timestamp{}
 }
 
 // Validate validates that the table descriptor is well formed. Checks include
