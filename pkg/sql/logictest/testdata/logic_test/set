@@ -350,3 +350,8 @@ SET enable_zigzag_join = no
 # Check error code.
 statement error pgcode 22023 parameter "enable_zigzag_join" requires a Boolean value
 SET enable_zigzag_join = nonsense
+
+statement ok
+SET experimental_distsql_planning = always;
+SET experimental_distsql_planning = on;
+SET experimental_distsql_planning = off
