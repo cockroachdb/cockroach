@@ -883,11 +883,10 @@ func (s *adminServer) Events(
 	if err != nil {
 		return nil, err
 	}
-	redactEvents := false
-	if isAdmin {
-		// We obey the redacted bit only if the user is admin.
-		redactEvents = !req.UnredactedEvents
+	if !isAdmin {
+		return nil, errInsufficientPrivilege
 	}
+	redactEvents := !req.UnredactedEvents
 
 	limit := req.Limit
 	if limit == 0 {
@@ -1494,12 +1493,13 @@ func (s *adminServer) Locations(
 	ctx context.Context, req *serverpb.LocationsRequest,
 ) (*serverpb.LocationsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-
-	userName, err := userFromContext(ctx)
+	userName, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, err
 	}
-
+	if !isAdmin {
+		return nil, errInsufficientPrivilege
+	}
 	q := makeSQLQuery()
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
