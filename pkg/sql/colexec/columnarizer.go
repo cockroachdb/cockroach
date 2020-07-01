@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Columnarizer turns an execinfra.RowSource input into an Operator output, by
@@ -31,12 +30,6 @@ import (
 type Columnarizer struct {
 	execinfra.ProcessorBase
 	NonExplainable
-
-	// mu is used to protect against concurrent DrainMeta and Next calls, which
-	// are currently allowed.
-	// TODO(asubiotto): Explore calling DrainMeta from the same goroutine as Next,
-	//  which will simplify this model.
-	mu syncutil.Mutex
 
 	allocator  *colmem.Allocator
 	input      execinfra.RowSource
@@ -101,8 +94,6 @@ func (c *Columnarizer) Init() {
 
 // Next is part of the Operator interface.
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
 	nRows := 0
@@ -146,8 +137,6 @@ var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
 func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.MoveToDraining(nil /* err */)
 	for {
 		meta := c.DrainHelper()
