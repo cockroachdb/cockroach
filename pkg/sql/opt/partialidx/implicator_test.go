@@ -101,14 +101,14 @@ func TestImplicator(t *testing.T) {
 			}
 
 			// Build the predicate from the second split, everything after "=>".
-			pred, err := makeScalarExpr(splitInput[1], &semaCtx, &evalCtx, &f)
+			pred, err := makeFiltersItem(splitInput[1], &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
 
 			im := partialidx.Implicator{}
 			im.Init(&f, md, &evalCtx)
-			remainingFilters, ok := im.FiltersImplyPredicate(filters, pred)
+			remainingFilters, ok := im.FiltersImplyPredicate(filters, &pred)
 			if !ok {
 				return "false"
 			}
@@ -266,7 +266,7 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		// Build the predicate.
-		pred, err := makeScalarExpr(tc.pred, &semaCtx, &evalCtx, &f)
+		pred, err := makeFiltersItem(tc.pred, &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}
@@ -280,7 +280,7 @@ func BenchmarkImplicator(b *testing.B) {
 				if i%10 == 0 {
 					im.Init(&f, md, &evalCtx)
 				}
-				_, _ = im.FiltersImplyPredicate(filters, pred)
+				_, _ = im.FiltersImplyPredicate(filters, &pred)
 			}
 		})
 	}
@@ -290,12 +290,12 @@ func BenchmarkImplicator(b *testing.B) {
 func makeFiltersExpr(
 	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
-	scalar, err := makeScalarExpr(input, semaCtx, evalCtx, f)
+	filter, err := makeFiltersItem(input, semaCtx, evalCtx, f)
 	if err != nil {
 		return nil, err
 	}
 
-	filters := memo.FiltersExpr{f.ConstructFiltersItem(scalar)}
+	filters := memo.FiltersExpr{filter}
 
 	// Run SimplifyFilters so that adjacent top-level AND expressions are
 	// flattened into individual FiltersItems, like they would be during
@@ -308,20 +308,20 @@ func makeFiltersExpr(
 	return f.CustomFuncs().ConsolidateFilters(filters), nil
 }
 
-// makeScalarExpr returns a ScalarExpr generated from the input string.
-func makeScalarExpr(
+// makeFiltersItem returns a FiltersItem generated from the input string.
+func makeFiltersItem(
 	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
-) (opt.ScalarExpr, error) {
+) (memo.FiltersItem, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
-		return nil, err
+		return memo.FiltersItem{}, err
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
 	if err := b.Build(expr); err != nil {
-		return nil, err
+		return memo.FiltersItem{}, err
 	}
 
 	root := f.Memo().RootExpr().(opt.ScalarExpr)
-	return root, nil
+	return f.ConstructFiltersItem(root), nil
 }

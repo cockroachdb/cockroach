@@ -152,8 +152,10 @@ func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.Eval
 // proven, nil and false are returned. See Implicator for more details on how
 // implication is proven and how the remaining filters are determined.
 func (im *Implicator) FiltersImplyPredicate(
-	filters memo.FiltersExpr, pred opt.ScalarExpr,
+	filters memo.FiltersExpr, predicate *memo.FiltersItem,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
+	pred := predicate.Condition
+
 	// Empty filters are equivalent to True, which only implies True.
 	if len(filters) == 0 && pred == memo.TrueSingleton {
 		return filters, true
