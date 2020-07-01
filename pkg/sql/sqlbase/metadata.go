@@ -148,7 +148,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			// Initializing a database. Databases must be initialized with
 			// the public schema, as all tables are scoped under the public schema.
 			publicSchemaValue := roachpb.Value{}
-			publicSchemaValue.SetInt(int64(keys.PublicSchemaID))
+			publicSchemaValue.SetInt(int64(PublicSchemaID))
 			ret = append(
 				ret,
 				roachpb.KeyValue{

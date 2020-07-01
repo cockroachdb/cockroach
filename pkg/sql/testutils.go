@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +46,7 @@ func CreateTestTableDescriptor(
 			nil, /* vs */
 			st,
 			n,
-			parentID, keys.PublicSchemaID, id,
+			parentID, sqlbase.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			nil, /* affected */
@@ -61,7 +60,7 @@ func CreateTestTableDescriptor(
 		desc, err := MakeSequenceTableDesc(
 			n.Name.Table(),
 			n.Options,
-			parentID, keys.PublicSchemaID, id,
+			parentID, sqlbase.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			false, /* temporary */

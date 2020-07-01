@@ -130,7 +130,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	desc := sqlbase.InitTableDescriptor(
 		sqlbase.ID(idCounter),
 		dbID,
-		keys.PublicSchemaID,
+		sqlbase.PublicSchemaID,
 		"rel",
 		hlc.Timestamp{},
 		&sqlbase.PrivilegeDescriptor{},

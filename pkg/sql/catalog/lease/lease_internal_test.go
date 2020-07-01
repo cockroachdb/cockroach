@@ -274,7 +274,7 @@ CREATE TEMP TABLE t2 (temp int);
 		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
 		lease := leaseManager.tableNames.get(
 			tableDesc.ParentID,
-			sqlbase.ID(keys.PublicSchemaID),
+			sqlbase.ID(sqlbase.PublicSchemaID),
 			tableName,
 			s.Clock().Now(),
 		)

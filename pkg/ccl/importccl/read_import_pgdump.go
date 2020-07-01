@@ -240,7 +240,7 @@ func readPostgresCreateTable(
 					name,
 					seq.Options,
 					parentID,
-					keys.PublicSchemaID,
+					sqlbase.PublicSchemaID,
 					id,
 					hlc.Timestamp{WallTime: walltime},
 					sqlbase.NewDefaultPrivilegeDescriptor(),

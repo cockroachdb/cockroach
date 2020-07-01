@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -90,7 +89,7 @@ func (p *planner) createDatabase(
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
-		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
+		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), sqlbase.PublicSchemaID); err != nil {
 			return nil, true, err
 		}
 	}

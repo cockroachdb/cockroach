@@ -943,7 +943,7 @@ func (m *Manager) migrateSystemNamespace(
 					// Also create a 'public' schema for this database.
 					schemaKey := sqlbase.NewSchemaKey(id, "public")
 					log.VEventf(ctx, 2, "Migrating system.namespace entry for database %s", name)
-					if err := txn.Put(ctx, schemaKey.Key(r.codec), keys.PublicSchemaID); err != nil {
+					if err := txn.Put(ctx, schemaKey.Key(r.codec), sqlbase.PublicSchemaID); err != nil {
 						return err
 					}
 				} else {
@@ -955,7 +955,7 @@ func (m *Manager) migrateSystemNamespace(
 						// deprecated ID.
 						continue
 					}
-					tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
+					tableKey := sqlbase.NewTableKey(parentID, sqlbase.PublicSchemaID, name)
 					log.VEventf(ctx, 2, "Migrating system.namespace entry for table %s", name)
 					if err := txn.Put(ctx, tableKey.Key(r.codec), id); err != nil {
 						return err

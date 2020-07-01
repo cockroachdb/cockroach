@@ -338,7 +338,7 @@ func allocateDescriptorRewrites(
 				// This would fail the CPut later anyway, but this yields a prettier error.
 				// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
 				//  support user defined schemas.
-				if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, table.Name); err != nil {
+				if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, sqlbase.PublicSchemaID, table.Name); err != nil {
 					return err
 				}
 
@@ -405,7 +405,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing type with the same name.
-				found, id, err := sqlbase.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, typ.Name)
+				found, id, err := sqlbase.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, sqlbase.PublicSchemaID, typ.Name)
 				if err != nil {
 					return err
 				}
@@ -423,7 +423,7 @@ func allocateDescriptorRewrites(
 
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
-					if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, arrTyp.Name); err != nil {
+					if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, sqlbase.PublicSchemaID, arrTyp.Name); err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}
 					// Create the rewrite entry for the array type as well.

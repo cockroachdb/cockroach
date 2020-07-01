@@ -367,7 +367,11 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29 // pseudo
+
+	// PublicSchemaID is a constant ID used to indicate the public schema. No
+	// descriptor is actually stored with this ID.
+	PublicSchemaID = 29 // pseudo
+
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID                    = 30
@@ -405,7 +409,6 @@ var PseudoTableIDs = []uint32{
 	SystemRangesID,
 	TimeseriesRangesID,
 	LivenessRangesID,
-	PublicSchemaID,
 	TenantsRangesID,
 }
 

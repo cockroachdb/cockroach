@@ -65,7 +65,7 @@ func ResolveSchemaID(
 	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
 	// checking for public schema.
 	if scName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
+		return true, sqlbase.PublicSchemaID, nil
 	}
 
 	sKey := sqlbase.NewSchemaKey(dbID, scName)

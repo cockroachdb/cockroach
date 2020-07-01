@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -408,7 +407,7 @@ func mysqlTableToCockroach(
 				seqName,
 				opts,
 				parentID,
-				keys.PublicSchemaID,
+				sqlbase.PublicSchemaID,
 				id,
 				time,
 				priv,
@@ -420,7 +419,7 @@ func mysqlTableToCockroach(
 				seqName,
 				opts,
 				parentID,
-				keys.PublicSchemaID,
+				sqlbase.PublicSchemaID,
 				id,
 				time,
 				priv,

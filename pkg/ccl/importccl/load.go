@@ -210,7 +210,7 @@ func Load(
 			var txn *kv.Txn
 			// At this point the CREATE statements in the loaded SQL do not
 			// use the SERIAL type so we need not process SERIAL types here.
-			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.GetID(), keys.PublicSchemaID,
+			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.GetID(), sqlbase.PublicSchemaID,
 				0 /* table ID */, ts, privs, affected, nil, evalCtx, evalCtx.SessionData, false /* temporary */)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make table desc")

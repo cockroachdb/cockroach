@@ -722,7 +722,7 @@ func (desc *TableDescriptor) IsVirtualTable() bool {
 func (desc *TableDescriptor) GetParentSchemaID() ID {
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
 	if parentSchemaID == InvalidID {
-		parentSchemaID = keys.PublicSchemaID
+		parentSchemaID = PublicSchemaID
 	}
 	return parentSchemaID
 }
@@ -4444,7 +4444,7 @@ type TableKey struct {
 
 // NewPublicTableKey returns a new TableKey scoped under the public schema.
 func NewPublicTableKey(parentID ID, name string) TableKey {
-	return TableKey{parentID: parentID, parentSchemaID: keys.PublicSchemaID, name: name}
+	return TableKey{parentID: parentID, parentSchemaID: PublicSchemaID, name: name}
 }
 
 // NewTableKey returns a new TableKey

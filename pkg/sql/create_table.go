@@ -158,7 +158,7 @@ func getTableCreateParams(
 	params runParams, dbID sqlbase.ID, isTemporary bool, tableName string,
 ) (sqlbase.DescriptorKey, sqlbase.ID, error) {
 	// By default, all tables are created in the `public` schema.
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
+	schemaID := sqlbase.ID(sqlbase.PublicSchemaID)
 	tKey := sqlbase.MakePublicTableNameKey(params.ctx,
 		params.ExecCfg().Settings, dbID, tableName)
 	if isTemporary {

@@ -80,7 +80,7 @@ func getCreateTypeParams(
 	// TODO (rohany): This should be named object key.
 	typeKey := sqlbase.MakePublicTableNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), name.Type())
 	// As of now, we can only create types in the public schema.
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
+	schemaID := sqlbase.ID(sqlbase.PublicSchemaID)
 	exists, collided, err := sqlbase.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())
 	if err == nil && exists {
@@ -117,7 +117,7 @@ func (p *planner) createArrayType(
 	// Postgres starts off trying to create the type as _<typename>. It then
 	// continues adding "_" to the front of the name until it doesn't find
 	// a collision.
-	schemaID := sqlbase.ID(keys.PublicSchemaID)
+	schemaID := sqlbase.ID(sqlbase.PublicSchemaID)
 	arrayTypeName := "_" + typ.Type()
 	var arrayTypeKey sqlbase.DescriptorKey
 	for {
@@ -170,7 +170,7 @@ func (p *planner) createArrayType(
 		Name:           arrayTypeName,
 		ID:             id,
 		ParentID:       db.GetID(),
-		ParentSchemaID: keys.PublicSchemaID,
+		ParentSchemaID: sqlbase.PublicSchemaID,
 		Kind:           sqlbase.TypeDescriptor_ALIAS,
 		Alias:          types.MakeArray(elemTyp),
 	})
@@ -244,7 +244,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		Name:           typeName.Type(),
 		ID:             id,
 		ParentID:       db.GetID(),
-		ParentSchemaID: keys.PublicSchemaID,
+		ParentSchemaID: sqlbase.PublicSchemaID,
 		Kind:           sqlbase.TypeDescriptor_ENUM,
 		EnumMembers:    members,
 	})

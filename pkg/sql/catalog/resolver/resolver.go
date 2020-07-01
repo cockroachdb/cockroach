@@ -242,7 +242,7 @@ var requiredTypeNames = [...]string{
 }
 
 var staticSchemaIDMap = map[sqlbase.ID]string{
-	keys.PublicSchemaID:         tree.PublicSchema,
+	sqlbase.PublicSchemaID:      tree.PublicSchema,
 	sqlbase.PgCatalogID:         sessiondata.PgCatalogName,
 	sqlbase.InformationSchemaID: sessiondata.InformationSchemaName,
 	sqlbase.CrdbInternalID:      sessiondata.CRDBInternalSchemaName,
@@ -345,7 +345,7 @@ func GetForDatabase(
 	// TODO(solon): This can be removed in 20.2, when this is always written.
 	// In 20.1, in a migrating state, it may be not included yet.
 	ret := make(map[sqlbase.ID]string, len(kvs)+1)
-	ret[sqlbase.ID(keys.PublicSchemaID)] = tree.PublicSchema
+	ret[sqlbase.ID(sqlbase.PublicSchemaID)] = tree.PublicSchema
 
 	for _, kv := range kvs {
 		id := sqlbase.ID(kv.ValueInt())

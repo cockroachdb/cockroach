@@ -862,7 +862,7 @@ func prepareNewTableDescsForIngestion(
 	for _, i := range importTables {
 		// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
 		//  support user defined schemas.
-		if err := backupccl.CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, i.Desc.Name); err != nil {
+		if err := backupccl.CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, sqlbase.PublicSchemaID, i.Desc.Name); err != nil {
 			return nil, err
 		}
 		tableDescs = append(tableDescs, i.Desc)

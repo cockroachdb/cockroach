@@ -77,7 +77,7 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.SystemRangesID,
 		keys.TimeseriesRangesID,
 		keys.LivenessRangesID,
-		keys.PublicSchemaID,
+		sqlbase.PublicSchemaID,
 		keys.TenantsRangesID,
 	}))
 }

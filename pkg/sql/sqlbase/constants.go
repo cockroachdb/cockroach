@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
@@ -45,6 +46,10 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 // RepotableAppNamePrefix; in particular the application name with
 // DelegatedAppNamePrefix should be scrubbed in reporting.
 const DelegatedAppNamePrefix = "$$ "
+
+// PublicSchemaID is a constant descriptor ID used to refer to the public schema
+// in all databases.
+const PublicSchemaID = keys.PublicSchemaID // pseudo
 
 // Oid for virtual database and table.
 const (
