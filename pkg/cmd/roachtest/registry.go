@@ -60,6 +60,7 @@ func registerTests(r *testRegistry) {
 	registerLibPQ(r)
 	registerNamespaceUpgrade(r)
 	registerNetwork(r)
+	registerPebble(r)
 	registerPgjdbc(r)
 	registerPgx(r)
 	registerPsycopg(r)
