@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -819,7 +820,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 								}
 							}
 						},
-						LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+						LeaseAcquiredEvent: func(_ catalog.Descriptor, _ error) {
 							atomic.AddInt32(&leasesAcquiredCount, 1)
 							<-acquisitionBlock
 						},
