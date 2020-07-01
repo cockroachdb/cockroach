@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -697,8 +698,8 @@ func TestSubqueryLeases(t *testing.T) {
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.Name == "foo" {
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetName() == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
@@ -774,8 +775,8 @@ func TestAsOfSystemTimeUsesCache(t *testing.T) {
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.Name == "foo" {
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetName() == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
@@ -829,8 +830,8 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				// Set this so we observe a release event from the cache
 				// when the API releases the descriptor.
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.Name == "foo" {
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetName() == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
@@ -1126,10 +1127,10 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.Name == "kv" {
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetName() == "kv" {
 						var err error
-						if table.Version != 2 {
+						if desc.GetVersion() != 2 {
 							err = errors.Errorf("not seeing latest version")
 						}
 						errChan <- err
@@ -1266,8 +1267,8 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.ID > keys.MaxReservedDescID {
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetID() > keys.MaxReservedDescID {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
@@ -1711,8 +1712,8 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
-					if table.ID > keys.MaxReservedDescID {
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetID() > keys.MaxReservedDescID {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
@@ -2290,11 +2291,11 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 			return nil
 		},
 		LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-			LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, err error) {
+			LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
 				// Block the lease acquisition for the table after the leasing
 				// transaction has been issued. We'll wait to unblock it until after
 				// the new version has been published and that even has been received.
-				if table.ID != interestingTable.Load().(sqlbase.ID) {
+				if desc.GetID() != interestingTable.Load().(sqlbase.ID) {
 					return
 				}
 				blocked := make(chan struct{})
