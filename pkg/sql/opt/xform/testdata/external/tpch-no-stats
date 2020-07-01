@@ -1750,42 +1750,44 @@ sort
       ├── grouping columns: p_brand:9!null p_type:10!null p_size:11!null
       ├── key: (9-11)
       ├── fd: (9-11)-->(22)
-      ├── inner-join (lookup part)
-      │    ├── columns: ps_partkey:1!null ps_suppkey:2!null p_partkey:6!null p_brand:9!null p_type:10!null p_size:11!null
-      │    ├── key columns: [1] = [6]
-      │    ├── lookup columns are key
-      │    ├── key: (2,6)
-      │    ├── fd: (6)-->(9-11), (1)==(6), (6)==(1)
-      │    ├── anti-join (merge)
-      │    │    ├── columns: ps_partkey:1!null ps_suppkey:2!null
-      │    │    ├── left ordering: +2
-      │    │    ├── right ordering: +15
-      │    │    ├── key: (1,2)
-      │    │    ├── scan partsupp@ps_sk
-      │    │    │    ├── columns: ps_partkey:1!null ps_suppkey:2!null
-      │    │    │    ├── key: (1,2)
-      │    │    │    └── ordering: +2
-      │    │    ├── select
-      │    │    │    ├── columns: s_suppkey:15!null s_comment:21!null
-      │    │    │    ├── key: (15)
-      │    │    │    ├── fd: (15)-->(21)
-      │    │    │    ├── ordering: +15
-      │    │    │    ├── scan supplier
-      │    │    │    │    ├── columns: s_suppkey:15!null s_comment:21!null
-      │    │    │    │    ├── key: (15)
-      │    │    │    │    ├── fd: (15)-->(21)
-      │    │    │    │    └── ordering: +15
-      │    │    │    └── filters
-      │    │    │         └── s_comment:21 LIKE '%Customer%Complaints%' [outer=(21), constraints=(/21: (/NULL - ])]
-      │    │    └── filters (true)
-      │    └── filters
-      │         ├── p_brand:9 != 'Brand#45' [outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
-      │         ├── p_type:10 NOT LIKE 'MEDIUM POLISHED %' [outer=(10), constraints=(/10: (/NULL - ])]
-      │         └── p_size:11 IN (3, 9, 14, 19, 23, 36, 45, 49) [outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
+      ├── distinct-on
+      │    ├── columns: ps_suppkey:2!null p_brand:9!null p_type:10!null p_size:11!null
+      │    ├── grouping columns: ps_suppkey:2!null p_brand:9!null p_type:10!null p_size:11!null
+      │    ├── key: (2,9-11)
+      │    └── inner-join (lookup part)
+      │         ├── columns: ps_partkey:1!null ps_suppkey:2!null p_partkey:6!null p_brand:9!null p_type:10!null p_size:11!null
+      │         ├── key columns: [1] = [6]
+      │         ├── lookup columns are key
+      │         ├── key: (2,6)
+      │         ├── fd: (6)-->(9-11), (1)==(6), (6)==(1)
+      │         ├── anti-join (merge)
+      │         │    ├── columns: ps_partkey:1!null ps_suppkey:2!null
+      │         │    ├── left ordering: +2
+      │         │    ├── right ordering: +15
+      │         │    ├── key: (1,2)
+      │         │    ├── scan partsupp@ps_sk
+      │         │    │    ├── columns: ps_partkey:1!null ps_suppkey:2!null
+      │         │    │    ├── key: (1,2)
+      │         │    │    └── ordering: +2
+      │         │    ├── select
+      │         │    │    ├── columns: s_suppkey:15!null s_comment:21!null
+      │         │    │    ├── key: (15)
+      │         │    │    ├── fd: (15)-->(21)
+      │         │    │    ├── ordering: +15
+      │         │    │    ├── scan supplier
+      │         │    │    │    ├── columns: s_suppkey:15!null s_comment:21!null
+      │         │    │    │    ├── key: (15)
+      │         │    │    │    ├── fd: (15)-->(21)
+      │         │    │    │    └── ordering: +15
+      │         │    │    └── filters
+      │         │    │         └── s_comment:21 LIKE '%Customer%Complaints%' [outer=(21), constraints=(/21: (/NULL - ])]
+      │         │    └── filters (true)
+      │         └── filters
+      │              ├── p_brand:9 != 'Brand#45' [outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
+      │              ├── p_type:10 NOT LIKE 'MEDIUM POLISHED %' [outer=(10), constraints=(/10: (/NULL - ])]
+      │              └── p_size:11 IN (3, 9, 14, 19, 23, 36, 45, 49) [outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
       └── aggregations
-           └── agg-distinct [as=count:22, outer=(2)]
-                └── count
-                     └── ps_suppkey:2
+           └── count-rows [as=count:22]
 
 # --------------------------------------------------
 # Q17
