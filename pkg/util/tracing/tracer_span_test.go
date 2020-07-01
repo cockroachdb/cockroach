@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -70,14 +71,6 @@ span local child:
 `)
 	require.NoError(t, err)
 
-	recStr := rec.String()
-	// Strip the timing info, converting rows like:
-	//      0.007ms      0.007ms    event:root 1
-	// into:
-	//    event:root 1
-	re := regexp.MustCompile(`.*s.*s\s\s\s\s`)
-	stripped := string(re.ReplaceAll([]byte(recStr), nil))
-
 	exp := `=== operation:root sb:1
 event:root 1
     === operation:remote child sb:1
@@ -89,7 +82,18 @@ event:root 3
 event:root 4
 event:root 5
 `
-	require.Equal(t, exp, stripped)
+	require.Equal(t, exp, recToStrippedString(rec))
+}
+
+func recToStrippedString(r Recording) string {
+	s := r.String()
+	// Strip the timing info, converting rows like:
+	//      0.007ms      0.007ms    event:root 1
+	// into:
+	//    event:root 1
+	re := regexp.MustCompile(`.*s.*s\s\s\s\s`)
+	stripped := string(re.ReplaceAll([]byte(s), nil))
+	return stripped
 }
 
 func TestRecordingInRecording(t *testing.T) {
@@ -121,4 +125,10 @@ span child:
 span grandchild:
 	tags: sb=1
 `))
+	fmt.Printf(childRec.String())
+
+	exp := `=== operation:child sb:1
+    === operation:grandchild sb:1
+`
+	require.Equal(t, exp, recToStrippedString(childRec))
 }

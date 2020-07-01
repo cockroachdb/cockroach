@@ -304,17 +304,12 @@ type traceLogData struct {
 // TODO(andrei): this should be unified with
 // SessionTracing.generateSessionTraceVTable().
 func (r Recording) String() string {
-	var logs []traceLogData
-	var start time.Time
-	for _, sp := range r {
-		if sp.ParentSpanID == 0 {
-			if start == (time.Time{}) {
-				start = sp.StartTime
-			}
-			logs = append(logs, r.visitSpan(sp, 0 /* depth */)...)
-		}
+	if len(r) == 0 {
+		return "<empty recording>"
 	}
+	logs := r.visitSpan(r[0], 0 /* depth */)
 
+	start := r[0].StartTime
 	var buf strings.Builder
 	for _, entry := range logs {
 		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
