@@ -597,13 +597,13 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			TestingTableRefreshedEvent: func(table *sqlbase.TableDescriptor) {
+			TestingDescriptorRefreshedEvent: func(descriptor *sqlbase.Descriptor) {
 				mu.Lock()
 				defer mu.Unlock()
-				if waitTableID != table.ID {
+				if waitTableID != descriptor.GetID() {
 					return
 				}
-				if table.Dropped() {
+				if descriptor.Table(hlc.Timestamp{}).Dropped() {
 					close(deleted)
 					waitTableID = 0
 				}
@@ -1729,7 +1729,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
 				},
 			},
-			TestingTableUpdateEvent: func(_ *sqlbase.TableDescriptor) error {
+			TestingDescriptorUpdateEvent: func(_ *sqlbase.Descriptor) error {
 				return errors.Errorf("ignore gossip update")
 			},
 		},
@@ -2276,15 +2276,15 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: args,
 	})
-	tableUpdateChan := make(chan *sqlbase.TableDescriptor)
+	descUpdateChan := make(chan *sqlbase.Descriptor)
 	args.Knobs.SQLLeaseManager = &lease.ManagerTestingKnobs{
-		TestingTableUpdateEvent: func(table *sqlbase.TableDescriptor) error {
-			// Use this testing knob to ensure that we see an update for the table
+		TestingDescriptorUpdateEvent: func(descriptor *sqlbase.Descriptor) error {
+			// Use this testing knob to ensure that we see an update for the desc
 			// in question. We don't care about events to refresh the first version
 			// which can happen under rare stress scenarios.
-			if table.ID == interestingTable.Load().(sqlbase.ID) && table.Version >= 2 {
+			if descriptor.GetID() == interestingTable.Load().(sqlbase.ID) && descriptor.GetVersion() >= 2 {
 				select {
-				case tableUpdateChan <- table:
+				case descUpdateChan <- descriptor:
 				case <-unblockAll:
 				}
 			}
@@ -2292,7 +2292,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 		},
 		LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 			LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
-				// Block the lease acquisition for the table after the leasing
+				// Block the lease acquisition for the desc after the leasing
 				// transaction has been issued. We'll wait to unblock it until after
 				// the new version has been published and that even has been received.
 				if desc.GetID() != interestingTable.Load().(sqlbase.ID) {
@@ -2318,7 +2318,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	// Create a couple of descriptors.
 	tdb1.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 
-	// Find the table ID for the table we'll be mucking with.
+	// Find the desc ID for the desc we'll be mucking with.
 	var tableID sqlbase.ID
 	tdb1.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = $1 AND database_name = current_database()",
 		"foo").Scan(&tableID)
@@ -2344,8 +2344,8 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 
 	// Make sure we get an update. Note that this is after we have already
 	// acquired a lease on the old version but have not yet recorded that fact.
-	table := <-tableUpdateChan
-	require.Equal(t, sqlbase.DescriptorVersion(2), table.Version)
+	desc := <-descUpdateChan
+	require.Equal(t, sqlbase.DescriptorVersion(2), desc.GetVersion())
 
 	// Allow the original lease acquisition to proceed.
 	close(toUnblockForLeaseAcquisition)

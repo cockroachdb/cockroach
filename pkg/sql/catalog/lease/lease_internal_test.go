@@ -129,7 +129,7 @@ func TestPurgeOldVersions(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &ManagerTestingKnobs{
-				TestingTableUpdateEvent: func(t *sqlbase.TableDescriptor) error {
+				TestingDescriptorUpdateEvent: func(_ *sqlbase.Descriptor) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
 					return nil

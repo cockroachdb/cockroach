@@ -1287,18 +1287,18 @@ var _ base.ModuleTestingKnobs = &StorageTestingKnobs{}
 type ManagerTestingKnobs struct {
 
 	// A callback called after the leases are refreshed as a result of a gossip update.
-	TestingTableRefreshedEvent func(descriptor *sqlbase.TableDescriptor)
+	TestingDescriptorRefreshedEvent func(descriptor *sqlbase.Descriptor)
 
-	// TestingTableUpdateEvent is a callback when an update is received, before
+	// TestingDescriptorUpdateEvent is a callback when an update is received, before
 	// the leases are refreshed. If a non-nil error is returned, the update is
 	// ignored.
-	TestingTableUpdateEvent func(descriptor *sqlbase.TableDescriptor) error
+	TestingDescriptorUpdateEvent func(descriptor *sqlbase.Descriptor) error
 
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 
 	// AlwaysUseRangefeeds ensures that rangefeeds and not gossip are used to
-	// detect changes to table descriptors.
+	// detect changes to descriptors.
 	AlwaysUseRangefeeds bool
 
 	// VersionPollIntervalForRangefeeds controls the polling interval for the
@@ -1443,7 +1443,7 @@ type Manager struct {
 		tables map[sqlbase.ID]*descriptorState
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
-		// table updates have already been seen.
+		// descriptor updates have already been seen.
 		updatesResolvedTimestamp hlc.Timestamp
 	}
 
@@ -1839,36 +1839,43 @@ func (m *Manager) RefreshLeases(
 func (m *Manager) refreshLeases(
 	ctx context.Context, g gossip.DeprecatedGossip, db *kv.DB, s *stop.Stopper,
 ) {
-	tableUpdateCh := make(chan *sqlbase.TableDescriptor)
-	m.watchForUpdates(ctx, s, db, g, tableUpdateCh)
+	descUpdateCh := make(chan *sqlbase.Descriptor)
+	m.watchForUpdates(ctx, s, db, g, descUpdateCh)
 	s.RunWorker(ctx, func(ctx context.Context) {
 		for {
 			select {
-			case table := <-tableUpdateCh:
+			case desc := <-descUpdateCh:
 				// NB: We allow nil descriptors to be sent to synchronize the updating of
 				// descriptors.
-				if table == nil {
+				if desc == nil {
 					continue
 				}
 
-				if evFunc := m.testingKnobs.TestingTableUpdateEvent; evFunc != nil {
-					if err := evFunc(table); err != nil {
-						log.Infof(ctx, "skipping table update of %v due to knob: %v",
-							table, err)
+				if evFunc := m.testingKnobs.TestingDescriptorUpdateEvent; evFunc != nil {
+					if err := evFunc(desc); err != nil {
+						log.Infof(ctx, "skipping update of %v due to knob: %v",
+							desc, err)
 					}
 				}
 
-				// Try to refresh the table lease to one >= this version.
-				log.VEventf(ctx, 2, "purging old version of table %d@%d (offline %v)",
-					table.ID, table.Version, table.GoingOffline())
+				// Handle dropping/offline tables as a special case.
+				// TODO (lucy): It's possible that with a more general API for offline
+				// descriptors we'll need to rethink using sqlbase.Descriptor here.
+				goingOffline := false
+				if table := desc.Table(hlc.Timestamp{}); table != nil {
+					goingOffline = table.GoingOffline()
+				}
+				// Try to refresh the lease to one >= this version.
+				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
+					desc.GetID(), desc.GetVersion(), goingOffline)
 				if err := purgeOldVersions(
-					ctx, db, table.ID, table.GoingOffline(), table.Version, m); err != nil {
-					log.Warningf(ctx, "error purging leases for table %d(%s): %s",
-						table.ID, table.Name, err)
+					ctx, db, desc.GetID(), goingOffline, desc.GetVersion(), m); err != nil {
+					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
+						desc.GetID(), desc.GetName(), err)
 				}
 
-				if evFunc := m.testingKnobs.TestingTableRefreshedEvent; evFunc != nil {
-					evFunc(table)
+				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
+					evFunc(desc)
 				}
 
 			case <-s.ShouldQuiesce():
@@ -1887,16 +1894,16 @@ func (m *Manager) watchForUpdates(
 	s *stop.Stopper,
 	db *kv.DB,
 	g gossip.DeprecatedGossip,
-	tableUpdateCh chan *sqlbase.TableDescriptor,
+	descUpdateCh chan *sqlbase.Descriptor,
 ) {
 	useRangefeeds := m.testingKnobs.AlwaysUseRangefeeds ||
 		m.storage.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases)
 	if useRangefeeds {
-		m.watchForRangefeedUpdates(ctx, s, db, tableUpdateCh)
+		m.watchForRangefeedUpdates(ctx, s, db, descUpdateCh)
 		return
 	}
 	gossipCtx, cancelWatchingGossip := context.WithCancel(ctx)
-	m.watchForGossipUpdates(gossipCtx, s, g, tableUpdateCh)
+	m.watchForGossipUpdates(gossipCtx, s, g, descUpdateCh)
 	canUseRangefeedsCh := m.waitForRangefeedsToBeUsable(ctx, s)
 	if err := s.RunAsyncTask(ctx, "wait for upgrade", func(ctx context.Context) {
 		select {
@@ -1917,7 +1924,7 @@ func (m *Manager) watchForUpdates(
 			// seen (see setResolvedTimestamp and its callers). The rangefeed API
 			// ensures that we will see all updates from on or before that timestamp
 			// at least once.
-			m.watchForRangefeedUpdates(ctx, s, db, tableUpdateCh)
+			m.watchForRangefeedUpdates(ctx, s, db, descUpdateCh)
 		}
 	}); err != nil {
 		// Note: this can only happen if the stopper has been stopped.
@@ -1929,7 +1936,7 @@ func (m *Manager) watchForGossipUpdates(
 	ctx context.Context,
 	s *stop.Stopper,
 	g gossip.DeprecatedGossip,
-	tableUpdateCh chan<- *sqlbase.TableDescriptor,
+	descUpdateCh chan<- *sqlbase.Descriptor,
 ) {
 	rawG, err := g.OptionalErr(47150)
 	if err != nil {
@@ -1952,7 +1959,7 @@ func (m *Manager) watchForGossipUpdates(
 		for {
 			select {
 			case <-gossipUpdateC:
-				m.handleUpdatedSystemCfg(ctx, rawG, &filter, tableUpdateCh)
+				m.handleUpdatedSystemCfg(ctx, rawG, &filter, descUpdateCh)
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -1961,7 +1968,7 @@ func (m *Manager) watchForGossipUpdates(
 }
 
 func (m *Manager) watchForRangefeedUpdates(
-	ctx context.Context, s *stop.Stopper, db *kv.DB, tableUpdateCh chan<- *sqlbase.TableDescriptor,
+	ctx context.Context, s *stop.Stopper, db *kv.DB, descUpdateCh chan<- *sqlbase.Descriptor,
 ) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
@@ -2004,32 +2011,17 @@ func (m *Manager) watchForRangefeedUpdates(
 				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
 			return
 		}
-		table := descriptor.Table(ev.Value.Timestamp)
-		if table == nil {
+		if descriptor.Union == nil {
 			return
 		}
-
-		// Note that we don't need to "fill in" the descriptor here. Nobody
-		// actually reads the table, but it's necessary for the call to
-		// ValidateTable().
-		if err := table.MaybeFillInDescriptor(ctx, nil, m.storage.codec); err != nil {
-			log.ReportOrPanic(ctx, &m.storage.settings.SV,
-				"%s: unable to fill in table descriptor %v", ev.Key, table)
-			return
-		}
-		if err := table.ValidateTable(); err != nil {
-			// Note: we don't ReportOrPanic here because invalid descriptors are
-			// sometimes created during testing.
-			log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v", ev.Key, err, table)
-			return
-		}
+		descriptor.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ev.Value.Timestamp)
 		if log.V(2) {
-			log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d, dropped: %t",
-				ev.Key, table.ID, table.Name, table.Version, table.Dropped())
+			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
+				ev.Key, descriptor.GetID(), descriptor.GetName(), descriptor.GetVersion())
 		}
 		select {
 		case <-ctx.Done():
-		case tableUpdateCh <- table:
+		case descUpdateCh <- &descriptor:
 		}
 	}
 	s.RunWorker(ctx, func(ctx context.Context) {
@@ -2059,7 +2051,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 	ctx context.Context,
 	rawG *gossip.Gossip,
 	cfgFilter *gossip.SystemConfigDeltaFilter,
-	tableUpdateChan chan<- *sqlbase.TableDescriptor,
+	descUpdateCh chan<- *sqlbase.Descriptor,
 ) {
 	cfg := rawG.GetSystemConfig()
 	// Read all descriptors and their versions
@@ -2068,7 +2060,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 	}
 	var latestTimestamp hlc.Timestamp
 	cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
-		// Attempt to unmarshal config into a table/database descriptor.
+		// Attempt to unmarshal config into a descriptor.
 		var descriptor sqlbase.Descriptor
 		if latestTimestamp.Less(kv.Value.Timestamp) {
 			latestTimestamp = kv.Value.Timestamp
@@ -2077,45 +2069,29 @@ func (m *Manager) handleUpdatedSystemCfg(
 			log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 			return
 		}
-		switch union := descriptor.Union.(type) {
-		case *sqlbase.Descriptor_Table:
-			table := union.Table
-			// Note that we don't need to "fill in" the descriptor here. Nobody
-			// actually reads the table, but it's necessary for the call to
-			// ValidateTable().
-			if err := table.MaybeFillInDescriptor(ctx, nil, m.storage.codec); err != nil {
-				log.Warningf(ctx, "%s: unable to fill in table descriptor %v", kv.Key, table)
-				return
-			}
-			if err := table.ValidateTable(); err != nil {
-				log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
-					kv.Key, err, table,
-				)
-				return
-			}
-			if log.V(2) {
-				log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d, dropped: %t",
-					kv.Key, table.ID, table.Name, table.Version, table.Dropped())
-			}
-			select {
-			case <-ctx.Done():
-			case tableUpdateChan <- table:
-			}
-
-		case *sqlbase.Descriptor_Database:
-			// Ignore.
+		if descriptor.Union == nil {
+			return
+		}
+		descriptor.MaybeSetModificationTimeFromMVCCTimestamp(ctx, kv.Value.Timestamp)
+		if log.V(2) {
+			log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d",
+				kv.Key, descriptor.GetID(), descriptor.GetName(), descriptor.GetVersion())
+		}
+		select {
+		case <-ctx.Done():
+		case descUpdateCh <- &descriptor:
 		}
 	})
 	if !latestTimestamp.IsEmpty() {
 		m.setResolvedTimestamp(latestTimestamp)
 	}
-	// Attempt to shove a nil table descriptor into the channel to ensure that
+	// Attempt to shove a nil descriptor into the channel to ensure that
 	// we've processed all of the events previously sent.
 	select {
 	case <-ctx.Done():
 		// If we've been canceled, the other size of the channel will also have
 		// been canceled.
-	case tableUpdateChan <- nil:
+	case descUpdateCh <- nil:
 	}
 }
 
