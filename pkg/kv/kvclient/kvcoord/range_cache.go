@@ -240,6 +240,9 @@ func (et EvictionToken) Empty() bool {
 // Desc returns the RangeDescriptor that was retrieved from the cache. The
 // result is to be considered immutable.
 func (et EvictionToken) Desc() *roachpb.RangeDescriptor {
+	if et.entry == nil {
+		return nil
+	}
 	return &et.entry.Desc
 }
 
