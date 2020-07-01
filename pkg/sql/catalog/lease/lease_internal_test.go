@@ -168,7 +168,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, *table)
+			tables = append(tables, *table.(*sqlbase.ImmutableTableDescriptor))
 			expiration = exp
 			if err := leaseManager.Release(table); err != nil {
 				t.Fatal(err)
@@ -182,14 +182,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Verifies that ErrDidntUpdateDescriptor doesn't leak from Publish().
-	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
+	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
 		return ErrDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Publish a new version for the table
-	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
+	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
 		return nil
 	}, nil); err != nil {
 		t.Fatal(err)
@@ -560,7 +560,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < 50; i++ {
 		timestamp := leaseManager.storage.clock.Now()
 		ctx := context.Background()
-		table, _, err := leaseManager.AcquireByName(
+		desc, _, err := leaseManager.AcquireByName(
 			ctx,
 			timestamp,
 			tableDesc.ParentID,
@@ -570,6 +570,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
+		table := desc.(*sqlbase.ImmutableTableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -751,7 +752,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		acquireChan chan Result,
 	) {
 		table, e, err := m.Acquire(ctx, m.storage.clock.Now(), descID)
-		acquireChan <- Result{err: err, exp: e, table: table}
+		acquireChan <- Result{err: err, exp: e, table: table.(*sqlbase.ImmutableTableDescriptor)}
 	}
 
 	testCases := []struct {
@@ -835,7 +836,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			serverArgs.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+			serverArgs.LeaseManagerConfig.DescriptorLeaseJitterFraction = 0.0
 
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
@@ -854,7 +855,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 						return
 					}
 					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
-					acquireChan <- Result{err: err, exp: e, table: table}
+					acquireChan <- Result{err: err, exp: e, table: table.(*sqlbase.ImmutableTableDescriptor)}
 				}(ctx, leaseManager, acquireResultChan)
 
 			} else {

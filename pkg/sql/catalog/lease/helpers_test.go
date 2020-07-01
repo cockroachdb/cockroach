@@ -13,13 +13,14 @@ package lease
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// A unique id for a particular table descriptor version.
-type tableVersionID struct {
+// A unique id for a particular descriptor version.
+type descVersionID struct {
 	id      sqlbase.ID
 	version sqlbase.DescriptorVersion
 }
@@ -38,7 +39,7 @@ type LeaseRemovalTracker struct {
 	mu syncutil.Mutex
 	// map from a lease whose release we're waiting for to a tracker for that
 	// lease.
-	tracking map[tableVersionID]RemovalTracker
+	tracking map[descVersionID]RemovalTracker
 }
 
 type RemovalTracker struct {
@@ -50,17 +51,17 @@ type RemovalTracker struct {
 // NewLeaseRemovalTracker creates a LeaseRemovalTracker.
 func NewLeaseRemovalTracker() *LeaseRemovalTracker {
 	return &LeaseRemovalTracker{
-		tracking: make(map[tableVersionID]RemovalTracker),
+		tracking: make(map[descVersionID]RemovalTracker),
 	}
 }
 
 // TrackRemoval starts monitoring lease removals for a particular lease.
 // This should be called before triggering the operation that (asynchronously)
 // removes the lease.
-func (w *LeaseRemovalTracker) TrackRemoval(table *sqlbase.ImmutableTableDescriptor) RemovalTracker {
-	id := tableVersionID{
-		id:      table.ID,
-		version: table.Version,
+func (w *LeaseRemovalTracker) TrackRemoval(desc catalog.Descriptor) RemovalTracker {
+	id := descVersionID{
+		id:      desc.GetID(),
+		version: desc.GetVersion(),
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -87,7 +88,7 @@ func (w *LeaseRemovalTracker) LeaseRemovedNotification(
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	idx := tableVersionID{
+	idx := descVersionID{
 		id:      id,
 		version: version,
 	}
@@ -103,8 +104,8 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	past := clock.Now().GoTime().Add(-time.Millisecond)
 
 	m.names.mu.Lock()
-	for _, table := range m.names.descriptors {
-		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
+	for _, desc := range m.names.descriptors {
+		desc.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.names.mu.Unlock()
 }
