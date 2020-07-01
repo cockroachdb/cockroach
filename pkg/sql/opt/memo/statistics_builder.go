@@ -585,6 +585,12 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
 
+	// Calculate distinct counts and histograms for partial index predicates.
+	if scan.UsesPartialIndex(sb.md) {
+		pred := scan.PartialIndexPredicate(sb.md)
+		sb.filterScan(scan, pred, relProps, s)
+	}
+
 	if scan.InvertedConstraint != nil ||
 		(scan.Constraint != nil && scan.Constraint.Spans.Count() < 2) {
 		// This constraint is either inverted or has at most one span.
@@ -635,6 +641,59 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	}
 
 	sb.finalizeFromCardinality(relProps)
+}
+
+// filterScan is called from buildScan to calculate the stats for a partial
+// index scan based on the predicate expression.
+func (sb *statisticsBuilder) filterScan(
+	scan *ScanExpr, pred FiltersExpr, relProps *props.Relational, s *props.Statistics,
+) {
+	// Update stats based on equivalencies in the filter conditions. Note that
+	// EquivReps from the Scan FD should not be used, as they include
+	// equivalencies derived from input expressions.
+	var equivFD props.FuncDepSet
+	for i := range pred {
+		equivFD.AddEquivFrom(&pred[i].ScalarProps().FuncDeps)
+	}
+	equivReps := equivFD.EquivReps()
+
+	// Calculate distinct counts and histograms for constrained columns
+	// ----------------------------------------------------------------
+	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilter(pred, scan, relProps)
+
+	// Try to reduce the number of columns used for selectivity
+	// calculation based on functional dependencies.
+	constrainedCols = sb.tryReduceCols(constrainedCols, s, &scan.Relational().FuncDeps)
+
+	// Set null counts to 0 for non-nullable columns
+	// ---------------------------------------------
+	notNullCols := relProps.NotNullCols
+	for i := range pred {
+		if constraintSet := pred[i].ScalarProps().Constraints; constraintSet != nil {
+			for i, n := 0, constraintSet.Length(); i < n; i++ {
+				// Add any not-null columns from the predicate constraints.
+				c := constraintSet.Constraint(i)
+				notNullCols = notNullCols.Union(c.ExtractNotNullCols(sb.evalCtx))
+			}
+		}
+	}
+	sb.updateNullCountsFromNotNullCols(scan, notNullCols, s)
+
+	// Calculate row count and selectivity
+	// -----------------------------------
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &equivFD, scan, s))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
+
+	// Adjust the selectivity so we don't double-count the histogram columns.
+	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+
+	// Update distinct and null counts based on equivalencies; this should
+	// happen after selectivityFromMultiColDistinctCounts and
+	// selectivityFromEquivalencies.
+	sb.applyEquivalencies(equivReps, &equivFD, scan, notNullCols, s)
 }
 
 // constrainScan is called from buildScan to calculate the stats for the scan
@@ -688,7 +747,7 @@ func (sb *statisticsBuilder) constrainScan(
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps, constrainedCols))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps.NotNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
 	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
@@ -760,14 +819,14 @@ func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relati
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, sel, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, sel, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(sel, relProps, constrainedCols))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(sel, relProps.NotNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
 	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, sel, s))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
-	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, sel, relProps)
+	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, sel, relProps.NotNullCols, s)
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -909,7 +968,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	s.RowCount = inputStats.RowCount
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, invFilter, s))
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps, constrainedCols))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
 	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
@@ -1081,14 +1140,14 @@ func (sb *statisticsBuilder) buildJoin(
 		constrainedCols.Intersection(rightCols), join, s,
 	))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps, constrainedCols))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
 	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
-	sb.applyEquivalencies(equivReps, &h.filtersFD, join, relProps)
+	sb.applyEquivalencies(equivReps, &h.filtersFD, join, relProps.NotNullCols, s)
 
 	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
@@ -1593,11 +1652,11 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps, constrainedCols))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps.NotNullCols, constrainedCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
-	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, zigzag, relProps)
+	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, zigzag, relProps.NotNullCols, s)
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -3171,19 +3230,21 @@ func (sb *statisticsBuilder) updateDistinctCountFromHistogram(
 }
 
 func (sb *statisticsBuilder) applyEquivalencies(
-	equivReps opt.ColSet, filterFD *props.FuncDepSet, e RelExpr, relProps *props.Relational,
+	equivReps opt.ColSet,
+	filterFD *props.FuncDepSet,
+	e RelExpr,
+	notNullCols opt.ColSet,
+	s *props.Statistics,
 ) {
 	equivReps.ForEach(func(i opt.ColumnID) {
 		equivGroup := filterFD.ComputeEquivGroup(i)
-		sb.updateDistinctNullCountsFromEquivalency(equivGroup, e, relProps)
+		sb.updateDistinctNullCountsFromEquivalency(equivGroup, e, notNullCols, s)
 	})
 }
 
 func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
-	equivGroup opt.ColSet, e RelExpr, relProps *props.Relational,
+	equivGroup opt.ColSet, e RelExpr, notNullCols opt.ColSet, s *props.Statistics,
 ) {
-	s := &relProps.Stats
-
 	// Find the minimum distinct and null counts for all columns in this equivalency
 	// group.
 	minDistinctCount := s.RowCount
@@ -3194,7 +3255,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 		if !ok {
 			colStat, _ = sb.colStatFromInput(colSet, e)
 			colStat = sb.copyColStat(colSet, s, colStat)
-			if colStat.NullCount > 0 && colSet.Intersects(relProps.NotNullCols) {
+			if colStat.NullCount > 0 && colSet.Intersects(notNullCols) {
 				colStat.NullCount = 0
 				colStat.DistinctCount = max(colStat.DistinctCount-1, epsilon)
 			}
@@ -3512,10 +3573,10 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 // or selectivityFromHistograms. The columns for filters already accounted for
 // should be designated by ignoreCols.
 func (sb *statisticsBuilder) selectivityFromNullsRemoved(
-	e RelExpr, relProps *props.Relational, ignoreCols opt.ColSet,
+	e RelExpr, notNullCols opt.ColSet, ignoreCols opt.ColSet,
 ) (selectivity float64) {
 	selectivity = 1.0
-	relProps.NotNullCols.ForEach(func(col opt.ColumnID) {
+	notNullCols.ForEach(func(col opt.ColumnID) {
 		if !ignoreCols.Contains(col) {
 			inputColStat, inputStats := sb.colStatFromInput(opt.MakeColSet(col), e)
 			selectivity *= sb.predicateSelectivity(
