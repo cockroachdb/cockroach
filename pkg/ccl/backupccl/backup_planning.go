@@ -228,9 +228,10 @@ func backupJobDescription(
 	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string,
 ) (string, error) {
 	b := &tree.Backup{
-		AsOf:    backup.AsOf,
-		Options: backup.Options,
-		Targets: backup.Targets,
+		AsOf:               backup.AsOf,
+		Options:            backup.Options,
+		Targets:            backup.Targets,
+		DescriptorCoverage: backup.DescriptorCoverage,
 	}
 
 	for _, t := range to {
