@@ -1,0 +1,395 @@
+exec-ddl
+CREATE TABLE t (i int PRIMARY KEY, g GEOMETRY, INVERTED INDEX (g))
+----
+
+# Histogram boundaries are from a `POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0,
+# 0.0 1.0, 0.0 0.0))` row. The row_count is lower than the sum of the
+# histogram's num_eq and num_range because there are more entries in
+# the inverted index than rows in the table.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 1000,
+    "null_count": 0
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 0,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[{
+      "num_eq":1000,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\xfd0555555555555555"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd0fffffff00000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd1000000100000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd1aaaaaab00000000"
+    }]
+  }
+]'
+----
+
+# Selecting from within the polygon means the histogram will estimate
+# many rows returned, thus making a search on the PK favorable.
+opt
+SELECT * FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+limit
+ ├── columns: i:1(int!null) g:2(geometry)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: i:1(int!null) g:2(geometry)
+ │    ├── immutable
+ │    ├── stats: [rows=666.666667]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    ├── scan t
+ │    │    ├── columns: i:1(int!null) g:2(geometry)
+ │    │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=0]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +1
+ │    │    └── limit hint: 3.00
+ │    └── filters
+ │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+ └── 1 [type=int]
+
+memo
+SELECT * FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
+ ├── G1: (limit G2 G3 ordering=+1)
+ │    └── [presentation: i:1,g:2]
+ │         ├── best: (limit G2="[ordering: +1] [limit hint: 1.00]" G3 ordering=+1)
+ │         └── cost: 2026.30
+ ├── G2: (select G4 G5) (select G6 G5)
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (select G4="[ordering: +1] [limit hint: 3.00]" G5)
+ │    │    └── cost: 2026.28
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 4100.04
+ ├── G3: (const 1)
+ ├── G4: (scan t)
+ │    ├── [ordering: +1] [limit hint: 3.00]
+ │    │    ├── best: (scan t)
+ │    │    └── cost: 6.26
+ │    └── []
+ │         ├── best: (scan t)
+ │         └── cost: 2080.02
+ ├── G5: (filters G7)
+ ├── G6: (index-join G8 t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 1.29]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 4555.64
+ │    └── []
+ │         ├── best: (index-join G8 t,cols=(1,2))
+ │         └── cost: 4371.46
+ ├── G7: (function G9 st_intersects)
+ ├── G8: (inverted-filter G10 g)
+ │    ├── [ordering: +1] [limit hint: 1.29]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 1084.20
+ │    └── []
+ │         ├── best: (inverted-filter G10 g)
+ │         └── cost: 900.02
+ ├── G9: (scalar-list G11 G12)
+ ├── G10: (scan t@secondary,constrained inverted)
+ │    └── []
+ │         ├── best: (scan t@secondary,constrained inverted)
+ │         └── cost: 891.44
+ ├── G11: (const '010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F')
+ └── G12: (variable g)
+
+# Selecting from outside the polygon means the histogram will estimate
+# few rows returned, thus making a search of the inverted index favorable.
+opt
+SELECT * FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+limit
+ ├── columns: i:1(int!null) g:2(geometry)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: i:1(int!null) g:2(geometry)
+ │    ├── immutable
+ │    ├── stats: [rows=666.666667]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    ├── sort
+ │    │    ├── columns: i:1(int!null) g:2(geometry)
+ │    │    ├── stats: [rows=2e-07]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 0.00
+ │    │    └── index-join t
+ │    │         ├── columns: i:1(int!null) g:2(geometry)
+ │    │         ├── stats: [rows=2e-07]
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2)
+ │    │         └── inverted-filter
+ │    │              ├── columns: i:1(int!null)
+ │    │              ├── inverted expression: /2
+ │    │              │    ├── tight: false
+ │    │              │    └── union spans: ["\x87\xff", "\x87\xff"]
+ │    │              ├── stats: [rows=2e-07]
+ │    │              ├── key: (1)
+ │    │              └── scan t@secondary
+ │    │                   ├── columns: i:1(int!null) g:2(geometry)
+ │    │                   ├── inverted constraint: /2/1
+ │    │                   │    └── spans: ["\x87\xff", "\x87\xff"]
+ │    │                   ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0]
+ │    │                   │   histogram(2)=
+ │    │                   ├── key: (1)
+ │    │                   └── fd: (1)-->(2)
+ │    └── filters
+ │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
+ └── 1 [type=int]
+
+memo
+SELECT * FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
+ ├── G1: (limit G2 G3 ordering=+1)
+ │    └── [presentation: i:1,g:2]
+ │         ├── best: (limit G2="[ordering: +1] [limit hint: 1.00]" G3 ordering=+1)
+ │         └── cost: 0.08
+ ├── G2: (select G4 G5) (select G6 G5)
+ │    ├── [ordering: +1] [limit hint: 1.00]
+ │    │    ├── best: (select G6="[ordering: +1] [limit hint: 0.00]" G5)
+ │    │    └── cost: 0.06
+ │    └── []
+ │         ├── best: (select G6 G5)
+ │         └── cost: 0.05
+ ├── G3: (const 1)
+ ├── G4: (scan t)
+ │    ├── [ordering: +1] [limit hint: 3.00]
+ │    │    ├── best: (scan t)
+ │    │    └── cost: 6.26
+ │    └── []
+ │         ├── best: (scan t)
+ │         └── cost: 2080.02
+ ├── G5: (filters G7)
+ ├── G6: (index-join G8 t,cols=(1,2))
+ │    ├── [ordering: +1] [limit hint: 0.00]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 0.04
+ │    └── []
+ │         ├── best: (index-join G8 t,cols=(1,2))
+ │         └── cost: 0.03
+ ├── G7: (function G9 st_intersects)
+ ├── G8: (inverted-filter G10 g)
+ │    ├── [ordering: +1] [limit hint: 0.00]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 0.03
+ │    └── []
+ │         ├── best: (inverted-filter G10 g)
+ │         └── cost: 0.02
+ ├── G9: (scalar-list G11 G12)
+ ├── G10: (scan t@secondary,constrained inverted)
+ │    └── []
+ │         ├── best: (scan t@secondary,constrained inverted)
+ │         └── cost: 0.01
+ ├── G11: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
+ └── G12: (variable g)
+
+# Add some NULL rows.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 1000,
+    "null_count": 50
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 7,
+    "null_count": 100,
+    "histo_col_type":"BYTES",
+    "histo_buckets":[{
+      "num_eq":1000,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"\\xfd0555555555555555"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd0fffffff00000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd1000000100000000"
+    },
+    {
+      "num_eq":1000,
+      "num_range":1000,
+      "distinct_range":1,
+      "upper_bound":"\\xfd1aaaaaab00000000"
+    }]
+  }
+]'
+----
+
+# Inverted indexes don't contain NULL entries, so we expect a full scan.
+opt
+SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)', g)
+----
+select
+ ├── columns: i:1(int!null) g:2(geometry)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan t
+ │    ├── columns: i:1(int!null) g:2(geometry)
+ │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── (g:2 IS NULL) OR st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
+
+memo
+SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)', g)
+----
+memo (optimized, ~2KB, required=[presentation: i:1,g:2])
+ ├── G1: (select G2 G3)
+ │    └── [presentation: i:1,g:2]
+ │         ├── best: (select G2 G3)
+ │         └── cost: 2100.04
+ ├── G2: (scan t)
+ │    └── []
+ │         ├── best: (scan t)
+ │         └── cost: 2080.02
+ ├── G3: (filters G4)
+ ├── G4: (or G5 G6)
+ ├── G5: (is G7 G8)
+ ├── G6: (function G9 st_intersects)
+ ├── G7: (variable g)
+ ├── G8: (null)
+ ├── G9: (scalar-list G10 G7)
+ └── G10: (const '010200000002000000000000000000594000000000000059400000000000C062400000000000C06240')
+
+# Repeat above tests to ensure null counts are correct.
+opt
+SELECT * FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
+----
+limit
+ ├── columns: i:1(int!null) g:2(geometry)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: i:1(int!null) g:2(geometry)
+ │    ├── immutable
+ │    ├── stats: [rows=666.666667]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    ├── scan t
+ │    │    ├── columns: i:1(int!null) g:2(geometry)
+ │    │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=0]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +1
+ │    │    └── limit hint: 3.00
+ │    └── filters
+ │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+ └── 1 [type=int]
+
+
+opt
+SELECT * FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
+----
+limit
+ ├── columns: i:1(int!null) g:2(geometry)
+ ├── internal-ordering: +1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: i:1(int!null) g:2(geometry)
+ │    ├── immutable
+ │    ├── stats: [rows=666.666667]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── ordering: +1
+ │    ├── limit hint: 1.00
+ │    ├── sort
+ │    │    ├── columns: i:1(int!null) g:2(geometry)
+ │    │    ├── stats: [rows=100]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 0.15
+ │    │    └── index-join t
+ │    │         ├── columns: i:1(int!null) g:2(geometry)
+ │    │         ├── stats: [rows=100]
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2)
+ │    │         └── inverted-filter
+ │    │              ├── columns: i:1(int!null)
+ │    │              ├── inverted expression: /2
+ │    │              │    ├── tight: false
+ │    │              │    └── union spans: ["\x87\xff", "\x87\xff"]
+ │    │              ├── stats: [rows=100]
+ │    │              ├── key: (1)
+ │    │              └── scan t@secondary
+ │    │                   ├── columns: i:1(int!null) g:2(geometry)
+ │    │                   ├── inverted constraint: /2/1
+ │    │                   │    └── spans: ["\x87\xff", "\x87\xff"]
+ │    │                   ├── stats: [rows=100, distinct(1)=97.5, null(1)=0, distinct(2)=2, null(2)=100]
+ │    │                   │   histogram(2)=
+ │    │                   ├── key: (1)
+ │    │                   └── fd: (1)-->(2)
+ │    └── filters
+ │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable]
+ └── 1 [type=int]
