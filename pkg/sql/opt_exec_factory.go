@@ -760,10 +760,45 @@ func (ef *execFactory) ConstructInvertedJoin(
 	inputCol exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
-	reqOrdering exec.OutputOrdering,
+	// The OutputOrdering is ignored since the inverted join always maintains
+	// the ordering of the input rows.
+	_ exec.OutputOrdering,
 ) (exec.Node, error) {
-	// TODO(rytaft, sumeerbhola): Fill this in.
-	return nil, errors.Errorf("Geospatial joins are not yet supported")
+	tabDesc := table.(*optTable).desc
+	indexDesc := index.(*optIndex).desc
+	// NB: lookupCols does not include the inverted column, which is only a partial
+	// representation of the original table column. This scan configuration does not
+	// affect what the invertedJoiner implementation retrieves from the inverted
+	// index (which includes the inverted column). This scan configuration is used
+	// later for computing the output from the inverted join.
+	colCfg := makeScanColumnsConfig(table, lookupCols)
+	tableScan := ef.planner.Scan()
+
+	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+		return nil, err
+	}
+	tableScan.index = indexDesc
+
+	n := &invertedJoinNode{
+		input:        input.(planNode),
+		table:        tableScan,
+		joinType:     joinType,
+		invertedExpr: invertedExpr,
+		inputCol:     int32(inputCol),
+	}
+	if onCond != nil && onCond != tree.DBoolTrue {
+		n.onExpr = onCond
+	}
+	// Build the result columns.
+	inputCols := planColumns(input.(planNode))
+	var scanCols sqlbase.ResultColumns
+	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
+		scanCols = planColumns(tableScan)
+	}
+	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
+	n.columns = append(n.columns, inputCols...)
+	n.columns = append(n.columns, scanCols...)
+	return n, nil
 }
 
 // Helper function to create a scanNode from just a table / index descriptor

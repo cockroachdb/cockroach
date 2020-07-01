@@ -147,6 +147,9 @@ var _ execinfra.OpNode = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
 
+// newInvertedJoiner constructs an invertedJoiner. The datumToInvertedExpr
+// argument is non-nil only for tests. When nil, the invertedJoiner uses
+// the spec to construct an implementation of DatumToInvertedExpr.
 func newInvertedJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
