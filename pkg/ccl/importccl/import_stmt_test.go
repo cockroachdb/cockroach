@@ -2473,11 +2473,12 @@ func TestImportIntoCSV(t *testing.T) {
 	})
 
 	// Test that IMPORT INTO works when columns with default expressions are present.
-	// The default expressions supported by IMPORT INTO are literals and pure functions
-	// (functions that always return the same value given the same arguments).
-	// The default expression is used when this column is not targeted; otherwise,
-	// data from source file (like CSV) is used. It also checks IMPORT TABLE works
-	// when there are default columns.
+	// The default expressions supported by IMPORT INTO are constant expressions,
+	// which are literals and functions that always return the same value given the
+	// same arguments (examples of non-constant expressions are given in the last two
+	// subtests below). The default expression is used when this column is not
+	// targeted; otherwise, data from source file (like CSV) is used. It also checks
+	// that IMPORT TABLE works when there are default columns.
 	t.Run("import-into-default", func(t *testing.T) {
 		var data string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
