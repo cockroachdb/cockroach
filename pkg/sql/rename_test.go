@@ -209,9 +209,9 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 
 	var foundLease bool
 	s.LeaseManager().(*lease.Manager).VisitLeases(func(
-		desc sqlbase.TableDescriptor, dropped bool, refCount int, expiration tree.DTimestamp,
+		desc catalog.Descriptor, dropped bool, refCount int, expiration tree.DTimestamp,
 	) (wantMore bool) {
-		if desc.ID == tableDesc.ID && desc.Name == "t" {
+		if desc.GetID() == tableDesc.ID && desc.GetName() == "t" {
 			foundLease = true
 		}
 		return true

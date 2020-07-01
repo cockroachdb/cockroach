@@ -367,7 +367,7 @@ func (tc *Collection) GetTableVersion(
 	}
 
 	readTimestamp := txn.ReadTimestamp()
-	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, schemaID, tn.Table())
+	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, schemaID, tn.Table())
 	if err != nil {
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
@@ -379,6 +379,13 @@ func (tc *Collection) GetTableVersion(
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.
 		return nil, err
+	}
+	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+	if !ok {
+		if flags.Required {
+			return nil, sqlbase.NewUndefinedRelationError(tn)
+		}
+		return nil, nil
 	}
 
 	if expiration.LessEq(readTimestamp) {
@@ -435,7 +442,7 @@ func (tc *Collection) GetTableVersionByID(
 	}
 
 	readTimestamp := txn.ReadTimestamp()
-	table, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, tableID)
+	desc, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, tableID)
 	if err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			// Transform the descriptor error into an error that references the
@@ -444,6 +451,12 @@ func (tc *Collection) GetTableVersionByID(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
 		return nil, err
+	}
+	// Also return an error if the descriptor isn't a table.
+	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+	if !ok {
+		return nil, sqlbase.NewUndefinedRelationError(
+			&tree.TableRef{TableID: int64(tableID)})
 	}
 
 	if expiration.LessEq(readTimestamp) {
@@ -598,7 +611,8 @@ func (tc *Collection) GetTablesWithNewVersion() []lease.IDVersion {
 	var tables []lease.IDVersion
 	for _, table := range tc.uncommittedTables {
 		if mut := table.MutableTableDescriptor; !mut.IsNewTable() {
-			tables = append(tables, lease.NewIDVersionPrev(&mut.ClusterVersion))
+			clusterVer := &mut.ClusterVersion
+			tables = append(tables, lease.NewIDVersionPrev(clusterVer.Name, clusterVer.ID, clusterVer.Version))
 		}
 	}
 	return tables
