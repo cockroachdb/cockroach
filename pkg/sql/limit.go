@@ -24,9 +24,6 @@ type limitNode struct {
 	plan       planNode
 	countExpr  tree.TypedExpr
 	offsetExpr tree.TypedExpr
-	evaluated  bool
-	count      int64
-	offset     int64
 }
 
 func (n *limitNode) startExec(params runParams) error {
@@ -47,24 +44,26 @@ func (n *limitNode) Close(ctx context.Context) {
 
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
-func (n *limitNode) evalLimit(evalCtx *tree.EvalContext) error {
-	n.count = math.MaxInt64
-	n.offset = 0
+func evalLimit(
+	evalCtx *tree.EvalContext, countExpr, offsetExpr tree.TypedExpr,
+) (count, offset int64, err error) {
+	count = math.MaxInt64
+	offset = 0
 
 	data := []struct {
 		name string
 		src  tree.TypedExpr
 		dst  *int64
 	}{
-		{"LIMIT", n.countExpr, &n.count},
-		{"OFFSET", n.offsetExpr, &n.offset},
+		{"LIMIT", countExpr, &count},
+		{"OFFSET", offsetExpr, &offset},
 	}
 
 	for _, datum := range data {
 		if datum.src != nil {
 			dstDatum, err := datum.src.Eval(evalCtx)
 			if err != nil {
-				return err
+				return count, offset, err
 			}
 
 			if dstDatum == tree.DNull {
@@ -75,11 +74,10 @@ func (n *limitNode) evalLimit(evalCtx *tree.EvalContext) error {
 			dstDInt := tree.MustBeDInt(dstDatum)
 			val := int64(dstDInt)
 			if val < 0 {
-				return fmt.Errorf("negative value for %s", datum.name)
+				return count, offset, fmt.Errorf("negative value for %s", datum.name)
 			}
 			*datum.dst = val
 		}
 	}
-	n.evaluated = true
-	return nil
+	return count, offset, nil
 }

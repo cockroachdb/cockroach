@@ -365,6 +365,7 @@ AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%' AND inf
 AND info NOT LIKE '%sql.stats.automatic_collection.enabled%'
 AND info NOT LIKE '%sql.defaults.vectorize%'
 AND info NOT LIKE '%sql.testing.vectorize.batch_size%'
+AND info NOT LIKE '%sql.defaults.experimental_distsql_planning%'
 ORDER BY "timestamp"
 ----
 0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}

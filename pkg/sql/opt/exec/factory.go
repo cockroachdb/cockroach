@@ -650,7 +650,6 @@ type CheckOrdinalSet = util.FastIntSet
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {
 	FuncName   string
-	Builtin    *tree.Overload
 	Distinct   bool
 	ResultType *types.T
 	ArgCols    []NodeColumnOrdinal

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -282,59 +281,7 @@ func (ef *execFactory) ConstructInvertedFilter(
 func (ef *execFactory) ConstructSimpleProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// If the top node is already a renderNode, just rearrange the columns. But
-	// we don't want to duplicate a rendering expression (in case it is expensive
-	// to compute or has side-effects); so if we have duplicates we avoid this
-	// optimization (and add a new renderNode).
-	if r, ok := n.(*renderNode); ok && !hasDuplicates(cols) {
-		oldCols, oldRenders := r.columns, r.render
-		r.columns = make(sqlbase.ResultColumns, len(cols))
-		r.render = make([]tree.TypedExpr, len(cols))
-		for i, ord := range cols {
-			r.columns[i] = oldCols[ord]
-			if colNames != nil {
-				r.columns[i].Name = colNames[i]
-			}
-			r.render[i] = oldRenders[ord]
-		}
-		r.reqOrdering = ReqOrdering(reqOrdering)
-		return r, nil
-	}
-	var inputCols sqlbase.ResultColumns
-	if colNames == nil {
-		// We will need the names of the input columns.
-		inputCols = planColumns(n.(planNode))
-	}
-
-	var rb renderBuilder
-	rb.init(n, reqOrdering)
-
-	exprs := make(tree.TypedExprs, len(cols))
-	for i, col := range cols {
-		exprs[i] = rb.r.ivarHelper.IndexedVar(int(col))
-	}
-	var resultTypes []*types.T
-	if colNames != nil {
-		// We will need updated result types.
-		resultTypes = make([]*types.T, len(cols))
-		for i := range exprs {
-			resultTypes[i] = exprs[i].ResolvedType()
-		}
-	}
-	resultCols := getResultColumnsForSimpleProject(cols, colNames, resultTypes, inputCols)
-	rb.setOutput(exprs, resultCols)
-	return rb.res, nil
-}
-
-func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
-	var set util.FastIntSet
-	for _, c := range cols {
-		if set.Contains(int(c)) {
-			return true
-		}
-		set.Add(int(c))
-	}
-	return false
+	return constructSimpleProjectForPlanNode(n.(planNode), cols, colNames, reqOrdering)
 }
 
 // ConstructRender is part of the exec.Factory interface.
@@ -452,10 +399,15 @@ func (ef *execFactory) ConstructMergeJoin(
 func (ef *execFactory) ConstructScalarGroupBy(
 	input exec.Node, aggregations []exec.AggInfo,
 ) (exec.Node, error) {
+	// There are no grouping columns with scalar GroupBy, so we create empty
+	// arguments upfront to be passed into getResultColumnsForGroupBy call
+	// below.
+	var inputCols sqlbase.ResultColumns
+	var groupCols []exec.NodeColumnOrdinal
 	n := &groupNode{
 		plan:     input.(planNode),
 		funcs:    make([]*aggregateFuncHolder, 0, len(aggregations)),
-		columns:  make(sqlbase.ResultColumns, 0, len(aggregations)),
+		columns:  getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
 		isScalar: true,
 	}
 	if err := ef.addAggregations(n, aggregations); err != nil {
@@ -472,31 +424,26 @@ func (ef *execFactory) ConstructGroupBy(
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	inputPlan := input.(planNode)
+	inputCols := planColumns(inputPlan)
 	n := &groupNode{
-		plan:             input.(planNode),
+		plan:             inputPlan,
 		funcs:            make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:          make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
-		groupCols:        make([]int, len(groupCols)),
+		columns:          getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		groupCols:        convertOrdinalsToInts(groupCols),
 		groupColOrdering: groupColOrdering,
 		isScalar:         false,
 		reqOrdering:      ReqOrdering(reqOrdering),
 	}
-	inputCols := planColumns(n.plan)
-	for i := range groupCols {
-		col := int(groupCols[i])
-		n.groupCols[i] = col
-
+	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := n.newAggregateFuncHolder(
 			builtins.AnyNotNull,
-			inputCols[col].Typ,
 			[]int{col},
-			builtins.NewAnyNotNullAggregate,
 			nil, /* arguments */
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)
-		n.columns = append(n.columns, inputCols[col])
 	}
 	if err := ef.addAggregations(n, aggregations); err != nil {
 		return nil, err
@@ -505,45 +452,22 @@ func (ef *execFactory) ConstructGroupBy(
 }
 
 func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo) error {
-	inputCols := planColumns(n.plan)
 	for i := range aggregations {
 		agg := &aggregations[i]
-		builtin := agg.Builtin
-		renderIdxs := make([]int, len(agg.ArgCols))
-		params := make([]*types.T, len(agg.ArgCols))
-		for j, col := range agg.ArgCols {
-			renderIdx := int(col)
-			renderIdxs[j] = renderIdx
-			params[j] = inputCols[renderIdx].Typ
-		}
-		aggFn := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-			return builtin.AggregateFunc(params, evalCtx, arguments)
-		}
+		renderIdxs := convertOrdinalsToInts(agg.ArgCols)
 
 		f := n.newAggregateFuncHolder(
 			agg.FuncName,
-			agg.ResultType,
 			renderIdxs,
-			aggFn,
 			agg.ConstArgs,
 			ef.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		if agg.Distinct {
 			f.setDistinct()
 		}
-
-		if agg.Filter == -1 {
-			// A value of -1 means the aggregate had no filter.
-			f.filterRenderIdx = tree.NoColumnIdx
-		} else {
-			f.filterRenderIdx = int(agg.Filter)
-		}
+		f.filterRenderIdx = int(agg.Filter)
 
 		n.funcs = append(n.funcs, f)
-		n.columns = append(n.columns, sqlbase.ResultColumn{
-			Name: agg.FuncName,
-			Typ:  agg.ResultType,
-		})
 	}
 	return nil
 }
