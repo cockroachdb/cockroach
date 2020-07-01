@@ -1,0 +1,192 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package sqlbase
+
+import (
+	"reflect"
+	"testing"
+)
+
+type validateStatus int
+
+const (
+	// statusUnvalidated means that a field hasn't been added to any Validate
+	// methods and will fail the test.
+	statusUnvalidated validateStatus = iota
+	// thisFieldReferencesNoObjects means that a field doesn't have any meaningful
+	// references to other objects, and therefore isn't validated.
+	thisFieldReferencesNoObjects
+	// todoIAmKnowinglyAddingTechDebt means that a field wasn't added to
+	// any validation methods, and that you're knowingly adding tech debt! You
+	// must add a justification for this in the map.
+	todoIAmKnowinglyAddingTechDebt
+	// iSolemnlySwearThisFieldIsValidated means that a field was added to a
+	//validate method.
+	iSolemnlySwearThisFieldIsValidated
+)
+
+// validationMap is a structure that contains a "validation status" for every
+// field in all listed descriptors.
+//
+// The purpose of this map is to force people who are adding new descriptor
+// fields to remember to add those fields to the appropriate Validate methods.
+// If you're here because you failed the test at the bottom of this file, you
+// should add an entry for your new field(s) to the map below. Please think
+// carefully when adding your entry, and be truthful - nothing checks these
+// validation statuses but you and your code reviewers.
+//
+// Adding information to Validate is extremely important. Writing corrupted
+// descriptors to disk is a real risk and has real consequences. Please do your
+// part to ensure your features don't have this risk.
+//
+// The validation statuses are descriptively named so that reviewers will take
+// note of what you add to the map :)
+var validationMap = []struct {
+	obj      interface{}
+	fieldMap map[string]validationStatusInfo
+}{
+	{
+		obj: TableDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":             {status: thisFieldReferencesNoObjects},
+			"ID":               {status: thisFieldReferencesNoObjects},
+			"Version":          {status: thisFieldReferencesNoObjects},
+			"ModificationTime": {status: thisFieldReferencesNoObjects},
+			"DrainingNames":    {status: thisFieldReferencesNoObjects},
+			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
+			"UnexposedParentSchemaID": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"Columns":      {status: iSolemnlySwearThisFieldIsValidated},
+			"NextColumnID": {status: iSolemnlySwearThisFieldIsValidated},
+			"Families":     {status: iSolemnlySwearThisFieldIsValidated},
+			"NextFamilyID": {status: thisFieldReferencesNoObjects},
+			"PrimaryIndex": {status: iSolemnlySwearThisFieldIsValidated},
+			"Indexes":      {status: iSolemnlySwearThisFieldIsValidated},
+			"NextIndexID":  {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges":   {status: iSolemnlySwearThisFieldIsValidated},
+			"Mutations":    {status: iSolemnlySwearThisFieldIsValidated},
+			"Lease":        {status: thisFieldReferencesNoObjects},
+			"NextMutationID": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(schema)"},
+			"FormatVersion": {status: thisFieldReferencesNoObjects},
+			"State":         {status: thisFieldReferencesNoObjects},
+			"OfflineReason": {status: thisFieldReferencesNoObjects},
+			"Checks": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"ViewQuery": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"DependsOn": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"DependedOnBy": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"MutationJobs": {status: thisFieldReferencesNoObjects},
+			"SequenceOpts": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"DropTime": {status: thisFieldReferencesNoObjects},
+			"ReplacementOf": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(bulkio)"},
+			"AuditMode": {status: thisFieldReferencesNoObjects},
+			"DropJobID": {status: thisFieldReferencesNoObjects},
+			"GCMutations": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(schema)"},
+			"CreateQuery":    {status: thisFieldReferencesNoObjects},
+			"CreateAsOfTime": {status: thisFieldReferencesNoObjects},
+			"OutboundFKs":    {status: thisFieldReferencesNoObjects},
+			"InboundFKs":     {status: thisFieldReferencesNoObjects},
+			"Temporary":      {status: thisFieldReferencesNoObjects},
+		},
+	},
+	{
+		obj: IndexDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":             {status: thisFieldReferencesNoObjects},
+			"ID":               {status: thisFieldReferencesNoObjects},
+			"Unique":           {status: thisFieldReferencesNoObjects},
+			"Version":          {status: thisFieldReferencesNoObjects},
+			"ColumnNames":      {status: iSolemnlySwearThisFieldIsValidated},
+			"ColumnDirections": {status: iSolemnlySwearThisFieldIsValidated},
+			"StoreColumnNames": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"ColumnIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"ExtraColumnIDs": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"StoreColumnIDs": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			"CompositeColumnIDs": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(features)"},
+			// These next 2 are deprecated and not used anymore.
+			"ForeignKey":   {status: thisFieldReferencesNoObjects},
+			"ReferencedBy": {status: thisFieldReferencesNoObjects},
+
+			"Interleave":        {status: iSolemnlySwearThisFieldIsValidated},
+			"InterleavedBy":     {status: iSolemnlySwearThisFieldIsValidated},
+			"Partitioning":      {status: iSolemnlySwearThisFieldIsValidated},
+			"Type":              {status: thisFieldReferencesNoObjects},
+			"CreatedExplicitly": {status: thisFieldReferencesNoObjects},
+			"EncodingType":      {status: thisFieldReferencesNoObjects},
+			"Sharded":           {status: iSolemnlySwearThisFieldIsValidated},
+			"Disabled":          {status: thisFieldReferencesNoObjects},
+			"GeoConfig":         {status: thisFieldReferencesNoObjects},
+			"Predicate": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(mgartner)"},
+		},
+	},
+}
+
+type validationStatusInfo struct {
+	status validateStatus
+	reason string
+}
+
+// Hello! If you're seeing this test fail, you probably just added a new
+// protobuf field to a descriptor. Please read the documentation at the top of
+// this file.
+func TestValidateCoversAllDescriptorFields(t *testing.T) {
+	for _, structInfo := range validationMap {
+		o := structInfo.obj
+		for field, info := range structInfo.fieldMap {
+			switch info.status {
+			case statusUnvalidated:
+				t.Logf("field %T.%s marked as unvalidated", o, field)
+				t.Fail()
+			case todoIAmKnowinglyAddingTechDebt:
+				if info.reason == "" {
+					t.Logf("field %T.%s marked as TODO with no reason", o, field)
+					t.Fail()
+				}
+			}
+		}
+
+		typ := reflect.ValueOf(o).Type()
+		for i := 0; i < typ.NumField(); i++ {
+			fieldName := typ.Field(i).Name
+			info := structInfo.fieldMap[fieldName]
+			switch info.status {
+			case statusUnvalidated:
+				t.Logf("field %T.%s not marked as validated", o, fieldName)
+				t.Fail()
+			case todoIAmKnowinglyAddingTechDebt:
+				t.Logf("TODO: field %T.%s isn't validated: %s", o, fieldName, info.reason)
+			}
+		}
+	}
+}
