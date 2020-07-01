@@ -178,9 +178,9 @@
 
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
-# with the ON condition (this is correct for both inner and left join).
+# with the ON condition (this is correct for inner, left, and semi/anti join).
 [GenerateLookupJoinsWithFilter, Explore]
-(InnerJoin | LeftJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Select
         (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)

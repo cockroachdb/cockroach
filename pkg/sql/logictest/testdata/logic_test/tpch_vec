@@ -598,10 +598,8 @@ EXPLAIN (VEC) SELECT o_orderpriority, count(*) AS order_count FROM orders WHERE 
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashAggregator
-      └ *colexec.hashJoiner
-        ├ *rowexec.indexJoiner
-        │ └ *colfetcher.colBatchScan
-        └ *colexec.selLTInt64Int64Op
+      └ *rowexec.joinReader
+        └ *rowexec.indexJoiner
           └ *colfetcher.colBatchScan
 
 # Query 5

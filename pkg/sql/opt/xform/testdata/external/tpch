@@ -454,8 +454,9 @@ sort
       ├── grouping columns: o_orderpriority:6!null
       ├── key: (6)
       ├── fd: (6)-->(26)
-      ├── semi-join (hash)
+      ├── semi-join (lookup lineitem)
       │    ├── columns: o_orderkey:1!null o_orderdate:5!null o_orderpriority:6!null
+      │    ├── key columns: [1] = [10]
       │    ├── key: (1)
       │    ├── fd: (1)-->(5,6)
       │    ├── index-join orders
@@ -467,14 +468,8 @@ sort
       │    │         ├── constraint: /5/1: [/'1993-07-01' - /'1993-09-30']
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(5)
-      │    ├── select
-      │    │    ├── columns: l_orderkey:10!null l_commitdate:21!null l_receiptdate:22!null
-      │    │    ├── scan lineitem
-      │    │    │    └── columns: l_orderkey:10!null l_commitdate:21!null l_receiptdate:22!null
-      │    │    └── filters
-      │    │         └── l_commitdate:21 < l_receiptdate:22 [outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ])]
       │    └── filters
-      │         └── l_orderkey:10 = o_orderkey:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+      │         └── l_commitdate:21 < l_receiptdate:22 [outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ])]
       └── aggregations
            └── count-rows [as=count_rows:26]
 
