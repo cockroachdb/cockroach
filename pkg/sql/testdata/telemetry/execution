@@ -1,0 +1,23 @@
+# This file contains telemetry tests for sql.exec.* counters.
+
+# Tests for vectorization counters.
+feature-allowlist
+sql.exec.vectorized-setting.on
+sql.exec.vectorized-setting.off
+sql.exec.vectorized-setting.201auto
+----
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.vectorize='on'
+----
+sql.exec.vectorized-setting.on
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.vectorize='off'
+----
+sql.exec.vectorized-setting.off
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.vectorize='201auto'
+----
+sql.exec.vectorized-setting.201auto
