@@ -138,9 +138,12 @@ func storedLeaseExpiration(expiration hlc.Timestamp) tree.DTimestamp {
 	return tree.DTimestamp{Time: timeutil.Unix(0, expiration.WallTime).Round(time.Microsecond)}
 }
 
-// Storage implements the operations for acquiring and releasing leases and
-// publishing a new version of a descriptor. Exported only for testing.
-type Storage struct {
+// storage implements the operations for acquiring and releasing leases and
+// publishing a new version of a descriptor.
+// TODO (lucy,ajwerner): This could go in its own package and expose an API for
+// the manager. Some of these fields belong on the manager, in any case, since
+// they're only used by the manager and not by the store itself.
+type storage struct {
 	nodeIDContainer  *base.SQLIDContainer
 	db               *kv.DB
 	clock            *hlc.Clock
@@ -171,7 +174,7 @@ type Storage struct {
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
-func (s Storage) jitteredLeaseDuration() time.Duration {
+func (s storage) jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(s.leaseDuration) * (1 - s.leaseJitterFraction +
 		2*s.leaseJitterFraction*rand.Float64()))
 }
@@ -180,7 +183,7 @@ func (s Storage) jitteredLeaseDuration() time.Duration {
 // If the lease cannot be obtained because the descriptor is in the process of
 // being dropped or offline, the error will be of type inactiveTableError.
 // The expiration time set for the lease > minExpiration.
-func (s Storage) acquire(
+func (s storage) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, tableID sqlbase.ID,
 ) (*descriptorVersionState, error) {
 	var table *descriptorVersionState
@@ -223,7 +226,7 @@ func (s Storage) acquire(
 			Descriptor: sqlbase.NewImmutableTableDescriptor(*tableDesc),
 			expiration: expiration,
 		}
-		log.VEventf(ctx, 2, "Storage acquired lease %+v", storedLease)
+		log.VEventf(ctx, 2, "storage acquired lease %+v", storedLease)
 		table.mu.lease = storedLease
 
 		// ValidateTable instead of Validate, even though we have a txn available,
@@ -266,14 +269,14 @@ func (s Storage) acquire(
 // read a table descriptor because it can be called while modifying a
 // descriptor through a schema change before the schema change has committed
 // that can result in a deadlock.
-func (s Storage) release(ctx context.Context, stopper *stop.Stopper, lease *storedTableLease) {
+func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *storedTableLease) {
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 	firstAttempt := true
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
 	for r := retry.Start(retryOptions); r.Next(); {
-		log.VEventf(ctx, 2, "Storage releasing lease %+v", lease)
+		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
 		nodeID := s.nodeIDContainer.SQLInstanceID()
 		if nodeID == 0 {
 			panic("zero nodeID")
@@ -312,7 +315,7 @@ func (s Storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
-func (s Storage) WaitForOneVersion(
+func (m *Manager) WaitForOneVersion(
 	ctx context.Context, tableID sqlbase.ID, retryOpts retry.Options,
 ) (sqlbase.DescriptorVersion, error) {
 	var tableDesc *sqlbase.TableDescriptor
@@ -321,15 +324,15 @@ func (s Storage) WaitForOneVersion(
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, s.db, s.codec, tableID)
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, m.storage.db, m.storage.codec, tableID)
 		if err != nil {
 			return 0, err
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
-		now := s.clock.Now()
+		now := m.storage.clock.Now()
 		tables := []IDVersion{NewIDVersionPrev(tableDesc)}
-		count, err := CountLeases(ctx, s.internalExecutor, tables, now)
+		count, err := CountLeases(ctx, m.storage.internalExecutor, tables, now)
 		if err != nil {
 			return 0, err
 		}
@@ -368,7 +371,7 @@ var ErrDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 //
 // TODO (lucy): Providing the txn for the update closure just to update a job
 // is not ideal. There must be a better API for this.
-func (s Storage) PublishMultiple(
+func (m *Manager) PublishMultiple(
 	ctx context.Context,
 	tableIDs []sqlbase.ID,
 	update func(*kv.Txn, map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error,
@@ -381,7 +384,7 @@ func (s Storage) PublishMultiple(
 		// of the tables.
 		expectedVersions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
 		for _, id := range tableIDs {
-			expected, err := s.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
+			expected, err := m.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
 			if err != nil {
 				return nil, err
 			}
@@ -391,14 +394,14 @@ func (s Storage) PublishMultiple(
 		tableDescs := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := m.storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			versions := make(map[sqlbase.ID]sqlbase.DescriptorVersion)
 			descsToUpdate := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 			for _, id := range tableIDs {
 				// Re-read the current versions of the table descriptor, this time
 				// transactionally.
 				var err error
-				descsToUpdate[id], err = sqlbase.GetMutableTableDescFromID(ctx, txn, s.codec, id)
+				descsToUpdate[id], err = sqlbase.GetMutableTableDescFromID(ctx, txn, m.storage.codec, id)
 				if err != nil {
 					return err
 				}
@@ -430,7 +433,7 @@ func (s Storage) PublishMultiple(
 						descsToUpdate[id].Version, versions[id])
 				}
 
-				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn, s.settings); err != nil {
+				if err := descsToUpdate[id].MaybeIncrementVersion(ctx, txn, m.storage.settings); err != nil {
 					return err
 				}
 				if err := descsToUpdate[id].ValidateTable(); err != nil {
@@ -442,7 +445,7 @@ func (s Storage) PublishMultiple(
 
 			b := txn.NewBatch()
 			for tableID, tableDesc := range tableDescs {
-				if err := catalogkv.WriteDescToBatch(ctx, false /* kvTrace */, s.settings, b, s.codec, tableID, tableDesc); err != nil {
+				if err := catalogkv.WriteDescToBatch(ctx, false /* kvTrace */, m.storage.settings, b, m.storage.codec, tableID, tableDesc); err != nil {
 					return err
 				}
 			}
@@ -497,7 +500,7 @@ func (s Storage) PublishMultiple(
 // Returns the updated version of the descriptor.
 // TODO (lucy): Maybe have the closure take a *kv.Txn to match
 // PublishMultiple.
-func (s Storage) Publish(
+func (m *Manager) Publish(
 	ctx context.Context,
 	tableID sqlbase.ID,
 	update func(*sqlbase.MutableTableDescriptor) error,
@@ -512,7 +515,7 @@ func (s Storage) Publish(
 		return update(desc)
 	}
 
-	results, err := s.PublishMultiple(ctx, tableIDs, updates, logEvent)
+	results, err := m.PublishMultiple(ctx, tableIDs, updates, logEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +573,7 @@ func CountLeases(
 // This returns an error when Replica.checkTSAboveGCThresholdRLocked()
 // returns an error when the expiration timestamp is less than the storage
 // layer GC threshold.
-func (s Storage) getForExpiration(
+func (s storage) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id sqlbase.ID,
 ) (*descriptorVersionState, error) {
 	var table *descriptorVersionState
@@ -867,7 +870,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 	// Read descriptors from the store.
 	var versions []*descriptorVersionState
 	for {
-		table, err := m.Storage.getForExpiration(ctx, expiration, tableID)
+		table, err := m.storage.getForExpiration(ctx, expiration, tableID)
 		if err != nil {
 			return nil, err
 		}
@@ -1017,7 +1020,7 @@ func (t *tableState) removeInactiveVersions() []*storedTableLease {
 // lease acquisition.
 func acquireNodeLease(ctx context.Context, m *Manager, id sqlbase.ID) (bool, error) {
 	var toRelease *storedTableLease
-	resultChan, didAcquire := m.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
+	resultChan, didAcquire := m.storage.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
 		// Note that we use a new `context` here to avoid a situation where a cancellation
 		// of the first context cancels other callers to the `acquireNodeLease()` method,
 		// because of its use of `singleflight.Group`. See issue #41780 for how this has
@@ -1032,7 +1035,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id sqlbase.ID) (bool, err
 		if newest != nil {
 			minExpiration = newest.expiration
 		}
-		table, err := m.Storage.acquire(newCtx, minExpiration, id)
+		table, err := m.storage.acquire(newCtx, minExpiration, id)
 		if err != nil {
 			return nil, err
 		}
@@ -1115,7 +1118,7 @@ func releaseLease(lease *storedTableLease, m *Manager) {
 	ctx := context.TODO()
 	if m.isDraining() {
 		// Release synchronously to guarantee release before exiting.
-		m.Storage.release(ctx, m.stopper, lease)
+		m.storage.release(ctx, m.stopper, lease)
 		return
 	}
 
@@ -1123,7 +1126,7 @@ func releaseLease(lease *storedTableLease, m *Manager) {
 	if err := m.stopper.RunAsyncTask(
 		ctx, "sql.tableState: releasing descriptor lease",
 		func(ctx context.Context) {
-			m.Storage.release(ctx, m.stopper, lease)
+			m.storage.release(ctx, m.stopper, lease)
 		}); err != nil {
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
@@ -1179,7 +1182,7 @@ func purgeOldVersions(
 	// Acquire a refcount on the table on the latest version to maintain an
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
-	table, _, err := t.findForTimestamp(ctx, m.clock.Now())
+	table, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
 	if isInactive := sqlbase.HasInactiveTableError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if table != nil {
@@ -1438,8 +1441,8 @@ func makeTableNameCacheKey(
 // The locking order is:
 // Manager.mu > tableState.mu > tableNameCache.mu > descriptorVersionState.mu
 type Manager struct {
-	Storage
-	mu struct {
+	storage storage
+	mu      struct {
 		syncutil.Mutex
 		tables map[sqlbase.ID]*tableState
 
@@ -1482,7 +1485,7 @@ func NewLeaseManager(
 	cfg *base.LeaseManagerConfig,
 ) *Manager {
 	lm := &Manager{
-		Storage: Storage{
+		storage: storage{
 			nodeIDContainer:     nodeIDContainer,
 			db:                  db,
 			clock:               clock,
@@ -1559,7 +1562,7 @@ func (m *Manager) AcquireByName(
 		if tableVersion.GetModificationTime().LessEq(timestamp) {
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(tableVersion.expiration.WallTime - timestamp.WallTime)
-			if durationUntilExpiry < m.Storage.leaseRenewalTimeout {
+			if durationUntilExpiry < m.storage.leaseRenewalTimeout {
 				if t := m.findTableState(tableVersion.GetID(), false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(
 						ctx, m, tableVersion.GetID(), tableName); err != nil {
@@ -1660,7 +1663,7 @@ func (m *Manager) resolveName(
 	tableName string,
 ) (sqlbase.ID, error) {
 	id := sqlbase.InvalidID
-	if err := m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := m.storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Run the name lookup as high-priority, thereby pushing any intents out of
 		// its way. We don't want schema changes to prevent name resolution/lease
 		// acquisitions; we'd rather force them to refresh. Also this prevents
@@ -1672,7 +1675,7 @@ func (m *Manager) resolveName(
 		txn.SetFixedTimestamp(ctx, timestamp)
 		var found bool
 		var err error
-		found, id, err = sqlbase.LookupObjectID(ctx, txn, m.codec, dbID, schemaID, tableName)
+		found, id, err = sqlbase.LookupObjectID(ctx, txn, m.storage.codec, dbID, schemaID, tableName)
 		if err != nil {
 			return err
 		}
@@ -1710,7 +1713,7 @@ func (m *Manager) Acquire(
 			// If the latest lease is nearly expired, ensure a renewal is queued.
 			if latest {
 				durationUntilExpiry := time.Duration(table.expiration.WallTime - timestamp.WallTime)
-				if durationUntilExpiry < m.Storage.leaseRenewalTimeout {
+				if durationUntilExpiry < m.storage.leaseRenewalTimeout {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, tableID, table.GetName()); err != nil {
 						return nil, hlc.Timestamp{}, err
 					}
@@ -1774,7 +1777,7 @@ func (m *Manager) Release(desc *sqlbase.ImmutableTableDescriptor) error {
 // removeOnceDereferenced returns true if the Manager thinks
 // a descriptorVersionState can be removed after its refcount goes to 0.
 func (m *Manager) removeOnceDereferenced() bool {
-	return m.Storage.testingKnobs.RemoveOnceDereferenced ||
+	return m.storage.testingKnobs.RemoveOnceDereferenced ||
 		// Release from the store if the Manager is draining.
 		m.isDraining()
 }
@@ -1890,7 +1893,7 @@ func (m *Manager) watchForUpdates(
 	tableUpdateCh chan *sqlbase.TableDescriptor,
 ) {
 	useRangefeeds := m.testingKnobs.AlwaysUseRangefeeds ||
-		m.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases)
+		m.storage.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases)
 	if useRangefeeds {
 		m.watchForRangefeedUpdates(ctx, s, db, tableUpdateCh)
 		return
@@ -1933,14 +1936,14 @@ func (m *Manager) watchForGossipUpdates(
 ) {
 	rawG, err := g.OptionalErr(47150)
 	if err != nil {
-		if v := clusterversion.VersionRangefeedLeases; !m.settings.Version.IsActive(ctx, v) {
+		if v := clusterversion.VersionRangefeedLeases; !m.storage.settings.Version.IsActive(ctx, v) {
 			log.Fatalf(ctx, "required gossip until %v is active: %v", clusterversion.VersionRangefeedLeases, err)
 		}
 		return
 	}
 
 	s.RunWorker(ctx, func(ctx context.Context) {
-		descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
+		descKeyPrefix := m.storage.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		// TODO(ajwerner): Add a mechanism to unregister this channel upon return.
 		// NB: this call is allowed to bypass DeprecatedGossip because we'll never
 		// get here after VersionRangefeedLeases.
@@ -1972,7 +1975,7 @@ func (m *Manager) watchForRangefeedUpdates(
 	if err := s.RunAsyncTask(ctx, "lease rangefeed", func(ctx context.Context) {
 		for {
 			ts := m.getResolvedTimestamp()
-			descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
+			descKeyPrefix := m.storage.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 			span := roachpb.Span{
 				Key:    descKeyPrefix,
 				EndKey: descKeyPrefix.PrefixEnd(),
@@ -2000,7 +2003,7 @@ func (m *Manager) watchForRangefeedUpdates(
 		}
 		var descriptor sqlbase.Descriptor
 		if err := ev.Value.GetProto(&descriptor); err != nil {
-			log.ReportOrPanic(ctx, &m.settings.SV,
+			log.ReportOrPanic(ctx, &m.storage.settings.SV,
 				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
 			return
 		}
@@ -2012,8 +2015,8 @@ func (m *Manager) watchForRangefeedUpdates(
 		// Note that we don't need to "fill in" the descriptor here. Nobody
 		// actually reads the table, but it's necessary for the call to
 		// ValidateTable().
-		if err := table.MaybeFillInDescriptor(ctx, nil, m.codec); err != nil {
-			log.ReportOrPanic(ctx, &m.settings.SV,
+		if err := table.MaybeFillInDescriptor(ctx, nil, m.storage.codec); err != nil {
+			log.ReportOrPanic(ctx, &m.storage.settings.SV,
 				"%s: unable to fill in table descriptor %v", ev.Key, table)
 			return
 		}
@@ -2083,7 +2086,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 			// Note that we don't need to "fill in" the descriptor here. Nobody
 			// actually reads the table, but it's necessary for the call to
 			// ValidateTable().
-			if err := table.MaybeFillInDescriptor(ctx, nil, m.codec); err != nil {
+			if err := table.MaybeFillInDescriptor(ctx, nil, m.storage.codec); err != nil {
 				log.Warningf(ctx, "%s: unable to fill in table descriptor %v", kv.Key, table)
 				return
 			}
@@ -2137,7 +2140,7 @@ func (m *Manager) waitForRangefeedsToBeUsable(ctx context.Context, s *stop.Stopp
 			select {
 			case <-timer.C:
 				timer.Read = true
-				if m.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases) {
+				if m.storage.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases) {
 					close(upgradeChan)
 					return
 				}
@@ -2183,12 +2186,12 @@ var tableLeaseRefreshLimit = settings.RegisterIntSetting(
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 	m.stopper.RunWorker(ctx, func(ctx context.Context) {
-		if m.leaseDuration <= 0 {
+		if m.storage.leaseDuration <= 0 {
 			return
 		}
 		refreshTimer := timeutil.NewTimer()
 		defer refreshTimer.Stop()
-		refreshTimer.Reset(m.Storage.jitteredLeaseDuration() / 2)
+		refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
@@ -2196,7 +2199,7 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
-				refreshTimer.Reset(m.Storage.jitteredLeaseDuration() / 2)
+				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
 				m.refreshSomeLeases(ctx)
 			}
@@ -2206,7 +2209,7 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 
 // Refresh some of the current leases.
 func (m *Manager) refreshSomeLeases(ctx context.Context) {
-	limit := tableLeaseRefreshLimit.Get(&m.settings.SV)
+	limit := tableLeaseRefreshLimit.Get(&m.storage.settings.SV)
 	if limit <= 0 {
 		return
 	}
@@ -2254,7 +2257,7 @@ func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
 	}
 	// TODO(asubiotto): clear up the nodeID naming here and in the table below,
 	// tracked as https://github.com/cockroachdb/cockroach/issues/48271.
-	nodeID := m.Storage.nodeIDContainer.SQLInstanceID()
+	nodeID := m.storage.nodeIDContainer.SQLInstanceID()
 	if nodeID == 0 {
 		panic("zero nodeID")
 	}
@@ -2275,7 +2278,7 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 		// The retry is required because of errors caused by node restarts. Retry 30 times.
 		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
 			var err error
-			rows, err = m.Storage.internalExecutor.Query(
+			rows, err = m.storage.internalExecutor.Query(
 				ctx, "read orphaned table leases", nil /*txn*/, sqlQuery)
 			return err
 		}); err != nil {
@@ -2296,7 +2299,7 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			}
 			if err := m.stopper.RunLimitedAsyncTask(
 				ctx, fmt.Sprintf("release table lease %+v", lease), m.sem, true /*wait*/, func(ctx context.Context) {
-					m.Storage.release(ctx, m.stopper, &lease)
+					m.storage.release(ctx, m.stopper, &lease)
 					log.Infof(ctx, "released orphaned table lease: %+v", lease)
 					wg.Done()
 				}); err != nil {
@@ -2309,12 +2312,12 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 
 // DB returns the Manager's handle to a kv.DB.
 func (m *Manager) DB() *kv.DB {
-	return m.db
+	return m.storage.db
 }
 
 // Codec return the Manager's SQLCodec.
 func (m *Manager) Codec() keys.SQLCodec {
-	return m.codec
+	return m.storage.codec
 }
 
 // VisitLeases introspects the state of leases managed by the Manager.
