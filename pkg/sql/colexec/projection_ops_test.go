@@ -261,10 +261,8 @@ func TestRandomComparisons(t *testing.T) {
 				},
 			)
 		}
-		for i := range lDatums {
-			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, &da, typ)
-			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, &da, typ)
-		}
+		PhysicalTypeColVecToDatum(lDatums, lVec, numTuples, nil /* sel */, &da)
+		PhysicalTypeColVecToDatum(rDatums, rVec, numTuples, nil /* sel */, &da)
 		supportedCmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 		if typ.Family() == types.JsonFamily {
 			supportedCmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE}

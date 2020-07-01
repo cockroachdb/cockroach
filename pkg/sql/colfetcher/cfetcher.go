@@ -884,8 +884,10 @@ func (rf *cFetcher) pushState(state fetcherState) {
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int, typ *types.T) tree.Datum {
-	return colexec.PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, &rf.table.da, typ)
+func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
+	res := []tree.Datum{nil}
+	colexec.PhysicalTypeColVecToDatum(res, rf.machine.colvecs[colIdx], 1 /* length */, []int{rowIdx}, &rf.table.da)
+	return res[0]
 }
 
 // processValue processes the state machine's current value component, setting
@@ -907,7 +909,7 @@ func (rf *cFetcher) processValue(
 		for _, idx := range rf.table.allIndexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
-				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
 			} else {
 				buf.WriteByte('?')
 			}
@@ -1002,7 +1004,7 @@ func (rf *cFetcher) processValue(
 					for j := range table.extraTypes {
 						idx := table.allExtraValColOrdinals[j]
 						buf.WriteByte('/')
-						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
 					}
 					prettyValue = buf.String()
 				}
@@ -1083,7 +1085,7 @@ func (rf *cFetcher) processValueSingle(
 			rf.machine.remainingValueColsByIdx.Remove(idx)
 
 			if rf.traceKV {
-				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, typ).String()
+				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx).String()
 			}
 			if row.DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
@@ -1182,7 +1184,7 @@ func (rf *cFetcher) processValueBytes(
 		}
 		rf.machine.remainingValueColsByIdx.Remove(idx)
 		if rf.traceKV {
-			dVal := rf.getDatumAt(idx, rf.machine.rowIdx, valTyp)
+			dVal := rf.getDatumAt(idx, rf.machine.rowIdx)
 			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
 				return "", "", err
 			}
@@ -1217,7 +1219,7 @@ func (rf *cFetcher) fillNulls() error {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
-					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx).String())
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}

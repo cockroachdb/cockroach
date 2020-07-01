@@ -31,42 +31,6 @@ func (c *CustomFuncs) RemoveGroupingCols(
 	return &p
 }
 
-// AppendAggCols constructs a new Aggregations operator containing the aggregate
-// functions from an existing Aggregations operator plus an additional set of
-// aggregate functions, one for each column in the given set. The new functions
-// are of the given aggregate operator type.
-func (c *CustomFuncs) AppendAggCols(
-	aggs memo.AggregationsExpr, aggOp opt.Operator, cols opt.ColSet,
-) memo.AggregationsExpr {
-	outAggs := make(memo.AggregationsExpr, len(aggs)+cols.Len())
-	copy(outAggs, aggs)
-	c.makeAggCols(aggOp, cols, outAggs[len(aggs):])
-	return outAggs
-}
-
-// AppendAggCols2 constructs a new Aggregations operator containing the
-// aggregate functions from an existing Aggregations operator plus an
-// additional set of aggregate functions, one for each column in the given set.
-// The new functions are of the given aggregate operator type.
-func (c *CustomFuncs) AppendAggCols2(
-	aggs memo.AggregationsExpr,
-	aggOp opt.Operator,
-	cols opt.ColSet,
-	aggOp2 opt.Operator,
-	cols2 opt.ColSet,
-) memo.AggregationsExpr {
-	colsLen := cols.Len()
-	outAggs := make(memo.AggregationsExpr, len(aggs)+colsLen+cols2.Len())
-	copy(outAggs, aggs)
-
-	offset := len(aggs)
-	c.makeAggCols(aggOp, cols, outAggs[offset:])
-	offset += colsLen
-	c.makeAggCols(aggOp2, cols2, outAggs[offset:])
-
-	return outAggs
-}
-
 // makeAggCols is a helper method that constructs a new aggregate function of
 // the given operator type for each column in the given set. The resulting
 // aggregates are written into outElems and outColList. As an example, for

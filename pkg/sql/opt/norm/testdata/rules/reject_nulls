@@ -247,7 +247,7 @@ project
 
 # Aggregate function with DISTINCT.
 norm expect=RejectNullsGroupBy
-SELECT sum(DISTINCT y)
+SELECT sum(DISTINCT y), max(y)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT y FROM xy)
 ON True
@@ -255,19 +255,19 @@ GROUP BY k
 HAVING sum(DISTINCT y)=1
 ----
 project
- ├── columns: sum:7!null
+ ├── columns: sum:7!null max:8!null
  ├── immutable
  ├── fd: ()-->(7)
  └── select
-      ├── columns: k:1!null sum:7!null
+      ├── columns: k:1!null sum:7!null max:8!null
       ├── immutable
       ├── key: (1)
-      ├── fd: ()-->(7)
+      ├── fd: ()-->(7), (1)-->(8)
       ├── group-by
-      │    ├── columns: k:1!null sum:7!null
+      │    ├── columns: k:1!null sum:7!null max:8!null
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(7)
+      │    ├── fd: (1)-->(7,8)
       │    ├── inner-join (cross)
       │    │    ├── columns: k:1!null y:6!null
       │    │    ├── scan a
@@ -281,9 +281,11 @@ project
       │    │    │         └── y:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
-      │         └── agg-distinct [as=sum:7, outer=(6)]
-      │              └── sum
-      │                   └── y:6
+      │         ├── agg-distinct [as=sum:7, outer=(6)]
+      │         │    └── sum
+      │         │         └── y:6
+      │         └── max [as=max:8, outer=(6)]
+      │              └── y:6
       └── filters
            └── sum:7 = 1 [outer=(7), immutable, constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
