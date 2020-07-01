@@ -858,7 +858,7 @@ var recoverySnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
 var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
-	2<<20, /* 2 MiB */
+	bulkIOWriteBurst,
 )
 
 func snapshotRateLimit(
