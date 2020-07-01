@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -305,8 +306,55 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 	}
 
+	// Create a set of index IDs to not add entries to.
+	var ignoreIndexesForPut util.FastIntSet
+	partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.numPassthrough
+	partialIndexVals := sourceVals[partialIndexValOffset:]
+	colIdx := 0
+	indexes := u.run.tu.tableDesc().Indexes
+	for i := range indexes {
+		index := &indexes[i]
+		if index.IsPartial() {
+			val, err := tree.GetBool(partialIndexVals[colIdx])
+			if err != nil {
+				return err
+			}
+			if !val {
+				// If the value of the column for the index predicate expression
+				// is false, the row should not be added to the partial index.
+				if i < len(indexes) {
+					ignoreIndexesForPut.Add(int(index.ID))
+				}
+			}
+			colIdx++
+		}
+	}
+	// Create a set of index IDs to not delete entries from.
+	var ignoreIndexesForDel util.FastIntSet
+	for i := range indexes {
+		index := &indexes[i]
+		if index.IsPartial() {
+			val, err := tree.GetBool(partialIndexVals[colIdx])
+			if err != nil {
+				return err
+			}
+			if !val {
+				// If the value of the column for the index predicate expression
+				// is false, the row should not be removed from the partial
+				// index because it does not exist.
+				if i < len(indexes) {
+					ignoreIndexesForDel.Add(int(index.ID))
+				}
+			}
+			colIdx++
+			if colIdx >= len(partialIndexVals) {
+				break
+			}
+		}
+	}
+
 	// Queue the insert in the KV batch.
-	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, u.run.traceKV)
+	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, ignoreIndexesForPut, ignoreIndexesForDel, u.run.traceKV)
 	if err != nil {
 		return err
 	}

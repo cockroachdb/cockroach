@@ -367,7 +367,10 @@ func (tu *optTableUpserter) updateConflictingRow(
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, traceKV)
+	// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+	// not add entries to or delete entries from.
+	var ignoreIndexes util.FastIntSet
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, ignoreIndexes, ignoreIndexes, traceKV)
 	if err != nil {
 		return err
 	}

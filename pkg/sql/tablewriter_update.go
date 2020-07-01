@@ -48,10 +48,14 @@ func (tu *tableUpdater) row(context.Context, tree.Datums, util.FastIntSet, bool)
 
 // rowForUpdate extends row() from the tableWriter interface.
 func (tu *tableUpdater) rowForUpdate(
-	ctx context.Context, oldValues, updateValues tree.Datums, traceKV bool,
+	ctx context.Context,
+	oldValues, updateValues tree.Datums,
+	ignoreIndexesForPut util.FastIntSet,
+	ignoreIndexesForDel util.FastIntSet,
+	traceKV bool,
 ) (tree.Datums, error) {
 	tu.batchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, ignoreIndexesForPut, ignoreIndexesForDel, traceKV)
 }
 
 // atBatchEnd is part of the tableWriter interface.

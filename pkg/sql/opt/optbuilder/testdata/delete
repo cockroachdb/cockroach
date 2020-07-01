@@ -459,6 +459,7 @@ DELETE FROM partial_indexes
 delete partial_indexes
  ├── columns: <none>
  ├── fetch columns: a:4 b:5 c:6
+ ├── partial index del columns: partial_index_del1:7 partial_index_del2:8
  └── project
       ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
       ├── scan partial_indexes

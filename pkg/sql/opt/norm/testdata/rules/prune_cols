@@ -1942,17 +1942,21 @@ delete a
 # Do not prune columns that are required for evaluating partial index
 # predicates.
 norm expect-not=(PruneMutationFetchCols,PruneMutationInputCols)
-DELETE FROM partial_indexes RETURNING a
+UPDATE partial_indexes SET c = 'bar' RETURNING a
 ----
-delete partial_indexes
+update partial_indexes
  ├── columns: a:1!null
  ├── fetch columns: a:4 b:5 c:6
+ ├── update-mapping:
+ │    └── c_new:9 => c:3
+ ├── partial index put columns: partial_index_put1:10 partial_index_put2:11
+ ├── partial index del columns: partial_index_del1:7 partial_index_del2:8
  ├── volatile, mutations
  ├── key: (1)
  └── project
-      ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
+      ├── columns: partial_index_put1:10!null partial_index_put2:11 c_new:9!null partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
       ├── key: (4)
-      ├── fd: (4)-->(5,6,8), (6)-->(7)
+      ├── fd: ()-->(9,10), (4)-->(5,6,8,11), (6)-->(7)
       ├── scan partial_indexes
       │    ├── columns: a:4!null b:5 c:6
       │    ├── partial index predicates
@@ -1961,6 +1965,9 @@ delete partial_indexes
       │    ├── key: (4)
       │    └── fd: (4)-->(5,6)
       └── projections
+           ├── false [as=partial_index_put1:10]
+           ├── a:4 > b:5 [as=partial_index_put2:11, outer=(4,5)]
+           ├── 'bar' [as=c_new:9]
            ├── c:6 = 'foo' [as=partial_index_del1:7, outer=(6)]
            └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8, outer=(4-6)]
 
