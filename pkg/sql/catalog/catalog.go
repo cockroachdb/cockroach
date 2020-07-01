@@ -18,6 +18,19 @@ import (
 // Descriptor is an interface for retrieved catalog descriptors.
 type Descriptor = sqlbase.DescriptorInterface
 
+type MutableDescriptor interface {
+	Descriptor
+	// MaybeIncrementVersion sets the version of the descriptor to
+	// ClusterVersion.Version + 1.
+	// TODO (lucy): It's not a good idea to have callers handle incrementing the
+	// version manually. Find a better API for this. Maybe creating a new mutable
+	// descriptor should increment the version on the mutable copy from the
+	// outset.
+	MaybeIncrementVersion()
+	// Immutable returns an immutable copy of this descriptor.
+	Immutable() Descriptor
+}
+
 // VirtualSchemas is a collection of VirtualSchemas.
 type VirtualSchemas interface {
 	GetVirtualSchema(schemaName string) (VirtualSchema, bool)

@@ -129,6 +129,56 @@ func unwrapDescriptor(
 	}
 }
 
+// GetMutableDescriptorByID looks up the descriptor for `id`, validates it, and
+// returns the mutable form of it.
+//
+// TODO (lucy): Should this be unified with GetDescriptorByID? See the comment
+// there.
+func GetMutableDescriptorByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
+) (catalog.MutableDescriptor, error) {
+	log.Eventf(ctx, "fetching descriptor with ID %d", id)
+	descKey := sqlbase.MakeDescMetadataKey(codec, id)
+	desc := &sqlbase.Descriptor{}
+	ts, err := txn.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
+		return nil, err
+	}
+	return unwrapDescriptorMutable(ctx, txn, codec, ts, desc)
+}
+
+// unwrapDescriptorMutable takes a descriptor retrieved using a transaction and
+// unwraps it into a mutable implementation of DescriptorInterface. It ensures
+// that the ModificationTime is set properly.
+func unwrapDescriptorMutable(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ts hlc.Timestamp, desc *sqlbase.Descriptor,
+) (catalog.MutableDescriptor, error) {
+	desc.MaybeSetModificationTimeFromMVCCTimestamp(ctx, ts)
+	table, database, typ, schema := desc.Table(hlc.Timestamp{}), desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	switch {
+	case table != nil:
+		if err := table.MaybeFillInDescriptor(ctx, txn, codec); err != nil {
+			return nil, err
+		}
+		if err := table.Validate(ctx, txn, codec); err != nil {
+			return nil, err
+		}
+		return sqlbase.NewMutableExistingTableDescriptor(*table), nil
+	case database != nil:
+		dbDesc := sqlbase.NewMutableExistingDatabaseDescriptor(*database)
+		if err := dbDesc.Validate(); err != nil {
+			return nil, err
+		}
+		return dbDesc, nil
+	case typ != nil:
+		return sqlbase.NewMutableExistingTypeDescriptor(*typ), nil
+	case schema != nil:
+		return sqlbase.NewMutableExistingSchemaDescriptor(*schema), nil
+	default:
+		return nil, nil
+	}
+}
+
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
 func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
