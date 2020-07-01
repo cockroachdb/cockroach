@@ -1660,3 +1660,51 @@ update decimals
       └── projections
            ├── round(a:11) = a:11 [as=check1:15]
            └── b:12[0] > 1 [as=check2:16]
+
+# ------------------------------------------------------------------------------
+# Test partial index column values.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    INDEX (b),
+    INDEX (b) WHERE c = 'foo',
+    INDEX (c) WHERE a > b AND c = 'bar',
+    INDEX "b:delete-only" (b) WHERE c = 'delete-only',
+    INDEX "b:write-only" (b) WHERE c = 'write-only'
+)
+----
+
+build
+UPDATE partial_indexes SET a = 1
+----
+update partial_indexes
+ ├── columns: <none>
+ ├── fetch columns: a:4 b:5 c:6
+ ├── update-mapping:
+ │    └── a_new:11 => a:1
+ ├── partial index put columns: partial_index_del1:7 partial_index_put2:12 partial_index_del3:9 partial_index_del4:10
+ ├── partial index del columns: partial_index_del1:7 partial_index_del2:8 partial_index_del3:9 partial_index_del4:10
+ └── project
+      ├── columns: partial_index_put2:12 a:4!null b:5 c:6 partial_index_del1:7 partial_index_del2:8 partial_index_del3:9 partial_index_del4:10 a_new:11!null
+      ├── project
+      │    ├── columns: a_new:11!null a:4!null b:5 c:6 partial_index_del1:7 partial_index_del2:8 partial_index_del3:9 partial_index_del4:10
+      │    ├── project
+      │    │    ├── columns: partial_index_del1:7 partial_index_del2:8 partial_index_del3:9 partial_index_del4:10 a:4!null b:5 c:6
+      │    │    ├── scan partial_indexes
+      │    │    │    ├── columns: a:4!null b:5 c:6
+      │    │    │    └── partial index predicates
+      │    │    │         ├── secondary: c:6 = 'foo'
+      │    │    │         └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      │    │    └── projections
+      │    │         ├── c:6 = 'foo' [as=partial_index_del1:7]
+      │    │         ├── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]
+      │    │         ├── c:6 = 'delete-only' [as=partial_index_del3:9]
+      │    │         └── c:6 = 'write-only' [as=partial_index_del4:10]
+      │    └── projections
+      │         └── 1 [as=a_new:11]
+      └── projections
+           └── (a_new:11 > b:5) AND (c:6 = 'bar') [as=partial_index_put2:12]

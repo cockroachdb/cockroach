@@ -147,7 +147,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	colIdx := 0
 	indexes := r.ti.tableDesc().Indexes
 	for i := range indexes {
-		index := indexes[i]
+		index := &indexes[i]
 		if index.IsPartial() {
 			val, err := tree.GetBool(partialIndexPutVals[colIdx])
 			if err != nil {
@@ -164,7 +164,6 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 			if colIdx >= len(partialIndexPutVals) {
 				break
 			}
-
 		}
 	}
 
