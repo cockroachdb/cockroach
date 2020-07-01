@@ -188,7 +188,7 @@ func (p *planner) maybeLogStatementInternal(
 		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %s %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr, numRetries)
 	}
-	if queryDuration > slowLogThreshold {
+	if slowQueryLogEnabled && queryDuration > slowLogThreshold {
 		logger := p.execCfg.SlowQueryLogger
 		logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d",
 			age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries)
