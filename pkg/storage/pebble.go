@@ -251,34 +251,20 @@ func (t *pebbleTimeBoundPropCollector) Name() string {
 	return "TimeBoundTblPropCollectorFactory"
 }
 
-var _ pebble.NeedCompacter = &pebbleDeleteRangeCollector{}
+// pebbleDeleteRangeCollector is the equivalent table collector as the RocksDB
+// DeleteRangeTblPropCollector. Pebble does not require it because Pebble will
+// prioritize its own compactions of range tombstones.
+type pebbleDeleteRangeCollector struct{}
 
-// pebbleDeleteRangeCollector marks an sstable for compaction that contains a
-// range tombstone.
-type pebbleDeleteRangeCollector struct {
-	numRangeTombstones int
-}
-
-func (c *pebbleDeleteRangeCollector) Add(key pebble.InternalKey, value []byte) error {
-	if key.Kind() == pebble.InternalKeyKindRangeDelete {
-		c.numRangeTombstones++
-	}
+func (pebbleDeleteRangeCollector) Add(_ pebble.InternalKey, _ []byte) error {
 	return nil
 }
 
-// NeedCompact implements the pebble.NeedCompacter interface.
-func (c *pebbleDeleteRangeCollector) NeedCompact() bool {
-	// NB: Mark any file containing range deletions as requiring a
-	// compaction. This ensures that range deletions are quickly compacted out
-	// of existence.
-	return c.numRangeTombstones > 0
-}
-
-func (*pebbleDeleteRangeCollector) Finish(userProps map[string]string) error {
+func (pebbleDeleteRangeCollector) Finish(_ map[string]string) error {
 	return nil
 }
 
-func (*pebbleDeleteRangeCollector) Name() string {
+func (pebbleDeleteRangeCollector) Name() string {
 	// This constant needs to match the one used by the RocksDB version of this
 	// table property collector. DO NOT CHANGE.
 	return "DeleteRangeTblPropCollectorFactory"
