@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -122,14 +123,14 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// leases using the old name (an update with the new name but the original
 	// version is ignored by the leasing refresh mechanism).
 	renamed := make(chan interface{})
-	lmKnobs.TestingTableRefreshedEvent =
-		func(table *sqlbase.TableDescriptor) {
+	lmKnobs.TestingDescriptorRefreshedEvent =
+		func(descriptor *sqlbase.Descriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			if waitTableID != table.ID {
+			if waitTableID != descriptor.GetID() {
 				return
 			}
-			if table.Name == "t2" && table.Version == 2 {
+			if descriptor.GetName() == "t2" && descriptor.GetVersion() == 2 {
 				close(renamed)
 				waitTableID = 0
 			}
