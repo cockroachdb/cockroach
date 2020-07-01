@@ -219,7 +219,9 @@ func populateExplain(
 			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
 			for scheduledOnNodeID, flow := range flows {
 				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
-				if _, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode); err != nil {
+				if _, err := colflow.SupportsVectorized(
+					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
+				); err != nil {
 					willVectorize = false
 					break
 				}

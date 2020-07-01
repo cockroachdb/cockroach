@@ -227,7 +227,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
-		false, /* forceExprDeserialization */
+		colexec.DefaultExprDeserialization,
 	)
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(creator)
@@ -469,7 +469,7 @@ func newVectorizedFlowCreator(
 	flowID execinfrapb.FlowID,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	forceExprDeserialization bool,
+	exprDeserialization colexec.ExprDeserialization,
 ) *vectorizedFlowCreator {
 	return &vectorizedFlowCreator{
 		flowCreatorHelper:              helper,
@@ -483,7 +483,7 @@ func newVectorizedFlowCreator(
 		flowID:                         flowID,
 		diskQueueCfg:                   diskQueueCfg,
 		fdSemaphore:                    fdSemaphore,
-		exprHelper:                     colexec.NewExprHelper(forceExprDeserialization),
+		exprHelper:                     colexec.NewExprHelper(exprDeserialization),
 	}
 }
 
@@ -952,7 +952,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			inputs = append(inputs, input)
 		}
 
-		args := colexec.NewColOperatorArgs{
+		args := &colexec.NewColOperatorArgs{
 			Spec:                 pspec,
 			Inputs:               inputs,
 			StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
@@ -1196,15 +1196,18 @@ func SupportsVectorized(
 	if isPlanLocal {
 		fuseOpt = flowinfra.FuseAggressively
 	}
-	// We want to force the expression deserialization if this flow is actually
-	// scheduled to be on the remote node in order to make sure that during
-	// actual execution the remote node will be able to deserialize the
-	// expressions without an error.
-	forceExprDeserialization := scheduledOnRemoteNode
+	exprDeserialization := colexec.DefaultExprDeserialization
+	if scheduledOnRemoteNode {
+		// We want to force the expression deserialization if this flow is actually
+		// scheduled to be on the remote node in order to make sure that during
+		// actual execution the remote node will be able to deserialize the
+		// expressions without an error.
+		exprDeserialization = colexec.ForcedExprDeserialization
+	}
 	creator := newVectorizedFlowCreator(
 		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false,
 		nil, output, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, forceExprDeserialization,
+		flowCtx.Cfg.VecFDSemaphore, exprDeserialization,
 	)
 	// We create an unlimited memory account because we're interested whether the
 	// flow is supported via the vectorized engine in general (without paying

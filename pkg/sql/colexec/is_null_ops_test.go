@@ -235,7 +235,7 @@ func TestIsNullSelOp(t *testing.T) {
 						Filter: execinfrapb.Expression{Expr: fmt.Sprintf("@1 %s", c.selExpr)},
 					},
 				}
-				args := NewColOperatorArgs{
+				args := &NewColOperatorArgs{
 					Spec:                spec,
 					Inputs:              input,
 					StreamingMemAccount: testMemAcc,

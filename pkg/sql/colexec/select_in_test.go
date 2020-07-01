@@ -240,7 +240,7 @@ func TestProjectInInt64(t *testing.T) {
 							},
 						},
 					}
-					args := NewColOperatorArgs{
+					args := &NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              input,
 						StreamingMemAccount: testMemAcc,

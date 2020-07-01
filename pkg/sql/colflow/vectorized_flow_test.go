@@ -214,7 +214,10 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	f := &flowinfra.FlowBase{FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx, NodeID: base.TestingIDContainer}}
 	var wg sync.WaitGroup
-	vfc := newVectorizedFlowCreator(&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil, false /* forceExprDeserialization */)
+	vfc := newVectorizedFlowCreator(
+		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
+		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil, colexec.DefaultExprDeserialization,
+	)
 
 	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)
 	defer func() {

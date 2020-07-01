@@ -161,7 +161,7 @@ func TestEval(t *testing.T) {
 			inputTyps := []*types.T{types.Int}
 
 			batchesReturned := 0
-			args := colexec.NewColOperatorArgs{
+			args := &colexec.NewColOperatorArgs{
 				Spec: &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{
 						Type:        execinfrapb.InputSyncSpec_UNORDERED,
