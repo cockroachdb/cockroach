@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -78,35 +76,19 @@ type Inbox struct {
 	// right after init. To be used for unit testing.
 	ctxInterceptorFn func(context.Context)
 
-	// We need two mutexes because a single mutex is insufficient to handle
-	// concurrent calls to Next() and DrainMeta(). See comment in DrainMeta.
-	stateMu struct {
-		syncutil.Mutex
-		// initialized prevents double initialization. Should not be used by the
-		// RunWithStream goroutine.
-		initialized bool
-		// done prevents double closing. It should not be used by the RunWithStream
-		// goroutine.
-		done bool
-		// nextRunning indicates whether Next goroutine is running at the moment.
-		nextRunning bool
-		// nextExited is a condition variable on which DrainMeta might block in
-		// order to wait for Next goroutine to exit.
-		nextExited *sync.Cond
-		// nextShouldExit indicates to Next goroutine that it should exit. It must
-		// only be updated by DrainMeta goroutine.
-		nextShouldExit bool
-		// bufferedMeta buffers any metadata found in Next when reading from the
-		// stream and is returned by DrainMeta.
-		bufferedMeta []execinfrapb.ProducerMetadata
-	}
+	// initialized prevents double initialization. Should not be used by the
+	// RunWithStream goroutine.
+	initialized bool
+	// done prevents double closing. It should not be used by the RunWithStream
+	// goroutine.
+	done bool
+	// bufferedMeta buffers any metadata found in Next when reading from the
+	// stream and is returned by DrainMeta.
+	bufferedMeta []execinfrapb.ProducerMetadata
 
-	streamMu struct {
-		syncutil.Mutex
-		// stream is the RPC stream. It is set when RunWithStream is called but
-		// only the Next and DrainMeta goroutines may access it.
-		stream flowStreamServer
-	}
+	// stream is the RPC stream. It is set when RunWithStream is called but
+	// only the Next and DrainMeta goroutines may access it.
+	stream flowStreamServer
 
 	scratch struct {
 		data []*array.Data
@@ -140,38 +122,32 @@ func NewInbox(
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
 	i.scratch.b = allocator.NewMemBatch(typs)
-	i.stateMu.bufferedMeta = make([]execinfrapb.ProducerMetadata, 0)
-	i.stateMu.nextExited = sync.NewCond(&i.stateMu)
 	return i, nil
 }
 
-// maybeInitLocked calls Inbox.initLocked if the inbox is not initialized and
-// returns an error if the initialization was not successful. Usually this is
-// because the given context is canceled before the remote stream arrives.
-// NOTE: i.stateMu *must* be held when calling this function.
-func (i *Inbox) maybeInitLocked(ctx context.Context) error {
-	if !i.stateMu.initialized {
-		if err := i.initLocked(ctx); err != nil {
+// maybeInit calls Inbox.init if the inbox is not initialized and returns an
+// error if the initialization was not successful. Usually this is because the
+// given context is canceled before the remote stream arrives.
+func (i *Inbox) maybeInit(ctx context.Context) error {
+	if !i.initialized {
+		if err := i.init(ctx); err != nil {
 			return err
 		}
-		i.stateMu.initialized = true
+		i.initialized = true
 	}
 	return nil
 }
 
-// initLocked initializes the Inbox for operation by blocking until
+// init initializes the Inbox for operation by blocking until
 // RunWithStream sets the stream to read from. ctx ownership is retained until
 // the stream arrives (to allow for unblocking the wait for a stream), at which
 // point ownership is transferred to RunWithStream. This should only be called
 // from the reader goroutine when it needs a stream.
-// NOTE: i.stateMu *must* be held when calling this function because it is
-// sufficient to protect access to i.streamMu.stream since the stream will only
-// be accessed after the initialization.
-func (i *Inbox) initLocked(ctx context.Context) error {
+func (i *Inbox) init(ctx context.Context) error {
 	// Wait for the stream to be initialized. We're essentially waiting for the
 	// remote connection.
 	select {
-	case i.streamMu.stream = <-i.streamCh:
+	case i.stream = <-i.streamCh:
 	case err := <-i.timeoutCh:
 		i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
 		return err
@@ -187,12 +163,11 @@ func (i *Inbox) initLocked(ctx context.Context) error {
 	return nil
 }
 
-// closeLocked closes the inbox, ensuring that any call to RunWithStream will
-// return immediately. closeLocked is idempotent.
-// NOTE: i.stateMu *must* be held when calling this function.
-func (i *Inbox) closeLocked() {
-	if !i.stateMu.done {
-		i.stateMu.done = true
+// close closes the inbox, ensuring that any call to RunWithStream will
+// return immediately. close is idempotent.
+func (i *Inbox) close() {
+	if !i.done {
+		i.done = true
 		close(i.errCh)
 	}
 }
@@ -246,15 +221,7 @@ func (i *Inbox) Init() {}
 // The Inbox will exit when either the context passed in on the first call to
 // Next is canceled or when DrainMeta goroutine tells it to do so.
 func (i *Inbox) Next(ctx context.Context) coldata.Batch {
-	i.stateMu.Lock()
-	stateMuLocked := true
-	i.stateMu.nextRunning = true
-	defer func() {
-		i.stateMu.nextRunning = false
-		i.stateMu.nextExited.Signal()
-		i.stateMu.Unlock()
-	}()
-	if i.stateMu.done {
+	if i.done {
 		return coldata.ZeroBatch
 	}
 
@@ -265,13 +232,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		// goroutine listening for context cancellation. errCh must still be closed
 		// during normal termination.
 		if err := recover(); err != nil {
-			if !stateMuLocked {
-				// The panic occurred while we were Recv'ing when we were holding
-				// i.streamMu and were not holding i.stateMu.
-				i.stateMu.Lock()
-				i.streamMu.Unlock()
-			}
-			i.closeLocked()
+			i.close()
 			colexecerror.InternalError(err)
 		}
 	}()
@@ -280,30 +241,18 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	// ungracefully or when DrainMeta has been called (which indicates a graceful
 	// termination). DrainMeta will use the stream to read any remaining metadata
 	// after Next returns a zero-length batch during normal execution.
-	if err := i.maybeInitLocked(ctx); err != nil {
+	if err := i.maybeInit(ctx); err != nil {
 		// An error occurred while initializing the Inbox and is likely caused by
 		// the connection issues. It is expected that such an error can occur.
 		colexecerror.ExpectedError(err)
 	}
 
 	for {
-		// DrainMeta goroutine indicated to us that we should exit. We do so
-		// without closing errCh since DrainMeta still needs the stream.
-		if i.stateMu.nextShouldExit {
-			return coldata.ZeroBatch
-		}
-
-		i.stateMu.Unlock()
-		stateMuLocked = false
-		i.streamMu.Lock()
-		m, err := i.streamMu.stream.Recv()
-		i.streamMu.Unlock()
-		i.stateMu.Lock()
-		stateMuLocked = true
+		m, err := i.stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				// Done.
-				i.closeLocked()
+				i.close()
 				return coldata.ZeroBatch
 			}
 			i.errCh <- err
@@ -315,7 +264,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				if !ok {
 					continue
 				}
-				i.stateMu.bufferedMeta = append(i.stateMu.bufferedMeta, meta)
+				i.bufferedMeta = append(i.bufferedMeta, meta)
 			}
 			// Continue until we get the next batch or EOF.
 			continue
@@ -337,9 +286,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
-	// It is safe to Send without holding the mutex because it is legal to call
-	// Send and Recv from different goroutines.
-	if err := i.streamMu.stream.Send(&execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}); err != nil {
+	if err := i.stream.Send(&execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}); err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "Inbox unable to send drain signal to Outbox: %+v", err)
 		}
@@ -348,67 +295,32 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	return nil
 }
 
-// DrainMeta is part of the MetadataGenerator interface. DrainMeta may be
+// DrainMeta is part of the MetadataGenerator interface. DrainMeta may not be
 // called concurrently with Next.
-// Note: DrainMeta will cause Next goroutine to finish.
 func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	i.stateMu.Lock()
-	defer i.stateMu.Unlock()
-	allMeta := i.stateMu.bufferedMeta
-	i.stateMu.bufferedMeta = i.stateMu.bufferedMeta[:0]
+	allMeta := i.bufferedMeta
+	i.bufferedMeta = i.bufferedMeta[:0]
 
-	if i.stateMu.done {
+	if i.done {
+		// Next exhausted the stream of metadata.
 		return allMeta
 	}
+	defer i.close()
 
 	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
 
-	// We want draining the Inbox to work regardless of whether or not we have a
-	// goroutine in Next. We essentially need to do two things: 1) Is the stream
-	// safe to use? If yes, then 2) Make sure nobody else is receiving.
-	// Unfortunately, there is no way to cancel a Recv on a stream, so we need to
-	// do this by sending the message. However, we can't unconditionally send a
-	// message since we don't know the state of the stream (is it initialized?).
-	// This leaves us with having two separate mutexes, one for the state and
-	// another one for the stream (to make sure we wait until the Next goroutine
-	// has finished Recv'ing).
-	drainSignalSent := false
-	if i.stateMu.initialized {
-		if err := i.sendDrainSignal(ctx); err != nil {
-			return allMeta
-		}
-		drainSignalSent = true
-		i.stateMu.nextShouldExit = true
-		for i.stateMu.nextRunning {
-			i.stateMu.nextExited.Wait()
-		}
-		// It is possible that Next goroutine has buffered more metadata, so we
-		// need to grab it.
-		allMeta = append(allMeta, i.stateMu.bufferedMeta...)
-		i.stateMu.bufferedMeta = i.stateMu.bufferedMeta[:0]
-	}
-
-	// Note that unlocking defer from above will execute after this defer because
-	// the unlocking one will be pushed below on the stack, so we still will have
-	// the lock when this one is executed.
-	defer i.closeLocked()
-
-	if err := i.maybeInitLocked(ctx); err != nil {
+	if err := i.maybeInit(ctx); err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %+v", err)
 		}
 		return allMeta
 	}
-	if !drainSignalSent {
-		if err := i.sendDrainSignal(ctx); err != nil {
-			return allMeta
-		}
+	if err := i.sendDrainSignal(ctx); err != nil {
+		return allMeta
 	}
 
-	i.streamMu.Lock()
-	defer i.streamMu.Unlock()
 	for {
-		msg, err := i.streamMu.stream.Recv()
+		msg, err := i.stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				break

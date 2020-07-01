@@ -178,13 +178,14 @@ func TestInboxTimeout(t *testing.T) {
 }
 
 // TestInboxShutdown is a random test that spawns a goroutine for handling a
-// FlowStream RPC (setting up an inbound stream, or RunWithStream), a goroutine
-// to read from an Inbox (Next goroutine), and a goroutine to drain the Inbox
-// (DrainMeta goroutine). These goroutines race against each other and the
+// FlowStream RPC (setting up an inbound stream, or RunWithStream), and a
+// goroutine to read from an Inbox (Next and DrainMeta goroutine) that gets
+// randomly canceled.
+// These goroutines race against each other and the
 // desired state is that everything is cleaned up at the end. Examples of
 // scenarios that are tested by this test include but are not limited to:
 //  - DrainMeta called before Next and before a stream arrives.
-//  - DrainMeta called concurrently with Next with an active stream.
+//  - DrainMeta called with an active stream.
 //  - A forceful cancellation of Next but no call to DrainMeta.
 func TestInboxShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -197,17 +198,34 @@ func TestInboxShutdown(t *testing.T) {
 		// shutdown scenarios in the middle of data processing are always tested. If
 		// false, they sometimes will be.
 		infiniteBatches    = rng.Float64() < 0.5
-		drainMetaSleep     = time.Millisecond * time.Duration(rng.Intn(10))
+		cancelSleep        = time.Millisecond * time.Duration(rng.Intn(10))
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []*types.T{types.Int}
 		batch              = coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
 	)
 
-	for _, runDrainMetaGoroutine := range []bool{false, true} {
+	// drainMetaScenario specifies when DrainMeta should be called in the Next
+	// goroutine.
+	type drainMetaScenario int
+	const (
+		// drainMetaBeforeNext specifies that DrainMeta should be called before the
+		// Next goroutine.
+		drainMetaBeforeNext drainMetaScenario = iota
+		// drainMetaPrematurely specifies that DrainMeta should be called after the
+		// first call to Next.
+		drainMetaPrematurely
+		// drianMetaAfterNextIsExhausted specifies that DrainMeta should be called
+		// after Next returns a zero-length batch.
+		drainMetaAfterNextIsExhausted
+		maxDrainMetaScenario
+	)
+
+	for _, cancel := range []bool{false, true} {
 		for _, runNextGoroutine := range []bool{false, true} {
+			drainScenario := drainMetaScenario(rng.Intn(int(maxDrainMetaScenario)))
 			for _, runRunWithStreamGoroutine := range []bool{false, true} {
-				if runDrainMetaGoroutine == false && runNextGoroutine == false && runRunWithStreamGoroutine == true {
+				if cancel == false && runNextGoroutine == false && runRunWithStreamGoroutine == true {
 					// This is sort of like a remote node connecting to the inbox, but the
 					// inbox will never be spawned. This is dealt with by another part of
 					// the code (the flow registry times out inbound RPCs if a consumer is
@@ -217,8 +235,8 @@ func TestInboxShutdown(t *testing.T) {
 				rpcLayer := makeMockFlowStreamRPCLayer()
 
 				t.Run(fmt.Sprintf(
-					"drain=%t/next=%t/stream=%t/inf=%t",
-					runDrainMetaGoroutine, runNextGoroutine, runRunWithStreamGoroutine, infiniteBatches,
+					"cancel=%t/next=%t/stream=%t/inf=%t",
+					cancel, runNextGoroutine, runRunWithStreamGoroutine, infiniteBatches,
 				), func(t *testing.T) {
 					inboxCtx, inboxCancel := context.WithCancel(context.Background())
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -270,7 +288,7 @@ func TestInboxShutdown(t *testing.T) {
 											return
 										}
 										var draining uint32
-										if runDrainMetaGoroutine {
+										if cancel {
 											// Listen for the drain signal.
 											wg.Add(1)
 											go func() {
@@ -331,6 +349,10 @@ func TestInboxShutdown(t *testing.T) {
 									if !runNextGoroutine {
 										return
 									}
+									if drainScenario == drainMetaBeforeNext {
+										_ = inbox.DrainMeta(inboxCtx)
+										return
+									}
 									if nextSleep != 0 {
 										time.Sleep(nextSleep)
 									}
@@ -340,6 +362,13 @@ func TestInboxShutdown(t *testing.T) {
 									)
 									for !done && err == nil {
 										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
+										if drainScenario == drainMetaPrematurely {
+											_ = inbox.DrainMeta(inboxCtx)
+											return
+										}
+									}
+									if drainScenario == drainMetaAfterNextIsExhausted {
+										_ = inbox.DrainMeta(inboxCtx)
 									}
 									errCh <- err
 								}()
@@ -347,24 +376,19 @@ func TestInboxShutdown(t *testing.T) {
 							},
 						},
 						{
-							name: "DrainMeta",
+							name: "Cancel",
 							asyncOperation: func() chan error {
 								errCh := make(chan error)
 								go func() {
 									defer func() {
-										inboxCancel()
+										if cancel {
+											inboxCancel()
+										}
 										close(errCh)
 									}()
-									// Sleep before checking for whether to run a drain meta
-									// goroutine or not, because we want to insert a potential delay
-									// before canceling the inbox context in any case.
-									if drainMetaSleep != 0 {
-										time.Sleep(drainMetaSleep)
+									if cancelSleep != 0 {
+										time.Sleep(cancelSleep)
 									}
-									if !runDrainMetaGoroutine {
-										return
-									}
-									_ = inbox.DrainMeta(inboxCtx)
 								}()
 								return errCh
 							},
