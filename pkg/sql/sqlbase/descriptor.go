@@ -49,6 +49,8 @@ type BaseDescriptorInterface interface {
 
 	GetID() ID
 	GetName() string
+	GetParentID() ID
+	GetParentSchemaID() ID
 
 	// Metadata for descriptor leasing.
 	GetVersion() DescriptorVersion

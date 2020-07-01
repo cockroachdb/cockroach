@@ -10,6 +10,8 @@
 
 package sqlbase
 
+import "github.com/cockroachdb/cockroach/pkg/keys"
+
 // SchemaDescriptorInterface will eventually be called dbdesc.Descriptor.
 // It is implemented by ImmutableSchemaDescriptor.
 type SchemaDescriptorInterface interface {
@@ -63,6 +65,11 @@ func NewMutableCreatedSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDesc
 	return &MutableSchemaDescriptor{
 		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(desc),
 	}
+}
+
+// GetParentSchemaID implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) GetParentSchemaID() ID {
+	return keys.RootNamespaceID
 }
 
 // GetAuditMode implements the DescriptorProto interface.

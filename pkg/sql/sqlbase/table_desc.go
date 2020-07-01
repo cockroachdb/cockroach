@@ -23,7 +23,6 @@ var _ TableDescriptorInterface = (*MutableTableDescriptor)(nil)
 type TableDescriptorInterface interface {
 	BaseDescriptorInterface
 
-	GetParentID() ID
 	TableDesc() *TableDescriptor
 	FindColumnByName(name tree.Name) (*ColumnDescriptor, bool, error)
 }

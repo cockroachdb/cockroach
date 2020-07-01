@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -104,6 +105,16 @@ func (desc *DatabaseDescriptor) TableDesc() *TableDescriptor {
 // TypeDesc implements the ObjectDescriptor interface.
 func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
+}
+
+// GetParentID implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) GetParentID() ID {
+	return keys.RootNamespaceID
+}
+
+// GetParentSchemaID implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) GetParentSchemaID() ID {
+	return keys.RootNamespaceID
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.
