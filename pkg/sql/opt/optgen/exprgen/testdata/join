@@ -176,12 +176,12 @@ index-join abc
  ├── columns: t.public.abc.c:3(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 51.03
+ ├── cost: 51.02
  ├── interesting orderings: (+1)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
       ├── stats: [rows=10]
-      ├── cost: 10.42
+      ├── cost: 10.41
       ├── prune: (1)
       └── interesting orderings: (+1)

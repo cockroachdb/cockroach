@@ -771,7 +771,8 @@ $(LIBSNAPPY): $(SNAPPY_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 $(LIBGEOS): $(GEOS_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(GEOS_SRC_DIR) || $(MAKE) --no-print-directory -C $(GEOS_DIR) geos_c
 	mkdir -p $(DYN_LIB_DIR)
-	ln -sf $(GEOS_DIR)/lib/lib{geos,geos_c}.$(DYN_EXT) $(DYN_LIB_DIR)
+	rm -f $(DYN_LIB_DIR)/lib{geos,geos_c}.$(DYN_EXT)
+	cp -L $(GEOS_DIR)/$(if $(target-is-windows),bin,lib)/lib{geos,geos_c}.$(DYN_EXT) $(DYN_LIB_DIR)
 
 $(LIBPROJ): $(PROJ_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(PROJ_SRC_DIR) || $(MAKE) --no-print-directory -C $(PROJ_DIR) proj
