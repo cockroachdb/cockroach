@@ -58,6 +58,10 @@ type testSpec struct {
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster clusterSpec
 
+	// Disable checks that are normally performed at the end of a test.
+	DisableReplicaDivergenceCheck bool
+	DisableDeadNodeCheck          bool
+
 	// UseIOBarrier controls the local-ssd-no-ext4-barrier flag passed to
 	// roachprod when creating a cluster. If set, the flag is not passed, and so
 	// you get durable writes. If not set (the default!), the filesystem is

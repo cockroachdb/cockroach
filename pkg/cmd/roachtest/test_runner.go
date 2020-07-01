@@ -820,13 +820,17 @@ func (r *testRunner) runTest(
 		}
 	}
 
-	// Detect replica divergence (i.e. ranges in which replicas have arrived
-	// at the same log position with different states).
-	c.FailOnReplicaDivergence(ctx, t)
-	// Detect dead nodes in an inner defer. Note that this will call
-	// t.printfAndFail() when appropriate, which will cause the code below to
-	// enter the t.Failed() branch.
-	c.FailOnDeadNodes(ctx, t)
+	if !t.spec.DisableReplicaDivergenceCheck {
+		// Detect replica divergence (i.e. ranges in which replicas have arrived
+		// at the same log position with different states).
+		c.FailOnReplicaDivergence(ctx, t)
+	}
+	if !t.spec.DisableDeadNodeCheck {
+		// Detect dead nodes in an inner defer. Note that this will call
+		// t.printfAndFail() when appropriate, which will cause the code below to
+		// enter the t.Failed() branch.
+		c.FailOnDeadNodes(ctx, t)
+	}
 
 	if t.Failed() {
 		r.collectClusterLogs(ctx, c, t.l)
