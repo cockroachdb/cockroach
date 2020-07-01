@@ -4,11 +4,18 @@ set -euo pipefail
 
 export FILEBEAT_CONFIG_PATH=/tmp/filebeat.yml
 
-# Install filebeat service and run at startup
-echo "Installing Filebeat..."
-# Should be latest version of Filebeat (not hard requirement)
-curl -L -o filebeat-amd64.deb https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-7.7.1-amd64.deb
-dpkg -i filebeat-amd64.deb
+# Download the Public Signing Key for the Beats APT repository
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
+
+# Install prerequisite package
+apt-get install apt-transport-https
+
+# Save APT repo to disk
+echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-7.x.list
+
+# Install Filebeat via apt-get and run at startup
+echo "Installing filebeat..."
+apt-get update && apt-get install filebeat
 systemctl enable filebeat
 
 # Copy over config file 
