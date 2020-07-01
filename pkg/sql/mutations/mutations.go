@@ -536,7 +536,7 @@ func postgresMutator(rng *rand.Rand, q string) string {
 var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool) {
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
-		case *tree.SetClusterSetting:
+		case *tree.SetClusterSetting, *tree.SetVar:
 			continue
 		case *tree.CreateTable:
 			if stmt.Interleave != nil {
