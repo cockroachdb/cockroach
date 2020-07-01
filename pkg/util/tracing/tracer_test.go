@@ -70,9 +70,6 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	if err := TestingCheckRecordedSpans(GetRecording(s2), `
-		span a:
-			tags: unfinished=
-			x: 2
 		span b:
 			tags: unfinished=
 			x: 3
@@ -120,11 +117,6 @@ func TestTracerRecording(t *testing.T) {
 	// The child span is still recording.
 	s3.LogKV("x", 5)
 	if err := TestingCheckRecordedSpans(GetRecording(s3), `
-		span a:
-			tags: unfinished=
-			x: 2
-		span b:
-			x: 3
 		span c:
 			tags: tag=val
 			x: 4

@@ -236,9 +236,7 @@ func (t *Tracer) StartSpan(
 	var hasParent bool
 	var parentType opentracing.SpanReferenceType
 	var parentCtx *spanContext
-	var recordingGroup *spanGroup
 	var recordingType RecordingType
-
 	for _, r := range sso.References {
 		if r.Type != opentracing.ChildOfRef && r.Type != opentracing.FollowsFromRef {
 			continue
@@ -251,16 +249,10 @@ func (t *Tracer) StartSpan(
 		}
 		hasParent = true
 		parentType = r.Type
+		// Note that the logic around here doesn't support spans with multiple
+		// references. Luckily, we don't have such cases.
 		parentCtx = r.ReferencedContext.(*spanContext)
-		if parentCtx.recordingGroup != nil {
-			recordingGroup = parentCtx.recordingGroup
-			recordingType = parentCtx.recordingType
-		} else if parentCtx.Baggage[Snowball] != "" {
-			// Automatically enable recording if we have the Snowball baggage item.
-			recordingGroup = new(spanGroup)
-			recordingType = SnowballRecording
-		}
-		// TODO(radu): can we do something for multiple references?
+		recordingType = parentCtx.recordingType
 		break
 	}
 	if hasParent {
@@ -272,7 +264,7 @@ func (t *Tracer) StartSpan(
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
 	// part of a recording or snowball trace, avoid overhead and return a noop
 	// span.
-	if !recordable && recordingGroup == nil && shadowTr == nil && !t.useNetTrace() && !t.forceRealSpans {
+	if !recordable && recordingType == NoRecording && shadowTr == nil && !t.useNetTrace() && !t.forceRealSpans {
 		return &t.noopSpan
 	}
 
@@ -296,8 +288,8 @@ func (t *Tracer) StartSpan(
 	s.SpanID = uint64(rand.Int63())
 
 	// Start recording if necessary.
-	if recordingGroup != nil {
-		s.enableRecording(recordingGroup, recordingType)
+	if recordingType != NoRecording {
+		s.enableRecording(parentCtx.span, recordingType, false /* separateRecording */)
 	}
 
 	if t.useNetTrace() {
@@ -415,9 +407,12 @@ func (t *Tracer) StartRootSpan(
 // This only works for creating children of local parents (i.e. the caller needs
 // to have a reference to the parent span).
 //
-// If separateRecording is true and the parent span is recording, we start a
-// new recording for the child span. If separateRecording is false (the
-// default), then the child span will be part of the same recording.
+// If separateRecording is true and the parent span is recording, the child's
+// recording will not be part of the parent's recording. This is useful when the
+// child's recording will be reported to a collector separate from the parent's
+// recording; for example DistSQL processors each report their own recording,
+// and we don't want the parent's recording to include a child's because then we
+// might double-report that child.
 func StartChildSpan(
 	opName string, parentSpan opentracing.Span, logTags *logtags.Buffer, separateRecording bool,
 ) opentracing.Span {
@@ -453,14 +448,7 @@ func StartChildSpan(
 		linkShadowSpan(s, pSpan.shadowTr, pSpan.shadowSpan.Context(), opentracing.ChildOfRef)
 	}
 
-	// Start recording if necessary.
-	if pSpan.isRecording() {
-		recordingGroup := pSpan.mu.recordingGroup
-		if separateRecording {
-			recordingGroup = new(spanGroup)
-		}
-		s.enableRecording(recordingGroup, pSpan.mu.recordingType)
-	}
+	recordingType := pSpan.mu.recording.recordingType
 
 	if pSpan.netTr != nil {
 		s.netTr = trace.New("tracing", opName)
@@ -482,6 +470,12 @@ func StartChildSpan(
 	}
 
 	pSpan.mu.Unlock()
+
+	// Start recording if necessary.
+	if recordingType != NoRecording {
+		s.enableRecording(pSpan, recordingType, separateRecording)
+	}
+
 	return s
 }
 
@@ -603,6 +597,10 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 	}
 	if sc.TraceID == 0 && sc.SpanID == 0 {
 		return noopSpanContext{}, nil
+	}
+
+	if sc.Baggage[Snowball] != "" {
+		sc.recordingType = SnowballRecording
 	}
 
 	if shadowType != "" {
