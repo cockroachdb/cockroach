@@ -390,7 +390,7 @@ func (s *sortBoolAscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortBoolAscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -538,7 +538,7 @@ func (s *sortDecimalAscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortDecimalAscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -608,7 +608,7 @@ func (s *sortInt16AscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt16AscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -689,7 +689,7 @@ func (s *sortInt32AscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt32AscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -770,7 +770,7 @@ func (s *sortInt64AscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt64AscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -851,7 +851,7 @@ func (s *sortFloat64AscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortFloat64AscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -940,7 +940,7 @@ func (s *sortTimestampAscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortTimestampAscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1017,7 +1017,7 @@ func (s *sortIntervalAscWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortIntervalAscWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1159,7 +1159,7 @@ func (s *sortBoolDescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortBoolDescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1307,7 +1307,7 @@ func (s *sortDecimalDescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortDecimalDescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1377,7 +1377,7 @@ func (s *sortInt16DescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt16DescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1458,7 +1458,7 @@ func (s *sortInt32DescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt32DescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1539,7 +1539,7 @@ func (s *sortInt64DescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt64DescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1620,7 +1620,7 @@ func (s *sortFloat64DescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortFloat64DescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1709,7 +1709,7 @@ func (s *sortTimestampDescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortTimestampDescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1786,7 +1786,7 @@ func (s *sortIntervalDescWithNullsOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortIntervalDescWithNullsOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -1928,7 +1928,7 @@ func (s *sortBoolAscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortBoolAscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2056,7 +2056,7 @@ func (s *sortDecimalAscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortDecimalAscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2116,7 +2116,7 @@ func (s *sortInt16AscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt16AscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2187,7 +2187,7 @@ func (s *sortInt32AscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt32AscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2258,7 +2258,7 @@ func (s *sortInt64AscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt64AscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2329,7 +2329,7 @@ func (s *sortFloat64AscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortFloat64AscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2408,7 +2408,7 @@ func (s *sortTimestampAscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortTimestampAscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2475,7 +2475,7 @@ func (s *sortIntervalAscOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortIntervalAscOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2597,7 +2597,7 @@ func (s *sortBoolDescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortBoolDescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2725,7 +2725,7 @@ func (s *sortDecimalDescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortDecimalDescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2785,7 +2785,7 @@ func (s *sortInt16DescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt16DescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2856,7 +2856,7 @@ func (s *sortInt32DescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt32DescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2927,7 +2927,7 @@ func (s *sortInt64DescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortInt64DescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -2998,7 +2998,7 @@ func (s *sortFloat64DescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortFloat64DescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -3077,7 +3077,7 @@ func (s *sortTimestampDescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortTimestampDescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 
@@ -3144,7 +3144,7 @@ func (s *sortIntervalDescOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sortIntervalDescOp) sort(ctx context.Context) {
-	n := len(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 

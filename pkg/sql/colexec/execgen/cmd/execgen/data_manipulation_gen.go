@@ -65,11 +65,6 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 		replaceWith:         "AppendVal",
 	},
 	{
-		templatePlaceholder: "execgen.LEN",
-		numArgs:             1,
-		replaceWith:         "Len",
-	},
-	{
 		templatePlaceholder: "execgen.WINDOW",
 		numArgs:             3,
 		replaceWith:         "Window",
