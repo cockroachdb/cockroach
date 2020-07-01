@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(50050)
+# LogicTest: !local-spec-planning(47473) !fakedist-spec-planning(47473) !3node-tenant(50050)
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
 #   parent1           (pid1)                      40        8

@@ -120,6 +120,78 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	}
 }
 
+func TestMakeValidGeographyGeom(t *testing.T) {
+	var (
+		invalidGeomPoint              = geom.NewPointFlat(geom.XY, []float64{200.0, 199.0})
+		invalidGeomLineString         = geom.NewLineStringFlat(geom.XY, []float64{90.0, 90.0, 180.0, 180.0})
+		invalidGeomPolygon            = geom.NewPolygonFlat(geom.XY, []float64{360.0, 360.0, 450.0, 450.0, 540.0, 540.0, 630.0, 630.0}, []int{8})
+		invalidGeomMultiPoint         = geom.NewMultiPointFlat(geom.XY, []float64{-90.0, -90.0, -180.0, -180.0})
+		invalidGeomMultiLineString    = geom.NewMultiLineStringFlat(geom.XY, []float64{-270.0, -270.0, -360.0, -360.0, -450.0, -450.0, -540.0, -540.0}, []int{4, 8})
+		invalidGeomMultiPolygon       = geom.NewMultiPolygon(geom.XY)
+		invalidGeomGeometryCollection = geom.NewGeometryCollection()
+	)
+	invalidGeomGeometryCollection.MustPush(geom.NewPointFlat(geom.XY, []float64{200.0, 199.0}))
+	invalidGeomGeometryCollection.MustPush(geom.NewLineStringFlat(geom.XY, []float64{90.0, 90.0, 180.0, 180.0}))
+	var (
+		validGeomPoint              = geom.NewPointFlat(geom.XY, []float64{-160.0, -19.0})
+		validGeomLineString         = geom.NewLineStringFlat(geom.XY, []float64{90.0, 90.0, 180.0, 0.0})
+		validGeomPolygon            = geom.NewPolygonFlat(geom.XY, []float64{0.0, 0.0, 90.0, 90.0, -180.0, 0.0, -90.0, -90.0}, []int{8})
+		validGeomMultiPoint         = geom.NewMultiPointFlat(geom.XY, []float64{-90.0, -90.0, -180.0, 0.0})
+		validGeomMultiLineString    = geom.NewMultiLineStringFlat(geom.XY, []float64{90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 180.0, 0.0}, []int{4, 8})
+		validGeomMultiPolygon       = geom.NewMultiPolygon(geom.XY)
+		validGeomGeometryCollection = geom.NewGeometryCollection()
+	)
+	validGeomGeometryCollection.MustPush(validGeomPoint)
+	validGeomGeometryCollection.MustPush(validGeomLineString)
+	testCases := []struct {
+		desc string
+		g    geom.T
+		ret  geom.T
+	}{
+		{
+			"Point",
+			invalidGeomPoint,
+			validGeomPoint,
+		},
+		{
+			"linestring",
+			invalidGeomLineString,
+			validGeomLineString,
+		},
+		{
+			"polygon",
+			invalidGeomPolygon,
+			validGeomPolygon,
+		},
+		{
+			"multipoint",
+			invalidGeomMultiPoint,
+			validGeomMultiPoint,
+		},
+		{
+			"multilinestring",
+			invalidGeomMultiLineString,
+			validGeomMultiLineString,
+		},
+		{
+			"multipolygon",
+			invalidGeomMultiPolygon,
+			validGeomMultiPolygon,
+		},
+		{
+			"geometrycollection",
+			invalidGeomGeometryCollection,
+			validGeomGeometryCollection,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			normalizeGeographyGeomT(tc.g)
+			require.Equal(t, tc.ret, tc.g)
+		})
+	}
+}
+
 func TestSpatialObjectFromGeomT(t *testing.T) {
 	testCases := []struct {
 		desc   string

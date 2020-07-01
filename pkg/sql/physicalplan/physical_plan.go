@@ -753,28 +753,30 @@ func (p *PhysicalPlan) AddFilter(
 	return nil
 }
 
-// emptyPlan creates a plan with a single processor on the gateway that
-// generates no rows; the output stream has the given types.
-func emptyPlan(types []*types.T, gatewayNodeID roachpb.NodeID) PhysicalPlan {
+// emptyPlan updates p in-place with a plan consisting of a single processor on
+// the gateway that generates no rows; the output stream has the same types as
+// p produces.
+func (p *PhysicalPlan) emptyPlan() {
 	s := execinfrapb.ValuesCoreSpec{
-		Columns: make([]execinfrapb.DatumInfo, len(types)),
+		Columns: make([]execinfrapb.DatumInfo, len(p.ResultTypes)),
 	}
-	for i, t := range types {
+	for i, t := range p.ResultTypes {
 		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
 		s.Columns[i].Type = t
 	}
 
-	return PhysicalPlan{
+	*p = PhysicalPlan{
 		Processors: []Processor{{
-			Node: gatewayNodeID,
+			Node: p.GatewayNodeID,
 			Spec: execinfrapb.ProcessorSpec{
 				Core:   execinfrapb.ProcessorCoreUnion{Values: &s},
 				Output: make([]execinfrapb.OutputRouterSpec, 1),
 			},
 		}},
 		ResultRouters: []ProcessorIdx{0},
-		ResultTypes:   types,
-		GatewayNodeID: gatewayNodeID,
+		ResultTypes:   p.ResultTypes,
+		ResultColumns: p.ResultColumns,
+		GatewayNodeID: p.GatewayNodeID,
 		Distribution:  LocalPlan,
 	}
 }
@@ -801,7 +803,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 	limitZero := false
 	if count == 0 {
 		if len(p.LocalProcessors) == 0 {
-			*p = emptyPlan(p.ResultTypes, p.GatewayNodeID)
+			p.emptyPlan()
 			return nil
 		}
 		count = 1
@@ -824,7 +826,7 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, exprCtx ExprContext) 
 					// Even though we know there will be no results, we don't elide the
 					// plan if there are local processors. See comment above limitZero
 					// for why.
-					*p = emptyPlan(p.ResultTypes, p.GatewayNodeID)
+					p.emptyPlan()
 					return nil
 				}
 				count = 1
