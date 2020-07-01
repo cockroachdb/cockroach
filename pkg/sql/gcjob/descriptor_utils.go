@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -29,7 +30,8 @@ func updateDescriptorGCMutations(
 ) error {
 	log.Infof(ctx, "updating GCMutations for table %d after removing index %d", table.ID, garbageCollectedIndexID)
 	// Remove the mutation from the table descriptor.
-	updateTableMutations := func(tbl *sqlbase.MutableTableDescriptor) error {
+	updateTableMutations := func(desc catalog.MutableDescriptor) error {
+		tbl := desc.(*sqlbase.MutableTableDescriptor)
 		for i := 0; i < len(tbl.GCMutations); i++ {
 			other := tbl.GCMutations[i]
 			if other.IndexID == garbageCollectedIndexID {

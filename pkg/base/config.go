@@ -78,21 +78,21 @@ const (
 	// liveness record would be eagerly renewed after 2 seconds.
 	livenessRenewalFraction = 0.5
 
-	// DefaultTableDescriptorLeaseDuration is the default mean duration a
+	// DefaultDescriptorLeaseDuration is the default mean duration a
 	// lease will be acquired for. The actual duration is jittered using
 	// the jitter fraction. Jittering is done to prevent multiple leases
 	// from being renewed simultaneously if they were all acquired
 	// simultaneously.
-	DefaultTableDescriptorLeaseDuration = 5 * time.Minute
+	DefaultDescriptorLeaseDuration = 5 * time.Minute
 
-	// DefaultTableDescriptorLeaseJitterFraction is the default factor
+	// DefaultDescriptorLeaseJitterFraction is the default factor
 	// that we use to randomly jitter the lease duration when acquiring a
 	// new lease and the lease renewal timeout.
-	DefaultTableDescriptorLeaseJitterFraction = 0.05
+	DefaultDescriptorLeaseJitterFraction = 0.05
 
-	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// DefaultDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
-	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
+	DefaultDescriptorLeaseRenewalTimeout = time.Minute
 )
 
 // DefaultHistogramWindowInterval returns the default rotation window for
@@ -549,27 +549,27 @@ func TempStorageConfigFromEnv(
 	}
 }
 
-// LeaseManagerConfig holds table lease manager parameters.
+// LeaseManagerConfig holds lease manager parameters.
 type LeaseManagerConfig struct {
-	// TableDescriptorLeaseDuration is the mean duration a lease will be
+	// DescriptorLeaseDuration is the mean duration a lease will be
 	// acquired for.
-	TableDescriptorLeaseDuration time.Duration
+	DescriptorLeaseDuration time.Duration
 
-	// TableDescriptorLeaseJitterFraction is the factor that we use to
+	// DescriptorLeaseJitterFraction is the factor that we use to
 	// randomly jitter the lease duration when acquiring a new lease and
 	// the lease renewal timeout.
-	TableDescriptorLeaseJitterFraction float64
+	DescriptorLeaseJitterFraction float64
 
-	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// DefaultDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.
-	TableDescriptorLeaseRenewalTimeout time.Duration
+	DescriptorLeaseRenewalTimeout time.Duration
 }
 
 // NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
 func NewLeaseManagerConfig() *LeaseManagerConfig {
 	return &LeaseManagerConfig{
-		TableDescriptorLeaseDuration:       DefaultTableDescriptorLeaseDuration,
-		TableDescriptorLeaseJitterFraction: DefaultTableDescriptorLeaseJitterFraction,
-		TableDescriptorLeaseRenewalTimeout: DefaultTableDescriptorLeaseRenewalTimeout,
+		DescriptorLeaseDuration:       DefaultDescriptorLeaseDuration,
+		DescriptorLeaseJitterFraction: DefaultDescriptorLeaseJitterFraction,
+		DescriptorLeaseRenewalTimeout: DefaultDescriptorLeaseRenewalTimeout,
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -321,7 +322,8 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 		if _, err := sc.leaseMgr.Publish(
 			ctx,
 			table.ID,
-			func(tbl *sqlbase.MutableTableDescriptor) error {
+			func(desc catalog.MutableDescriptor) error {
+				tbl := desc.(*MutableTableDescriptor)
 				if !tbl.Adding() {
 					return lease.ErrDidntUpdateDescriptor
 				}
@@ -348,13 +350,14 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	_, err := sc.leaseMgr.Publish(
 		ctx,
 		sc.tableID,
-		func(desc *sqlbase.MutableTableDescriptor) error {
+		func(desc catalog.MutableDescriptor) error {
+			tbl := desc.(*MutableTableDescriptor)
 			if sc.testingKnobs.OldNamesDrainedNotification != nil {
 				sc.testingKnobs.OldNamesDrainedNotification()
 			}
 			// Free up the old name(s) for reuse.
-			namesToReclaim = desc.DrainingNames
-			desc.DrainingNames = nil
+			namesToReclaim = tbl.DrainingNames
+			tbl.DrainingNames = nil
 			return nil
 		},
 		// Reclaim all the old names.
@@ -658,11 +661,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	log.Info(ctx, "stepping through state machine")
 
 	var runStatus jobs.RunningStatus
-	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
+	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc catalog.MutableDescriptor) error {
+		tbl := desc.(*MutableTableDescriptor)
 
 		runStatus = ""
 		// Apply mutations belonging to the same version.
-		for i, mutation := range desc.Mutations {
+		for i, mutation := range tbl.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
@@ -678,7 +682,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					// the index can indeed be created, and subsequently in the
 					// DELETE_AND_WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
+					tbl.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
 					runStatus = RunningStatusDeleteAndWriteOnly
 
 				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
@@ -691,12 +695,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					// The state change has already moved forward.
 
 				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
+					tbl.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
 					runStatus = RunningStatusDeleteOnly
 				}
 			}
 		}
-		if doNothing := runStatus == "" || desc.Dropped(); doNothing {
+		if doNothing := runStatus == "" || tbl.Dropped(); doNothing {
 			// Return error so that Publish() doesn't increment the version.
 			return lease.ErrDidntUpdateDescriptor
 		}
@@ -741,7 +745,7 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // schema.
 // It also kicks off GC jobs as needed.
 // Returns the updated descriptor.
-func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescriptor, error) {
+func (sc *SchemaChanger) done(ctx context.Context) error {
 	isRollback := false
 
 	// Get the other tables whose foreign key backreferences need to be removed.
@@ -791,7 +795,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
 	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
@@ -807,7 +811,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
 	var childJobs []*jobs.StartableJob
-	update := func(txn *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
+	update := func(txn *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
 		childJobs = nil
@@ -817,8 +821,9 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+		scTable := scDesc.(*MutableTableDescriptor)
 
-		for _, mutation := range scDesc.Mutations {
+		for _, mutation := range scTable.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
@@ -831,8 +836,8 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 					// how we keep track of dropped index names (for, e.g., zone config
 					// lookups), even though in the absence of a GC job there's nothing to
 					// clean them up.
-					scDesc.GCMutations = append(
-						scDesc.GCMutations,
+					scTable.GCMutations = append(
+						scTable.GCMutations,
 						sqlbase.TableDescriptor_GCDescriptorMutation{
 							IndexID: indexDesc.ID,
 						})
@@ -866,10 +871,11 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				mutation.Direction == sqlbase.DescriptorMutation_ADD &&
 				constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Unvalidated {
 				// Add backreference on the referenced table (which could be the same table)
-				backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
+				backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 				if !ok {
 					return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 				}
+				backrefTable := backrefDesc.(*MutableTableDescriptor)
 				backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 			}
 
@@ -882,12 +888,12 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				// configurations removes spans for indexes in the dropping state,
 				// which we don't want. So, set up the zone configs before we swap.
 				if err := sc.maybeUpdateZoneConfigsForPKChange(
-					ctx, txn, sc.execCfg, scDesc.TableDesc(), pkSwap); err != nil {
+					ctx, txn, sc.execCfg, scTable.TableDesc(), pkSwap); err != nil {
 					return err
 				}
 			}
 
-			if err := scDesc.MakeMutationComplete(mutation); err != nil {
+			if err := scTable.MakeMutationComplete(mutation); err != nil {
 				return err
 			}
 
@@ -901,24 +907,24 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				// corresponding piece in runSchemaChangesInTxn.
 				for _, idxID := range append(
 					[]sqlbase.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
-					oldIndex, err := scDesc.FindIndexByID(idxID)
+					oldIndex, err := scTable.FindIndexByID(idxID)
 					if err != nil {
 						return err
 					}
 					if len(oldIndex.Interleave.Ancestors) != 0 {
 						ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-						ancestor := descs[ancestorInfo.TableID]
+						ancestor := descs[ancestorInfo.TableID].(*MutableTableDescriptor)
 						ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
 						if err != nil {
 							return err
 						}
 						foundAncestor := false
 						for k, ref := range ancestorIdx.InterleavedBy {
-							if ref.Table == scDesc.ID && ref.Index == oldIndex.ID {
+							if ref.Table == scTable.ID && ref.Index == oldIndex.ID {
 								if foundAncestor {
 									return errors.AssertionFailedf(
 										"ancestor entry in %s for %s@%s found more than once",
-										ancestor.Name, scDesc.Name, oldIndex.Name)
+										ancestor.Name, scTable.Name, oldIndex.Name)
 								}
 								ancestorIdx.InterleavedBy = append(
 									ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
@@ -929,7 +935,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				}
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
-				if childJobs, err = sc.queueCleanupJobs(ctx, scDesc, txn, childJobs); err != nil {
+				if childJobs, err = sc.queueCleanupJobs(ctx, scTable, txn, childJobs); err != nil {
 					return err
 				}
 			}
@@ -942,7 +948,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				// If we performed MakeMutationComplete on a computed column swap, then
 				// we need to start a job for the column deletion that the swap mutation
 				// added if any.
-				if childJobs, err = sc.queueCleanupJobs(ctx, scDesc, txn, childJobs); err != nil {
+				if childJobs, err = sc.queueCleanupJobs(ctx, scTable, txn, childJobs); err != nil {
 					return err
 				}
 			}
@@ -954,19 +960,19 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			return lease.ErrDidntUpdateDescriptor
 		}
 		// Trim the executed mutations from the descriptor.
-		scDesc.Mutations = scDesc.Mutations[i:]
+		scTable.Mutations = scTable.Mutations[i:]
 
-		for i, g := range scDesc.MutationJobs {
+		for i, g := range scTable.MutationJobs {
 			if g.MutationID == sc.mutationID {
 				// Trim the executed mutation group from the descriptor.
-				scDesc.MutationJobs = append(scDesc.MutationJobs[:i], scDesc.MutationJobs[i+1:]...)
+				scTable.MutationJobs = append(scTable.MutationJobs[:i], scTable.MutationJobs[i+1:]...)
 				break
 			}
 		}
 		return nil
 	}
 
-	descs, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *kv.Txn) error {
+	_, err = sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *kv.Txn) error {
 		schemaChangeEventType := EventLogFinishSchemaChange
 		if isRollback {
 			schemaChangeEventType = EventLogFinishSchemaRollback
@@ -998,7 +1004,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
 			}
 		}
-		return nil, err
+		return err
 	}
 	for _, job := range childJobs {
 		if _, err := job.Start(ctx); err != nil {
@@ -1006,7 +1012,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		}
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
 	}
-	return descs[sc.tableID], nil
+	return nil
 }
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
@@ -1096,8 +1102,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
 
 	// Mark the mutations as completed.
 	log.Info(ctx, "marking schema change as complete")
-	_, err := sc.done(ctx)
-	return err
+	return sc.done(ctx)
 }
 
 func (sc *SchemaChanger) refreshStats() {
@@ -1165,17 +1170,18 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 	// Create update closure for the table and all other tables with backreferences
 	var droppedMutations map[sqlbase.MutationID]struct{}
-	update := func(_ *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
+	update := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
 		scDesc, ok := descs[sc.tableID]
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+		scTable := scDesc.(*MutableTableDescriptor)
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
 		columns := make(map[string]struct{})
 		droppedMutations = nil
 
-		for i, mutation := range scDesc.Mutations {
+		for i, mutation := range scTable.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				// Only reverse the first set of mutations if they have the
 				// mutation ID we're looking for.
@@ -1192,36 +1198,37 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
-			scDesc.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
+			scTable.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				mutation.Direction == sqlbase.DescriptorMutation_ADD {
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
-				if err := sc.maybeDropValidatingConstraint(ctx, scDesc, constraint); err != nil {
+				if err := sc.maybeDropValidatingConstraint(ctx, scTable, constraint); err != nil {
 					return err
 				}
 				// Get the foreign key backreferences to remove.
 				if constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY {
 					fk := &constraint.ForeignKey
-					backrefTable, ok := descs[fk.ReferencedTableID]
+					backrefDesc, ok := descs[fk.ReferencedTableID]
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
-					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scDesc.TableDesc()); err != nil {
+					backrefTable := backrefDesc.(*MutableTableDescriptor)
+					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable.TableDesc()); err != nil {
 						return err
 					}
 				}
 			}
-			scDesc.Mutations[i].Rollback = true
+			scTable.Mutations[i].Rollback = true
 		}
 
 		// Delete all mutations that reference any of the reversed columns
 		// by running a graph traversal of the mutations.
 		if len(columns) > 0 {
 			var err error
-			droppedMutations, err = sc.deleteIndexMutationsWithReversedColumns(ctx, scDesc, columns)
+			droppedMutations, err = sc.deleteIndexMutationsWithReversedColumns(ctx, scTable, columns)
 			if err != nil {
 				return err
 			}

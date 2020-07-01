@@ -1130,7 +1130,7 @@ SELECT * from t.test WHERE k = 'test_key';
 func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	advancement := 2 * base.DefaultTableDescriptorLeaseDuration
+	advancement := 2 * base.DefaultDescriptorLeaseDuration
 
 	var cmdFilters tests.CommandFilters
 	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)

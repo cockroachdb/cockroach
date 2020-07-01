@@ -126,20 +126,20 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+) (catalog.Descriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).Acquire(context.Background(), t.server.Clock().Now(), descID)
 }
 
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+) (catalog.Descriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).TestingAcquireAndAssertMinVersion(
 		context.Background(), t.server.Clock().Now(), descID, minVersion)
 }
 
 func (t *leaseTest) mustAcquire(
 	nodeID uint32, descID sqlbase.ID,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp) {
+) (catalog.Descriptor, hlc.Timestamp) {
 	table, expiration, err := t.acquire(nodeID, descID)
 	if err != nil {
 		t.Fatal(err)
@@ -149,16 +149,16 @@ func (t *leaseTest) mustAcquire(
 
 func (t *leaseTest) mustAcquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp) {
-	table, expiration, err := t.acquireMinVersion(nodeID, descID, minVersion)
+) (catalog.Descriptor, hlc.Timestamp) {
+	desc, expiration, err := t.acquireMinVersion(nodeID, descID, minVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return table, expiration
+	return desc, expiration
 }
 
-func (t *leaseTest) release(nodeID uint32, table *sqlbase.ImmutableTableDescriptor) error {
-	return t.node(nodeID).Release(table)
+func (t *leaseTest) release(nodeID uint32, desc catalog.Descriptor) error {
+	return t.node(nodeID).Release(desc)
 }
 
 // If leaseRemovalTracker is not nil, it will be used to block until the lease is
@@ -166,15 +166,13 @@ func (t *leaseTest) release(nodeID uint32, table *sqlbase.ImmutableTableDescript
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
-	nodeID uint32,
-	table *sqlbase.ImmutableTableDescriptor,
-	leaseRemovalTracker *lease.LeaseRemovalTracker,
+	nodeID uint32, desc catalog.Descriptor, leaseRemovalTracker *lease.LeaseRemovalTracker,
 ) {
 	var tracker lease.RemovalTracker
 	if leaseRemovalTracker != nil {
-		tracker = leaseRemovalTracker.TrackRemoval(table)
+		tracker = leaseRemovalTracker.TrackRemoval(desc)
 	}
-	if err := t.release(nodeID, table); err != nil {
+	if err := t.release(nodeID, desc); err != nil {
 		t.Fatal(err)
 	}
 	if leaseRemovalTracker != nil {
@@ -185,7 +183,7 @@ func (t *leaseTest) mustRelease(
 }
 
 func (t *leaseTest) publish(ctx context.Context, nodeID uint32, descID sqlbase.ID) error {
-	_, err := t.node(nodeID).Publish(ctx, descID, func(*sqlbase.MutableTableDescriptor) error {
+	_, err := t.node(nodeID).Publish(ctx, descID, func(catalog.MutableDescriptor) error {
 		return nil
 	}, nil)
 	return err
@@ -255,7 +253,7 @@ func TestLeaseManager(testingT *testing.T) {
 	// table and expiration.
 	l1, e1 := t.mustAcquire(1, descID)
 	l2, e2 := t.mustAcquire(1, descID)
-	if l1.ID != l2.ID {
+	if l1.GetID() != l2.GetID() {
 		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
 	} else if e1 != e2 {
 		t.Fatalf("expected same lease timestamps, but found %v != %v", e1, e2)
@@ -271,7 +269,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// It is an error to acquire a lease for a specific version that doesn't
 	// exist yet.
-	expected = "version 2 for table lease does not exist yet"
+	expected = "version 2 for descriptor lease does not exist yet"
 	if _, _, err := t.acquireMinVersion(1, descID, 2); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -341,7 +339,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	params.LeaseManagerConfig.TableDescriptorLeaseDuration = 0
+	params.LeaseManagerConfig.DescriptorLeaseDuration = 0
 
 	removalTracker := lease.NewLeaseRemovalTracker()
 	params.Knobs = base.TestingKnobs{
@@ -362,7 +360,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	// Another lease acquisition from the same node will result in a new lease.
 	rt := removalTracker.TrackRemoval(l1)
 	l3, e3 := t.mustAcquire(1, descID)
-	if l1.ID == l3.ID && e3.WallTime == e1.WallTime {
+	if l1.GetID() == l3.GetID() && e3.WallTime == e1.WallTime {
 		t.Fatalf("expected different leases, but found %v", l1)
 	}
 	if e3.WallTime < e1.WallTime {
@@ -406,7 +404,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	wg.Add(2)
 
 	go func(n1update, n2start chan struct{}) {
-		_, err := n1.Publish(context.Background(), descID, func(*sqlbase.MutableTableDescriptor) error {
+		_, err := n1.Publish(context.Background(), descID, func(catalog.MutableDescriptor) error {
 			if n2start != nil {
 				// Signal node 2 to start.
 				close(n2start)
@@ -427,7 +425,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 		// Wait for node 1 signal indicating that node 1 is in its update()
 		// function.
 		<-n2start
-		_, err := n2.Publish(context.Background(), descID, func(*sqlbase.MutableTableDescriptor) error {
+		_, err := n2.Publish(context.Background(), descID, func(catalog.MutableDescriptor) error {
 			return nil
 		}, nil)
 		if err != nil {
@@ -450,14 +448,16 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 	defer t.cleanup()
 
 	if _, err := t.node(1).Publish(
-		context.Background(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
+		context.Background(), keys.LeaseTableID, func(desc catalog.MutableDescriptor) error {
+			table := desc.(*sqlbase.MutableTableDescriptor)
 			table.Version++
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 	if _, err := t.node(1).Publish(
-		context.Background(), keys.LeaseTableID, func(table *sqlbase.MutableTableDescriptor) error {
+		context.Background(), keys.LeaseTableID, func(desc catalog.MutableDescriptor) error {
+			table := desc.(*sqlbase.MutableTableDescriptor)
 			table.Version--
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -578,7 +578,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID,
-) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+) (catalog.Descriptor, hlc.Timestamp, error) {
 	return s.LeaseManager().(*lease.Manager).Acquire(ctx, s.Clock().Now(), descID)
 }
 
@@ -1171,7 +1171,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 	// Increment the table version after the txn has started.
 	leaseMgr := s.LeaseManager().(*lease.Manager)
 	if _, err := leaseMgr.Publish(
-		context.Background(), tableDesc.ID, func(table *sqlbase.MutableTableDescriptor) error {
+		context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
 			// Do nothing: increments the version.
 			return nil
 		}, nil); err != nil {
@@ -1281,11 +1281,11 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	params.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+	params.LeaseManagerConfig.DescriptorLeaseJitterFraction = 0.0
 	// The renewal timeout is set to be the duration, so background
 	// renewal should begin immediately after accessing a lease.
-	params.LeaseManagerConfig.TableDescriptorLeaseRenewalTimeout =
-		params.LeaseManagerConfig.TableDescriptorLeaseDuration
+	params.LeaseManagerConfig.DescriptorLeaseRenewalTimeout =
+		params.LeaseManagerConfig.DescriptorLeaseDuration
 
 	ctx := context.Background()
 	t := newLeaseTest(testingT, params)
@@ -1654,10 +1654,11 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 		leaseMgr := t.node(1)
 		for timeutil.Now().Before(end) {
 			log.Infof(ctx, "publishing new descriptor")
-			table, err := leaseMgr.Publish(ctx, descID, func(*sqlbase.MutableTableDescriptor) error { return nil }, nil)
+			desc, err := leaseMgr.Publish(ctx, descID, func(catalog.MutableDescriptor) error { return nil }, nil)
 			if err != nil {
 				t.Fatalf("error while publishing: %v", err)
 			}
+			table := desc.(*sqlbase.ImmutableTableDescriptor)
 
 			// Wait a little time to give a chance to other goroutines to
 			// race past.
@@ -1737,12 +1738,12 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	params.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+	params.LeaseManagerConfig.DescriptorLeaseJitterFraction = 0.0
 	// Lease duration to something small.
-	params.LeaseManagerConfig.TableDescriptorLeaseDuration = 50 * time.Millisecond
+	params.LeaseManagerConfig.DescriptorLeaseDuration = 50 * time.Millisecond
 	// Renewal timeout to 0 saying that the lease will get renewed only
 	// after the lease expires when a request requests the descriptor.
-	params.LeaseManagerConfig.TableDescriptorLeaseRenewalTimeout = 0
+	params.LeaseManagerConfig.DescriptorLeaseRenewalTimeout = 0
 
 	ctx := context.Background()
 	t := newLeaseTest(testingT, params)
