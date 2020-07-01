@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -188,16 +189,14 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
-				p.stmt.AST.StatementTag() == "SELECT" {
+				!strings.Contains(p.stmt.AST.StatementTag(), "SET") {
 				// We do not fallback to the old path because experimental
-				// planning is set to 'always' and we have a SELECT statement,
-				// so we return an error.
-				// We use a simple heuristic to check whether the statement is
-				// a SELECT, and the reasoning behind it is that we want to be
-				// able to run certain statement types (e.g. SET) regardless of
-				// whether they are supported by the new factory.
-				// TODO(yuzefovich): update this once we support more than just
-				// SELECT statements (see #47473).
+				// planning is set to 'always' and we don't have a SET
+				// statement, so we return an error. SET statements are
+				// exceptions because we want to be able to execute them
+				// regardless of whether they are supported by the new factory.
+				// TODO(yuzefovich): update this once SET statements are
+				// supported (see #47473).
 				return err
 			}
 			// We will fallback to the old path.
