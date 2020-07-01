@@ -10,7 +10,10 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // DescriptorInterface provides table information for results from a name
 // lookup.
@@ -44,10 +47,16 @@ type DescriptorInterface interface {
 type BaseDescriptorInterface interface {
 	tree.NameResolutionResult
 
-	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
-	TypeName() string
 	GetName() string
+
+	// Metadata for descriptor leasing.
+	GetVersion() DescriptorVersion
+	GetModificationTime() hlc.Timestamp
+	GetDrainingNames() []NameInfo
+
+	GetPrivileges() *PrivilegeDescriptor
+	TypeName() string
 	GetAuditMode() TableDescriptor_AuditMode
 
 	// DescriptorProto prepares this descriptor for serialization.
