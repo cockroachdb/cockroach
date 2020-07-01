@@ -606,17 +606,6 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
-// Len is a function that should only be used in templates.
-// WARNING: combination of Slice and Len might not work correctly for Bytes
-// type.
-func (b *argWidthOverloadBase) Len(target string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
-		return fmt.Sprintf("%s.Len()", target)
-	}
-	return fmt.Sprintf("len(%s)", target)
-}
-
 // Window is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Window(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
@@ -644,7 +633,6 @@ var (
 	_    = awob.CopySlice
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
-	_    = awob.Len
 	_    = awob.Window
 )
 

@@ -96,7 +96,7 @@ func (p projBitandInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -124,7 +124,7 @@ func (p projBitandInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -192,7 +192,7 @@ func (p projBitandInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -220,7 +220,7 @@ func (p projBitandInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -288,7 +288,7 @@ func (p projBitandInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -316,7 +316,7 @@ func (p projBitandInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -384,7 +384,7 @@ func (p projBitandInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -412,7 +412,7 @@ func (p projBitandInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -480,7 +480,7 @@ func (p projBitandInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -508,7 +508,7 @@ func (p projBitandInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -576,7 +576,7 @@ func (p projBitandInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -604,7 +604,7 @@ func (p projBitandInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -672,7 +672,7 @@ func (p projBitandInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -700,7 +700,7 @@ func (p projBitandInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -768,7 +768,7 @@ func (p projBitandInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -796,7 +796,7 @@ func (p projBitandInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -864,7 +864,7 @@ func (p projBitandInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -892,7 +892,7 @@ func (p projBitandInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1072,7 +1072,7 @@ func (p projBitorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1100,7 +1100,7 @@ func (p projBitorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1168,7 +1168,7 @@ func (p projBitorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1196,7 +1196,7 @@ func (p projBitorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1264,7 +1264,7 @@ func (p projBitorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1292,7 +1292,7 @@ func (p projBitorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1360,7 +1360,7 @@ func (p projBitorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1388,7 +1388,7 @@ func (p projBitorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1456,7 +1456,7 @@ func (p projBitorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1484,7 +1484,7 @@ func (p projBitorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1552,7 +1552,7 @@ func (p projBitorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1580,7 +1580,7 @@ func (p projBitorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1648,7 +1648,7 @@ func (p projBitorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1676,7 +1676,7 @@ func (p projBitorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1744,7 +1744,7 @@ func (p projBitorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1772,7 +1772,7 @@ func (p projBitorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1840,7 +1840,7 @@ func (p projBitorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -1868,7 +1868,7 @@ func (p projBitorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2048,7 +2048,7 @@ func (p projBitxorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2076,7 +2076,7 @@ func (p projBitxorInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2144,7 +2144,7 @@ func (p projBitxorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2172,7 +2172,7 @@ func (p projBitxorInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2240,7 +2240,7 @@ func (p projBitxorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2268,7 +2268,7 @@ func (p projBitxorInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2336,7 +2336,7 @@ func (p projBitxorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2364,7 +2364,7 @@ func (p projBitxorInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2432,7 +2432,7 @@ func (p projBitxorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2460,7 +2460,7 @@ func (p projBitxorInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2528,7 +2528,7 @@ func (p projBitxorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2556,7 +2556,7 @@ func (p projBitxorInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2624,7 +2624,7 @@ func (p projBitxorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2652,7 +2652,7 @@ func (p projBitxorInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2720,7 +2720,7 @@ func (p projBitxorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2748,7 +2748,7 @@ func (p projBitxorInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2816,7 +2816,7 @@ func (p projBitxorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -2844,7 +2844,7 @@ func (p projBitxorInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3031,7 +3031,7 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3073,7 +3073,7 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3155,7 +3155,7 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3197,7 +3197,7 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3279,7 +3279,7 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3321,7 +3321,7 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3402,7 +3402,7 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3442,7 +3442,7 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3522,7 +3522,7 @@ func (p projPlusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3562,7 +3562,7 @@ func (p projPlusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3642,7 +3642,7 @@ func (p projPlusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3682,7 +3682,7 @@ func (p projPlusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3762,7 +3762,7 @@ func (p projPlusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3802,7 +3802,7 @@ func (p projPlusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3884,7 +3884,7 @@ func (p projPlusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -3928,7 +3928,7 @@ func (p projPlusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4014,7 +4014,7 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -4062,7 +4062,7 @@ func (p projPlusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -4146,7 +4146,7 @@ func (p projPlusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4186,7 +4186,7 @@ func (p projPlusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4266,7 +4266,7 @@ func (p projPlusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4306,7 +4306,7 @@ func (p projPlusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4386,7 +4386,7 @@ func (p projPlusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4426,7 +4426,7 @@ func (p projPlusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4508,7 +4508,7 @@ func (p projPlusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4552,7 +4552,7 @@ func (p projPlusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4638,7 +4638,7 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -4686,7 +4686,7 @@ func (p projPlusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -4770,7 +4770,7 @@ func (p projPlusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4810,7 +4810,7 @@ func (p projPlusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4890,7 +4890,7 @@ func (p projPlusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -4930,7 +4930,7 @@ func (p projPlusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5010,7 +5010,7 @@ func (p projPlusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5050,7 +5050,7 @@ func (p projPlusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5132,7 +5132,7 @@ func (p projPlusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5176,7 +5176,7 @@ func (p projPlusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5262,7 +5262,7 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -5310,7 +5310,7 @@ func (p projPlusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -5391,7 +5391,7 @@ func (p projPlusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5425,7 +5425,7 @@ func (p projPlusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5494,7 +5494,7 @@ func (p projPlusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5518,7 +5518,7 @@ func (p projPlusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5582,7 +5582,7 @@ func (p projPlusIntervalTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5606,7 +5606,7 @@ func (p projPlusIntervalTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5670,7 +5670,7 @@ func (p projPlusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5694,7 +5694,7 @@ func (p projPlusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -5770,7 +5770,7 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -5818,7 +5818,7 @@ func (p projPlusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -6415,7 +6415,7 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6457,7 +6457,7 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6539,7 +6539,7 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6581,7 +6581,7 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6663,7 +6663,7 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6705,7 +6705,7 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6786,7 +6786,7 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6826,7 +6826,7 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6906,7 +6906,7 @@ func (p projMinusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -6946,7 +6946,7 @@ func (p projMinusInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7026,7 +7026,7 @@ func (p projMinusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7066,7 +7066,7 @@ func (p projMinusInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7146,7 +7146,7 @@ func (p projMinusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7186,7 +7186,7 @@ func (p projMinusInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7268,7 +7268,7 @@ func (p projMinusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7312,7 +7312,7 @@ func (p projMinusInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7398,7 +7398,7 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -7446,7 +7446,7 @@ func (p projMinusInt16DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -7530,7 +7530,7 @@ func (p projMinusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7570,7 +7570,7 @@ func (p projMinusInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7650,7 +7650,7 @@ func (p projMinusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7690,7 +7690,7 @@ func (p projMinusInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7770,7 +7770,7 @@ func (p projMinusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7810,7 +7810,7 @@ func (p projMinusInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7892,7 +7892,7 @@ func (p projMinusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -7936,7 +7936,7 @@ func (p projMinusInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8022,7 +8022,7 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -8070,7 +8070,7 @@ func (p projMinusInt32DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -8154,7 +8154,7 @@ func (p projMinusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8194,7 +8194,7 @@ func (p projMinusInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8274,7 +8274,7 @@ func (p projMinusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8314,7 +8314,7 @@ func (p projMinusInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8394,7 +8394,7 @@ func (p projMinusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8434,7 +8434,7 @@ func (p projMinusInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8516,7 +8516,7 @@ func (p projMinusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8560,7 +8560,7 @@ func (p projMinusInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8646,7 +8646,7 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -8694,7 +8694,7 @@ func (p projMinusInt64DatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -8775,7 +8775,7 @@ func (p projMinusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8809,7 +8809,7 @@ func (p projMinusFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8881,7 +8881,7 @@ func (p projMinusTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8911,7 +8911,7 @@ func (p projMinusTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -8978,7 +8978,7 @@ func (p projMinusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -9002,7 +9002,7 @@ func (p projMinusTimestampIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -9066,7 +9066,7 @@ func (p projMinusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -9090,7 +9090,7 @@ func (p projMinusIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -9166,7 +9166,7 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -9214,7 +9214,7 @@ func (p projMinusIntervalDatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1)
 			_ = col2.Get(colLen - 1)
 			for i := 0; i < n; i++ {
@@ -10051,7 +10051,7 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10093,7 +10093,7 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10175,7 +10175,7 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10217,7 +10217,7 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10299,7 +10299,7 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10341,7 +10341,7 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10422,7 +10422,7 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10462,7 +10462,7 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10539,7 +10539,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10573,7 +10573,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10658,7 +10658,7 @@ func (p projMultInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10714,7 +10714,7 @@ func (p projMultInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10810,7 +10810,7 @@ func (p projMultInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10866,7 +10866,7 @@ func (p projMultInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -10962,7 +10962,7 @@ func (p projMultInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11018,7 +11018,7 @@ func (p projMultInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11108,7 +11108,7 @@ func (p projMultInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11152,7 +11152,7 @@ func (p projMultInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11226,7 +11226,7 @@ func (p projMultInt16IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11250,7 +11250,7 @@ func (p projMultInt16IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11330,7 +11330,7 @@ func (p projMultInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11386,7 +11386,7 @@ func (p projMultInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11482,7 +11482,7 @@ func (p projMultInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11538,7 +11538,7 @@ func (p projMultInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11634,7 +11634,7 @@ func (p projMultInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11690,7 +11690,7 @@ func (p projMultInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11780,7 +11780,7 @@ func (p projMultInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11824,7 +11824,7 @@ func (p projMultInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11898,7 +11898,7 @@ func (p projMultInt32IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -11922,7 +11922,7 @@ func (p projMultInt32IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12002,7 +12002,7 @@ func (p projMultInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12058,7 +12058,7 @@ func (p projMultInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12154,7 +12154,7 @@ func (p projMultInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12210,7 +12210,7 @@ func (p projMultInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12306,7 +12306,7 @@ func (p projMultInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12362,7 +12362,7 @@ func (p projMultInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12452,7 +12452,7 @@ func (p projMultInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12496,7 +12496,7 @@ func (p projMultInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12570,7 +12570,7 @@ func (p projMultInt64IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12594,7 +12594,7 @@ func (p projMultInt64IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12663,7 +12663,7 @@ func (p projMultFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12697,7 +12697,7 @@ func (p projMultFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12766,7 +12766,7 @@ func (p projMultFloat64IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12790,7 +12790,7 @@ func (p projMultFloat64IntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12854,7 +12854,7 @@ func (p projMultIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12878,7 +12878,7 @@ func (p projMultIntervalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12942,7 +12942,7 @@ func (p projMultIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -12966,7 +12966,7 @@ func (p projMultIntervalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13030,7 +13030,7 @@ func (p projMultIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13054,7 +13054,7 @@ func (p projMultIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13118,7 +13118,7 @@ func (p projMultIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13142,7 +13142,7 @@ func (p projMultIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13211,7 +13211,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13245,7 +13245,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13327,7 +13327,7 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13377,7 +13377,7 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13467,7 +13467,7 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13517,7 +13517,7 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13607,7 +13607,7 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13657,7 +13657,7 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13746,7 +13746,7 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13794,7 +13794,7 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13882,7 +13882,7 @@ func (p projDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -13930,7 +13930,7 @@ func (p projDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14018,7 +14018,7 @@ func (p projDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14066,7 +14066,7 @@ func (p projDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14154,7 +14154,7 @@ func (p projDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14202,7 +14202,7 @@ func (p projDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14292,7 +14292,7 @@ func (p projDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14344,7 +14344,7 @@ func (p projDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14434,7 +14434,7 @@ func (p projDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14482,7 +14482,7 @@ func (p projDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14570,7 +14570,7 @@ func (p projDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14618,7 +14618,7 @@ func (p projDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14706,7 +14706,7 @@ func (p projDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14754,7 +14754,7 @@ func (p projDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14844,7 +14844,7 @@ func (p projDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14896,7 +14896,7 @@ func (p projDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -14986,7 +14986,7 @@ func (p projDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15034,7 +15034,7 @@ func (p projDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15122,7 +15122,7 @@ func (p projDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15170,7 +15170,7 @@ func (p projDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15258,7 +15258,7 @@ func (p projDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15306,7 +15306,7 @@ func (p projDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15396,7 +15396,7 @@ func (p projDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15448,7 +15448,7 @@ func (p projDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15535,7 +15535,7 @@ func (p projDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15577,7 +15577,7 @@ func (p projDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15654,7 +15654,7 @@ func (p projDivIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15686,7 +15686,7 @@ func (p projDivIntervalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15758,7 +15758,7 @@ func (p projDivIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15790,7 +15790,7 @@ func (p projDivIntervalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15871,7 +15871,7 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -15921,7 +15921,7 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16011,7 +16011,7 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16061,7 +16061,7 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16151,7 +16151,7 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16201,7 +16201,7 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16290,7 +16290,7 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16338,7 +16338,7 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16421,7 +16421,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16459,7 +16459,7 @@ func (p projFloorDivInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16537,7 +16537,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16575,7 +16575,7 @@ func (p projFloorDivInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16653,7 +16653,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16691,7 +16691,7 @@ func (p projFloorDivInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16776,7 +16776,7 @@ func (p projFloorDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16828,7 +16828,7 @@ func (p projFloorDivInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16913,7 +16913,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -16951,7 +16951,7 @@ func (p projFloorDivInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17029,7 +17029,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17067,7 +17067,7 @@ func (p projFloorDivInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17145,7 +17145,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17183,7 +17183,7 @@ func (p projFloorDivInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17268,7 +17268,7 @@ func (p projFloorDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17320,7 +17320,7 @@ func (p projFloorDivInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17405,7 +17405,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17443,7 +17443,7 @@ func (p projFloorDivInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17521,7 +17521,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17559,7 +17559,7 @@ func (p projFloorDivInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17637,7 +17637,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17675,7 +17675,7 @@ func (p projFloorDivInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17760,7 +17760,7 @@ func (p projFloorDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17812,7 +17812,7 @@ func (p projFloorDivInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17899,7 +17899,7 @@ func (p projFloorDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -17941,7 +17941,7 @@ func (p projFloorDivFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18027,7 +18027,7 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18077,7 +18077,7 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18167,7 +18167,7 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18217,7 +18217,7 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18307,7 +18307,7 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18357,7 +18357,7 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18446,7 +18446,7 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18494,7 +18494,7 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18577,7 +18577,7 @@ func (p projModInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18615,7 +18615,7 @@ func (p projModInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18693,7 +18693,7 @@ func (p projModInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18731,7 +18731,7 @@ func (p projModInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18809,7 +18809,7 @@ func (p projModInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18847,7 +18847,7 @@ func (p projModInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18932,7 +18932,7 @@ func (p projModInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -18984,7 +18984,7 @@ func (p projModInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19069,7 +19069,7 @@ func (p projModInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19107,7 +19107,7 @@ func (p projModInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19185,7 +19185,7 @@ func (p projModInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19223,7 +19223,7 @@ func (p projModInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19301,7 +19301,7 @@ func (p projModInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19339,7 +19339,7 @@ func (p projModInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19424,7 +19424,7 @@ func (p projModInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19476,7 +19476,7 @@ func (p projModInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19561,7 +19561,7 @@ func (p projModInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19599,7 +19599,7 @@ func (p projModInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19677,7 +19677,7 @@ func (p projModInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19715,7 +19715,7 @@ func (p projModInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19793,7 +19793,7 @@ func (p projModInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19831,7 +19831,7 @@ func (p projModInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19916,7 +19916,7 @@ func (p projModInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -19968,7 +19968,7 @@ func (p projModInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20055,7 +20055,7 @@ func (p projModFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20097,7 +20097,7 @@ func (p projModFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20179,7 +20179,7 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20221,7 +20221,7 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20303,7 +20303,7 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20345,7 +20345,7 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20427,7 +20427,7 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20469,7 +20469,7 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20550,7 +20550,7 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20590,7 +20590,7 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20676,7 +20676,7 @@ func (p projPowInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20728,7 +20728,7 @@ func (p projPowInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20820,7 +20820,7 @@ func (p projPowInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20872,7 +20872,7 @@ func (p projPowInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -20964,7 +20964,7 @@ func (p projPowInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21016,7 +21016,7 @@ func (p projPowInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21104,7 +21104,7 @@ func (p projPowInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21148,7 +21148,7 @@ func (p projPowInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21236,7 +21236,7 @@ func (p projPowInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21288,7 +21288,7 @@ func (p projPowInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21380,7 +21380,7 @@ func (p projPowInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21432,7 +21432,7 @@ func (p projPowInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21524,7 +21524,7 @@ func (p projPowInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21576,7 +21576,7 @@ func (p projPowInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21664,7 +21664,7 @@ func (p projPowInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21708,7 +21708,7 @@ func (p projPowInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21796,7 +21796,7 @@ func (p projPowInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21848,7 +21848,7 @@ func (p projPowInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21940,7 +21940,7 @@ func (p projPowInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -21992,7 +21992,7 @@ func (p projPowInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22084,7 +22084,7 @@ func (p projPowInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22136,7 +22136,7 @@ func (p projPowInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22224,7 +22224,7 @@ func (p projPowInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22268,7 +22268,7 @@ func (p projPowInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22347,7 +22347,7 @@ func (p projPowFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22381,7 +22381,7 @@ func (p projPowFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22678,7 +22678,7 @@ func (p projLShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22718,7 +22718,7 @@ func (p projLShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22798,7 +22798,7 @@ func (p projLShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22838,7 +22838,7 @@ func (p projLShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22918,7 +22918,7 @@ func (p projLShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -22958,7 +22958,7 @@ func (p projLShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23038,7 +23038,7 @@ func (p projLShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23078,7 +23078,7 @@ func (p projLShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23158,7 +23158,7 @@ func (p projLShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23198,7 +23198,7 @@ func (p projLShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23278,7 +23278,7 @@ func (p projLShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23318,7 +23318,7 @@ func (p projLShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23398,7 +23398,7 @@ func (p projLShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23438,7 +23438,7 @@ func (p projLShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23518,7 +23518,7 @@ func (p projLShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23558,7 +23558,7 @@ func (p projLShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23638,7 +23638,7 @@ func (p projLShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -23678,7 +23678,7 @@ func (p projLShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24142,7 +24142,7 @@ func (p projRShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24182,7 +24182,7 @@ func (p projRShiftInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24262,7 +24262,7 @@ func (p projRShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24302,7 +24302,7 @@ func (p projRShiftInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24382,7 +24382,7 @@ func (p projRShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24422,7 +24422,7 @@ func (p projRShiftInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24502,7 +24502,7 @@ func (p projRShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24542,7 +24542,7 @@ func (p projRShiftInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24622,7 +24622,7 @@ func (p projRShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24662,7 +24662,7 @@ func (p projRShiftInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24742,7 +24742,7 @@ func (p projRShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24782,7 +24782,7 @@ func (p projRShiftInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24862,7 +24862,7 @@ func (p projRShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24902,7 +24902,7 @@ func (p projRShiftInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -24982,7 +24982,7 @@ func (p projRShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -25022,7 +25022,7 @@ func (p projRShiftInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -25102,7 +25102,7 @@ func (p projRShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -25142,7 +25142,7 @@ func (p projRShiftInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26124,7 +26124,7 @@ func (p projEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26176,7 +26176,7 @@ func (p projEQBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26370,7 +26370,7 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26418,7 +26418,7 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26506,7 +26506,7 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26554,7 +26554,7 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26642,7 +26642,7 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26690,7 +26690,7 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26780,7 +26780,7 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26832,7 +26832,7 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26916,7 +26916,7 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -26952,7 +26952,7 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27039,7 +27039,7 @@ func (p projEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27097,7 +27097,7 @@ func (p projEQInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27195,7 +27195,7 @@ func (p projEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27253,7 +27253,7 @@ func (p projEQInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27351,7 +27351,7 @@ func (p projEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27409,7 +27409,7 @@ func (p projEQInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27515,7 +27515,7 @@ func (p projEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27589,7 +27589,7 @@ func (p projEQInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27690,7 +27690,7 @@ func (p projEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27738,7 +27738,7 @@ func (p projEQInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27831,7 +27831,7 @@ func (p projEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27889,7 +27889,7 @@ func (p projEQInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -27987,7 +27987,7 @@ func (p projEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28045,7 +28045,7 @@ func (p projEQInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28143,7 +28143,7 @@ func (p projEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28201,7 +28201,7 @@ func (p projEQInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28307,7 +28307,7 @@ func (p projEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28381,7 +28381,7 @@ func (p projEQInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28482,7 +28482,7 @@ func (p projEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28530,7 +28530,7 @@ func (p projEQInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28623,7 +28623,7 @@ func (p projEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28681,7 +28681,7 @@ func (p projEQInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28779,7 +28779,7 @@ func (p projEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28837,7 +28837,7 @@ func (p projEQInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28935,7 +28935,7 @@ func (p projEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -28993,7 +28993,7 @@ func (p projEQInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29099,7 +29099,7 @@ func (p projEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29173,7 +29173,7 @@ func (p projEQInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29274,7 +29274,7 @@ func (p projEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29322,7 +29322,7 @@ func (p projEQInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29423,7 +29423,7 @@ func (p projEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29497,7 +29497,7 @@ func (p projEQFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29611,7 +29611,7 @@ func (p projEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29685,7 +29685,7 @@ func (p projEQFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29799,7 +29799,7 @@ func (p projEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29873,7 +29873,7 @@ func (p projEQFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -29987,7 +29987,7 @@ func (p projEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30061,7 +30061,7 @@ func (p projEQFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30164,7 +30164,7 @@ func (p projEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30216,7 +30216,7 @@ func (p projEQFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30307,7 +30307,7 @@ func (p projEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30357,7 +30357,7 @@ func (p projEQTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30440,7 +30440,7 @@ func (p projEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30476,7 +30476,7 @@ func (p projEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30680,7 +30680,7 @@ func (p projNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30732,7 +30732,7 @@ func (p projNEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30926,7 +30926,7 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -30974,7 +30974,7 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31062,7 +31062,7 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31110,7 +31110,7 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31198,7 +31198,7 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31246,7 +31246,7 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31336,7 +31336,7 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31388,7 +31388,7 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31472,7 +31472,7 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31508,7 +31508,7 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31595,7 +31595,7 @@ func (p projNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31653,7 +31653,7 @@ func (p projNEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31751,7 +31751,7 @@ func (p projNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31809,7 +31809,7 @@ func (p projNEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31907,7 +31907,7 @@ func (p projNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -31965,7 +31965,7 @@ func (p projNEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32071,7 +32071,7 @@ func (p projNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32145,7 +32145,7 @@ func (p projNEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32246,7 +32246,7 @@ func (p projNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32294,7 +32294,7 @@ func (p projNEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32387,7 +32387,7 @@ func (p projNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32445,7 +32445,7 @@ func (p projNEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32543,7 +32543,7 @@ func (p projNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32601,7 +32601,7 @@ func (p projNEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32699,7 +32699,7 @@ func (p projNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32757,7 +32757,7 @@ func (p projNEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32863,7 +32863,7 @@ func (p projNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -32937,7 +32937,7 @@ func (p projNEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33038,7 +33038,7 @@ func (p projNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33086,7 +33086,7 @@ func (p projNEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33179,7 +33179,7 @@ func (p projNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33237,7 +33237,7 @@ func (p projNEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33335,7 +33335,7 @@ func (p projNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33393,7 +33393,7 @@ func (p projNEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33491,7 +33491,7 @@ func (p projNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33549,7 +33549,7 @@ func (p projNEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33655,7 +33655,7 @@ func (p projNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33729,7 +33729,7 @@ func (p projNEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33830,7 +33830,7 @@ func (p projNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33878,7 +33878,7 @@ func (p projNEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -33979,7 +33979,7 @@ func (p projNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34053,7 +34053,7 @@ func (p projNEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34167,7 +34167,7 @@ func (p projNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34241,7 +34241,7 @@ func (p projNEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34355,7 +34355,7 @@ func (p projNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34429,7 +34429,7 @@ func (p projNEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34543,7 +34543,7 @@ func (p projNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34617,7 +34617,7 @@ func (p projNEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34720,7 +34720,7 @@ func (p projNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34772,7 +34772,7 @@ func (p projNEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34863,7 +34863,7 @@ func (p projNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34913,7 +34913,7 @@ func (p projNETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -34996,7 +34996,7 @@ func (p projNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35032,7 +35032,7 @@ func (p projNEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35236,7 +35236,7 @@ func (p projLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35288,7 +35288,7 @@ func (p projLTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35482,7 +35482,7 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35530,7 +35530,7 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35618,7 +35618,7 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35666,7 +35666,7 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35754,7 +35754,7 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35802,7 +35802,7 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35892,7 +35892,7 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -35944,7 +35944,7 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36028,7 +36028,7 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36064,7 +36064,7 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36151,7 +36151,7 @@ func (p projLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36209,7 +36209,7 @@ func (p projLTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36307,7 +36307,7 @@ func (p projLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36365,7 +36365,7 @@ func (p projLTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36463,7 +36463,7 @@ func (p projLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36521,7 +36521,7 @@ func (p projLTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36627,7 +36627,7 @@ func (p projLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36701,7 +36701,7 @@ func (p projLTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36802,7 +36802,7 @@ func (p projLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36850,7 +36850,7 @@ func (p projLTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -36943,7 +36943,7 @@ func (p projLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37001,7 +37001,7 @@ func (p projLTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37099,7 +37099,7 @@ func (p projLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37157,7 +37157,7 @@ func (p projLTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37255,7 +37255,7 @@ func (p projLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37313,7 +37313,7 @@ func (p projLTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37419,7 +37419,7 @@ func (p projLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37493,7 +37493,7 @@ func (p projLTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37594,7 +37594,7 @@ func (p projLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37642,7 +37642,7 @@ func (p projLTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37735,7 +37735,7 @@ func (p projLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37793,7 +37793,7 @@ func (p projLTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37891,7 +37891,7 @@ func (p projLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -37949,7 +37949,7 @@ func (p projLTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38047,7 +38047,7 @@ func (p projLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38105,7 +38105,7 @@ func (p projLTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38211,7 +38211,7 @@ func (p projLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38285,7 +38285,7 @@ func (p projLTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38386,7 +38386,7 @@ func (p projLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38434,7 +38434,7 @@ func (p projLTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38535,7 +38535,7 @@ func (p projLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38609,7 +38609,7 @@ func (p projLTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38723,7 +38723,7 @@ func (p projLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38797,7 +38797,7 @@ func (p projLTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38911,7 +38911,7 @@ func (p projLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -38985,7 +38985,7 @@ func (p projLTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39099,7 +39099,7 @@ func (p projLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39173,7 +39173,7 @@ func (p projLTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39276,7 +39276,7 @@ func (p projLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39328,7 +39328,7 @@ func (p projLTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39419,7 +39419,7 @@ func (p projLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39469,7 +39469,7 @@ func (p projLTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39552,7 +39552,7 @@ func (p projLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39588,7 +39588,7 @@ func (p projLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39792,7 +39792,7 @@ func (p projLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -39844,7 +39844,7 @@ func (p projLEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40038,7 +40038,7 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40086,7 +40086,7 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40174,7 +40174,7 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40222,7 +40222,7 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40310,7 +40310,7 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40358,7 +40358,7 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40448,7 +40448,7 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40500,7 +40500,7 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40584,7 +40584,7 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40620,7 +40620,7 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40707,7 +40707,7 @@ func (p projLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40765,7 +40765,7 @@ func (p projLEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40863,7 +40863,7 @@ func (p projLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -40921,7 +40921,7 @@ func (p projLEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41019,7 +41019,7 @@ func (p projLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41077,7 +41077,7 @@ func (p projLEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41183,7 +41183,7 @@ func (p projLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41257,7 +41257,7 @@ func (p projLEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41358,7 +41358,7 @@ func (p projLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41406,7 +41406,7 @@ func (p projLEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41499,7 +41499,7 @@ func (p projLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41557,7 +41557,7 @@ func (p projLEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41655,7 +41655,7 @@ func (p projLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41713,7 +41713,7 @@ func (p projLEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41811,7 +41811,7 @@ func (p projLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41869,7 +41869,7 @@ func (p projLEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -41975,7 +41975,7 @@ func (p projLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42049,7 +42049,7 @@ func (p projLEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42150,7 +42150,7 @@ func (p projLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42198,7 +42198,7 @@ func (p projLEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42291,7 +42291,7 @@ func (p projLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42349,7 +42349,7 @@ func (p projLEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42447,7 +42447,7 @@ func (p projLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42505,7 +42505,7 @@ func (p projLEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42603,7 +42603,7 @@ func (p projLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42661,7 +42661,7 @@ func (p projLEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42767,7 +42767,7 @@ func (p projLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42841,7 +42841,7 @@ func (p projLEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42942,7 +42942,7 @@ func (p projLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -42990,7 +42990,7 @@ func (p projLEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43091,7 +43091,7 @@ func (p projLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43165,7 +43165,7 @@ func (p projLEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43279,7 +43279,7 @@ func (p projLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43353,7 +43353,7 @@ func (p projLEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43467,7 +43467,7 @@ func (p projLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43541,7 +43541,7 @@ func (p projLEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43655,7 +43655,7 @@ func (p projLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43729,7 +43729,7 @@ func (p projLEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43832,7 +43832,7 @@ func (p projLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43884,7 +43884,7 @@ func (p projLEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -43975,7 +43975,7 @@ func (p projLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44025,7 +44025,7 @@ func (p projLETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44108,7 +44108,7 @@ func (p projLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44144,7 +44144,7 @@ func (p projLEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44348,7 +44348,7 @@ func (p projGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44400,7 +44400,7 @@ func (p projGTBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44594,7 +44594,7 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44642,7 +44642,7 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44730,7 +44730,7 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44778,7 +44778,7 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44866,7 +44866,7 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -44914,7 +44914,7 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45004,7 +45004,7 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45056,7 +45056,7 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45140,7 +45140,7 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45176,7 +45176,7 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45263,7 +45263,7 @@ func (p projGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45321,7 +45321,7 @@ func (p projGTInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45419,7 +45419,7 @@ func (p projGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45477,7 +45477,7 @@ func (p projGTInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45575,7 +45575,7 @@ func (p projGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45633,7 +45633,7 @@ func (p projGTInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45739,7 +45739,7 @@ func (p projGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45813,7 +45813,7 @@ func (p projGTInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45914,7 +45914,7 @@ func (p projGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -45962,7 +45962,7 @@ func (p projGTInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46055,7 +46055,7 @@ func (p projGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46113,7 +46113,7 @@ func (p projGTInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46211,7 +46211,7 @@ func (p projGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46269,7 +46269,7 @@ func (p projGTInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46367,7 +46367,7 @@ func (p projGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46425,7 +46425,7 @@ func (p projGTInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46531,7 +46531,7 @@ func (p projGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46605,7 +46605,7 @@ func (p projGTInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46706,7 +46706,7 @@ func (p projGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46754,7 +46754,7 @@ func (p projGTInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46847,7 +46847,7 @@ func (p projGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -46905,7 +46905,7 @@ func (p projGTInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47003,7 +47003,7 @@ func (p projGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47061,7 +47061,7 @@ func (p projGTInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47159,7 +47159,7 @@ func (p projGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47217,7 +47217,7 @@ func (p projGTInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47323,7 +47323,7 @@ func (p projGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47397,7 +47397,7 @@ func (p projGTInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47498,7 +47498,7 @@ func (p projGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47546,7 +47546,7 @@ func (p projGTInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47647,7 +47647,7 @@ func (p projGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47721,7 +47721,7 @@ func (p projGTFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47835,7 +47835,7 @@ func (p projGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -47909,7 +47909,7 @@ func (p projGTFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48023,7 +48023,7 @@ func (p projGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48097,7 +48097,7 @@ func (p projGTFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48211,7 +48211,7 @@ func (p projGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48285,7 +48285,7 @@ func (p projGTFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48388,7 +48388,7 @@ func (p projGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48440,7 +48440,7 @@ func (p projGTFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48531,7 +48531,7 @@ func (p projGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48581,7 +48581,7 @@ func (p projGTTimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48664,7 +48664,7 @@ func (p projGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48700,7 +48700,7 @@ func (p projGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48904,7 +48904,7 @@ func (p projGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -48956,7 +48956,7 @@ func (p projGEBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49150,7 +49150,7 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49198,7 +49198,7 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49286,7 +49286,7 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49334,7 +49334,7 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49422,7 +49422,7 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49470,7 +49470,7 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49560,7 +49560,7 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49612,7 +49612,7 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49696,7 +49696,7 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49732,7 +49732,7 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49819,7 +49819,7 @@ func (p projGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49877,7 +49877,7 @@ func (p projGEInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -49975,7 +49975,7 @@ func (p projGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50033,7 +50033,7 @@ func (p projGEInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50131,7 +50131,7 @@ func (p projGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50189,7 +50189,7 @@ func (p projGEInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50295,7 +50295,7 @@ func (p projGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50369,7 +50369,7 @@ func (p projGEInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50470,7 +50470,7 @@ func (p projGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50518,7 +50518,7 @@ func (p projGEInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50611,7 +50611,7 @@ func (p projGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50669,7 +50669,7 @@ func (p projGEInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50767,7 +50767,7 @@ func (p projGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50825,7 +50825,7 @@ func (p projGEInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50923,7 +50923,7 @@ func (p projGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -50981,7 +50981,7 @@ func (p projGEInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51087,7 +51087,7 @@ func (p projGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51161,7 +51161,7 @@ func (p projGEInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51262,7 +51262,7 @@ func (p projGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51310,7 +51310,7 @@ func (p projGEInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51403,7 +51403,7 @@ func (p projGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51461,7 +51461,7 @@ func (p projGEInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51559,7 +51559,7 @@ func (p projGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51617,7 +51617,7 @@ func (p projGEInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51715,7 +51715,7 @@ func (p projGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51773,7 +51773,7 @@ func (p projGEInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51879,7 +51879,7 @@ func (p projGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -51953,7 +51953,7 @@ func (p projGEInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52054,7 +52054,7 @@ func (p projGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52102,7 +52102,7 @@ func (p projGEInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52203,7 +52203,7 @@ func (p projGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52277,7 +52277,7 @@ func (p projGEFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52391,7 +52391,7 @@ func (p projGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52465,7 +52465,7 @@ func (p projGEFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52579,7 +52579,7 @@ func (p projGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52653,7 +52653,7 @@ func (p projGEFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52767,7 +52767,7 @@ func (p projGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52841,7 +52841,7 @@ func (p projGEFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52944,7 +52944,7 @@ func (p projGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -52996,7 +52996,7 @@ func (p projGEFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -53087,7 +53087,7 @@ func (p projGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -53137,7 +53137,7 @@ func (p projGETimestampTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -53220,7 +53220,7 @@ func (p projGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {
@@ -53256,7 +53256,7 @@ func (p projGEIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			col1 = col1[0:n]
-			colLen := len(col1)
+			colLen := col1.Len()
 			_ = projCol.Get(colLen - 1) //gcassert:inline
 			_ = col2.Get(colLen - 1)    //gcassert:inline
 			for i := 0; i < n; i++ {

@@ -165,7 +165,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		// incorrect value. In order to keep bounds check elimination for all other
 		// types, we simply omit this code snippet for Bytes. */}}
 		col1 = execgen.SLICE(col1, 0, n)
-		colLen := execgen.LEN(col1)
+		colLen := col1.Len()
 		_ = _RETURN_UNSAFEGET(projCol, colLen-1)
 		_ = _R_UNSAFEGET(col2, colLen-1)
 		// {{end}}

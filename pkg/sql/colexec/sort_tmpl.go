@@ -135,7 +135,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(col coldata.Vec, order []int) {
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort(ctx context.Context) {
-	n := execgen.LEN(s.sortCol)
+	n := s.sortCol.Len()
 	s.quickSort(ctx, 0, n, maxDepth(n))
 }
 

@@ -64,3 +64,27 @@ func (c Times) Get(idx int) time.Time { return c[idx] }
 
 // Get returns the element at index idx of the vector.
 func (c Durations) Get(idx int) duration.Duration { return c[idx] }
+
+// Len returns the length of the vector.
+func (c Bools) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Int16s) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Int32s) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Int64s) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Float64s) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Decimals) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Times) Len() int { return len(c) }
+
+// Len returns the length of the vector.
+func (c Durations) Len() int { return len(c) }
