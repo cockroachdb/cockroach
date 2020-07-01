@@ -702,15 +702,18 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 		}
 
 		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+
 		var scalar opt.ScalarExpr
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
 		})
+
+		// Wrap the scalar in a FiltersItem.
+		filter := b.factory.ConstructFiltersItem(scalar)
+
 		// Check if the expression contains non-immutable operators.
-		var sharedProps props.Shared
-		memo.BuildSharedProps(scalar, &sharedProps)
-		if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
-			tabMeta.AddPartialIndexPredicate(indexOrd, scalar)
+		if !filter.ScalarProps().VolatilitySet.HasStable() && !filter.ScalarProps().VolatilitySet.HasVolatile() {
+			tabMeta.AddPartialIndexPredicate(indexOrd, &filter)
 		}
 	}
 }

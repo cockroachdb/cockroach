@@ -585,6 +585,12 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	inputStats := sb.makeTableStatistics(scan.Table)
 	s.RowCount = inputStats.RowCount
 
+	// Calculate distinct counts and histograms for partial index predicates.
+	if _, ok := sb.md.Table(scan.Table).Index(scan.Index).Predicate(); ok {
+		pred := sb.md.TableMeta(scan.Table).PartialIndexPredicates[scan.Index].(*FiltersItem)
+		sb.filterScan(scan, pred, relProps, s)
+	}
+
 	if scan.InvertedConstraint != nil ||
 		(scan.Constraint != nil && scan.Constraint.Spans.Count() < 2) {
 		// This constraint is either inverted or has at most one span.
@@ -635,6 +641,48 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	}
 
 	sb.finalizeFromCardinality(relProps)
+}
+
+// filterScan is called from buildScan to calculate the stats for a partial
+// index scan.
+func (sb *statisticsBuilder) filterScan(
+	scan *ScanExpr, pred *FiltersItem, relProps *props.Relational, s *props.Statistics,
+) {
+	// Update stats based on equivalencies in the predicate. Note
+	// that EquivReps from the Scan FD should not be used, as they include
+	// equivalencies derived from input expressions.
+	// TODO(mgartner): This was copied from buildSelect, but maybe the
+	// Scan FD should be used in this case?
+	equivReps := pred.ScalarProps().FuncDeps.EquivReps()
+
+	// Calculate distinct counts and histograms for constrained columns
+	// ----------------------------------------------------------------
+	f := FiltersExpr{*pred}
+	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilter(f, scan, relProps)
+
+	// Try to reduce the number of columns used for selectivity
+	// calculation based on functional dependencies.
+	inputFD := &scan.Relational().FuncDeps
+	constrainedCols = sb.tryReduceCols(constrainedCols, s, inputFD)
+
+	// Set null counts to 0 for non-nullable columns
+	// -------------------------------------------
+	sb.updateNullCountsFromNotNullCols(scan, relProps.NotNullCols, s)
+
+	// Calculate row count and selectivity
+	// -----------------------------------
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, scan, s))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, relProps, constrainedCols))
+
+	// Adjust the selectivity so we don't double-count the histogram columns.
+	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+
+	// Update distinct counts based on equivalencies; this should happen after
+	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
+	sb.applyEquivalencies(equivReps, &relProps.FuncDeps, scan, relProps)
 }
 
 // constrainScan is called from buildScan to calculate the stats for the scan
