@@ -40270,8 +40270,6 @@ func (o *mergeJoinRightOuterOp) build(ctx context.Context) {
 }
 
 func (o *mergeJoinRightOuterOp) Next(ctx context.Context) coldata.Batch {
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.output.ResetInternalBatch()
 	for {
 		switch o.state {

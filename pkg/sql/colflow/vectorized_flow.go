@@ -121,10 +121,10 @@ type vectorizedFlow struct {
 	}
 
 	// numClosers is the number of components in the flow that implement
-	// IdempotentClose. This is used for testing assertions.
+	// Close. This is used for testing assertions.
 	numClosers int32
 	// numClosed is a pointer to an int32 that is updated atomically when a
-	// component's IdempotentClose method is called. This is used for testing
+	// component's Close method is called. This is used for testing
 	// assertions.
 	numClosed *int32
 
@@ -400,7 +400,7 @@ type flowCreatorHelper interface {
 type opDAGWithMetaSources struct {
 	rootOperator    colexecbase.Operator
 	metadataSources []execinfrapb.MetadataSource
-	toClose         []colexec.IdempotentCloser
+	toClose         []colexec.Closer
 }
 
 // remoteComponentCreator is an interface that abstracts the constructors for
@@ -411,7 +411,7 @@ type remoteComponentCreator interface {
 		input colexecbase.Operator,
 		typs []*types.T,
 		metadataSources []execinfrapb.MetadataSource,
-		toClose []colexec.IdempotentCloser,
+		toClose []colexec.Closer,
 	) (*colrpc.Outbox, error)
 	newInbox(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
@@ -423,7 +423,7 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 	input colexecbase.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []colexec.Closer,
 ) (*colrpc.Outbox, error) {
 	return colrpc.NewOutbox(allocator, input, typs, metadataSources, toClose)
 }
@@ -563,7 +563,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	outputTyps []*types.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []colexec.Closer,
 	factory coldata.ColumnFactory,
 ) (execinfra.OpNode, error) {
 	// TODO(yuzefovich): we should collect some statistics on the outbox (e.g.
@@ -610,7 +610,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	outputTyps []*types.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []colexec.Closer,
 	factory coldata.ColumnFactory,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
@@ -702,7 +702,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
 	factory coldata.ColumnFactory,
-) (colexecbase.Operator, []execinfrapb.MetadataSource, []colexec.IdempotentCloser, error) {
+) (colexecbase.Operator, []execinfrapb.MetadataSource, []colexec.Closer, error) {
 	inputStreamOps := make([]colexec.SynchronizerInput, 0, len(input.Streams))
 	// Before we can safely use types we received over the wire in the
 	// operators, we need to make sure they are hydrated. In row execution
@@ -766,13 +766,13 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			op = os
 			metaSources = []execinfrapb.MetadataSource{os}
-			toClose = []colexec.IdempotentCloser{os}
+			toClose = []colexec.Closer{os}
 		} else {
 			if opt == flowinfra.FuseAggressively {
 				sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
 				op = sync
 				metaSources = []execinfrapb.MetadataSource{sync}
-				toClose = []colexec.IdempotentCloser{sync}
+				toClose = []colexec.Closer{sync}
 			} else {
 				sync := colexec.NewParallelUnorderedSynchronizer(inputStreamOps, s.waitGroup)
 				op = sync
@@ -819,7 +819,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	op colexecbase.Operator,
 	opOutputTypes []*types.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []colexec.Closer,
 	factory coldata.ColumnFactory,
 ) error {
 	output := &pspec.Output[0]
@@ -972,7 +972,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// toClose is similar to metadataSourcesQueue with the difference that these
 		// components do not produce metadata and should be Closed even during
 		// non-graceful termination.
-		toClose := make([]colexec.IdempotentCloser, 0, 1)
+		toClose := make([]colexec.Closer, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
 			input, metadataSources, closers, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
@@ -1016,18 +1016,18 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 		}
 		metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
-		// TODO(asubiotto): I was looking for how to assert that IdempotentClose is
+		// TODO(asubiotto): I was looking for how to assert that Close is
 		//  called exactly as many times as there are closers.
 		if flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 			for _, closer := range result.ToClose {
-				func(c colexec.IdempotentCloser) {
+				func(c colexec.Closer) {
 					closed := false
 					toClose = append(toClose, &colexec.CallbackCloser{CloseCb: func(ctx context.Context) error {
 						if !closed {
 							closed = true
 							atomic.AddInt32(&s.numClosed, 1)
 						}
-						return c.IdempotentClose(ctx)
+						return c.Close(ctx)
 					}})
 				}(closer)
 			}

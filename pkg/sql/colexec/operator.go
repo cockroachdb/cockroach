@@ -123,22 +123,21 @@ type ResettableOperator interface {
 	resetter
 }
 
-// IdempotentCloser is an object that releases resource on the first call to
-// IdempotentClose but does nothing for any subsequent call.
-type IdempotentCloser interface {
-	IdempotentClose(ctx context.Context) error
+// Closer is an object that releases resources when Close is called.
+type Closer interface {
+	Close(ctx context.Context) error
 }
 
 type CallbackCloser struct {
 	CloseCb func(context.Context) error
 }
 
-func (c *CallbackCloser) IdempotentClose(ctx context.Context) error {
+func (c *CallbackCloser) Close(ctx context.Context) error {
 	return c.CloseCb(ctx)
 }
 
 // closerHelper is a simple helper that helps Operators implement
-// IdempotentCloser. If close returns true, resources may be released, if it
+// Closer. If close returns true, resources may be released, if it
 // returns false, close has already been called.
 // use.
 type closerHelper struct {
@@ -157,7 +156,7 @@ func (c *closerHelper) close() bool {
 
 type closableOperator interface {
 	colexecbase.Operator
-	IdempotentCloser
+	Closer
 }
 
 type noopOperator struct {

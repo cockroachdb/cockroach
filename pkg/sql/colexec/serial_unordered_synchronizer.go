@@ -86,12 +86,12 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 	return bufferedMeta
 }
 
-func (s *SerialUnorderedSynchronizer) IdempotentClose(ctx context.Context) error {
+func (s *SerialUnorderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range s.inputs {
 		for _, closer := range input.ToClose {
-			if err := closer.IdempotentClose(ctx); err != nil {
+			if err := closer.Close(ctx); err != nil {
 				if log.V(1) {
-					log.Infof(ctx, "serial unordered synchronizer error closing IdempotentCloser: %v", err)
+					log.Infof(ctx, "serial unordered synchronizer error closing Closer: %v", err)
 				}
 			}
 		}

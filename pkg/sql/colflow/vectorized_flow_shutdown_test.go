@@ -57,7 +57,7 @@ type callbackCloser struct {
 	closeCb func() error
 }
 
-func (c callbackCloser) IdempotentClose(_ context.Context) error {
+func (c callbackCloser) Close(_ context.Context) error {
 	return c.closeCb()
 }
 
@@ -244,7 +244,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
-						[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+						[]colexec.Closer{callbackCloser{closeCb: func() error {
 							idToClosed.Lock()
 							idToClosed.mapping[id] = true
 							idToClosed.Unlock()
@@ -326,7 +326,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					typs,
 					nil, /* output */
 					[]execinfrapb.MetadataSource{materializerMetadataSource},
-					[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+					[]colexec.Closer{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil
 					}}}, /* toClose */

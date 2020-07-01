@@ -42219,8 +42219,6 @@ func (o *mergeJoinExceptAllOp) build(ctx context.Context) {
 }
 
 func (o *mergeJoinExceptAllOp) Next(ctx context.Context) coldata.Batch {
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.output.ResetInternalBatch()
 	for {
 		switch o.state {

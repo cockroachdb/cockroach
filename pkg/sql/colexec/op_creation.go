@@ -80,7 +80,7 @@ type NewColOperatorResult struct {
 	MetadataSources  []execinfrapb.MetadataSource
 	// ToClose is a slice of components that need to be Closed. Close should be
 	// idempotent.
-	ToClose     []IdempotentCloser
+	ToClose     []Closer
 	IsStreaming bool
 	OpMonitors  []*mon.BytesMonitor
 	OpAccounts  []*mon.BoundAccount
