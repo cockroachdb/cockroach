@@ -318,6 +318,10 @@ func DefaultPebbleOptions() *pebble.Options {
 	// with TPCC import performance. More experimentation might be needed to
 	// optimize this for other workloads.
 	opts.Experimental.FlushSplitBytes = 10 << 20 // 10 MB
+	// Automatically flush 10s after the first range tombstone is added to a
+	// memtable. This ensures that we can reclaim space even when there's no
+	// activity on the database generating flushes.
+	opts.Experimental.DeleteRangeFlushDelay = 10 * time.Second
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]

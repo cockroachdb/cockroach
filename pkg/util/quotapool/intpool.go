@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -109,8 +110,8 @@ func (ia *IntAlloc) from(p *IntPool) bool {
 type intAlloc IntAlloc
 
 // Merge makes intAlloc a Resource.
-func (ia *intAlloc) Merge(other Resource) {
-	(*IntAlloc)(ia).Merge((*IntAlloc)(other.(*intAlloc)))
+func (ia *intAlloc) Merge(val interface{}) {
+	(*IntAlloc)(ia).Merge((*IntAlloc)(val.(*intAlloc)))
 }
 
 // NewIntPool creates a new named IntPool.
@@ -183,7 +184,7 @@ func (p *IntPool) acquireMaybeWait(ctx context.Context, v uint64, wait bool) (*I
 
 // Release will release allocs back to their pool. Allocs which are from p are
 // merged into a single alloc before being added to avoid synchronizing
-// on p multiple times. Allocs which did not come from p are released
+// on o multiple times. Allocs which did not come from p are released
 // one at a time. It is legal to pass nil values in allocs.
 func (p *IntPool) Release(allocs ...*IntAlloc) {
 	var toRelease *IntAlloc
@@ -449,15 +450,17 @@ type intRequest struct {
 	want uint64
 }
 
-func (r *intRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
+func (r *intRequest) Acquire(
+	ctx context.Context, v Resource,
+) (fulfilled bool, tryAgainAfter time.Duration) {
 	ia := v.(*intAlloc)
 	want := min(int64(r.want), int64(ia.p.Capacity()))
 	if ia.alloc < want {
-		return false, nil
+		return false, 0
 	}
 	r.want = uint64(want)
 	ia.alloc -= want
-	return true, ia
+	return true, 0
 }
 
 func (r *intRequest) ShouldWait() bool { return true }
@@ -466,7 +469,7 @@ type intRequestNoWait intRequest
 
 func (r *intRequestNoWait) Acquire(
 	ctx context.Context, v Resource,
-) (fulfilled bool, extra Resource) {
+) (fulfilled bool, tryAgainAfter time.Duration) {
 	return (*intRequest)(r).Acquire(ctx, v)
 }
 
@@ -482,7 +485,9 @@ type intFuncRequest struct {
 	err error
 }
 
-func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled bool, extra Resource) {
+func (r *intFuncRequest) Acquire(
+	ctx context.Context, v Resource,
+) (fulfilled bool, tryAgainAfter time.Duration) {
 	ia := v.(*intAlloc)
 	pi := PoolInfo{
 		Available: uint64(max(0, ia.alloc)),
@@ -494,18 +499,18 @@ func (r *intFuncRequest) Acquire(ctx context.Context, v Resource) (fulfilled boo
 			panic(fmt.Sprintf("IntRequestFunc returned both took: %d and err: %s", took, err))
 		}
 		if errors.Is(err, ErrNotEnoughQuota) {
-			return false, nil
+			return false, 0
 		}
 		r.err = err
 		// Take the request out of the queue and put all the quota back.
-		return true, ia
+		return true, 0
 	}
 	if took > math.MaxInt64 || int64(took) > ia.alloc {
 		panic(errors.Errorf("took %d quota > %d allocated", took, ia.alloc))
 	}
 	r.took = took
 	ia.alloc -= int64(took)
-	return true, ia
+	return true, 0
 }
 
 func min(a, b int64) (v int64) {
@@ -528,7 +533,7 @@ type intFuncRequestNoWait intFuncRequest
 
 func (r *intFuncRequestNoWait) Acquire(
 	ctx context.Context, v Resource,
-) (fulfilled bool, extra Resource) {
+) (fulfilled bool, tryAgainAfter time.Duration) {
 	return (*intFuncRequest)(r).Acquire(ctx, v)
 }
 
