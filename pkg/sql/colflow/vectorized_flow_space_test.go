@@ -96,7 +96,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
-				args := colexec.NewColOperatorArgs{
+				args := &colexec.NewColOperatorArgs{
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
@@ -223,7 +223,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
-				args := colexec.NewColOperatorArgs{
+				args := &colexec.NewColOperatorArgs{
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,

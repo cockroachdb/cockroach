@@ -1671,7 +1671,7 @@ func TestMergeJoiner(t *testing.T) {
 						tc.expected, mergeJoinVerifier,
 						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 							spec := createSpecForMergeJoiner(tc)
-							args := NewColOperatorArgs{
+							args := &NewColOperatorArgs{
 								Spec:                spec,
 								Inputs:              input,
 								StreamingMemAccount: testMemAcc,

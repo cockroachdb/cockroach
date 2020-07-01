@@ -11,6 +11,9 @@
 package colexec
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -26,13 +29,33 @@ type ExprHelper interface {
 	ProcessExpr(execinfrapb.Expression, *tree.EvalContext, []*types.T) (tree.TypedExpr, error)
 }
 
+// ExprDeserialization describes how expression deserialization should be
+// handled in the vectorized engine.
+type ExprDeserialization int
+
+const (
+	// DefaultExprDeserialization is the default way of handling expression
+	// deserialization in which case LocalExpr field is used if set.
+	DefaultExprDeserialization ExprDeserialization = iota
+	// ForcedExprDeserialization is the way of handling expression
+	// deserialization in which case LocalExpr field is completely ignored and
+	// the serialized representation is always deserialized.
+	ForcedExprDeserialization
+)
+
 // NewExprHelper returns a new ExprHelper. forceExprDeserialization determines
 // whether LocalExpr field is ignored by the helper.
-func NewExprHelper(forceExprDeserialization bool) ExprHelper {
-	if forceExprDeserialization {
+func NewExprHelper(exprDeserialization ExprDeserialization) ExprHelper {
+	switch exprDeserialization {
+	case DefaultExprDeserialization:
+		return &defaultExprHelper{}
+	case ForcedExprDeserialization:
 		return &forcedDeserializationExprHelper{}
+	default:
+		colexecerror.InternalError(fmt.Sprintf("unexpected ExprDeserialization %d", exprDeserialization))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	}
-	return &defaultExprHelper{}
 }
 
 // defaultExprHelper is an ExprHelper that takes advantage of already present
