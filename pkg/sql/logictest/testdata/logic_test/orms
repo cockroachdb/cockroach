@@ -266,3 +266,57 @@ FROM
 			AS t_pk ON i.table_name = t_pk.table_name
 GROUP BY
 	t_pk.table_primary_key_columns
+
+# Regression test for pgcli's foreign key query.
+query TTTTTT
+SELECT
+  s_p.nspname AS parentschema,
+  t_p.relname AS parenttable,
+  unnest(
+    (
+      SELECT
+        array_agg(attname ORDER BY i)
+      FROM
+        (
+          SELECT
+            unnest(confkey) AS attnum,
+            generate_subscripts(confkey, 1) AS i
+        )
+          AS x
+        JOIN pg_catalog.pg_attribute AS c USING (attnum)
+      WHERE
+        c.attrelid = fk.confrelid
+    )
+  )
+    AS parentcolumn,
+  s_c.nspname AS childschema,
+  t_c.relname AS childtable,
+  unnest(
+    (
+      SELECT
+        array_agg(attname ORDER BY i)
+      FROM
+        (
+          SELECT
+            unnest(conkey) AS attnum,
+            generate_subscripts(conkey, 1) AS i
+        )
+          AS x
+        JOIN pg_catalog.pg_attribute AS c USING (attnum)
+      WHERE
+        c.attrelid = fk.conrelid
+    )
+  )
+    AS childcolumn
+FROM
+  pg_catalog.pg_constraint AS fk
+  JOIN pg_catalog.pg_class AS t_p ON t_p.oid = fk.confrelid
+  JOIN pg_catalog.pg_namespace AS s_p ON
+      s_p.oid = t_p.relnamespace
+  JOIN pg_catalog.pg_class AS t_c ON t_c.oid = fk.conrelid
+  JOIN pg_catalog.pg_namespace AS s_c ON
+      s_c.oid = t_c.relnamespace
+WHERE
+  fk.contype = 'f';
+----
+public  a  id  public  b  a_id
