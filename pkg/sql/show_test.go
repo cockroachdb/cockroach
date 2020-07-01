@@ -71,7 +71,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
@@ -90,7 +90,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
@@ -108,7 +108,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	s STRING NULL,
 	FAMILY "primary" (i, rowid),
@@ -120,7 +120,7 @@ func TestShowCreateTable(t *testing.T) {
 			stmt: `CREATE TABLE %s (
 	i INT8 PRIMARY KEY
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)
@@ -134,7 +134,7 @@ func TestShowCreateTable(t *testing.T) {
 				CREATE INDEX idx_if on %[1]s (f, i) STORING (s, d);
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
@@ -151,6 +151,11 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
 	FAMILY "primary" ("te""st")
 )`,
+			expect: `CREATE TABLE public.%s (
+	"te""st" INT8 NOT NULL,
+	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
+	FAMILY "primary" ("te""st")
+)`,
 		},
 		{
 			stmt: `CREATE TABLE %s (
@@ -158,7 +163,7 @@ func TestShowCreateTable(t *testing.T) {
 	b int8,
 	index c(a asc, b desc)
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	a INT8 NULL,
 	b INT8 NULL,
 	INDEX c (a ASC, b DESC),
@@ -174,12 +179,12 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b),
 	k int REFERENCES items (c)
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c),
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b),
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c),
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -192,12 +197,12 @@ func TestShowCreateTable(t *testing.T) {
 	k int REFERENCES items (c) MATCH FULL,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) MATCH FULL,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c) MATCH FULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) MATCH FULL,
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c) MATCH FULL,
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -208,7 +213,7 @@ func TestShowCreateTable(t *testing.T) {
 	x INT8,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	x INT8 NULL,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo(x),
 	FAMILY "primary" (x, rowid)
@@ -223,12 +228,12 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
 	k int8 REFERENCES items (c) ON DELETE SET NULL
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL DEFAULT 123:::INT8,
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) ON DELETE SET DEFAULT,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES items(c) ON DELETE SET NULL,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c) ON DELETE SET NULL,
 	FAMILY "primary" (i, j, k, rowid)
 )`,
 		},
@@ -240,12 +245,12 @@ func TestShowCreateTable(t *testing.T) {
 	b INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT items (a, b)`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	a INT8 NOT NULL,
 	b INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
 	FAMILY "primary" (a, b)
-) INTERLEAVE IN PARENT items (a, b)`,
+) INTERLEAVE IN PARENT public.items (a, b)`,
 		},
 		// Check that INTERLEAVE dependencies outside of the current
 		// database are prefixed by their db name.
@@ -253,7 +258,7 @@ func TestShowCreateTable(t *testing.T) {
 			stmt: `CREATE TABLE %s (
 	x INT8 PRIMARY KEY
 ) INTERLEAVE IN PARENT o.foo (x)`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	x INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (x ASC),
 	FAMILY "primary" (x)
@@ -270,13 +275,13 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH SIMPLE ON DELETE SET DEFAULT,
 	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
 )`,
-			expect: `CREATE TABLE %s (
+			expect: `CREATE TABLE public.%s (
 	i INT8 NULL DEFAULT 1:::INT8,
 	j INT8 NULL DEFAULT 2:::INT8,
 	k INT8 NULL DEFAULT 3:::INT8,
 	l INT8 NULL DEFAULT 4:::INT8,
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES items(a, b) ON DELETE SET DEFAULT,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES items(a, b) MATCH FULL ON UPDATE CASCADE,
+	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES public.items(a, b) MATCH FULL ON UPDATE CASCADE,
 	FAMILY "primary" (i, j, k, l, rowid)
 )`,
 		},
@@ -348,35 +353,35 @@ func TestShowCreateView(t *testing.T) {
 	}{
 		{
 			`CREATE VIEW %s AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM d.public.t`,
+			`CREATE VIEW public.%s (i, s, v, t) AS SELECT i, s, v, t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT i, s, t FROM t`,
-			`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM d.public.t`,
+			`CREATE VIEW public.%s (i, s, t) AS SELECT i, s, t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM t`,
-			`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.public.t`,
+			`CREATE VIEW public.%s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
-			`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3`,
+			`CREATE VIEW public.%s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT count(*) FROM t`,
-			`CREATE VIEW %s (count) AS SELECT count(*) FROM d.public.t`,
+			`CREATE VIEW public.%s (count) AS SELECT count(*) FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT8`,
-			`CREATE VIEW %s (s, count) AS SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8`,
+			`CREATE VIEW public.%s (s, count) AS SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8`,
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.public.t`,
+			`CREATE VIEW public.%s (a, b, c, d) AS SELECT i, s, v, t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
-			`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.public.t`,
+			`CREATE VIEW public.%s (a, b) AS SELECT i, v FROM d.public.t`,
 		},
 	}
 	for i, test := range tests {
@@ -442,19 +447,19 @@ func TestShowCreateSequence(t *testing.T) {
 	}{
 		{
 			`CREATE SEQUENCE %s`,
-			`CREATE SEQUENCE %s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
 		},
 		{
 			`CREATE SEQUENCE %s INCREMENT BY 5`,
-			`CREATE SEQUENCE %s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1`,
+			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1`,
 		},
 		{
 			`CREATE SEQUENCE %s START WITH 5`,
-			`CREATE SEQUENCE %s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 5`,
+			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 5`,
 		},
 		{
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0`,
-			`CREATE SEQUENCE %s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
+			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
 		},
 	}
 	for i, test := range tests {

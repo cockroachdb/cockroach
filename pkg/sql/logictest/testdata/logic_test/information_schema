@@ -147,7 +147,7 @@ query TT colnames
 SHOW CREATE TABLE information_schema.tables
 ----
 table_name                 create_statement
-information_schema.tables  CREATE TABLE tables (
+information_schema.tables  CREATE TABLE information_schema.tables (
                            table_catalog STRING NOT NULL,
                            table_schema STRING NOT NULL,
                            table_name STRING NOT NULL,

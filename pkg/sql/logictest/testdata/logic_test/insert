@@ -472,7 +472,7 @@ CREATE TABLE sw (
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE sw]
 ----
-CREATE TABLE sw (
+CREATE TABLE public.sw (
    a CHAR NULL,
    b CHAR(3) NULL,
    c VARCHAR NULL,
@@ -595,7 +595,7 @@ BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
-CREATE TABLE t29494 (
+CREATE TABLE public.t29494 (
    x INT8 NULL,
    FAMILY "primary" (x, rowid)
 )
@@ -633,7 +633,7 @@ BEGIN; ALTER TABLE t32759 DROP COLUMN y
 query T
 SELECT create_statement FROM [SHOW CREATE t32759]
 ----
-CREATE TABLE t32759 (
+CREATE TABLE public.t32759 (
    x INT8 NULL,
    z INT8 NULL,
    FAMILY "primary" (x, z, rowid)

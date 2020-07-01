@@ -19,7 +19,7 @@ dump d
 SET experimental_enable_enums = true;
 CREATE TYPE public.t AS ENUM ('dump', 'cli');
 
-CREATE TABLE tt (
+CREATE TABLE public.tt (
 	x public.t NULL,
 	y public.t[] NULL,
 	z INT8 NULL,
@@ -38,7 +38,7 @@ dump d tt
 noroundtrip
 ----
 ----
-CREATE TABLE tt (
+CREATE TABLE public.tt (
 	x public.t NULL,
 	y public.t[] NULL,
 	z INT8 NULL,

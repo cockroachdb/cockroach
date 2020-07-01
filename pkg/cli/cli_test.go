@@ -2042,6 +2042,6 @@ func Example_dump_no_visible_columns() {
 	// sql -e create table t(x int); set sql_safe_updates=false; alter table t drop x
 	// ALTER TABLE
 	// dump defaultdb
-	// CREATE TABLE t (FAMILY "primary" (rowid)
+	// CREATE TABLE public.t (FAMILY "primary" (rowid)
 	// );
 }

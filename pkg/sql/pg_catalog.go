@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1006,6 +1007,20 @@ func (r oneAtATimeSchemaResolver) getTableByID(id sqlbase.ID) (*TableDescriptor,
 		return nil, err
 	}
 	return table.Desc.TableDesc(), nil
+}
+
+func (r oneAtATimeSchemaResolver) getSchemaByID(
+	id sqlbase.ID,
+) (*sqlbase.ImmutableSchemaDescriptor, error) {
+	// TODO (rohany): This should use the descs.Collection.
+	sc, err := catalogkv.GetDescriptorByID(r.ctx, r.p.txn, r.p.ExecCfg().Codec, id)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil || sc.SchemaDesc() == nil {
+		return nil, sqlbase.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
+	}
+	return sc.(*sqlbase.ImmutableSchemaDescriptor), nil
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through

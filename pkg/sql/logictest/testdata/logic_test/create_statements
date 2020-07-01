@@ -32,28 +32,28 @@ query TTTT colnames
 SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'
 ----
 create_statement  create_nofks  alter_statements  validate_statements
-CREATE TABLE t (
+CREATE TABLE public.t (
    a INT8 NULL,
-   CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t(rowid),
+   CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid),
    FAMILY "primary" (a, rowid)
-)  CREATE TABLE t (
+)  CREATE TABLE public.t (
    a INT8 NULL,
    FAMILY "primary" (a, rowid)
-)  {"ALTER TABLE t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES t(rowid)"}  {"ALTER TABLE t VALIDATE CONSTRAINT fk_a_ref_t"}
-CREATE TABLE v (
+)  {"ALTER TABLE public.t ADD CONSTRAINT fk_a_ref_t FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT fk_a_ref_t"}
+CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
-   CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES t(rowid),
-   CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v(s),
+   CONSTRAINT "fk_'_ref_t" FOREIGN KEY ("'") REFERENCES public.t(rowid),
+   CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s),
    UNIQUE INDEX v_s_key (s ASC),
    FAMILY "primary" ("'", s, rowid)
-)  CREATE TABLE v (
+)  CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    UNIQUE INDEX v_s_key (s ASC),
    FAMILY "primary" ("'", s, rowid)
-)  {"ALTER TABLE v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES t(rowid)","ALTER TABLE v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES v(s)"}  {"ALTER TABLE v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE v VALIDATE CONSTRAINT fk_s_ref_v"}
-CREATE TABLE c (
+)  {"ALTER TABLE public.v ADD CONSTRAINT \"fk_'_ref_t\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT fk_s_ref_v FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"fk_'_ref_t\"","ALTER TABLE public.v VALIDATE CONSTRAINT fk_s_ref_v"}
+CREATE TABLE public.c (
   a INT8 NOT NULL,
   b INT8 NULL,
   INDEX c_a_b_idx (a ASC, b ASC),
@@ -62,7 +62,7 @@ CREATE TABLE c (
 );
 COMMENT ON TABLE c IS 'table';
 COMMENT ON COLUMN c.a IS 'column';
-COMMENT ON INDEX c@c_a_b_idx IS 'index'  CREATE TABLE c (
+COMMENT ON INDEX c@c_a_b_idx IS 'index'  CREATE TABLE public.c (
                                          a INT8 NOT NULL,
                                          b INT8 NULL,
                                          INDEX c_a_b_idx (a ASC, b ASC),

@@ -215,7 +215,7 @@ CREATE TABLE t7 (
 query TT
 SHOW CREATE TABLE t7
 ----
-t7  CREATE TABLE t7 (
+t7  CREATE TABLE public.t7 (
     x INT8 NULL,
     y INT8 NULL,
     z INT8 NULL,
@@ -252,7 +252,7 @@ CREATE TABLE t8 (
 query TT
 SHOW CREATE TABLE t8
 ----
-t8  CREATE TABLE t8 (
+t8  CREATE TABLE public.t8 (
     a INT8 NULL,
     FAMILY "primary" (a, rowid),
     CONSTRAINT check_a CHECK (a > 0:::INT8),

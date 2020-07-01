@@ -460,10 +460,10 @@ CREATE TABLE a (b INT ARRAY)
 query TT
 SHOW CREATE TABLE a
 ----
-a  CREATE TABLE a (
-     b INT8[] NULL,
-     FAMILY "primary" (b, rowid)
-   )
+a  CREATE TABLE public.a (
+   b INT8[] NULL,
+   FAMILY "primary" (b, rowid)
+)
 
 statement ok
 DROP TABLE a
@@ -519,10 +519,10 @@ SELECT * FROM a
 query TT
 SHOW CREATE TABLE a
 ----
-a  CREATE TABLE a (
-     b INT8[] NULL,
-     FAMILY "primary" (b, rowid)
-   )
+a  CREATE TABLE public.a (
+   b INT8[] NULL,
+   FAMILY "primary" (b, rowid)
+)
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -590,7 +590,7 @@ CREATE TABLE a (b SMALLINT[])
 query TT
 SHOW CREATE TABLE a
 ----
-a  CREATE TABLE a (
+a  CREATE TABLE public.a (
    b INT2[] NULL,
    FAMILY "primary" (b, rowid)
 )

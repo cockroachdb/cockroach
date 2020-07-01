@@ -183,27 +183,27 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.public.t
+v1  CREATE VIEW public.v1 (a, b) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2  CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.public.t
+v2  CREATE VIEW public.v2 (x, y) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6  CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.public.v1
+v6  CREATE VIEW public.v6 (x, y) AS SELECT a, b FROM test.public.v1
 
 query TT
 SHOW CREATE VIEW v7
 ----
-v7  CREATE VIEW v7 (x, y) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
+v7  CREATE VIEW public.v7 (x, y) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.public.v1  CREATE VIEW v1 (x, y) AS SELECT x, y FROM test.public.v2
+test2.public.v1  CREATE VIEW public.v1 (x, y) AS SELECT x, y FROM test.public.v2
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -252,7 +252,7 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.public.t
+v1  CREATE VIEW public.v1 (a, b) AS SELECT a, b FROM test.public.t
 
 user root
 
@@ -524,7 +524,7 @@ CREATE VIEW w AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 query T
 SELECT create_statement FROM [SHOW CREATE w]
 ----
-CREATE VIEW w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+CREATE VIEW public.w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 
 statement ok
 CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
@@ -532,7 +532,7 @@ CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
 query T
 SELECT create_statement FROM [SHOW CREATE w2]
 ----
-CREATE VIEW w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
+CREATE VIEW public.w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
 
 statement ok
 CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
@@ -540,7 +540,7 @@ CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
 query T
 SELECT create_statement FROM [SHOW CREATE w3]
 ----
-CREATE VIEW w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
+CREATE VIEW public.w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT)
@@ -584,7 +584,7 @@ CREATE VIEW v47704 AS
 query T
 SELECT create_statement FROM [ SHOW CREATE VIEW v47704 ]
 ----
-CREATE VIEW v47704 (first_value) AS SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo) FROM test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
+CREATE VIEW public.v47704 (first_value) AS SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo) FROM test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
 
 statement ok
 SELECT * FROM v47704

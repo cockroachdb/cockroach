@@ -71,7 +71,7 @@ query TT colnames
 show create table t
 ----
 table_name  create_statement
-t           CREATE TABLE t (
+t           CREATE TABLE public.t (
             a INT8 NOT NULL,
             i INT8 NULL,
             CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -257,12 +257,12 @@ ALTER TABLE t6 ALTER COLUMN id2 TYPE STRING;
 query TT
 SHOW CREATE TABLE t6
 ----
-t6      CREATE TABLE t6 (
-              id INT8 NULL,
-              id2 STRING NULL,
-              FAMILY f1 (id, rowid),
-              FAMILY f2 (id2)
-            )
+t6  CREATE TABLE public.t6 (
+    id INT8 NULL,
+    id2 STRING NULL,
+    FAMILY f1 (id, rowid),
+    FAMILY f2 (id2)
+)
 
 # Ensure default expressions are casted correctly.
 statement ok
@@ -292,10 +292,10 @@ ALTER TABLE t8 ALTER COLUMN x TYPE INT
 query TT
 SHOW CREATE TABLE t8
 ----
-t8  CREATE TABLE t8 (
-        x STRING NULL,
-        FAMILY "primary" (x, rowid)
-    )
+t8  CREATE TABLE public.t8 (
+    x STRING NULL,
+    FAMILY "primary" (x, rowid)
+)
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
 statement ok
@@ -399,7 +399,7 @@ query TT colnames
 show create table t17
 ----
 table_name  create_statement
-t17         CREATE TABLE t17 (
+t17         CREATE TABLE public.t17 (
             x STRING NULL DEFAULT 'HELLO':::STRING,
             FAMILY "primary" (x, rowid)
 )
@@ -470,7 +470,7 @@ query TT colnames
 show create table t24
 ----
 table_name  create_statement
-t24         CREATE TABLE t24 (
+t24         CREATE TABLE public.t24 (
             x STRING NULL,
             FAMILY "primary" (x, rowid)
 )
