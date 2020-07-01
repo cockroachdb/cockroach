@@ -143,26 +143,28 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// to when they are partial indexes and the row does not satisfy the
 	// predicate. This set is passed as a parameter to tableInserter.row below.
 	var ignoreIndexes util.FastIntSet
-	indexPredicateVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
+	partialIndexPutVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
 	colIdx := 0
 	indexes := r.ti.tableDesc().Indexes
 	for i := range indexes {
-		if colIdx >= len(indexPredicateVals) {
-			break
-		}
-
 		index := indexes[i]
 		if index.IsPartial() {
-			val, err := tree.GetBool(indexPredicateVals[colIdx])
+			val, err := tree.GetBool(partialIndexPutVals[colIdx])
 			if err != nil {
 				return err
 			}
+
 			if !val {
 				// If the value of the column for the index predicate expression
 				// is false, the row should not be added to the partial index.
 				ignoreIndexes.Add(int(index.ID))
 			}
+
 			colIdx++
+			if colIdx >= len(partialIndexPutVals) {
+				break
+			}
+
 		}
 	}
 

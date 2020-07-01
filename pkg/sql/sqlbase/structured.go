@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1701,20 +1700,12 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 	}
 	desc.Version++
 
-	// Before 19.2 we needed to observe the transaction CommitTimestamp to ensure
-	// that ModificationTime reflected the timestamp at which the transaction
-	// committed. Starting in 19.2 we use a zero-valued ModificationTime when
-	// incrementing the version and then upon reading use the MVCC timestamp to
-	// populate the ModificationTime.
-	//
-	// TODO(ajwerner): remove this check in 20.1.
-	var modTime hlc.Timestamp
-	if !settings.Version.IsActive(ctx, clusterversion.VersionTableDescModificationTimeFromMVCC) {
-		modTime = txn.CommitTimestamp()
-	}
-	desc.ModificationTime = modTime
-	log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
-		desc.ID, desc.Name, desc.Version, modTime.GoTime())
+	// Starting in 19.2 we use a zero-valued ModificationTime when incrementing
+	// the version, and then, upon reading, use the MVCC timestamp to populate
+	// the ModificationTime.
+	desc.ModificationTime = hlc.Timestamp{}
+	log.Infof(ctx, "publish: descID=%d (%s) version=%d",
+		desc.ID, desc.Name, desc.Version)
 	return nil
 }
 

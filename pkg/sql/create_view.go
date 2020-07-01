@@ -133,6 +133,12 @@ func (n *createViewNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+		// creationTime is initialized to a zero value and populated at read time.
+		// See the comment in desc.MaybeIncrementVersion.
+		//
+		// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
+		// currently relied on in import and restore code and tests.
+		var creationTime hlc.Timestamp
 		desc, err := makeViewTableDesc(
 			params.ctx,
 			viewName,
@@ -141,7 +147,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			schemaID,
 			id,
 			n.columns,
-			params.creationTimeForNewTableDescriptor(),
+			creationTime,
 			privs,
 			&params.p.semaCtx,
 			params.p.EvalContext(),

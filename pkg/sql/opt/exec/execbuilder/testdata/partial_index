@@ -35,6 +35,30 @@ CPut /Table/53/1/12/0 -> /TUPLE/2:2:Int/11/1:3:Bytes/foo
 InitPut /Table/53/2/11/12/0 -> /BYTES/
 InitPut /Table/53/3/"foo"/12/0 -> /BYTES/
 
+# Deleted row matches no partial index.
+query T kvtrace
+DELETE FROM t WHERE a = 5
+----
+Scan /Table/53/1/5{-/#}
+Del /Table/53/1/5/0
+
+# Deleted row matches the first partial index.
+query T kvtrace
+DELETE FROM t WHERE a = 6
+----
+Scan /Table/53/1/6{-/#}
+Del /Table/53/2/11/6/0
+Del /Table/53/1/6/0
+
+# Deleted row matches both partial indexes.
+query T kvtrace
+DELETE FROM t WHERE a = 12
+----
+Scan /Table/53/1/12{-/#}
+Del /Table/53/2/11/12/0
+Del /Table/53/3/"foo"/12/0
+Del /Table/53/1/12/0
+
 # EXPLAIN output shows the partial index label on scans over partial indexes.
 query TTT
 EXPLAIN SELECT b FROM t WHERE b > 10
