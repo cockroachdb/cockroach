@@ -1263,6 +1263,7 @@ enum ExternalStorageProvider {
   GoogleCloud = 4;
   Azure = 5;
   Workload = 6;
+  FileTable = 7;
 }
 
 message ExternalStorage {
@@ -1327,12 +1328,27 @@ message ExternalStorage {
     int64 batch_begin = 6;
     int64 batch_end = 7;
   }
+  message FileTable {
+    option (gogoproto.equal) = true;
+
+    // User interacting with the external storage. This is used to check access
+    // privileges of the requested user scoped tables.
+    string user = 1;
+
+    // QualifiedTableName specifies the database.schema.tablename which the
+    // FileTableSystem should interact with when servicing reads/writes.
+    string qualified_table_name = 2;
+
+    // Path is the filename being read/written to via the FileTableSystem.
+    string path = 3;
+  }
   LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
   Http HttpPath = 3 [(gogoproto.nullable) = false];
   GCS GoogleCloudConfig = 4;
   S3 S3Config = 5;
   Azure AzureConfig = 6;
   Workload WorkloadConfig = 7;
+  FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the

@@ -57,7 +57,8 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 	return q.Encode()
 }
 
-func makeS3Storage(
+// MakeS3Storage returns an instance of S3 ExternalStorage.
+func MakeS3Storage(
 	ctx context.Context,
 	ioConf base.ExternalIODirConfig,
 	conf *roachpb.ExternalStorage_S3,
@@ -90,12 +91,12 @@ func makeS3Storage(
 	// "": default to `specified`.
 	opts := session.Options{}
 	switch conf.Auth {
-	case "", authParamSpecified:
+	case "", AuthParamSpecified:
 		if conf.AccessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
-				authParamSpecified,
+				AuthParamSpecified,
 				S3AccessKeyParam,
 			)
 		}
@@ -103,12 +104,12 @@ func makeS3Storage(
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
 				AuthParam,
-				authParamSpecified,
+				AuthParamSpecified,
 				S3SecretParam,
 			)
 		}
 		opts.Config.MergeIn(config)
-	case authParamImplicit:
+	case AuthParamImplicit:
 		if ioConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
@@ -183,14 +184,6 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 		return nil, errors.Wrap(err, "failed to get s3 object")
 	}
 	return out.Body, nil
-}
-
-func getPrefixBeforeWildcard(p string) string {
-	globIndex := strings.IndexAny(p, "*?[")
-	if globIndex < 0 {
-		return p
-	}
-	return path.Dir(p[:globIndex])
 }
 
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
