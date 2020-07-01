@@ -76,6 +76,6 @@ CREATE TABLE rtable(
   INVERTED INDEX geom_index(geom)
 )
 
-query error Geospatial joins are not yet supported
+statement ok
 SELECT url FROM [EXPLAIN (DISTSQL)
 SELECT ltable.k, rtable.k FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)]
