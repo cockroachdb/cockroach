@@ -13,7 +13,7 @@ INSERT 1
 dump d t
 ----
 ----
-CREATE TABLE t (
+CREATE TABLE public.t (
 	i INT8 NOT NULL,
 	CONSTRAINT pk_name PRIMARY KEY (i ASC),
 	FAMILY "primary" (i)

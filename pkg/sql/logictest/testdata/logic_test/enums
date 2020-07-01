@@ -388,7 +388,7 @@ SELECT b'\xFF'::as_bytes
 query TT
 SHOW CREATE t1
 ----
-t1  CREATE TABLE t1 (
+t1  CREATE TABLE public.t1 (
     x public.greeting NULL,
     INDEX i (x ASC),
     FAMILY "primary" (x, rowid)
@@ -399,7 +399,7 @@ t1  CREATE TABLE t1 (
 query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
-CREATE TABLE t1 (
+CREATE TABLE public.t1 (
    x public.greeting NULL,
    INDEX i (x ASC),
    FAMILY "primary" (x, rowid)
@@ -484,7 +484,7 @@ SELECT * FROM enum_default
 query TT
 SHOW CREATE enum_default
 ----
-enum_default  CREATE TABLE enum_default (
+enum_default  CREATE TABLE public.enum_default (
               x INT8 NULL,
               y public.greeting NULL DEFAULT 'hello':::public.greeting,
               z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
@@ -539,7 +539,7 @@ SELECT * FROM enum_computed
 query TT
 SHOW CREATE enum_computed
 ----
-enum_computed  CREATE TABLE enum_computed (
+enum_computed  CREATE TABLE public.enum_computed (
                x INT8 NULL,
                y public.greeting NULL AS ('hello':::public.greeting) STORED,
                z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
@@ -574,7 +574,7 @@ INSERT INTO enum_checks VALUES ('hello')
 query TT
 SHOW CREATE enum_checks
 ----
-enum_checks  CREATE TABLE enum_checks (
+enum_checks  CREATE TABLE public.enum_checks (
              x public.greeting NULL,
              FAMILY "primary" (x, rowid),
              CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),

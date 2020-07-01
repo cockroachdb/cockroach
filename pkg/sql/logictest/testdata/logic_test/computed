@@ -9,7 +9,7 @@ CREATE TABLE with_no_column_refs (
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
-with_no_column_refs  CREATE TABLE with_no_column_refs (
+with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                      a INT8 NULL,
                      b INT8 NULL,
                      c INT8 NULL AS (3:::INT8) STORED,
@@ -27,7 +27,7 @@ CREATE TABLE extra_parens (
 query TT
 SHOW CREATE TABLE extra_parens
 ----
-extra_parens  CREATE TABLE extra_parens (
+extra_parens  CREATE TABLE public.extra_parens (
               a INT8 NULL,
               b INT8 NULL,
               c INT8 NULL AS (3:::INT8) STORED,
@@ -80,7 +80,7 @@ CREATE TABLE x (
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE x (
+x  CREATE TABLE public.x (
    a INT8 NULL DEFAULT 3:::INT8,
    b INT8 NULL DEFAULT 7:::INT8,
    c INT8 NULL AS (a) STORED,
@@ -609,7 +609,7 @@ CREATE TABLE x (
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE x (
+x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a) STORED,
    FAMILY "primary" (a, b, rowid)
@@ -632,7 +632,7 @@ ALTER TABLE x RENAME COLUMN a TO c
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE x (
+x  CREATE TABLE public.x (
    c INT8 NULL,
    b INT8 NULL AS (c) STORED,
    FAMILY "primary" (c, b, rowid)
@@ -671,7 +671,7 @@ ALTER TABLE x ADD COLUMN c INT NOT NULL AS (a + 4) STORED
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE x (
+x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a * 2:::INT8) STORED,
    c INT8 NOT NULL AS (a + 4:::INT8) STORED,
@@ -785,7 +785,7 @@ ALTER TABLE t42418 ADD COLUMN y INT GENERATED ALWAYS AS (1) STORED
 query TT
 SHOW CREATE t42418
 ----
-t42418  CREATE TABLE t42418 (
+t42418  CREATE TABLE public.t42418 (
         x INT8 NULL AS (1:::INT8) STORED,
         y INT8 NULL AS (1:::INT8) STORED,
         FAMILY "primary" (x, rowid, y)

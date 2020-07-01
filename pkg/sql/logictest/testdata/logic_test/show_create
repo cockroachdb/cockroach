@@ -20,7 +20,7 @@ query TT colnames
 SHOW CREATE c
 ----
 table_name  create_statement
-c           CREATE TABLE c (
+c           CREATE TABLE public.c (
             a INT8 NOT NULL,
             b INT8 NULL,
             INDEX c_a_b_idx (a ASC, b ASC),

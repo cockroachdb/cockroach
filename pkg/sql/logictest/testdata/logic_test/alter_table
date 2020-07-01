@@ -89,11 +89,11 @@ a f b    c
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-table_name  constraint_name  constraint_type  details                              validated
-t           check_a          CHECK            CHECK ((a > 0:::INT8))               true
-t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
-t           foo              UNIQUE           UNIQUE (b ASC)                       true
-t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                  true
+table_name  constraint_name  constraint_type  details                                     validated
+t           check_a          CHECK            CHECK ((a > 0:::INT8))                      true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES public.other(b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                              true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                         true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -119,10 +119,10 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                              true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -137,11 +137,11 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
-t  check_a1        CHECK        CHECK ((a > 0:::INT8))               true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
+t  check_a1        CHECK        CHECK ((a > 0:::INT8))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                              true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -159,11 +159,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
-t  check_a1        CHECK        CHECK ((a > 0:::INT8))               true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
+t  check_a1        CHECK        CHECK ((a > 0:::INT8))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                              true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -776,7 +776,7 @@ select a, b from decomputed_column order by a
 query TT
 show create table decomputed_column
 ----
-decomputed_column  CREATE TABLE decomputed_column (
+decomputed_column  CREATE TABLE public.decomputed_column (
                    a INT8 NOT NULL,
                    b INT8 NULL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -1112,10 +1112,10 @@ INSERT INTO t2 VALUES (1, 1)
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1130,10 +1130,10 @@ ALTER TABLE t3 ADD COLUMN x INT UNIQUE REFERENCES t1 (x)
 query TT
 SHOW CREATE t3
 ----
-t3  CREATE TABLE t3 (
+t3  CREATE TABLE public.t3 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     UNIQUE INDEX t3_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1166,11 +1166,11 @@ ALTER TABLE t1 ADD COLUMN x2 INT REFERENCES t1 (x)
 query TT
 SHOW CREATE t1
 ----
-t1  CREATE TABLE t1 (
+t1  CREATE TABLE public.t1 (
     x INT8 NOT NULL,
     x2 INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (x ASC),
-    CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES t1(x),
+    CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES public.t1(x),
     FAMILY "primary" (x, x2)
 )
 
@@ -1191,10 +1191,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1213,10 +1213,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1238,10 +1238,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1262,10 +1262,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1285,9 +1285,9 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (x, rowid)
 )
@@ -1312,10 +1312,10 @@ ALTER TABLE t2 ADD COLUMN x INT DEFAULT 1 UNIQUE REFERENCES t1 (x)
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL DEFAULT 1:::INT8,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     UNIQUE INDEX t2_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1346,7 +1346,7 @@ ALTER TABLE child DROP COLUMN p
 query TT
 SHOW CREATE child
 ----
-child  CREATE TABLE child (
+child  CREATE TABLE public.child (
        c INT8 NOT NULL,
        CONSTRAINT "primary" PRIMARY KEY (c ASC),
        FAMILY fam_0_c_p (c)

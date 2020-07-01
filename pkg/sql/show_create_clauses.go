@@ -76,7 +76,7 @@ func selectComment(ctx context.Context, p PlanHookState, tableID sqlbase.ID) (tc
 // statement used to create the given view. It is used in the implementation of
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
-	ctx context.Context, tn *tree.Name, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -169,7 +169,7 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkDb, err := lCtx.getDatabaseByID(fkTable.ParentID)
+		fkTableName, err = getTableAsTableName(lCtx, fkTable, dbPrefix)
 		if err != nil {
 			return err
 		}
@@ -177,8 +177,6 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkTableName = tree.MakeTableName(tree.Name(fkDb.GetName()), tree.Name(fkTable.Name))
-		fkTableName.ExplicitSchema = fkDb.GetName() != dbPrefix
 		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
 		if err != nil {
 			return err
@@ -217,7 +215,7 @@ func showForeignKeyConstraint(
 // ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
 func ShowCreateSequence(
-	ctx context.Context, tn *tree.Name, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")

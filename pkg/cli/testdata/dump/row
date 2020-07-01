@@ -62,7 +62,7 @@ INSERT 3
 dump d t
 ----
 ----
-CREATE TABLE t (
+CREATE TABLE public.t (
 	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,

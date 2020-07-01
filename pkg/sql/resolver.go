@@ -498,13 +498,14 @@ func (r *fkSelfResolver) LookupObject(
 //
 // It only reveals physical descriptors (not virtual descriptors).
 type internalLookupCtx struct {
-	dbNames  map[sqlbase.ID]string
-	dbIDs    []sqlbase.ID
-	dbDescs  map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor
-	tbDescs  map[sqlbase.ID]*ImmutableTableDescriptor
-	tbIDs    []sqlbase.ID
-	typDescs map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor
-	typIDs   []sqlbase.ID
+	dbNames     map[sqlbase.ID]string
+	dbIDs       []sqlbase.ID
+	dbDescs     map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor
+	schemaDescs map[sqlbase.ID]*sqlbase.ImmutableSchemaDescriptor
+	tbDescs     map[sqlbase.ID]*ImmutableTableDescriptor
+	tbIDs       []sqlbase.ID
+	typDescs    map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor
+	typIDs      []sqlbase.ID
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
@@ -539,6 +540,7 @@ func newInternalLookupCtx(
 ) *internalLookupCtx {
 	dbNames := make(map[sqlbase.ID]string)
 	dbDescs := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
+	schemaDescs := make(map[sqlbase.ID]*sqlbase.ImmutableSchemaDescriptor)
 	tbDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor)
 	var tbIDs, typIDs, dbIDs []sqlbase.ID
@@ -563,16 +565,23 @@ func newInternalLookupCtx(
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, desc.GetID())
 			}
+		case *sqlbase.ImmutableSchemaDescriptor:
+			schemaDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
+				// Only make the schema visible for iteration if the prefix was included.
+				typIDs = append(typIDs, desc.GetID())
+			}
 		}
 	}
 	return &internalLookupCtx{
-		dbNames:  dbNames,
-		dbDescs:  dbDescs,
-		tbDescs:  tbDescs,
-		typDescs: typDescs,
-		tbIDs:    tbIDs,
-		dbIDs:    dbIDs,
-		typIDs:   typIDs,
+		dbNames:     dbNames,
+		dbDescs:     dbDescs,
+		schemaDescs: schemaDescs,
+		tbDescs:     tbDescs,
+		typDescs:    typDescs,
+		tbIDs:       tbIDs,
+		dbIDs:       dbIDs,
+		typIDs:      typIDs,
 	}
 }
 
@@ -593,6 +602,16 @@ func (l *internalLookupCtx) getTableByID(id sqlbase.ID) (*TableDescriptor, error
 			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
 	}
 	return tb.TableDesc(), nil
+}
+
+func (l *internalLookupCtx) getSchemaByID(
+	id sqlbase.ID,
+) (*sqlbase.ImmutableSchemaDescriptor, error) {
+	sc, ok := l.schemaDescs[id]
+	if !ok {
+		return nil, sqlbase.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
+	}
+	return sc, nil
 }
 
 func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
@@ -618,26 +637,46 @@ func getParentAsTableName(
 	if err != nil {
 		return tree.TableName{}, err
 	}
+	var parentSchemaName tree.Name
+	if parentTable.GetParentSchemaID() == keys.PublicSchemaID {
+		parentSchemaName = tree.PublicSchemaName
+	} else {
+		parentSchema, err := l.getSchemaByID(parentTable.GetParentSchemaID())
+		if err != nil {
+			return tree.TableName{}, err
+		}
+		parentSchemaName = tree.Name(parentSchema.Name)
+	}
 	parentDbDesc, err := l.getDatabaseByID(parentTable.ParentID)
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	parentName = tree.MakeTableName(tree.Name(parentDbDesc.GetName()), tree.Name(parentTable.Name))
-	parentName.ExplicitSchema = parentDbDesc.GetName() != dbPrefix
+	parentName = tree.MakeTableNameWithSchema(tree.Name(parentDbDesc.GetName()), parentSchemaName, tree.Name(parentTable.Name))
+	parentName.ExplicitCatalog = parentDbDesc.GetName() != dbPrefix
 	return parentName, nil
 }
 
 // getTableAsTableName returns a TableName object for a given TableDescriptor.
 func getTableAsTableName(
-	l simpleSchemaResolver, table *sqlbase.ImmutableTableDescriptor, dbPrefix string,
+	l simpleSchemaResolver, table *sqlbase.TableDescriptor, dbPrefix string,
 ) (tree.TableName, error) {
 	var tableName tree.TableName
 	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	tableName = tree.MakeTableName(tree.Name(tableDbDesc.GetName()), tree.Name(table.Name))
-	tableName.ExplicitSchema = tableDbDesc.GetName() != dbPrefix
+	var parentSchemaName tree.Name
+	if table.GetParentSchemaID() == keys.PublicSchemaID {
+		parentSchemaName = tree.PublicSchemaName
+	} else {
+		parentSchema, err := l.getSchemaByID(table.GetParentSchemaID())
+		if err != nil {
+			return tree.TableName{}, err
+		}
+		parentSchemaName = tree.Name(parentSchema.Name)
+	}
+	tableName = tree.MakeTableNameWithSchema(tree.Name(tableDbDesc.GetName()), parentSchemaName, tree.Name(table.Name))
+	tableName.ExplicitCatalog = tableDbDesc.GetName() != dbPrefix
 	return tableName, nil
 }
 
@@ -738,5 +777,6 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 
 type simpleSchemaResolver interface {
 	getDatabaseByID(id sqlbase.ID) (*sqlbase.ImmutableDatabaseDescriptor, error)
+	getSchemaByID(id sqlbase.ID) (*sqlbase.ImmutableSchemaDescriptor, error)
 	getTableByID(id sqlbase.ID) (*TableDescriptor, error)
 }

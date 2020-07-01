@@ -24,7 +24,7 @@ INSERT 1
 dump d t
 ----
 ----
-CREATE TABLE t (
+CREATE TABLE public.t (
 	a JSONB NULL,
 	b JSONB NULL,
 	c INT8[] NULL,

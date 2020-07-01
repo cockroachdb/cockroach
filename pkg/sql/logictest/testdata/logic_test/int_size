@@ -21,7 +21,7 @@ CREATE TABLE i4 (i4 INT)
 query TT
 SHOW CREATE TABLE i4
 ----
-i4  CREATE TABLE i4 (
+i4  CREATE TABLE public.i4 (
     i4 INT4 NULL,
     FAMILY "primary" (i4, rowid)
 )
@@ -42,7 +42,7 @@ CREATE TABLE i8 (i8 INT)
 query TT
 SHOW CREATE TABLE i8
 ----
-i8  CREATE TABLE i8 (
+i8  CREATE TABLE public.i8 (
     i8 INT8 NULL,
     FAMILY "primary" (i8, rowid)
 )
@@ -61,7 +61,7 @@ SET default_int_size=4; CREATE TABLE late4 (a INT)
 query TT
 SHOW CREATE TABLE late4
 ----
-late4  CREATE TABLE late4 (
+late4  CREATE TABLE public.late4 (
        a INT8 NULL,
        FAMILY "primary" (a, rowid)
 )
@@ -92,7 +92,7 @@ CREATE TABLE i4_rowid (a SERIAL)
 query TT
 SHOW CREATE TABLE i4_rowid
 ----
-i4_rowid  CREATE TABLE i4_rowid (
+i4_rowid  CREATE TABLE public.i4_rowid (
           a INT8 NOT NULL DEFAULT unique_rowid(),
           FAMILY "primary" (a, rowid)
 )
@@ -106,7 +106,7 @@ CREATE TABLE i8_rowid (a SERIAL)
 query TT
 SHOW CREATE TABLE i8_rowid
 ----
-i8_rowid  CREATE TABLE i8_rowid (
+i8_rowid  CREATE TABLE public.i8_rowid (
           a INT8 NOT NULL DEFAULT unique_rowid(),
           FAMILY "primary" (a, rowid)
 )
@@ -123,7 +123,7 @@ CREATE TABLE i4_sql_sequence (a SERIAL)
 query TT
 SHOW CREATE TABLE i4_sql_sequence
 ----
-i4_sql_sequence  CREATE TABLE i4_sql_sequence (
+i4_sql_sequence  CREATE TABLE public.i4_sql_sequence (
                  a INT4 NOT NULL DEFAULT nextval('i4_sql_sequence_a_seq':::STRING),
                  FAMILY "primary" (a, rowid)
 )
@@ -137,7 +137,7 @@ CREATE TABLE i8_sql_sequence (a SERIAL)
 query TT
 SHOW CREATE TABLE i8_sql_sequence
 ----
-i8_sql_sequence  CREATE TABLE i8_sql_sequence (
+i8_sql_sequence  CREATE TABLE public.i8_sql_sequence (
                  a INT8 NOT NULL DEFAULT nextval('i8_sql_sequence_a_seq':::STRING),
                  FAMILY "primary" (a, rowid)
 )
@@ -155,7 +155,7 @@ CREATE TABLE i4_virtual_sequence (a SERIAL)
 query TT
 SHOW CREATE TABLE i4_virtual_sequence
 ----
-i4_virtual_sequence  CREATE TABLE i4_virtual_sequence (
+i4_virtual_sequence  CREATE TABLE public.i4_virtual_sequence (
                      a INT8 NOT NULL DEFAULT nextval('i4_virtual_sequence_a_seq':::STRING),
                      FAMILY "primary" (a, rowid)
 )
@@ -169,7 +169,7 @@ CREATE TABLE i8_virtual_sequence (a SERIAL)
 query TT
 SHOW CREATE TABLE i8_virtual_sequence
 ----
-i8_virtual_sequence  CREATE TABLE i8_virtual_sequence (
+i8_virtual_sequence  CREATE TABLE public.i8_virtual_sequence (
                      a INT8 NOT NULL DEFAULT nextval('i8_virtual_sequence_a_seq':::STRING),
                      FAMILY "primary" (a, rowid)
 )

@@ -13,7 +13,7 @@ CREATE TABLE ok1 (
 query TT
 SHOW CREATE TABLE ok1
 ----
-ok1  CREATE TABLE ok1 (
+ok1  CREATE TABLE public.ok1 (
      a INT8 NOT NULL,
      b INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -42,7 +42,7 @@ CREATE TABLE ok2 (
 query TT
 SHOW CREATE TABLE ok2
 ----
-ok2  CREATE TABLE ok2 (
+ok2  CREATE TABLE public.ok2 (
      a INT8 NOT NULL,
      b INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -73,7 +73,7 @@ CREATE UNIQUE INDEX ok3_b_key2 ON ok3 (b ASC) PARTITION BY LIST (b) (
 query TT
 SHOW CREATE TABLE ok3
 ----
-ok3  CREATE TABLE ok3 (
+ok3  CREATE TABLE public.ok3 (
      a INT8 NOT NULL,
      b INT8 NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -81,7 +81,7 @@ ok3  CREATE TABLE ok3 (
        PARTITION p1 VALUES IN ((1))
      ),
      UNIQUE INDEX ok3_b_key2 (b ASC) PARTITION BY LIST (b) (
-            PARTITION p2 VALUES IN ((1))
+       PARTITION p2 VALUES IN ((1))
      ),
      FAMILY "primary" (a, b)
 )
@@ -128,7 +128,7 @@ CREATE INDEX i5 ON indexes (b) PARTITION BY LIST (b) (
 query TT
 SHOW CREATE TABLE indexes
 ----
-indexes  CREATE TABLE indexes (
+indexes  CREATE TABLE public.indexes (
          a INT8 NOT NULL,
          b INT8 NULL,
          CONSTRAINT "primary" PRIMARY KEY (a ASC),

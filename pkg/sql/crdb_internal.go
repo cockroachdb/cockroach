@@ -1469,29 +1469,30 @@ CREATE TABLE crdb_internal.create_statements (
 		var stmt, createNofk string
 		alterStmts := tree.NewDArray(types.String)
 		validateStmts := tree.NewDArray(types.String)
+		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(scName), ExplicitSchema: true}
+		name := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.Name))
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(ctx, (*tree.Name)(&table.Name), table)
+			stmt, err = ShowCreateView(ctx, &name, table)
 		} else if table.IsSequence() {
 			descType = typeSequence
-			stmt, err = ShowCreateSequence(ctx, (*tree.Name)(&table.Name), table)
+			stmt, err = ShowCreateSequence(ctx, &name, table)
 		} else {
 			descType = typeTable
-			tn := (*tree.Name)(&table.Name)
 			displayOptions := ShowCreateDisplayOptions{
 				FKDisplayMode: OmitFKClausesFromCreate,
 			}
-			createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, displayOptions)
+			createNofk, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
 			if err != nil {
 				return err
 			}
-			if err := showAlterStatementWithInterleave(ctx, tn, contextName, lookup, table.Indexes, table, alterStmts,
+			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.Indexes, table, alterStmts,
 				validateStmts); err != nil {
 				return err
 			}
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
-			stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, displayOptions)
+			stmt, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
 		}
 		if err != nil {
 			return err
@@ -1528,7 +1529,7 @@ CREATE TABLE crdb_internal.create_statements (
 
 func showAlterStatementWithInterleave(
 	ctx context.Context,
-	tn *tree.Name,
+	tn *tree.TableName,
 	contextName string,
 	lCtx simpleSchemaResolver,
 	allIdx []sqlbase.IndexDescriptor,
@@ -1585,7 +1586,7 @@ func showAlterStatementWithInterleave(
 
 			var tableName tree.TableName
 			if lCtx != nil {
-				tableName, err = getTableAsTableName(lCtx, table, contextName)
+				tableName, err = getTableAsTableName(lCtx, table.TableDesc(), contextName)
 				if err != nil {
 					return err
 				}

@@ -12,7 +12,7 @@ CREATE TABLE serial (
 query TT
 SHOW CREATE TABLE serial
 ----
-serial  CREATE TABLE serial (
+serial  CREATE TABLE public.serial (
         a INT8 NOT NULL DEFAULT unique_rowid(),
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT unique_rowid(),
@@ -50,7 +50,7 @@ INSERT INTO smallbig (c) VALUES (7), (7)
 query TT
 SHOW CREATE TABLE smallbig
 ----
-smallbig  CREATE TABLE smallbig (
+smallbig  CREATE TABLE public.smallbig (
           a INT8 NOT NULL DEFAULT unique_rowid(),
           b INT8 NOT NULL DEFAULT unique_rowid(),
           c INT8 NULL,
@@ -71,7 +71,7 @@ CREATE TABLE serials (
 query TT
 SHOW CREATE TABLE serials
 ----
-serials  CREATE TABLE serials (
+serials  CREATE TABLE public.serials (
          a INT8 NOT NULL DEFAULT unique_rowid(),
          b INT8 NOT NULL DEFAULT unique_rowid(),
          c INT8 NOT NULL DEFAULT unique_rowid(),
@@ -112,7 +112,7 @@ CREATE TABLE serial (
 query TT
 SHOW CREATE TABLE serial
 ----
-serial  CREATE TABLE serial (
+serial  CREATE TABLE public.serial (
         a INT8 NOT NULL DEFAULT nextval('serial_a_seq':::STRING),
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('serial_c_seq2':::STRING),
@@ -124,7 +124,7 @@ serial  CREATE TABLE serial (
 query TT
 SHOW CREATE SEQUENCE serial_a_seq
 ----
-serial_a_seq  CREATE SEQUENCE serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+serial_a_seq  CREATE SEQUENCE public.serial_a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
 
 statement ok
 INSERT INTO serial (a, b) VALUES (1, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
@@ -155,7 +155,7 @@ INSERT INTO smallbig (c) VALUES (7), (7)
 query TT
 SHOW CREATE TABLE smallbig
 ----
-smallbig  CREATE TABLE smallbig (
+smallbig  CREATE TABLE public.smallbig (
           a INT8 NOT NULL DEFAULT nextval('smallbig_a_seq':::STRING),
           b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq':::STRING),
           c INT8 NULL,
@@ -176,7 +176,7 @@ CREATE TABLE serials (
 query TT
 SHOW CREATE TABLE serials
 ----
-serials  CREATE TABLE serials (
+serials  CREATE TABLE public.serials (
          a INT8 NOT NULL DEFAULT nextval('serials_a_seq':::STRING),
          b INT8 NOT NULL DEFAULT nextval('serials_b_seq':::STRING),
          c INT8 NOT NULL DEFAULT nextval('serials_c_seq':::STRING),
@@ -213,7 +213,7 @@ CREATE TABLE serial (
 query TT
 SHOW CREATE TABLE serial
 ----
-serial  CREATE TABLE serial (
+serial  CREATE TABLE public.serial (
         a INT8 NOT NULL DEFAULT nextval('serial_a_seq1':::STRING),
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('serial_c_seq3':::STRING),
@@ -225,7 +225,7 @@ serial  CREATE TABLE serial (
 query TT
 SHOW CREATE SEQUENCE serial_a_seq1
 ----
-serial_a_seq1  CREATE SEQUENCE serial_a_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+serial_a_seq1  CREATE SEQUENCE public.serial_a_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 statement ok
 INSERT INTO serial (a, b) VALUES (0, 2), (DEFAULT, DEFAULT), (DEFAULT, 3)
@@ -250,7 +250,7 @@ CREATE TABLE "serial_MixedCase" (
 query TT
 SHOW CREATE TABLE "serial_MixedCase"
 ----
-"serial_MixedCase"  CREATE TABLE "serial_MixedCase" (
+"serial_MixedCase"  CREATE TABLE public."serial_MixedCase" (
                     a INT8 NOT NULL DEFAULT nextval('"serial_MixedCase_a_seq"':::STRING),
                     b INT8 NULL DEFAULT 7:::INT8,
                     c INT8 NOT NULL DEFAULT nextval('"serial_MixedCase_c_seq"':::STRING),
@@ -277,7 +277,7 @@ INSERT INTO smallbig (c) VALUES (7), (7)
 query TT
 SHOW CREATE TABLE smallbig
 ----
-smallbig  CREATE TABLE smallbig (
+smallbig  CREATE TABLE public.smallbig (
           a INT2 NOT NULL DEFAULT nextval('smallbig_a_seq1':::STRING),
           b INT8 NOT NULL DEFAULT nextval('smallbig_b_seq1':::STRING),
           c INT8 NULL,
@@ -298,7 +298,7 @@ CREATE TABLE serials (
 query TT
 SHOW CREATE TABLE serials
 ----
-serials  CREATE TABLE serials (
+serials  CREATE TABLE public.serials (
          a INT2 NOT NULL DEFAULT nextval('serials_a_seq1':::STRING),
          b INT4 NOT NULL DEFAULT nextval('serials_b_seq1':::STRING),
          c INT8 NOT NULL DEFAULT nextval('serials_c_seq1':::STRING),
