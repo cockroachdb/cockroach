@@ -61,6 +61,14 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 			return spansToString(index.Intersects(ctx, shapes[nameArg(t, d)]))
 		case "covered-by":
 			return checkExprAndToString(index.CoveredBy(ctx, shapes[nameArg(t, d)]))
+		case "d-within":
+			var distance int
+			d.ScanArgs(t, "distance", &distance)
+			return spansToString(index.DWithin(ctx, shapes[nameArg(t, d)], float64(distance)))
+		case "d-fully-within":
+			var distance int
+			d.ScanArgs(t, "distance", &distance)
+			return spansToString(index.DFullyWithin(ctx, shapes[nameArg(t, d)], float64(distance)))
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
