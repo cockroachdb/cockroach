@@ -429,8 +429,8 @@ CREATE TABLE "user content".review_stats (
 query TTTTB
 SHOW CONSTRAINTS FROM "user content".review_stats
 ----
-review_stats  primary   PRIMARY KEY  PRIMARY KEY (id ASC)                                true
-review_stats  reviewfk  FOREIGN KEY  FOREIGN KEY (id) REFERENCES "customer reviews"(id)  true
+review_stats  primary   PRIMARY KEY  PRIMARY KEY (id ASC)                                       true
+review_stats  reviewfk  FOREIGN KEY  FOREIGN KEY (id) REFERENCES public."customer reviews"(id)  true
 
 statement error pgcode 23503 insert on table "review_stats" violates foreign key constraint "reviewfk"\nDETAIL: Key \(id\)=\(5\) is not present in table "customer reviews"
 INSERT INTO "user content".review_stats (id, upvotes) VALUES (5, 1)
@@ -495,13 +495,13 @@ CREATE TABLE delivery (
 query TT
 SHOW CREATE TABLE delivery
 ----
-delivery  CREATE TABLE delivery (
+delivery  CREATE TABLE public.delivery (
           ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
           "order" INT8 NULL,
           shipment INT8 NULL,
           item STRING NULL,
-          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment),
-          CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES products(upc),
+          CONSTRAINT fk_order_ref_orders FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
+          CONSTRAINT fk_item_ref_products FOREIGN KEY (item) REFERENCES public.products(upc),
           INDEX delivery_item_idx (item ASC),
           FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
@@ -553,7 +553,7 @@ ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 query TTTTB
 SHOW CONSTRAINTS FROM delivery
 ----
-delivery  fk_order_ref_orders  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  fk_order_ref_orders  FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment)  true
 
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
@@ -564,8 +564,8 @@ ALTER TABLE delivery ADD FOREIGN KEY (item) REFERENCES products (upc)
 query TTTTB
 SHOW CONSTRAINTS FROM delivery
 ----
-delivery  fk_item_ref_products  FOREIGN KEY  FOREIGN KEY (item) REFERENCES products(upc)                      true
-delivery  fk_order_ref_orders   FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES orders(id, shipment)  true
+delivery  fk_item_ref_products  FOREIGN KEY  FOREIGN KEY (item) REFERENCES public.products(upc)                      true
+delivery  fk_order_ref_orders   FOREIGN KEY  FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment)  true
 
 statement ok
 ALTER TABLE "user content"."customer reviews"
@@ -632,10 +632,10 @@ TRUNCATE delivery, products, orders, "user content"."customer reviews"
 query TTTTB colnames
 SHOW CONSTRAINTS FROM orders
 ----
-table_name  constraint_name          constraint_type  details                                                                               validated
-orders      fk_product_ref_products  FOREIGN KEY      FOREIGN KEY (product) REFERENCES products(sku) ON DELETE RESTRICT ON UPDATE RESTRICT  true
-orders      primary                  PRIMARY KEY      PRIMARY KEY (id ASC, shipment ASC)                                                    true
-orders      valid_customer           FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
+table_name  constraint_name          constraint_type  details                                                                                      validated
+orders      fk_product_ref_products  FOREIGN KEY      FOREIGN KEY (product) REFERENCES public.products(sku) ON DELETE RESTRICT ON UPDATE RESTRICT  true
+orders      primary                  PRIMARY KEY      PRIMARY KEY (id ASC, shipment ASC)                                                           true
+orders      valid_customer           FOREIGN KEY      FOREIGN KEY (customer) REFERENCES public.customers(id)                                       true
 
 statement error pq: index "products_upc_key" is in use as unique constraint
 DROP INDEX products@products_upc_key
@@ -809,11 +809,11 @@ refpairs    refpairs_a_b_c_idx  true        4             rowid        ASC      
 query TT
 SHOW CREATE TABLE refpairs
 ----
-refpairs  CREATE TABLE refpairs (
+refpairs  CREATE TABLE public.refpairs (
           a INT8 NULL,
           b STRING NULL,
           c INT8 NULL,
-          CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs(src, dest) ON UPDATE RESTRICT,
+          CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
           INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
           FAMILY "primary" (a, b, c, rowid)
 )
@@ -898,10 +898,10 @@ CREATE TABLE domain_modules (
 query TTTTB
 SHOW CONSTRAINTS FROM domain_modules
 ----
-domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  FOREIGN KEY (domain_id) REFERENCES domains(id)  true
-domain_modules  domain_modules_module_id_fk  FOREIGN KEY  FOREIGN KEY (module_id) REFERENCES modules(id)  true
-domain_modules  domain_modules_uq            UNIQUE       UNIQUE (domain_id ASC, module_id ASC)           true
-domain_modules  primary                      PRIMARY KEY  PRIMARY KEY (id ASC)                            true
+domain_modules  domain_modules_domain_id_fk  FOREIGN KEY  FOREIGN KEY (domain_id) REFERENCES public.domains(id)  true
+domain_modules  domain_modules_module_id_fk  FOREIGN KEY  FOREIGN KEY (module_id) REFERENCES public.modules(id)  true
+domain_modules  domain_modules_uq            UNIQUE       UNIQUE (domain_id ASC, module_id ASC)                  true
+domain_modules  primary                      PRIMARY KEY  PRIMARY KEY (id ASC)                                   true
 
 statement ok
 INSERT INTO modules VALUES(3)
@@ -1017,10 +1017,10 @@ ALTER INDEX refers@b_idx RENAME TO another_idx
 query TT
 SHOW CREATE TABLE refers
 ----
-refers  CREATE TABLE refers (
+refers  CREATE TABLE public.refers (
         a INT8 NULL,
         b INT8 NULL,
-        CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee(id),
+        CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES public.referee(id),
         INDEX another_idx (b ASC),
         INDEX foo (a ASC),
         FAMILY "primary" (a, b, rowid)
@@ -1099,10 +1099,10 @@ CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a ON UPDATE NO ACTION O
 query TT
 SHOW CREATE TABLE pkref_b
 ----
-pkref_b  CREATE TABLE pkref_b (
+pkref_b  CREATE TABLE public.pkref_b (
          b INT8 NOT NULL,
          CONSTRAINT "primary" PRIMARY KEY (b ASC),
-         CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a(a) ON DELETE RESTRICT,
+         CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT,
          FAMILY "primary" (b)
 )
 
@@ -2754,8 +2754,8 @@ ALTER TABLE pet ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES person 
 query TTTTB
 SHOW CONSTRAINTS FROM pet
 ----
-pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  false
-pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES public.person(id)  false
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                           true
 
 statement error pq: foreign key violation: "pet" row id=0 has no match in "person"
 ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
@@ -2769,8 +2769,8 @@ ALTER TABLE pet VALIDATE CONSTRAINT fk_constraint
 query TTTTB
 SHOW CONSTRAINTS FROM pet
 ----
-pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES person(id)  true
-pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                    true
+pet  fk_constraint  FOREIGN KEY  FOREIGN KEY (id) REFERENCES public.person(id)  true
+pet  primary        PRIMARY KEY  PRIMARY KEY (id ASC)                           true
 
 statement ok
 DROP TABLE person, pet

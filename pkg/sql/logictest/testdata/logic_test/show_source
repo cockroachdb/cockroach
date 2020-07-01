@@ -320,7 +320,7 @@ query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
 table_name                create_statement
-system.public.descriptor  CREATE TABLE descriptor (
+system.public.descriptor  CREATE TABLE public.descriptor (
                           id INT8 NOT NULL,
                           descriptor BYTES NULL,
                           CONSTRAINT "primary" PRIMARY KEY (id ASC),
@@ -333,7 +333,7 @@ query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
 table_name  create_statement
-v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
+v           CREATE VIEW public.v (id) AS SELECT id FROM system.public.descriptor
 
 
 query TTT colnames

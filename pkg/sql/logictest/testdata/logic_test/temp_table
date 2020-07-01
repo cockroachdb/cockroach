@@ -30,15 +30,6 @@ statement ok
 ALTER TABLE temp_table_ref ADD CONSTRAINT fk_temp FOREIGN KEY (a) REFERENCES temp_table_test(a)
 
 query TT
-SHOW CREATE TABLE temp_table_test
-----
-temp_table_test  CREATE TEMP TABLE temp_table_test (
-                 a TIMETZ NOT NULL,
-                 CONSTRAINT "primary" PRIMARY KEY (a ASC),
-                 FAMILY "primary" (a)
-)
-
-query TT
 SELECT table_name, table_type FROM information_schema.tables WHERE table_name = 'temp_table_test' AND table_schema LIKE 'pg_temp_%'
 ----
 temp_table_test  LOCAL TEMPORARY

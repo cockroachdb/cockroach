@@ -282,9 +282,9 @@ DROP INDEX fk1@i CASCADE
 query TT
 SHOW CREATE fk1
 ----
-fk1  CREATE TABLE fk1 (
+fk1  CREATE TABLE public.fk1 (
      x INT8 NULL,
-     CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2(x),
+     CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
      INDEX i2 (x ASC),
      FAMILY "primary" (x, rowid)
 )

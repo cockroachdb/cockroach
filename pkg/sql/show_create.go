@@ -62,7 +62,7 @@ type ShowCreateDisplayOptions struct {
 func ShowCreateTable(
 	ctx context.Context,
 	p PlanHookState,
-	tn *tree.Name,
+	tn *tree.TableName,
 	dbPrefix string,
 	desc *sqlbase.ImmutableTableDescriptor,
 	lCtx simpleSchemaResolver,
@@ -214,14 +214,14 @@ func (p *planner) ShowCreate(
 ) (string, error) {
 	var stmt string
 	var err error
-	tn := (*tree.Name)(&desc.Name)
+	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
 	if desc.IsView() {
-		stmt, err = ShowCreateView(ctx, tn, desc)
+		stmt, err = ShowCreateView(ctx, &tn, desc)
 	} else if desc.IsSequence() {
-		stmt, err = ShowCreateSequence(ctx, tn, desc)
+		stmt, err = ShowCreateSequence(ctx, &tn, desc)
 	} else {
 		lCtx := newInternalLookupCtxFromDescriptors(allDescs, nil /* want all tables */)
-		stmt, err = ShowCreateTable(ctx, p, tn, dbPrefix, desc, lCtx, displayOptions)
+		stmt, err = ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
 	}
 
 	return stmt, err

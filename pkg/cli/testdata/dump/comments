@@ -11,7 +11,7 @@ COMMENT ON COLUMN
 
 dump d
 ----
-CREATE TABLE "t   t" (
+CREATE TABLE public."t   t" (
 	"x'" INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY ("x'" ASC),
 	FAMILY "primary" ("x'")

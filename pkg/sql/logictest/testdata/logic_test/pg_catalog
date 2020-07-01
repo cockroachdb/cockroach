@@ -150,7 +150,7 @@ query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
 ----
 table_name               create_statement
-pg_catalog.pg_namespace  CREATE TABLE pg_namespace (
+pg_catalog.pg_namespace  CREATE TABLE pg_catalog.pg_namespace (
                          oid OID NULL,
                          nspname NAME NOT NULL,
                          nspowner OID NULL,

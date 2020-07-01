@@ -4228,7 +4228,7 @@ func TestImportPgDump(t *testing.T) {
 			if c.expected == expectSimple || c.expected == expectAll {
 				// Verify table schema because PKs and indexes are at the bottom of pg_dump.
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE simple`, [][]string{{
-					"simple", `CREATE TABLE simple (
+					"simple", `CREATE TABLE public.simple (
 	i INT8 NOT NULL,
 	s STRING NULL,
 	b BYTES NULL,
@@ -4270,7 +4270,7 @@ func TestImportPgDump(t *testing.T) {
 			if c.expected == expectSecond || c.expected == expectAll {
 				// Verify table schema because PKs and indexes are at the bottom of pg_dump.
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE second`, [][]string{{
-					"second", `CREATE TABLE second (
+					"second", `CREATE TABLE public.second (
 	i INT8 NOT NULL,
 	s STRING NULL,
 	CONSTRAINT second_pkey PRIMARY KEY (i ASC),
@@ -4296,14 +4296,14 @@ func TestImportPgDump(t *testing.T) {
 			}
 			if c.expected == expectAll {
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
-					"seqtable", `CREATE TABLE seqtable (
+					"seqtable", `CREATE TABLE public.seqtable (
 	a INT8 NULL DEFAULT nextval('public.a_seq':::STRING),
 	b INT8 NULL,
 	FAMILY "primary" (a, b, rowid)
 )`,
 				}})
 				sqlDB.CheckQueryResults(t, `SHOW CREATE SEQUENCE a_seq`, [][]string{{
-					"a_seq", `CREATE SEQUENCE a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+					"a_seq", `CREATE SEQUENCE public.a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
 				}})
 				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"7"}})
 				sqlDB.CheckQueryResults(t,
@@ -4410,7 +4410,7 @@ func TestImportCockroachDump(t *testing.T) {
 		{"primary", "-5808590958014384147"},
 	})
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t", [][]string{
-		{"t", `CREATE TABLE t (
+		{"t", `CREATE TABLE public.t (
 	i INT8 NOT NULL,
 	t STRING NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
@@ -4419,10 +4419,10 @@ func TestImportCockroachDump(t *testing.T) {
 )`},
 	})
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE a", [][]string{
-		{"a", `CREATE TABLE a (
+		{"a", `CREATE TABLE public.a (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES t(i),
+	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES public.t(i),
 	FAMILY "primary" (i)
 )`},
 	})

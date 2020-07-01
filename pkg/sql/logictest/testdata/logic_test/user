@@ -181,4 +181,3 @@ ALTER USER userlongpassword WITH PASSWORD '987654321021'
 
 statement ok
 DROP USER userlongpassword
-

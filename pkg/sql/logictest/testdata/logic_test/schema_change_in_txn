@@ -32,8 +32,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM test.child
 ----
-child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  false
-child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                           true
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES public.parent(id)  false
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                                  true
 
 statement ok
 ALTER TABLE test.child VALIDATE CONSTRAINT fk_child_parent_id
@@ -41,8 +41,8 @@ ALTER TABLE test.child VALIDATE CONSTRAINT fk_child_parent_id
 query TTTTB
 SHOW CONSTRAINTS FROM test.child
 ----
-child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  true
-child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                           true
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES public.parent(id)  true
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                                  true
 
 statement ok
 DROP TABLE test.child, test.parent
@@ -74,8 +74,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM test.child
 ----
-child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES parent(id)  true
-child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                           true
+child  fk_child_parent_id  FOREIGN KEY  FOREIGN KEY (parent_id) REFERENCES public.parent(id)  true
+child  primary             PRIMARY KEY  PRIMARY KEY (id ASC)                                  true
 
 statement ok
 DROP TABLE test.child, test.parent
@@ -271,10 +271,10 @@ ALTER TABLE b ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (parent_id)
 query TT
 SHOW CREATE TABLE b
 ----
-b  CREATE TABLE b (
+b  CREATE TABLE public.b (
    parent_id INT8 NULL,
    d INT8 NULL DEFAULT 23:::INT8,
-   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent(id),
+   CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES public.parent(id),
    INDEX foo (parent_id ASC),
    UNIQUE INDEX bar (parent_id ASC),
    FAMILY "primary" (parent_id, rowid, d)
@@ -1520,8 +1520,8 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM y
 ----
-y  fk_b_ref_x  FOREIGN KEY  FOREIGN KEY (b) REFERENCES x(b)  true
-y  primary     PRIMARY KEY  PRIMARY KEY (a ASC)              true
+y  fk_b_ref_x  FOREIGN KEY  FOREIGN KEY (b) REFERENCES public.x(b)  true
+y  primary     PRIMARY KEY  PRIMARY KEY (a ASC)                     true
 
 # Also test dropping the index on the referenced side
 statement ok

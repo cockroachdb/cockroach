@@ -53,6 +53,11 @@ func NewInvalidSchemaDefinitionError(err error) error {
 	return pgerror.WithCandidateCode(err, pgcode.InvalidSchemaDefinition)
 }
 
+// NewUndefinedSchemaError creates an error for an undefined schema.
+func NewUndefinedSchemaError(name string) error {
+	return pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", name)
+}
+
 // NewUnsupportedSchemaUsageError creates an error for an invalid
 // schema use, e.g. mydb.someschema.tbl.
 func NewUnsupportedSchemaUsageError(name string) error {
