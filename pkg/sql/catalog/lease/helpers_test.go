@@ -103,7 +103,7 @@ func (m *Manager) ExpireLeases(clock *hlc.Clock) {
 	past := clock.Now().GoTime().Add(-time.Millisecond)
 
 	m.tableNames.mu.Lock()
-	for _, table := range m.tableNames.tables {
+	for _, table := range m.tableNames.descriptors {
 		table.expiration = hlc.Timestamp{WallTime: past.UnixNano()}
 	}
 	m.tableNames.mu.Unlock()

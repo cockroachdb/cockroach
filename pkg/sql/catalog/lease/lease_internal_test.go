@@ -499,9 +499,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 }
 
 // Test that there's no deadlock between AcquireByName and Release.
-// We used to have one due to lock inversion between the tableNameCache lock and
+// We used to have one due to lock inversion between the nameCache lock and
 // the descriptorVersionState lock, triggered when the same lease was Release()d after the
-// table had been dropped (which means it's removed from the tableNameCache) and
+// table had been dropped (which means it's removed from the nameCache) and
 // AcquireByName()d at the same time.
 func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
