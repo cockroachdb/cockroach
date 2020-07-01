@@ -640,7 +640,7 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
 	// Add any partial index boolean columns to the input.
-	mb.addPartialIndexPredicateCols()
+	mb.addPartialIndexPutCols()
 
 	mb.buildFKChecksForInsert()
 

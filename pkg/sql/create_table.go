@@ -277,7 +277,12 @@ func (n *createTableNode) startExec(params runParams) error {
 	var asCols sqlbase.ResultColumns
 	var desc sqlbase.MutableTableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
-	creationTime := params.creationTimeForNewTableDescriptor()
+	// creationTime is initialized to a zero value and populated at read time.
+	// See the comment in desc.MaybeIncrementVersion.
+	//
+	// TODO(ajwerner): remove the timestamp from makeTableDesc and its friends,
+	// it's	currently relied on in import and restore code and tests.
+	var creationTime hlc.Timestamp
 	if n.n.As() {
 		asCols = planColumns(n.sourcePlan)
 		if !n.run.fromHeuristicPlanner && !n.n.AsHasUserSpecifiedPrimaryKey() {
