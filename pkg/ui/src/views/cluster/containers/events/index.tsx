@@ -16,7 +16,7 @@ import { Link, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import * as protos from "src/js/protos";
 import { refreshEvents } from "src/redux/apiReducers";
-import { eventsSelector, eventsValidSelector } from "src/redux/events";
+import { eventsLastErrorSelector, eventsSelector, eventsValidSelector } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
@@ -25,6 +25,7 @@ import { DATE_FORMAT } from "src/util/format";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import Loading from "src/views/shared/components/loading";
 import "./events.styl";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
@@ -126,6 +127,7 @@ export interface EventPageProps {
   refreshEvents: typeof refreshEvents;
   sortSetting: SortSetting;
   setSort: typeof eventsSortSetting.set;
+  lastError: Error;
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
@@ -139,35 +141,45 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
     this.props.refreshEvents();
   }
 
-  render() {
+  renderContent() {
     const { events, sortSetting } = this.props;
-
     const simplifiedEvents = _.map(events, getEventInfo);
 
+    return (
+      <div className="l-columns__left events-table">
+        <EventSortedTable
+          data={simplifiedEvents}
+          sortSetting={sortSetting}
+          onChangeSortSetting={(setting) => this.props.setSort(setting)}
+          columns={[
+            {
+              title: "Event",
+              cell: (e) => e.content,
+            },
+            {
+              title: "Timestamp",
+              cell: (e) => e.fromNowString,
+              sort: (e) => e.sortableTimestamp,
+            },
+          ]}
+        />
+      </div>
+    );
+  }
+
+  render() {
+    const { events, lastError } = this.props;
     return <div>
       <Helmet title="Events" />
       <section className="section section--heading">
         <h1 className="base-heading">Events</h1>
       </section>
       <section className="section l-columns">
-        <div className="l-columns__left events-table">
-          <EventSortedTable
-            data={simplifiedEvents}
-            sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.props.setSort(setting)}
-            columns={[
-              {
-                title: "Event",
-                cell: (e) => e.content,
-              },
-              {
-                title: "Timestamp",
-                cell: (e) => e.fromNowString,
-                sort: (e) => e.sortableTimestamp,
-              },
-            ]}
-            />
-        </div>
+        <Loading
+          loading={!events}
+          error={lastError}
+          render={this.renderContent}
+        />
       </section>
     </div>;
   }
@@ -193,6 +205,7 @@ const eventPageConnected = withRouter(connect(
       events: eventsSelector(state),
       eventsValid: eventsValidSelector(state),
       sortSetting: eventsSortSetting.selector(state),
+      lastError: eventsLastErrorSelector(state),
     };
   },
   {
