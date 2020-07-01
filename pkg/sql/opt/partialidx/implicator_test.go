@@ -290,12 +290,12 @@ func BenchmarkImplicator(b *testing.B) {
 func makeFiltersExpr(
 	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
-	scalar, err := makeScalarExpr(input, semaCtx, evalCtx, f)
+	filter, err := makeFiltersItem(input, semaCtx, evalCtx, f)
 	if err != nil {
 		return nil, err
 	}
 
-	filters := memo.FiltersExpr{f.ConstructFiltersItem(scalar)}
+	filters := memo.FiltersExpr{filter}
 
 	// Run SimplifyFilters so that adjacent top-level AND expressions are
 	// flattened into individual FiltersItems, like they would be during
@@ -308,20 +308,20 @@ func makeFiltersExpr(
 	return f.CustomFuncs().ConsolidateFilters(filters), nil
 }
 
-// makeScalarExpr returns a ScalarExpr generated from the input string.
-func makeScalarExpr(
+// makeFiltersItem returns a FiltersItem generated from the input string.
+func makeFiltersItem(
 	input string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, f *norm.Factory,
-) (opt.ScalarExpr, error) {
+) (memo.FiltersItem, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
-		return nil, err
+		return memo.FiltersItem{}, err
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
 	if err := b.Build(expr); err != nil {
-		return nil, err
+		return memo.FiltersItem{}, err
 	}
 
 	root := f.Memo().RootExpr().(opt.ScalarExpr)
-	return root, nil
+	return f.ConstructFiltersItem(root), nil
 }
