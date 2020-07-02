@@ -52,7 +52,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const crdbInternalName = sessiondata.CRDBInternalSchemaName
+// CrdbInternalName is the name of the crdb_internal schema.
+const CrdbInternalName = sessiondata.CRDBInternalSchemaName
 
 // Naming convention:
 // - if the response is served from memory, prefix with node_
@@ -66,7 +67,7 @@ const crdbInternalName = sessiondata.CRDBInternalSchemaName
 // Many existing tables don't follow the conventions above, but please apply
 // them to future additions.
 var crdbInternal = virtualSchema{
-	name: crdbInternalName,
+	name: CrdbInternalName,
 	tableDefs: map[sqlbase.ID]virtualSchemaDef{
 		sqlbase.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
 		sqlbase.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,

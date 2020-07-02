@@ -41,6 +41,23 @@ func makeFileTableStorage(
 		return nil, errors.Errorf("FileTable storage requested but username or qualified table name" +
 			" not provided")
 	}
+
+	// FileTableStorage is not backed by a file system and so the name of the file
+	// written to the underlying SQL tables will be the entire path of the
+	// userfile URI. We ensure that the path post normalization is the same as the
+	// path which the user inputted in the userfile URI to reject paths which may
+	// lead to user surprises.
+	// For example, users may expect:
+	// - a/./b == a/b
+	// - test/../test.csv == test/test.csv
+	// but this is not the case since FileTableStorage does not offer file system
+	// semantics.
+	if path.Clean(cfg.Path) != cfg.Path {
+		return nil, errors.Newf("path %s changes after normalization to %s. "+
+			"userfile upload does not permit such path constructs",
+			cfg.Path, path.Clean(cfg.Path))
+	}
+
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx, cfg.QualifiedTableName, ie, db,
 		cfg.User)
 	if err != nil {
