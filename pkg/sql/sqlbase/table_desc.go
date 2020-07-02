@@ -10,7 +10,10 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+)
 
 var _ TableDescriptorInterface = (*ImmutableTableDescriptor)(nil)
 var _ TableDescriptorInterface = (*MutableTableDescriptor)(nil)
@@ -23,7 +26,13 @@ var _ TableDescriptorInterface = (*MutableTableDescriptor)(nil)
 type TableDescriptorInterface interface {
 	BaseDescriptorInterface
 
-	GetParentID() ID
 	TableDesc() *TableDescriptor
 	FindColumnByName(name tree.Name) (*ColumnDescriptor, bool, error)
+}
+
+// Immutable implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) Immutable() DescriptorInterface {
+	// TODO (lucy): Should the immutable descriptor constructors always make a
+	// copy, so we don't have to do it here?
+	return NewImmutableTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*TableDescriptor))
 }

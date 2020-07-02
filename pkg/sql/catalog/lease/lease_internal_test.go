@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -73,18 +74,24 @@ func TestTableSet(t *testing.T) {
 		{remove{2, 4}, ""},
 	}
 
-	set := &tableSet{}
+	set := &descriptorSet{}
 	for i, d := range testData {
 		switch op := d.op.(type) {
 		case insert:
-			s := &tableVersionState{}
-			s.Version = op.version
+			s := &descriptorVersionState{
+				Descriptor: sqlbase.NewImmutableTableDescriptor(
+					sqlbase.TableDescriptor{Version: op.version},
+				),
+			}
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.insert(s)
 
 		case remove:
-			s := &tableVersionState{}
-			s.Version = op.version
+			s := &descriptorVersionState{
+				Descriptor: sqlbase.NewImmutableTableDescriptor(
+					sqlbase.TableDescriptor{Version: op.version},
+				),
+			}
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.remove(s)
 
@@ -95,7 +102,7 @@ func TestTableSet(t *testing.T) {
 			}
 			s := "<nil>"
 			if n != nil {
-				s = fmt.Sprintf("%d:%d", n.Version, n.expiration.WallTime)
+				s = fmt.Sprintf("%d:%d", n.GetVersion(), n.expiration.WallTime)
 			}
 			if d.expected != s {
 				t.Fatalf("%d: expected %s, but found %s", i, d.expected, s)
@@ -108,10 +115,10 @@ func TestTableSet(t *testing.T) {
 	}
 }
 
-func getNumVersions(ts *tableState) int {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	return len(ts.mu.active.data)
+func getNumVersions(ds *descriptorState) int {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	return len(ds.mu.active.data)
 }
 
 func TestPurgeOldVersions(t *testing.T) {
@@ -122,7 +129,7 @@ func TestPurgeOldVersions(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &ManagerTestingKnobs{
-				TestingTableUpdateEvent: func(t *sqlbase.TableDescriptor) error {
+				TestingDescriptorUpdateEvent: func(_ *sqlbase.Descriptor) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
 					return nil
@@ -161,7 +168,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, *table)
+			tables = append(tables, *table.(*sqlbase.ImmutableTableDescriptor))
 			expiration = exp
 			if err := leaseManager.Release(table); err != nil {
 				t.Fatal(err)
@@ -169,27 +176,27 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	}
 	getLeases()
-	ts := leaseManager.findTableState(tableDesc.ID, false)
+	ts := leaseManager.findDescriptorState(tableDesc.ID, false)
 	if numLeases := getNumVersions(ts); numLeases != 1 {
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 
 	// Verifies that ErrDidntUpdateDescriptor doesn't leak from Publish().
-	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
+	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
 		return ErrDidntUpdateDescriptor
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Publish a new version for the table
-	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(*sqlbase.MutableTableDescriptor) error {
+	if _, err := leaseManager.Publish(context.Background(), tableDesc.ID, func(catalog.MutableDescriptor) error {
 		return nil
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	getLeases()
-	ts = leaseManager.findTableState(tableDesc.ID, false)
+	ts = leaseManager.findDescriptorState(tableDesc.ID, false)
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
@@ -202,8 +209,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 	ts.mu.Lock()
-	correctLease := ts.mu.active.data[0].TableDescriptor.ID == tables[5].ID &&
-		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
+	correctLease := ts.mu.active.data[0].GetID() == tables[5].ID &&
+		ts.mu.active.data[0].GetVersion() == tables[5].Version
 	correctExpiration := ts.mu.active.data[0].expiration == expiration
 	ts.mu.Unlock()
 	if !correctLease {
@@ -216,9 +223,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Test that purgeOldVersions correctly removes a table version
 	// without a lease.
 	ts.mu.Lock()
-	tableVersion := &tableVersionState{
-		ImmutableTableDescriptor: tables[0],
-		expiration:               tables[5].ModificationTime,
+	tableVersion := &descriptorVersionState{
+		Descriptor: &tables[0],
+		expiration: tables[5].ModificationTime,
 	}
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
@@ -272,14 +279,14 @@ CREATE TEMP TABLE t2 (temp int);
 
 	for _, tableName := range []string{"t", "t2"} {
 		tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
-		lease := leaseManager.tableNames.get(
+		lease := leaseManager.names.get(
 			tableDesc.ParentID,
 			sqlbase.ID(keys.PublicSchemaID),
 			tableName,
 			s.Clock().Now(),
 		)
-		if lease.ID != tableDesc.ID {
-			t.Fatalf("lease has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
+		if lease.GetID() != tableDesc.ID {
+			t.Fatalf("lease has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.ID)
 		}
 	}
 }
@@ -312,18 +319,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "test", s.Clock().Now()) != nil {
+	if leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "test", s.Clock().Now()) != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease := leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "test2", s.Clock().Now())
+	lease := leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "test2", s.Clock().Now())
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
-	if lease.ID != tableDesc.ID {
-		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
+	if lease.GetID() != tableDesc.ID {
+		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.ID)
 	}
-	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -339,18 +346,18 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "test2", s.Clock().Now()) != nil {
+	if leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "test2", s.Clock().Now()) != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease = leaseManager.tableNames.get(newTableDesc.ParentID, tableDesc.GetParentSchemaID(), "test2", s.Clock().Now())
+	lease = leaseManager.names.get(newTableDesc.ParentID, tableDesc.GetParentSchemaID(), "test2", s.Clock().Now())
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
-	if lease.ID != tableDesc.ID {
-		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.ID, tableDesc.ID)
+	if lease.GetID() != tableDesc.ID {
+		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.ID)
 	}
-	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -380,10 +387,10 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease == nil {
+	if lease := leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
-		if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
+		if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -391,7 +398,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager.ExpireLeases(s.Clock())
 
 	// Check the name no longer resolves.
-	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease != nil {
+	if lease := leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease != nil {
 		t.Fatalf("name cache has unexpired entry for (%d, %s): %s", tableDesc.ParentID, tableName, lease)
 	}
 }
@@ -429,12 +436,12 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// There is a cache entry.
-	lease := leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
+	lease := leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	}
 
-	tracker := removalTracker.TrackRemoval(&lease.ImmutableTableDescriptor)
+	tracker := removalTracker.TrackRemoval(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor))
 
 	// Acquire another lease.
 	if _, err := acquireNodeLease(context.Background(), leaseManager, tableDesc.ID); err != nil {
@@ -442,7 +449,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check the name resolves to the new lease.
-	newLease := leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
+	newLease := leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.ParentID, tableName)
 	}
@@ -450,7 +457,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("same lease %s", newLease.expiration.GoTime())
 	}
 
-	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -459,7 +466,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if err := leaseManager.Release(&newLease.ImmutableTableDescriptor); err != nil {
+	if err := leaseManager.Release(lease.Descriptor.(*sqlbase.ImmutableTableDescriptor)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -486,15 +493,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Check that we cannot get the table by a different name.
-	if leaseManager.tableNames.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "tEsT", s.Clock().Now()) != nil {
+	if leaseManager.names.get(tableDesc.ParentID, tableDesc.GetParentSchemaID(), "tEsT", s.Clock().Now()) != nil {
 		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }
 
 // Test that there's no deadlock between AcquireByName and Release.
-// We used to have one due to lock inversion between the tableNameCache lock and
-// the tableVersionState lock, triggered when the same lease was Release()d after the
-// table had been dropped (which means it's removed from the tableNameCache) and
+// We used to have one due to lock inversion between the nameCache lock and
+// the descriptorVersionState lock, triggered when the same lease was Release()d after the
+// table had been dropped (which means it's removed from the nameCache) and
 // AcquireByName()d at the same time.
 func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -525,7 +532,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ctx := context.Background()
 	table, _, err := leaseManager.AcquireByName(
 		ctx,
-		leaseManager.clock.Now(),
+		leaseManager.storage.clock.Now(),
 		tableDesc.ParentID,
 		tableDesc.GetParentSchemaID(),
 		"test",
@@ -551,9 +558,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}()
 
 	for i := 0; i < 50; i++ {
-		timestamp := leaseManager.clock.Now()
+		timestamp := leaseManager.storage.clock.Now()
 		ctx := context.Background()
-		table, _, err := leaseManager.AcquireByName(
+		desc, _, err := leaseManager.AcquireByName(
 			ctx,
 			timestamp,
 			tableDesc.ParentID,
@@ -563,6 +570,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
+		table := desc.(*sqlbase.ImmutableTableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -591,29 +599,24 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			t.Fatal(err)
 		}
 
-		// Even after waiting for the error above, the lease might still
-		// need removal from the store because lease removal is asynchronous.
-		// Depending on how the race went, there are two cases - either the
-		// AcquireByName ran first, and got the same lease as we already had,
-		// or the Release ran first and so we got a new lease and can wait here
-		// for the old lease to be released.
-		if tableByName != table {
-			if err := tracker.WaitForRemoval(); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		// Track removal only after the above call to WaitForRemoval
-		// so that if there is an existing removal of a lease
-		// (Release occurred before AcquireByName) it is guaranteed
-		// to not reuse an existing tracker.
-		tracker2 := removalTracker.TrackRemoval(tableByName)
-
+		// Release the lease for the last time.
 		if err := leaseManager.Release(tableByName); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := tracker2.WaitForRemoval(); err != nil {
+		// There are 2 possible results of the race above: Either we acquired before
+		// releasing (causing us to acquire the same lease, incrementing and then
+		// decrementing the refCount), or we released before acquiring (causing the
+		// lease to be removed before another new lease is acquired). In the latter
+		// case, there are actually two different lease removals, but we still only
+		// track one.
+		//
+		// An earlier version of this test tracked both lease removals, but it used
+		// reference equality to determine whether we were reacquiring the same
+		// lease, which is no longer feasible after the 20.2 descriptor interface
+		// changes. This is mostly fine because async lease removal doesn't require
+		// the descriptorState lock anyway, so it's not that relevant to this test.
+		if err := tracker.WaitForRemoval(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -668,7 +671,7 @@ func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: StorageTestingKnobs{
-				// Immediate remove tableVersionState and release its
+				// Immediate remove descriptorVersionState and release its
 				// lease when it is dereferenced. This forces threads
 				// waiting on a lease to reacquire the lease.
 				RemoveOnceDereferenced: true,
@@ -710,15 +713,15 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 }
 
 // Test one possible outcome of a race between a lease acquisition (the first
-// case through tableState.acquire(), the second through
-// tableState.acquireFreshestFromStore()) and a release of the lease that was
+// case through descriptorState.acquire(), the second through
+// descriptorState.acquireFreshestFromStore()) and a release of the lease that was
 // just acquired. Precisely:
 // 1. Thread 1 calls either acquireFreshestFromStore() or acquire().
-// 2. Thread 1 releases the lock on tableState and starts acquisition of a lease
+// 2. Thread 1 releases the lock on descriptorState and starts acquisition of a lease
 //    from the store, blocking until it's finished.
 // 3. Thread 2 calls acquire(). The lease has not been acquired yet, so it
 //    also enters the acquisition code path (calling DoChan).
-// 4. Thread 2 proceeds to release the lock on tableState waiting for the
+// 4. Thread 2 proceeds to release the lock on descriptorState waiting for the
 //    in-flight acquisition.
 // 4. The lease is acquired from the store and the waiting routines are
 //    unblocked.
@@ -726,7 +729,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // 5. Thread 1 wakes up. At this point, a naive implementation would use the
 //    newly acquired lease, which would be incorrect. The test checks that
 //    acquireFreshestFromStore() or acquire() notices, after re-acquiring the
-//    tableState lock, that the new lease has been released and acquires a new
+//    descriptorState lock, that the new lease has been released and acquires a new
 //    one.
 func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -748,8 +751,8 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		m *Manager,
 		acquireChan chan Result,
 	) {
-		table, e, err := m.Acquire(ctx, m.clock.Now(), descID)
-		acquireChan <- Result{err: err, exp: e, table: table}
+		table, e, err := m.Acquire(ctx, m.storage.clock.Now(), descID)
+		acquireChan <- Result{err: err, exp: e, table: table.(*sqlbase.ImmutableTableDescriptor)}
 	}
 
 	testCases := []struct {
@@ -818,7 +821,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 								}
 							}
 						},
-						LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+						LeaseAcquiredEvent: func(_ catalog.Descriptor, _ error) {
 							atomic.AddInt32(&leasesAcquiredCount, 1)
 							<-acquisitionBlock
 						},
@@ -833,7 +836,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			serverArgs.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+			serverArgs.LeaseManagerConfig.DescriptorLeaseJitterFraction = 0.0
 
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
@@ -852,7 +855,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 						return
 					}
 					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
-					acquireChan <- Result{err: err, exp: e, table: table}
+					acquireChan <- Result{err: err, exp: e, table: table.(*sqlbase.ImmutableTableDescriptor)}
 				}(ctx, leaseManager, acquireResultChan)
 
 			} else {

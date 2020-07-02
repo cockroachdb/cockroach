@@ -48,10 +48,10 @@ import (
 //   The "=>" symbol denotes implication. For example, "a => b" tests if
 //   expression a implies expression b.
 //
-func TestPredicateImplication(t *testing.T) {
+func TestImplicator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, "testdata/predicate", func(t *testing.T, path string) {
+	datadriven.Walk(t, "testdata/implicator", func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
@@ -106,7 +106,9 @@ func TestPredicateImplication(t *testing.T) {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
 
-			remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, &f, md, &evalCtx)
+			im := partialidx.Implicator{}
+			im.Init(&f, md, &evalCtx)
+			remainingFilters, ok := im.FiltersImplyPredicate(filters, pred)
 			if !ok {
 				return "false"
 			}
@@ -128,7 +130,7 @@ func TestPredicateImplication(t *testing.T) {
 	})
 }
 
-func BenchmarkPredicateImplication(b *testing.B) {
+func BenchmarkImplicator(b *testing.B) {
 	type testCase struct {
 		name, varTypes, filters, pred string
 	}
@@ -242,37 +244,43 @@ func BenchmarkPredicateImplication(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {
+		var f norm.Factory
+		f.Init(&evalCtx, nil /* catalog */)
+		md := f.Metadata()
+
+		// Parse the variable types.
+		varTypes, err := exprgen.ParseTypes(strings.Split(tc.varTypes, ", "))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		// Add the variables to the metadata.
+		for i, typ := range varTypes {
+			md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+		}
+
+		// Build the filters.
+		filters, err := makeFiltersExpr(tc.filters, &semaCtx, &evalCtx, &f)
+		if err != nil {
+			b.Fatalf("unexpected error while building filters: %v\n", err)
+		}
+
+		// Build the predicate.
+		pred, err := makeScalarExpr(tc.pred, &semaCtx, &evalCtx, &f)
+		if err != nil {
+			b.Fatalf("unexpected error while building predicate: %v\n", err)
+		}
+
+		im := partialidx.Implicator{}
 		b.Run(tc.name, func(b *testing.B) {
-			var f norm.Factory
-			f.Init(&evalCtx, nil /* catalog */)
-			md := f.Metadata()
-
-			// Parse the variable types.
-			varTypes, err := exprgen.ParseTypes(strings.Split(tc.varTypes, ", "))
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			// Add the variables to the metadata.
-			for i, typ := range varTypes {
-				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
-			}
-
-			// Build the filters.
-			filters, err := makeFiltersExpr(tc.filters, &semaCtx, &evalCtx, &f)
-			if err != nil {
-				b.Fatalf("unexpected error while building filters: %v\n", err)
-			}
-
-			// Build the predicate.
-			pred, err := makeScalarExpr(tc.pred, &semaCtx, &evalCtx, &f)
-			if err != nil {
-				b.Fatalf("unexpected error while building predicate: %v\n", err)
-			}
-
-			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = partialidx.FiltersImplyPredicate(filters, pred, &f, md, &evalCtx)
+				// Reset the implicator every 10 iterations to simulate its
+				// cache being used multiple times during repetitive calls to
+				// FiltersImplyPredicate during xform rules.
+				if i%10 == 0 {
+					im.Init(&f, md, &evalCtx)
+				}
+				_, _ = im.FiltersImplyPredicate(filters, pred)
 			}
 		})
 	}

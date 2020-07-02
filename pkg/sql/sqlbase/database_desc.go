@@ -13,6 +13,8 @@ package sqlbase
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -36,7 +38,7 @@ type ImmutableDatabaseDescriptor struct {
 type MutableDatabaseDescriptor struct {
 	ImmutableDatabaseDescriptor
 
-	ClusterVersion *DatabaseDescriptor
+	ClusterVersion *ImmutableDatabaseDescriptor
 }
 
 // NewInitialDatabaseDescriptor constructs a new DatabaseDescriptor for an
@@ -59,26 +61,24 @@ func NewInitialDatabaseDescriptorWithPrivileges(
 	})
 }
 
-func makeImmutableDatabaseDesc(desc DatabaseDescriptor) ImmutableDatabaseDescriptor {
+func makeImmutableDatabaseDescriptor(desc DatabaseDescriptor) ImmutableDatabaseDescriptor {
 	return ImmutableDatabaseDescriptor{DatabaseDescriptor: desc}
 }
 
 // NewImmutableDatabaseDescriptor makes a new database descriptor.
 func NewImmutableDatabaseDescriptor(desc DatabaseDescriptor) *ImmutableDatabaseDescriptor {
-	ret := makeImmutableDatabaseDesc(desc)
+	ret := makeImmutableDatabaseDescriptor(desc)
 	return &ret
 }
 
-// NewMutableDatabaseDescriptor creates a new MutableDatabaseDescriptor. The
-// version of the returned descriptor will be the successor of the descriptor
-// from which it was constructed.
-func NewMutableDatabaseDescriptor(mutationOf DatabaseDescriptor) *MutableDatabaseDescriptor {
-	mut := &MutableDatabaseDescriptor{
-		ImmutableDatabaseDescriptor: makeImmutableDatabaseDesc(*protoutil.Clone(&mutationOf).(*DatabaseDescriptor)),
-		ClusterVersion:              &mutationOf,
+// NewMutableExistingDatabaseDescriptor returns a MutableDatabaseDescriptor from the
+// given database descriptor with the cluster version also set to the descriptor.
+// This is for databases that already exist.
+func NewMutableExistingDatabaseDescriptor(desc DatabaseDescriptor) *MutableDatabaseDescriptor {
+	return &MutableDatabaseDescriptor{
+		ImmutableDatabaseDescriptor: makeImmutableDatabaseDescriptor(*protoutil.Clone(&desc).(*DatabaseDescriptor)),
+		ClusterVersion:              NewImmutableDatabaseDescriptor(desc),
 	}
-	mut.Version++
-	return mut
 }
 
 // TypeName returns the plain type of this descriptor.
@@ -104,6 +104,16 @@ func (desc *DatabaseDescriptor) TableDesc() *TableDescriptor {
 // TypeDesc implements the ObjectDescriptor interface.
 func (desc *DatabaseDescriptor) TypeDesc() *TypeDescriptor {
 	return nil
+}
+
+// GetParentID implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) GetParentID() ID {
+	return keys.RootNamespaceID
+}
+
+// GetParentSchemaID implements the BaseDescriptorInterface interface.
+func (desc *ImmutableDatabaseDescriptor) GetParentSchemaID() ID {
+	return keys.RootNamespaceID
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.
@@ -147,4 +157,21 @@ func (desc *ImmutableDatabaseDescriptor) Validate() error {
 
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
+}
+
+// MaybeIncrementVersion implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {
+	// Already incremented, no-op.
+	if desc.Version == desc.ClusterVersion.Version+1 {
+		return
+	}
+	desc.Version++
+	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// Immutable implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) Immutable() DescriptorInterface {
+	// TODO (lucy): Should the immutable descriptor constructors always make a
+	// copy, so we don't have to do it here?
+	return NewImmutableDatabaseDescriptor(*protoutil.Clone(desc.DatabaseDesc()).(*DatabaseDescriptor))
 }
