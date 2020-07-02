@@ -585,10 +585,12 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
       └ *colexec.hashAggregator
         └ *rowexec.joinReader
           └ *colexec.hashJoiner
-            ├ *colexec.selLTInt64Int64ConstOp
-            │ └ *colfetcher.colBatchScan
-            └ *colexec.selEQBytesBytesConstOp
-              └ *colfetcher.colBatchScan
+            ├ *colfetcher.colBatchScan
+            └ *colexec.hashJoiner
+              ├ *colexec.selLTInt64Int64ConstOp
+              │ └ *colfetcher.colBatchScan
+              └ *colexec.selEQBytesBytesConstOp
+                └ *colfetcher.colBatchScan
 
 # Query 4
 query T
@@ -650,25 +652,27 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
             └ *colexec.constBytesOp
               └ *colexec.hashJoiner
                 ├ *rowexec.joinReader
-                │ └ *rowexec.joinReader
+                │ └ *colexec.hashJoiner
+                │   ├ *colfetcher.colBatchScan
                 │   └ *rowexec.joinReader
-                │     └ *colexec.caseOp
-                │       ├ *colexec.bufferOp
-                │       │ └ *colexec.hashJoiner
-                │       │   ├ *colfetcher.colBatchScan
-                │       │   └ *colfetcher.colBatchScan
-                │       ├ *colexec.constBoolOp
-                │       │ └ *colexec.andProjOp
-                │       │   ├ *colexec.bufferOp
-                │       │   ├ *colexec.projEQBytesBytesConstOp
-                │       │   └ *colexec.projEQBytesBytesConstOp
-                │       ├ *colexec.constBoolOp
-                │       │ └ *colexec.andProjOp
-                │       │   ├ *colexec.bufferOp
-                │       │   ├ *colexec.projEQBytesBytesConstOp
-                │       │   └ *colexec.projEQBytesBytesConstOp
-                │       └ *colexec.constBoolOp
-                │         └ *colexec.bufferOp
+                │     └ *rowexec.joinReader
+                │       └ *colexec.caseOp
+                │         ├ *colexec.bufferOp
+                │         │ └ *colexec.hashJoiner
+                │         │   ├ *colfetcher.colBatchScan
+                │         │   └ *colfetcher.colBatchScan
+                │         ├ *colexec.constBoolOp
+                │         │ └ *colexec.andProjOp
+                │         │   ├ *colexec.bufferOp
+                │         │   ├ *colexec.projEQBytesBytesConstOp
+                │         │   └ *colexec.projEQBytesBytesConstOp
+                │         ├ *colexec.constBoolOp
+                │         │ └ *colexec.andProjOp
+                │         │   ├ *colexec.bufferOp
+                │         │   ├ *colexec.projEQBytesBytesConstOp
+                │         │   └ *colexec.projEQBytesBytesConstOp
+                │         └ *colexec.constBoolOp
+                │           └ *colexec.bufferOp
                 └ *colfetcher.colBatchScan
 
 # Query 8
