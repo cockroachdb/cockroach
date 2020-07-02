@@ -674,7 +674,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB(), defaultWKTDecimalDigits)
+				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
 			types.String,
@@ -692,7 +692,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				wkt, err := geo.EWKBToWKT(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				wkt, err := geo.SpatialObjectToWKT(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(wkt)), err
 			},
 			Info: infoBuilder{
@@ -702,7 +702,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkt, err := geo.EWKBToWKT(g.Geography.EWKB(), defaultWKTDecimalDigits)
+				wkt, err := geo.SpatialObjectToWKT(g.Geography.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(wkt)), err
 			},
 			types.String,
@@ -720,7 +720,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				wkt, err := geo.EWKBToWKT(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				wkt, err := geo.SpatialObjectToWKT(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(wkt)), err
 			},
 			Info: infoBuilder{
@@ -733,7 +733,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB(), defaultWKTDecimalDigits)
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
 			types.String,
@@ -751,7 +751,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				ewkt, err := geo.EWKBToEWKT(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(ewkt)), err
 			},
 			Info: infoBuilder{
@@ -761,7 +761,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB(), defaultWKTDecimalDigits)
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geography.SpatialObject(), defaultWKTDecimalDigits)
 				return tree.NewDString(string(ewkt)), err
 			},
 			types.String,
@@ -779,7 +779,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				ewkt, err := geo.EWKBToEWKT(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
+				ewkt, err := geo.SpatialObjectToEWKT(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits))
 				return tree.NewDString(string(ewkt)), err
 			},
 			Info: infoBuilder{
@@ -792,7 +792,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.DefaultEWKBEncodingFormat)
+				wkb, err := geo.SpatialObjectToWKB(g.Geometry.SpatialObject(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
@@ -801,7 +801,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.DefaultEWKBEncodingFormat)
+				wkb, err := geo.SpatialObjectToWKB(g.Geography.SpatialObject(), geo.DefaultEWKBEncodingFormat)
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			types.Bytes,
@@ -818,7 +818,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				g := args[0].(*tree.DGeometry)
 				text := string(tree.MustBeDString(args[1]))
 
-				wkb, err := geo.EWKBToWKB(g.Geometry.EWKB(), geo.StringToByteOrder(text))
+				wkb, err := geo.SpatialObjectToWKB(g.Geometry.SpatialObject(), geo.StringToByteOrder(text))
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			Info: infoBuilder{
@@ -837,7 +837,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				g := args[0].(*tree.DGeography)
 				text := string(tree.MustBeDString(args[1]))
 
-				wkb, err := geo.EWKBToWKB(g.Geography.EWKB(), geo.StringToByteOrder(text))
+				wkb, err := geo.SpatialObjectToWKB(g.Geography.SpatialObject(), geo.StringToByteOrder(text))
 				return tree.NewDBytes(tree.DBytes(wkb)), err
 			},
 			Info: infoBuilder{
@@ -870,7 +870,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				hexwkb, err := geo.EWKBToWKBHex(g.Geometry.EWKB())
+				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geometry.SpatialObject())
 				return tree.NewDString(hexwkb), err
 			},
 			types.String,
@@ -879,7 +879,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				hexwkb, err := geo.EWKBToWKBHex(g.Geography.EWKB())
+				hexwkb, err := geo.SpatialObjectToWKBHex(g.Geography.SpatialObject())
 				return tree.NewDString(hexwkb), err
 			},
 			types.String,
@@ -976,7 +976,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				kml, err := geo.EWKBToKML(g.Geometry.EWKB())
+				kml, err := geo.SpatialObjectToKML(g.Geometry.SpatialObject())
 				return tree.NewDString(kml), err
 			},
 			types.String,
@@ -985,7 +985,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		),
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				kml, err := geo.EWKBToKML(g.Geography.EWKB())
+				kml, err := geo.SpatialObjectToKML(g.Geography.SpatialObject())
 				return tree.NewDString(kml), err
 			},
 			types.String,
@@ -997,7 +997,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), defaultGeoJSONDecimalDigits, geo.EWKBToGeoJSONFlagShortCRSIfNot4326)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), defaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
@@ -1018,7 +1018,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.EWKBToGeoJSONFlagShortCRSIfNot4326)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1036,8 +1036,8 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeometry)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				options := geo.EWKBToGeoJSONFlag(tree.MustBeDInt(args[2]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geometry.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
+				options := geo.SpatialObjectToGeoJSONFlag(tree.MustBeDInt(args[2]))
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1054,7 +1054,7 @@ Options is a flag that can be bitmasked. The options are:
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), defaultGeoJSONDecimalDigits, geo.EWKBToGeoJSONFlagZero)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), defaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
@@ -1075,7 +1075,7 @@ Options is a flag that can be bitmasked. The options are:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.EWKBToGeoJSONFlagZero)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), geo.SpatialObjectToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
@@ -1093,8 +1093,8 @@ Options is a flag that can be bitmasked. The options are:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := args[0].(*tree.DGeography)
 				maxDecimalDigits := int(tree.MustBeDInt(args[1]))
-				options := geo.EWKBToGeoJSONFlag(tree.MustBeDInt(args[2]))
-				geojson, err := geo.EWKBToGeoJSON(g.Geography.EWKB(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
+				options := geo.SpatialObjectToGeoJSONFlag(tree.MustBeDInt(args[2]))
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), fitMaxDecimalDigitsToBounds(maxDecimalDigits), options)
 				return tree.NewDString(string(geojson)), err
 			},
 			Info: infoBuilder{
