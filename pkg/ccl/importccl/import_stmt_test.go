@@ -2961,6 +2961,10 @@ func TestImportDefault(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const nodes = 3
+	numFiles := nodes + 2
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata", "csv")
@@ -3233,6 +3237,34 @@ func TestImportDefault(t *testing.T) {
 				require.Equal(t, 0, numBadRows)
 			})
 		}
+	})
+	t.Run("multiple_unique_rowid", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT, c STRING, d INT DEFAULT unique_rowid())`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (3, 'CAT')`))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (4, 'DOG')`))
+		var numDistinct int
+		sqlDB.QueryRow(t,
+			`SELECT DISTINCT COUNT (*) FROM (SELECT a FROM t WHERE a IS NOT NULL UNION SELECT d FROM t WHERE d IS NOT NULL)`,
+		).Scan(&numDistinct)
+		var numRows int
+		sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
+		require.Equal(t, numDistinct, 2*numRows)
+	})
+	t.Run("unique_rowid_with_pk", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT PRIMARY KEY, c STRING)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (-3, 'CAT')`))
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (-4, 'DOG')`))
+		var numDistinct int
+		sqlDB.QueryRow(t,
+			`SELECT DISTINCT COUNT (a) FROM t`,
+		).Scan(&numDistinct)
+		var numRows int
+		sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
+		require.Equal(t, numDistinct, numRows)
 	})
 }
 
@@ -4372,14 +4404,23 @@ func TestImportPgDumpGeo(t *testing.T) {
 
 	// Verify both created tables are identical.
 	importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
-	// Families are slightly different due to the geom column being last
-	// in exec and rowid being last in import, so swap that in import to
-	// match exec.
-	importCreate[0][0] = strings.Replace(importCreate[0][0], "geom, rowid", "rowid, geom", 1)
+	// Families are slightly different due to that rowid shows up in exec
+	// but not import (possibly due to the ALTER TABLE statement that makes
+	// gid a primary key), so add that into import to match exec.
+	importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
 	sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
 
-	importSelect := sqlDB.QueryStr(t, "SELECT * FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks")
-	sqlDB.CheckQueryResults(t, "SELECT * FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks", importSelect)
+	// Drop the comparison of gid for import vs exec, then check that gid
+	// in import is indeed valid rowid.
+	importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"
+	importSelect := sqlDB.QueryStr(t, fmt.Sprintf(
+		"SELECT (%s) FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks",
+		importCols,
+	))
+	sqlDB.CheckQueryResults(t, fmt.Sprintf(
+		"SELECT (%s) FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks",
+		importCols,
+	), importSelect)
 }
 
 func TestImportCockroachDump(t *testing.T) {
