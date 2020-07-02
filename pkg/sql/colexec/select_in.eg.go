@@ -52,7 +52,6 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	var err error
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
@@ -65,10 +64,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowBool(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowBool(t, datumTuple)
 			return obj, nil
 		}
 	case types.BytesFamily:
@@ -82,10 +78,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowBytes(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowBytes(t, datumTuple)
 			return obj, nil
 		}
 	case types.DecimalFamily:
@@ -99,10 +92,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowDecimal(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowDecimal(t, datumTuple)
 			return obj, nil
 		}
 	case types.IntFamily:
@@ -115,10 +105,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInt16(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInt16(t, datumTuple)
 			return obj, nil
 		case 32:
 			obj := &projectInOpInt32{
@@ -128,10 +115,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInt32(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInt32(t, datumTuple)
 			return obj, nil
 		case -1:
 		default:
@@ -142,10 +126,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInt64(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInt64(t, datumTuple)
 			return obj, nil
 		}
 	case types.FloatFamily:
@@ -159,10 +140,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowFloat64(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowFloat64(t, datumTuple)
 			return obj, nil
 		}
 	case types.TimestampTZFamily:
@@ -176,10 +154,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowTimestamp(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowTimestamp(t, datumTuple)
 			return obj, nil
 		}
 	case types.IntervalFamily:
@@ -193,10 +168,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInterval(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInterval(t, datumTuple)
 			return obj, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -210,10 +182,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowDatum(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowDatum(t, datumTuple)
 			return obj, nil
 		}
 	}
@@ -223,7 +192,6 @@ func GetInProjectionOperator(
 func GetInOperator(
 	t *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (colexecbase.Operator, error) {
-	var err error
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
 		switch t.Width() {
@@ -234,10 +202,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowBool(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowBool(t, datumTuple)
 			return obj, nil
 		}
 	case types.BytesFamily:
@@ -249,10 +214,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowBytes(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowBytes(t, datumTuple)
 			return obj, nil
 		}
 	case types.DecimalFamily:
@@ -264,10 +226,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowDecimal(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowDecimal(t, datumTuple)
 			return obj, nil
 		}
 	case types.IntFamily:
@@ -278,10 +237,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInt16(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInt16(t, datumTuple)
 			return obj, nil
 		case 32:
 			obj := &selectInOpInt32{
@@ -289,10 +245,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInt32(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInt32(t, datumTuple)
 			return obj, nil
 		case -1:
 		default:
@@ -301,10 +254,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInt64(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInt64(t, datumTuple)
 			return obj, nil
 		}
 	case types.FloatFamily:
@@ -316,10 +266,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowFloat64(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowFloat64(t, datumTuple)
 			return obj, nil
 		}
 	case types.TimestampTZFamily:
@@ -331,10 +278,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowTimestamp(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowTimestamp(t, datumTuple)
 			return obj, nil
 		}
 	case types.IntervalFamily:
@@ -346,10 +290,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowInterval(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowInterval(t, datumTuple)
 			return obj, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -361,10 +302,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRowDatum(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRowDatum(t, datumTuple)
 			return obj, nil
 		}
 	}
@@ -393,7 +331,7 @@ type projectInOpBool struct {
 
 var _ colexecbase.Operator = &projectInOpBool{}
 
-func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool, error) {
+func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []bool
 	hasNulls := false
@@ -401,15 +339,12 @@ func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool, error)
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(bool)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInBool(
@@ -630,7 +565,7 @@ type projectInOpBytes struct {
 
 var _ colexecbase.Operator = &projectInOpBytes{}
 
-func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool, error) {
+func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result [][]byte
 	hasNulls := false
@@ -638,15 +573,12 @@ func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool, err
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.([]byte)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInBytes(
@@ -863,7 +795,7 @@ type projectInOpDecimal struct {
 
 var _ colexecbase.Operator = &projectInOpDecimal{}
 
-func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bool, error) {
+func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []apd.Decimal
 	hasNulls := false
@@ -871,15 +803,12 @@ func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bo
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(apd.Decimal)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInDecimal(
@@ -1092,7 +1021,7 @@ type projectInOpInt16 struct {
 
 var _ colexecbase.Operator = &projectInOpInt16{}
 
-func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool, error) {
+func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []int16
 	hasNulls := false
@@ -1100,15 +1029,12 @@ func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool, erro
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(int16)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInInt16(
@@ -1332,7 +1258,7 @@ type projectInOpInt32 struct {
 
 var _ colexecbase.Operator = &projectInOpInt32{}
 
-func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool, error) {
+func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []int32
 	hasNulls := false
@@ -1340,15 +1266,12 @@ func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool, erro
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(int32)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInInt32(
@@ -1572,7 +1495,7 @@ type projectInOpInt64 struct {
 
 var _ colexecbase.Operator = &projectInOpInt64{}
 
-func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool, error) {
+func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []int64
 	hasNulls := false
@@ -1580,15 +1503,12 @@ func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool, erro
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(int64)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInInt64(
@@ -1812,7 +1732,7 @@ type projectInOpFloat64 struct {
 
 var _ colexecbase.Operator = &projectInOpFloat64{}
 
-func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool, error) {
+func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []float64
 	hasNulls := false
@@ -1820,15 +1740,12 @@ func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool, 
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(float64)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInFloat64(
@@ -2060,7 +1977,7 @@ type projectInOpTimestamp struct {
 
 var _ colexecbase.Operator = &projectInOpTimestamp{}
 
-func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bool, error) {
+func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []time.Time
 	hasNulls := false
@@ -2068,15 +1985,12 @@ func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bo
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(time.Time)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInTimestamp(
@@ -2296,7 +2210,7 @@ type projectInOpInterval struct {
 
 var _ colexecbase.Operator = &projectInOpInterval{}
 
-func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Duration, bool, error) {
+func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Duration, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []duration.Duration
 	hasNulls := false
@@ -2304,15 +2218,12 @@ func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Durat
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(duration.Duration)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInInterval(
@@ -2525,7 +2436,7 @@ type projectInOpDatum struct {
 
 var _ colexecbase.Operator = &projectInOpDatum{}
 
-func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool, error) {
+func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []interface{}
 	hasNulls := false
@@ -2533,15 +2444,12 @@ func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(interface{})
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpInDatum(
