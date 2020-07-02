@@ -68,7 +68,7 @@ const (
 	VersionAlterSystemJobsAddCreatedByColumns
 	VersionAddScheduledJobsTable
 	VersionUserDefinedSchemas
-
+	VersionAbortSpanBytesCounter
 	// Add new versions here (step one of two).
 )
 
@@ -516,6 +516,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionUserDefinedSchemas enables the creation of user defined schemas.
 		Key:     VersionUserDefinedSchemas,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionAbortSpanBytesCounter adds a field to MVCCStats
+		// (MVCCStats.AbortSpanBytes) that tracks the size of a
+		// range's abort span.
+		Key:     VersionAbortSpanBytesCounter,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).

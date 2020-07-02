@@ -1083,6 +1083,7 @@ const int MVCCStats::kIntentBytesFieldNumber;
 const int MVCCStats::kIntentCountFieldNumber;
 const int MVCCStats::kSysBytesFieldNumber;
 const int MVCCStats::kSysCountFieldNumber;
+const int MVCCStats::kAbortSpanBytesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MVCCStats::MVCCStats()
@@ -1098,15 +1099,15 @@ MVCCStats::MVCCStats(const MVCCStats& from)
       _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::memcpy(&last_update_nanos_, &from.last_update_nanos_,
-    static_cast<size_t>(reinterpret_cast<char*>(&contains_estimates_) -
-    reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
+    static_cast<size_t>(reinterpret_cast<char*>(&abort_span_bytes_) -
+    reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(abort_span_bytes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.storage.enginepb.MVCCStats)
 }
 
 void MVCCStats::SharedCtor() {
   ::memset(&last_update_nanos_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&contains_estimates_) -
-      reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(contains_estimates_));
+      reinterpret_cast<char*>(&abort_span_bytes_) -
+      reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(abort_span_bytes_));
 }
 
 MVCCStats::~MVCCStats() {
@@ -1138,10 +1139,10 @@ void MVCCStats::Clear() {
         reinterpret_cast<char*>(&val_bytes_) -
         reinterpret_cast<char*>(&last_update_nanos_)) + sizeof(val_bytes_));
   }
-  if (cached_has_bits & 16128u) {
+  if (cached_has_bits & 32512u) {
     ::memset(&val_count_, 0, static_cast<size_t>(
-        reinterpret_cast<char*>(&contains_estimates_) -
-        reinterpret_cast<char*>(&val_count_)) + sizeof(contains_estimates_));
+        reinterpret_cast<char*>(&abort_span_bytes_) -
+        reinterpret_cast<char*>(&val_count_)) + sizeof(abort_span_bytes_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -1345,6 +1346,19 @@ bool MVCCStats::MergePartialFromCodedStream(
         break;
       }
 
+      case 15: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(121u /* 121 & 0xFF */)) {
+          set_has_abort_span_bytes();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_SFIXED64>(
+                 input, &abort_span_bytes_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1428,6 +1442,10 @@ void MVCCStats::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(14, this->contains_estimates(), output);
   }
 
+  if (cached_has_bits & 0x00004000u) {
+    ::google::protobuf::internal::WireFormatLite::WriteSFixed64(15, this->abort_span_bytes(), output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.enginepb.MVCCStats)
@@ -1473,7 +1491,7 @@ size_t MVCCStats::ByteSizeLong() const {
     }
 
   }
-  if (_has_bits_[8 / 32] & 16128u) {
+  if (_has_bits_[8 / 32] & 32512u) {
     if (has_val_count()) {
       total_size += 1 + 8;
     }
@@ -1498,6 +1516,10 @@ size_t MVCCStats::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->contains_estimates());
+    }
+
+    if (has_abort_span_bytes()) {
+      total_size += 1 + 8;
     }
 
   }
@@ -1546,7 +1568,7 @@ void MVCCStats::MergeFrom(const MVCCStats& from) {
     }
     _has_bits_[0] |= cached_has_bits;
   }
-  if (cached_has_bits & 16128u) {
+  if (cached_has_bits & 32512u) {
     if (cached_has_bits & 0x00000100u) {
       val_count_ = from.val_count_;
     }
@@ -1564,6 +1586,9 @@ void MVCCStats::MergeFrom(const MVCCStats& from) {
     }
     if (cached_has_bits & 0x00002000u) {
       contains_estimates_ = from.contains_estimates_;
+    }
+    if (cached_has_bits & 0x00004000u) {
+      abort_span_bytes_ = from.abort_span_bytes_;
     }
     _has_bits_[0] |= cached_has_bits;
   }
@@ -1600,6 +1625,7 @@ void MVCCStats::InternalSwap(MVCCStats* other) {
   swap(sys_bytes_, other->sys_bytes_);
   swap(sys_count_, other->sys_count_);
   swap(contains_estimates_, other->contains_estimates_);
+  swap(abort_span_bytes_, other->abort_span_bytes_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
