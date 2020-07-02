@@ -535,6 +535,7 @@ func init() {
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, nodeLocalCmds...)
+	clientCmds = append(clientCmds, stmtDiagCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		varFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
@@ -645,6 +646,7 @@ func init() {
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
+	sqlCmds = append(sqlCmds, stmtDiagCmds...)
 	sqlCmds = append(sqlCmds, nodeLocalCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()

@@ -74,9 +74,11 @@ func setExplainBundleResult(
 
 		text = []string{
 			"Statement diagnostics bundle generated. Download from the Admin UI (Advanced",
-			"Debug -> Statement Diagnostics History) or use the direct link below.",
+			"Debug -> Statement Diagnostics History), via the direct link below, or using",
+			"the command line.",
 			fmt.Sprintf("Admin UI: %s", execCfg.AdminURL()),
 			fmt.Sprintf("Direct link: %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID),
+			"Command line: cockroach statement-diag list / download",
 		}
 	}()
 
