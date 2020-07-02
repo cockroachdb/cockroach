@@ -39,13 +39,15 @@ import (
 // xform and xfunc packages using the same struct.
 type CustomFuncs struct {
 	norm.CustomFuncs
-	e *explorer
+	e  *explorer
+	im partialidx.Implicator
 }
 
 // Init initializes a new CustomFuncs with the given explorer.
 func (c *CustomFuncs) Init(e *explorer) {
 	c.CustomFuncs.Init(e.f)
 	c.e = e
+	c.im.Init(e.f, e.mem.Metadata(), e.evalCtx)
 }
 
 // ----------------------------------------------------------------------
@@ -201,7 +203,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectNonPartialIndexes)
 	for iter.Next() {
 		pred := tabMeta.PartialIndexPredicates[iter.IndexOrdinal()]
-		remainingFilters, ok := partialidx.FiltersImplyPredicate(filters, pred, c.e.f, md, c.e.evalCtx)
+		remainingFilters, ok := c.im.FiltersImplyPredicate(filters, pred)
 		if !ok {
 			// The filters do not imply the predicate, so the partial index
 			// cannot be used.

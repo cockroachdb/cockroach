@@ -10,6 +10,12 @@
 
 package sqlbase
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+)
+
 // SchemaDescriptorInterface will eventually be called dbdesc.Descriptor.
 // It is implemented by ImmutableSchemaDescriptor.
 type SchemaDescriptorInterface interface {
@@ -40,11 +46,20 @@ type MutableSchemaDescriptor struct {
 	ClusterVersion *ImmutableSchemaDescriptor
 }
 
+// NewMutableExistingSchemaDescriptor returns a MutableSchemaDescriptor from the
+// given schema descriptor with the cluster version also set to the descriptor.
+// This is for schemas that already exist.
+func NewMutableExistingSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDescriptor {
+	return &MutableSchemaDescriptor{
+		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(*protoutil.Clone(&desc).(*SchemaDescriptor)),
+		ClusterVersion:            NewImmutableSchemaDescriptor(desc),
+	}
+}
+
 // NewImmutableSchemaDescriptor makes a new Schema descriptor.
 func NewImmutableSchemaDescriptor(desc SchemaDescriptor) *ImmutableSchemaDescriptor {
-	return &ImmutableSchemaDescriptor{
-		SchemaDescriptor: desc,
-	}
+	m := makeImmutableSchemaDescriptor(desc)
+	return &m
 }
 
 func makeImmutableSchemaDescriptor(desc SchemaDescriptor) ImmutableSchemaDescriptor {
@@ -63,6 +78,11 @@ func NewMutableCreatedSchemaDescriptor(desc SchemaDescriptor) *MutableSchemaDesc
 	return &MutableSchemaDescriptor{
 		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(desc),
 	}
+}
+
+// GetParentSchemaID implements the BaseDescriptorInterface interface.
+func (desc *ImmutableSchemaDescriptor) GetParentSchemaID() ID {
+	return keys.RootNamespaceID
 }
 
 // GetAuditMode implements the DescriptorProto interface.
@@ -106,3 +126,20 @@ func (desc *ImmutableSchemaDescriptor) DescriptorProto() *Descriptor {
 
 // NameResolutionResult implements the ObjectDescriptor interface.
 func (desc *ImmutableSchemaDescriptor) NameResolutionResult() {}
+
+// MaybeIncrementVersion implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) MaybeIncrementVersion() {
+	// Already incremented, no-op.
+	if desc.Version == desc.ClusterVersion.Version+1 {
+		return
+	}
+	desc.Version++
+	desc.ModificationTime = hlc.Timestamp{}
+}
+
+// Immutable implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) Immutable() DescriptorInterface {
+	// TODO (lucy): Should the immutable descriptor constructors always make a
+	// copy, so we don't have to do it here?
+	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*SchemaDescriptor))
+}

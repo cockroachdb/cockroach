@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -320,12 +321,13 @@ func (sc *SchemaChanger) dropConstraints(
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
 
-	// Create update closure for the table and all other tables with backreferences
-	update := func(_ *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
-		scTable, ok := descs[sc.tableID]
+	// Create update closure for the table and all other tables with backreferences.
+	update := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
+		scDesc, ok := descs[sc.tableID]
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+		scTable := scDesc.(*MutableTableDescriptor)
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
@@ -351,10 +353,11 @@ func (sc *SchemaChanger) dropConstraints(
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
 					if def.Name == constraint.Name {
-						backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
+						backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 						if !ok {
 							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 						}
+						backrefTable := backrefDesc.(*MutableTableDescriptor)
 						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable.TableDesc()); err != nil {
 							return err
 						}
@@ -390,7 +393,12 @@ func (sc *SchemaChanger) dropConstraints(
 	}
 
 	log.Info(ctx, "finished dropping constraints")
-	return descs, nil
+
+	tableDescs := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+	for i := range descs {
+		tableDescs[i] = descs[i].(*ImmutableTableDescriptor)
+	}
+	return tableDescs, nil
 }
 
 // addConstraints publishes a new version of the given table descriptor with the
@@ -416,11 +424,12 @@ func (sc *SchemaChanger) addConstraints(
 	}
 
 	// Create update closure for the table and all other tables with backreferences
-	update := func(_ *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
-		scTable, ok := descs[sc.tableID]
+	update := func(_ *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
+		scDesc, ok := descs[sc.tableID]
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+		scTable := scDesc.(*MutableTableDescriptor)
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
@@ -466,10 +475,11 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
-					backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
+					backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
+					backrefTable := backrefDesc.(*MutableTableDescriptor)
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 				}
 			}

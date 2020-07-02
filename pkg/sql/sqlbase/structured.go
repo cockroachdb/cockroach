@@ -1700,13 +1700,11 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(columnNames map[stri
 	}
 }
 
-// MaybeIncrementVersion increments the version of a descriptor if necessary.
-func (desc *MutableTableDescriptor) MaybeIncrementVersion(
-	ctx context.Context, txn *kv.Txn, settings *cluster.Settings,
-) error {
+// MaybeIncrementVersion implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
 	if desc.Version == desc.ClusterVersion.Version+1 {
-		return nil
+		return
 	}
 	desc.Version++
 
@@ -1714,9 +1712,6 @@ func (desc *MutableTableDescriptor) MaybeIncrementVersion(
 	// the version, and then, upon reading, use the MVCC timestamp to populate
 	// the ModificationTime.
 	desc.ModificationTime = hlc.Timestamp{}
-	log.Infof(ctx, "publish: descID=%d (%s) version=%d",
-		desc.ID, desc.Name, desc.Version)
-	return nil
 }
 
 // Validate validates that the table descriptor is well formed. Checks include

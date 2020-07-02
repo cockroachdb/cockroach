@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -1335,7 +1336,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*lease.Manager)
 		var version sqlbase.DescriptorVersion
-		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.MutableTableDescriptor) error {
+		if _, err := leaseMgr.Publish(ctx, id, func(desc catalog.MutableDescriptor) error {
+			table := desc.(*sqlbase.MutableTableDescriptor)
 			// Publish nothing; only update the version.
 			version = table.Version
 			return nil
