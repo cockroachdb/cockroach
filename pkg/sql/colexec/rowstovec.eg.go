@@ -57,11 +57,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(bool)
 							col[i] = castV
 						}
@@ -85,11 +81,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.([]byte)
 							col.Set(i, castV)
 						}
@@ -113,11 +105,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(apd.Decimal)
 							col[i].Set(&castV)
 						}
@@ -140,11 +128,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(int16)
 							col[i] = castV
 						}
@@ -164,11 +148,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(int32)
 							col[i] = castV
 						}
@@ -189,11 +169,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(int64)
 							col[i] = castV
 						}
@@ -217,11 +193,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(float64)
 							col[i] = castV
 						}
@@ -245,11 +217,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(time.Time)
 							col[i] = castV
 						}
@@ -273,11 +241,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(duration.Duration)
 							col[i] = castV
 						}
@@ -301,11 +265,7 @@ func EncDatumRowsToColVec(
 						if datum == tree.DNull {
 							vec.Nulls().SetNull(i)
 						} else {
-							v, err = datumToPhysicalFn(datum)
-							if err != nil {
-								return
-							}
-
+							v = datumToPhysicalFn(datum)
 							castV := v.(interface{})
 							col.Set(i, castV)
 						}
