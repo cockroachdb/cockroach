@@ -42,10 +42,11 @@ import (
 type DescRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_DescriptorRewrite
 
 const (
-	restoreOptIntoDB               = "into_db"
-	restoreOptSkipMissingFKs       = "skip_missing_foreign_keys"
-	restoreOptSkipMissingSequences = "skip_missing_sequences"
-	restoreOptSkipMissingViews     = "skip_missing_views"
+	restoreOptIntoDB                    = "into_db"
+	restoreOptSkipMissingFKs            = "skip_missing_foreign_keys"
+	restoreOptSkipMissingSequences      = "skip_missing_sequences"
+	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
+	restoreOptSkipMissingViews          = "skip_missing_views"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -53,11 +54,12 @@ const (
 )
 
 var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
-	restoreOptIntoDB:               sql.KVStringOptRequireValue,
-	restoreOptSkipMissingFKs:       sql.KVStringOptRequireNoValue,
-	restoreOptSkipMissingSequences: sql.KVStringOptRequireNoValue,
-	restoreOptSkipMissingViews:     sql.KVStringOptRequireNoValue,
-	backupOptEncPassphrase:         sql.KVStringOptRequireValue,
+	restoreOptIntoDB:                    sql.KVStringOptRequireValue,
+	restoreOptSkipMissingFKs:            sql.KVStringOptRequireNoValue,
+	restoreOptSkipMissingSequences:      sql.KVStringOptRequireNoValue,
+	restoreOptSkipMissingSequenceOwners: sql.KVStringOptRequireNoValue,
+	restoreOptSkipMissingViews:          sql.KVStringOptRequireNoValue,
+	backupOptEncPassphrase:              sql.KVStringOptRequireValue,
 }
 
 // rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
@@ -216,6 +218,29 @@ func allocateDescriptorRewrites(
 							table.Name, seqID, restoreOptSkipMissingSequences,
 						)
 					}
+				}
+			}
+			for _, seqID := range col.OwnsSequenceIds {
+				if _, ok := tablesByID[seqID]; !ok {
+					if _, ok := opts[restoreOptSkipMissingSequenceOwners]; !ok {
+						return nil, errors.Errorf(
+							"cannot restore table %q without referenced sequence %d (or %q option)",
+							table.Name, seqID, restoreOptSkipMissingSequenceOwners)
+					}
+				}
+			}
+		}
+
+		// Handle sequence ownership dependencies.
+		if table.IsSequence() && table.SequenceOpts.HasOwner() {
+			if _, ok := tablesByID[table.SequenceOpts.SequenceOwner.OwnerTableID]; !ok {
+				if _, ok := opts[restoreOptSkipMissingSequenceOwners]; !ok {
+					return nil, errors.Errorf(
+						"cannot restore sequence %q without referenced owner table %d (or %q option)",
+						table.Name,
+						table.SequenceOpts.SequenceOwner.OwnerTableID,
+						restoreOptSkipMissingSequenceOwners,
+					)
 				}
 			}
 		}
@@ -765,25 +790,51 @@ func RewriteTableDescs(
 			}
 		}
 
+		if table.IsSequence() && table.SequenceOpts.HasOwner() {
+			if ownerRewrite, ok := descriptorRewrites[table.SequenceOpts.SequenceOwner.OwnerTableID]; ok {
+				table.SequenceOpts.SequenceOwner.OwnerTableID = ownerRewrite.ID
+			} else {
+				// The sequence's owner table is not being restored, thus we simply
+				// remove the ownership dependency. To get here, the user must have
+				// specified 'skip_missing_sequence_owners', otherwise we would have
+				// errored out in allocateDescriptorRewrites.
+				table.SequenceOpts.SequenceOwner = sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}
+			}
+		}
+
 		// rewriteCol is a closure that performs the ID rewrite logic on a column.
 		rewriteCol := func(col *sqlbase.ColumnDescriptor) error {
 			// Rewrite the types.T's IDs present in the column.
 			rewriteIDsInTypesT(col.Type, descriptorRewrites)
-			var newSeqRefs []sqlbase.ID
+			var newUsedSeqRefs []sqlbase.ID
 			for _, seqID := range col.UsesSequenceIds {
 				if rewrite, ok := descriptorRewrites[seqID]; ok {
-					newSeqRefs = append(newSeqRefs, rewrite.ID)
+					newUsedSeqRefs = append(newUsedSeqRefs, rewrite.ID)
 				} else {
 					// The referenced sequence isn't being restored.
 					// Strip the DEFAULT expression and sequence references.
 					// To get here, the user must have specified 'skip_missing_sequences' --
 					// otherwise, would have errored out in allocateDescriptorRewrites.
-					newSeqRefs = []sqlbase.ID{}
+					newUsedSeqRefs = []sqlbase.ID{}
 					col.DefaultExpr = nil
 					break
 				}
 			}
-			col.UsesSequenceIds = newSeqRefs
+			col.UsesSequenceIds = newUsedSeqRefs
+
+			var newOwnedSeqRefs []sqlbase.ID
+			for _, seqID := range col.OwnsSequenceIds {
+				// We only add the sequence ownership dependency if the owned sequence
+				// is being restored.
+				// If the owned sequence is not being restored, the user must have
+				// specified 'skip_missing_sequence_owners' to get here, otherwise
+				// we would have errored out in allocateDescriptorRewrites.
+				if rewrite, ok := descriptorRewrites[seqID]; ok {
+					newOwnedSeqRefs = append(newOwnedSeqRefs, rewrite.ID)
+				}
+			}
+			col.OwnsSequenceIds = newOwnedSeqRefs
+
 			return nil
 		}
 

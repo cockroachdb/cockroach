@@ -4551,3 +4551,7 @@ func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
 
 	return desc.ID
 }
+
+func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
+	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
+}
