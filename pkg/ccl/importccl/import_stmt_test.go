@@ -64,6 +64,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// This checks that the selected columns of a query string have
+// all unique elements. It's useful for checking unique_rowid.
+func checkUnique(rows [][]string, colIndexes []int) bool {
+	uniqStr := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		for _, ind := range colIndexes {
+			s := row[ind]
+			if _, ok := uniqStr[s]; ok {
+				return false
+			}
+			uniqStr[s] = struct{}{}
+		}
+	}
+	return true
+}
+
+// This checks that the selected columns of a query string have
+// no "NULL" elements. It's useful for checking unique_rowid.
+func containsNoNull(rows [][]string, colIndexes []int) bool {
+	for _, row := range rows {
+		for _, ind := range colIndexes {
+			if row[ind] == "NULL" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validUniqueRowID(rows [][]string, colIndexes []int) bool {
+	return checkUnique(rows, colIndexes) && containsNoNull(rows, colIndexes)
+}
+
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2497,8 +2530,10 @@ func TestImportIntoCSV(t *testing.T) {
 	// Test that IMPORT INTO works when columns with default expressions are present.
 	// The default expressions supported by IMPORT INTO are constant expressions,
 	// which are literals and functions that always return the same value given the
-	// same arguments (examples of non-constant expressions are given in the last two
-	// subtests below). The default expression of a column is used when this column is not
+	// same arguments (examples of non-constant expressions are given as now()
+	// and nextval()). `unique_rowid()` is also supported.
+	//
+	// The default expression of a column is used when this column is not
 	// targeted; otherwise, data from source file (like CSV) is used. It also checks
 	// that IMPORT TABLE works when there are default columns.
 	t.Run("import-into-default", func(t *testing.T) {
@@ -2627,6 +2662,24 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, "IMPORT INTO t (c, a) PGDUMP DATA ($1)", srv.URL)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 			sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
+		})
+		t.Run("unique_rowid", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT, c STRING, d INT DEFAULT unique_rowid())`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (3, 'CAT')`))
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (4, 'DOG')`))
+			IDstr := sqlDB.QueryStr(t, `SELECT a, d FROM t`)
+			require.True(t, validUniqueRowID(IDstr, []int{0, 1}))
+		})
+		t.Run("unique_rowid_with_pk", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT PRIMARY KEY, c STRING)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (-3, 'CAT')`))
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (-4, 'DOG')`))
+			IDstr := sqlDB.QueryStr(t, `SELECT a FROM t`)
+			require.True(t, validUniqueRowID(IDstr, []int{0}))
 		})
 	})
 
@@ -4118,14 +4171,25 @@ func TestImportPgDumpGeo(t *testing.T) {
 
 	// Verify both created tables are identical.
 	importCreate := sqlDB.QueryStr(t, "SELECT create_statement FROM [SHOW CREATE importdb.nyc_census_blocks]")
-	// Families are slightly different due to the geom column being last
-	// in exec and rowid being last in import, so swap that in import to
-	// match exec.
-	importCreate[0][0] = strings.Replace(importCreate[0][0], "geom, rowid", "rowid, geom", 1)
+	// Families are slightly different due to that rowid shows up in exec
+	// but not import (possibly due to the ALTER TABLE statement that makes
+	// gid a primary key), so add that into import to match exec.
+	importCreate[0][0] = strings.Replace(importCreate[0][0], "boroname, geom", "boroname, rowid, geom", 1)
 	sqlDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE execdb.nyc_census_blocks]", importCreate)
 
-	importSelect := sqlDB.QueryStr(t, "SELECT * FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks")
-	sqlDB.CheckQueryResults(t, "SELECT * FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks", importSelect)
+	// Drop the comparison of gid for import vs exec, then check that gid
+	// in import is indeed valid rowid.
+	importCols := "blkid, popn_total, popn_white, popn_black, popn_nativ, popn_asian, popn_other, boroname"
+	importSelect := sqlDB.QueryStr(t, fmt.Sprintf(
+		"SELECT (%s) FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks",
+		importCols,
+	))
+	sqlDB.CheckQueryResults(t, fmt.Sprintf(
+		"SELECT (%s) FROM execdb.nyc_census_blocks ORDER BY PRIMARY KEY execdb.nyc_census_blocks",
+		importCols,
+	), importSelect)
+	importID := sqlDB.QueryStr(t, "SELECT (gid) FROM importdb.nyc_census_blocks ORDER BY PRIMARY KEY importdb.nyc_census_blocks")
+	require.True(t, validUniqueRowID(importID, []int{0}))
 }
 
 func TestImportCockroachDump(t *testing.T) {

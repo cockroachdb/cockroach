@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -22,6 +23,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
+
+var supportedDefault = []string{
+	"unique_rowid",
+}
+
+func isSupportedDefault(ctx *tree.EvalContext, expr tree.TypedExpr, defaultStr string) bool {
+	if tree.IsConst(ctx, expr) {
+		return true
+	}
+	for _, supportedStr := range supportedDefault {
+		if strings.Contains(defaultStr, supportedStr) {
+			return true
+		}
+	}
+	return false
+}
 
 // KVInserter implements the putter interface.
 type KVInserter func(roachpb.KeyValue)
@@ -198,7 +215,7 @@ type DatumRowConverter struct {
 	IsTargetCol map[int]struct{}
 
 	// The rest of these are derived from tableDesc, just cached here.
-	hidden                int
+	defaultUniqueIDs      []int
 	ri                    Inserter
 	EvalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
@@ -302,14 +319,18 @@ func NewDatumRowConverter(
 		_, ok := isTargetColID[col.ID]
 		return ok
 	}
-	c.hidden = -1
+	hidden := -1
+	c.defaultUniqueIDs = make([]int, 0)
 	for i := range cols {
 		col := &cols[i]
+		if col.HasDefault() && col.DefaultExprStr() == "unique_rowid()" {
+			c.defaultUniqueIDs = append(c.defaultUniqueIDs, i)
+		}
 		if col.Hidden {
-			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || c.hidden != -1 {
+			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || hidden != -1 {
 				return nil, errors.New("unexpected hidden column")
 			}
-			c.hidden = i
+			hidden = i
 			c.Datums = append(c.Datums, nil)
 		} else {
 			if !isTargetCol(col) && col.DefaultExpr != nil {
@@ -339,14 +360,23 @@ const rowIDBits = 64 - builtins.NodeIDBits
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
-	if c.hidden >= 0 {
-		// We don't want to call unique_rowid() for the hidden PK column because it
-		// is not idempotent and has unfortunate overlapping of output spans since
-		// it puts the uniqueness-ensuring per-generator part (nodeID) in the
-		// low-bits. Instead, make our own IDs that attempt to keep each generator
-		// (sourceID) writing to its own key-space with sequential rowIndexes
-		// mapping to sequential unique IDs, by putting the rowID in the lower
-		// bits. To avoid collisions with the SQL-genenerated IDs (at least for a
+	isTargetCol := func(i int) bool {
+		_, ok := c.IsTargetCol[i]
+		return ok
+	}
+	for i, colIdx := range c.defaultUniqueIDs {
+		// We don't want to call unique_rowid() for columns with such default expressions
+		// because it is not idempotent and has unfortunate overlapping of output
+		// spans since it puts the uniqueness-ensuring per-generator part (nodeID)
+		// in the low-bits. Instead, make our own IDs that attempt to keep each
+		// generator (sourceID) writing to its own key-space with sequential
+		// rowIndexes mapping to sequential unique IDs. This is done by putting the
+		// following as the lower bits, in order to handle the case where there are
+		// multiple columns with default as `unique_rowid`:
+		//
+		// #default_rowid_cols * rowIndex + colPosition (among those with default unique_rowid)
+		//
+		// To avoid collisions with the SQL-genenerated IDs (at least for a
 		// very long time) we also flip the top bit to 1.
 		//
 		// Producing sequential keys in non-overlapping spans for each source yields
@@ -366,20 +396,28 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		// fileIndex*desc.Version) could improve on this. For now, if this
 		// best-effort collision avoidance scheme doesn't work in some cases we can
 		// just recommend an explicit PK as a workaround.
+		//
+		// TODO(anzoteh96): As per the issue in #51004, having too many columns with
+		// default expression unique_rowid() could cause collisions when IMPORTs are run
+		// too close to each other. It will therefore be nice to fix this problem.
+		if isTargetCol(colIdx) {
+			continue
+		}
 		avoidCollisionsWithSQLsIDs := uint64(1 << 63)
-		rowID := (uint64(sourceID) << rowIDBits) ^ uint64(rowIndex)
-		c.Datums[c.hidden] = tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | rowID))
+		shiftedRowIndex := int64(len(c.defaultUniqueIDs))*rowIndex + int64(i)
+		rowID := (uint64(sourceID) << rowIDBits) ^ uint64(shiftedRowIndex)
+		c.Datums[colIdx] = tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | rowID))
 	}
 
 	for i := range c.cols {
 		col := &c.cols[i]
-		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
-			if !tree.IsConst(c.EvalCtx, c.defaultExprs[i]) {
-				// Check if the default expression is a constant expression as we do not
-				// support non-constant default expressions for non-target columns in IMPORT INTO.
+		if !isTargetCol(i) && !col.Hidden && col.DefaultExpr != nil {
+			if !isSupportedDefault(c.EvalCtx, c.defaultExprs[i], col.DefaultExprStr()) {
+				// Check if the default expression is supported as we only support constant and a
+				// limited subset or non-constant default expressions for non-targeted columns in
+				// IMPORT INTO.
 				//
-				// TODO (anzoteh96): add support to non-constant default expressions. Perhaps
-				// we can start with those with Stable volatility, like now().
+				// TODO (anzoteh96): add support to more non-constant default expressions.
 				return errors.Newf(
 					"non-constant default expression %s for non-targeted column %q is not supported by IMPORT INTO",
 					c.defaultExprs[i].String(),
