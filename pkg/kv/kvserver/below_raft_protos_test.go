@@ -65,8 +65,10 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
+		// If new fields are added to `MVCCStats`, the expected populated sum
+		// will change and should be updated accordingly below.
 		emptySum:     615555020845646359,
-		populatedSum: 6873743885651366543,
+		populatedSum: 10390885694280604642,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

@@ -181,4 +181,7 @@ message MVCCStats {
   optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
   // sys_count is the number of meta keys tracked under sys_bytes.
   optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false];
+  // abort_span_bytes is the number of bytes stored in a range's
+  // AbortSpan. These bytes are a subset of sys_bytes.
+  optional sfixed64 abort_span_bytes = 15 [(gogoproto.nullable) = false];
 }

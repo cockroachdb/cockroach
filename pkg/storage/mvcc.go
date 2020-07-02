@@ -163,9 +163,23 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
-// isSysLocal returns whether the whether the key is system-local.
+// isSysLocal returns whether the key is system-local.
 func isSysLocal(key roachpb.Key) bool {
 	return key.Compare(keys.LocalMax) < 0
+}
+
+// isAbortSpanKey returns whether the key is an AbortSpanKey.
+func isAbortSpanKey(key roachpb.Key) bool {
+	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(key)
+		if err != nil {
+			return false
+		}
+		if infix.Equal(keys.LocalRangeIDReplicatedInfix) && suffix.Equal(keys.LocalAbortSpanSuffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // updateStatsForInline updates stat counters for an inline value.
@@ -182,6 +196,9 @@ func updateStatsForInline(
 		if sys {
 			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
 			ms.SysCount--
+			if isAbortSpanKey(key) {
+				ms.AbortSpanBytes -= (origMetaKeySize + origMetaValSize)
+			}
 		} else {
 			ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
 			ms.LiveCount--
@@ -196,6 +213,9 @@ func updateStatsForInline(
 		if sys {
 			ms.SysBytes += metaKeySize + metaValSize
 			ms.SysCount++
+			if isAbortSpanKey(key) {
+				ms.AbortSpanBytes += metaKeySize + metaValSize
+			}
 		} else {
 			ms.LiveBytes += metaKeySize + metaValSize
 			ms.LiveCount++
@@ -3491,6 +3511,9 @@ func ComputeStatsGo(
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
+				if isAbortSpanKey(unsafeKey.Key) {
+					ms.AbortSpanBytes += totalBytes
+				}
 			} else {
 				if !meta.Deleted {
 					ms.LiveBytes += totalBytes
