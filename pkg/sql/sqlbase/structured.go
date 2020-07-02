@@ -4113,3 +4113,8 @@ func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string
 	}
 	return name
 }
+
+// HasOwner returns true if the sequence options indicate an owner exists.
+func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
+	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
+}
