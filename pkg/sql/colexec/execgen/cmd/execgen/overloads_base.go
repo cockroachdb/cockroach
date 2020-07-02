@@ -485,8 +485,8 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return copyVal(b.CanonicalTypeFamily, dest, src)
 }
 
-func set(family types.Family, target, i, new string) string {
-	switch family {
+func set(canonicalTypeFamily types.Family, target, i, new string) string {
+	switch canonicalTypeFamily {
 	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	case types.DecimalFamily:

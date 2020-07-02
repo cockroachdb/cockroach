@@ -226,6 +226,8 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 			}
 		}
 		colexecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
 	case types.DateFamily:
 		return func(datum tree.Datum) interface{} {
 			return datum.(*tree.DDate).UnixEpochDaysWithOrig()
@@ -268,57 +270,12 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 			return datum.(*tree.DInterval).Duration
 		}
 
-	// Types backed by tree.Datums.
-	case types.CollatedStringFamily:
+	// Types backed by tree.Datums. Note that we don't need to convert datum to
+	// anything because we actually use it as is (with a wrapper around it) for
+	// all unoptimized types.
+	default:
 		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DCollatedString)
-		}
-	case types.UnknownFamily:
-		return func(datum tree.Datum) interface{} {
-			return tree.DNull
-		}
-	case types.ArrayFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DArray)
-		}
-	case types.INetFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DIPAddr)
-		}
-	case types.TimeFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DTime)
-		}
-	case types.JsonFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DJSON)
-		}
-	case types.TimeTZFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DTimeTZ)
-		}
-	case types.TupleFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DTuple)
-		}
-	case types.BitFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DBitArray)
-		}
-	case types.GeometryFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DGeometry)
-		}
-	case types.GeographyFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DGeography)
-		}
-	case types.EnumFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DEnum)
+			return datum
 		}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unexpectedly unhandled type %s", ct.DebugString()))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
 }
