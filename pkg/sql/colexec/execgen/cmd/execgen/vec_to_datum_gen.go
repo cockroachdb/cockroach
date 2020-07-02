@@ -54,11 +54,11 @@ func (i vecToDatumWidthTmplInfo) AssignConverted(
 // Remove unused warning.
 var _ = vecToDatumWidthTmplInfo{}.AssignConverted
 
-// conversionTmpls maps the type families to the corresponding "format" strings
-// (see comment above for details).
+// vecToDatumConversionTmpls maps the type families to the corresponding
+// "format" strings (see comment above for details).
 // Note that the strings are formatted this way so that generated code doesn't
 // have empty lines.
-var conversionTmpls = map[types.Family]string{
+var vecToDatumConversionTmpls = map[types.Family]string{
 	types.BoolFamily: `%[1]s = tree.MakeDBool(tree.DBool(%[2]s[%[3]s]))`,
 	// Note that currently, regardless of the integer's width, we always return
 	// INT8, so there is a single conversion template for IntFamily.
@@ -135,7 +135,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 			tmplInfo.Widths = append(tmplInfo.Widths, vecToDatumWidthTmplInfo{
 				Width:          width,
 				VecMethod:      toVecMethod(canonicalTypeFamily, width),
-				ConversionTmpl: conversionTmpls[typeFamily],
+				ConversionTmpl: vecToDatumConversionTmpls[typeFamily],
 			})
 		}
 		tmplInfos = append(tmplInfos, tmplInfo)
@@ -158,7 +158,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 		Widths: []vecToDatumWidthTmplInfo{{
 			Width:          anyWidth,
 			VecMethod:      toVecMethod(typeconv.DatumVecCanonicalTypeFamily, anyWidth),
-			ConversionTmpl: conversionTmpls[typeconv.DatumVecCanonicalTypeFamily],
+			ConversionTmpl: vecToDatumConversionTmpls[typeconv.DatumVecCanonicalTypeFamily],
 		}},
 	})
 
