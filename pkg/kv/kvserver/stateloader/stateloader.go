@@ -396,16 +396,49 @@ func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex 
 func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	// NB: newMS is copied to prevent conditional calls to this method from
-	// causing the stats argument to escape. This is legacy code which does
-	// not need to be optimized for performance.
-	newMSCopy := *newMS
-	return storage.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
+	// We added a new field to the MVCCStats struct to track abort span bytes, which
+	// enlarges the size of the struct itself. This is mostly fine - we persist
+	// MVCCStats under the RangeAppliedState key and don't account for the size of
+	// the MVCCStats struct itself when doing so (we ignore the RangeAppliedState key
+	// in ComputeStatsGo). This would not therefore not cause replica state divergence
+	// in mixed version clusters (the enlarged struct does not contribute to a
+	// persisted stats difference on disk because we're not accounting for the size of
+	// the struct itself).
+	// That's all fine and good except for the fact that historically we persisted
+	// MVCCStats under a dedicated RangeStatsLegacyKey (as we're doing so here), and
+	// in this key we also accounted for the size of the MVCCStats object itself
+	// (which made it super cumbersome to update the schema of the MVCCStats object,
+	// and we basically never did).
+	// Now, in order to add this extra field to the MVCCStats object, we need to be
+	// careful with what we write to the RangeStatsLegacyKey. We can't write this new
+	// version of MVCCStats, as it is going to account for it's now (enlarged) size
+	// and persist a value for sysbytes different from other replicas that are unaware
+	// of this new representation (as would be the case in mixed-version settings). To
+	// this end we've constructed a copy of the legacy MVCCStats representation and
+	// are careful to persist only that (and sidestepping any inconsistencies due to
+	// the differing MVCCStats schema).
+	legacyMS := enginepb.MVCCStatsLegacyRepresentation{
+		ContainsEstimates: newMS.ContainsEstimates,
+		LastUpdateNanos:   newMS.LastUpdateNanos,
+		IntentAge:         newMS.IntentAge,
+		GCBytesAge:        newMS.GCBytesAge,
+		LiveBytes:         newMS.LiveBytes,
+		LiveCount:         newMS.LiveCount,
+		KeyBytes:          newMS.KeyBytes,
+		KeyCount:          newMS.KeyCount,
+		ValBytes:          newMS.ValBytes,
+		ValCount:          newMS.ValCount,
+		IntentBytes:       newMS.IntentBytes,
+		IntentCount:       newMS.IntentCount,
+		SysBytes:          newMS.SysBytes,
+		SysCount:          newMS.SysCount,
+	}
+	return storage.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &legacyMS)
 }
 
 // SetLegacyMVCCStats overwrites the legacy MVCC stats key.
 //
-// The range applied state key cannot already exist or an assetion will be
+// The range applied state key cannot already exist or an assertion will be
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyMVCCStats(
 	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,

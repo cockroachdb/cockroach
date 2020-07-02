@@ -181,4 +181,34 @@ message MVCCStats {
   optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
   // sys_count is the number of meta keys tracked under sys_bytes.
   optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false];
+  // abort_span_bytes is the number of bytes stored in a range's
+  // abort span. These bytes are a subset of sys_bytes.
+  optional sfixed64 abort_span_bytes = 15 [(gogoproto.nullable) = false];
+}
+
+// MVCCStatsLegacyRepresentation is almost identical to MVCCStats, except
+// it does not have a field tracking abort span bytes.
+// The abort span bytes field in MVCCStats didn't exist in earlier versions,
+// and its addition of it to MVCCStats causes the struct to be larger than it was
+// previously. The discrepancy between the size of MVCCStats between versions
+// could cause incorrect sysbyte counts during version migration.
+// MVCCStatsLegacyRepresentation is the older version of MVCCStats, and allows
+// us to prevent this discrepancy during version migration.
+message MVCCStatsLegacyRepresentation {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+  optional int64 contains_estimates = 14 [(gogoproto.nullable) = false];
+  optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false];
+  optional sfixed64 intent_age = 2 [(gogoproto.nullable) = false];
+  optional sfixed64 gc_bytes_age = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge"];
+  optional sfixed64 live_bytes = 4 [(gogoproto.nullable) = false];
+  optional sfixed64 live_count = 5 [(gogoproto.nullable) = false];
+  optional sfixed64 key_bytes = 6 [(gogoproto.nullable) = false];
+  optional sfixed64 key_count = 7 [(gogoproto.nullable) = false];
+  optional sfixed64 val_bytes = 8 [(gogoproto.nullable) = false];
+  optional sfixed64 val_count = 9 [(gogoproto.nullable) = false];
+  optional sfixed64 intent_bytes = 10 [(gogoproto.nullable) = false];
+  optional sfixed64 intent_count = 11 [(gogoproto.nullable) = false];
+  optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
+  optional sfixed64 sys_count = 13 [(gogoproto.nullable) = false];
 }

@@ -134,7 +134,7 @@ func computeStatsDelta(
 		// access to the stats. Concurrent changes to range-local keys are
 		// explicitly ignored (i.e. SysCount, SysBytes).
 		delta = cArgs.EvalCtx.GetMVCCStats()
-		delta.SysCount, delta.SysBytes = 0, 0 // no change to system stats
+		delta.SysCount, delta.SysBytes, delta.AbortSpanBytes = 0, 0, 0 // no change to system stats
 	}
 
 	// If we can't use the fast stats path, or race test is enabled,

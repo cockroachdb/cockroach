@@ -271,6 +271,12 @@ var (
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAbortSpanBytes = metric.Metadata{
+		Name:        "abortspanbytes",
+		Help:        "Number of bytes in the abort span",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	// Metrics used by the rebalancing logic that aren't already captured elsewhere.
 	metaAverageQueriesPerSecond = metric.Metadata{
@@ -1213,6 +1219,7 @@ type TenantsStorageMetrics struct {
 	LastUpdateNanos *aggmetric.AggGauge
 	SysBytes        *aggmetric.AggGauge
 	SysCount        *aggmetric.AggGauge
+	AbortSpanBytes  *aggmetric.AggGauge
 
 	// This struct is invisible to the metric package.
 	tenants syncutil.IntMap // map[roachpb.TenantID]*tenantStorageMetrics
@@ -1275,6 +1282,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
 			m.SysBytes = sm.SysBytes.AddChild(tenantIDStr)
 			m.LastUpdateNanos = sm.LastUpdateNanos.AddChild(tenantIDStr)
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
+			m.AbortSpanBytes = sm.AbortSpanBytes.AddChild(tenantIDStr)
 			m.mu.Unlock()
 			return
 		}
@@ -1312,6 +1320,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, tenantID roa
 	m.LastUpdateNanos.Destroy()
 	m.SysBytes.Destroy()
 	m.SysCount.Destroy()
+	m.AbortSpanBytes.Destroy()
 	sm.tenants.Delete(int64(tenantID.ToUint64()))
 }
 
@@ -1348,6 +1357,7 @@ type tenantStorageMetrics struct {
 	LastUpdateNanos *aggmetric.Gauge
 	SysBytes        *aggmetric.Gauge
 	SysCount        *aggmetric.Gauge
+	AbortSpanBytes  *aggmetric.Gauge
 }
 
 func newTenantsStorageMetrics() *TenantsStorageMetrics {
@@ -1367,6 +1377,7 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 		LastUpdateNanos: b.Gauge(metaLastUpdateNanos),
 		SysBytes:        b.Gauge(metaSysBytes),
 		SysCount:        b.Gauge(metaSysCount),
+		AbortSpanBytes:  b.Gauge(metaAbortSpanBytes),
 	}
 	return sm
 }
@@ -1590,6 +1601,7 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 	tm.LastUpdateNanos.Inc(delta.LastUpdateNanos)
 	tm.SysBytes.Inc(delta.SysBytes)
 	tm.SysCount.Inc(delta.SysCount)
+	tm.AbortSpanBytes.Inc(delta.AbortSpanBytes)
 }
 
 func (sm *TenantsStorageMetrics) addMVCCStats(

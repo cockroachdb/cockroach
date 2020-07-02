@@ -48,7 +48,9 @@ const goldenSeed = 1337
 const itersPerProto = 20
 
 type fixture struct {
-	populatedConstructor   func(*rand.Rand) protoutil.Message
+	populatedConstructor func(*rand.Rand) protoutil.Message
+	// If new fields are added to `MVCCStats`, the expected populatedSum
+	// will change and should be updated accordingly.
 	emptySum, populatedSum uint64
 }
 
@@ -67,7 +69,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
 		emptySum:     615555020845646359,
-		populatedSum: 6873743885651366543,
+		populatedSum: 10390885694280604642,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

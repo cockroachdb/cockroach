@@ -45,14 +45,14 @@ const (
 	gcIntentScoreThreshold = 10
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
-	probablyLargeAbortSpanSysBytesThreshold = 16 * (1 << 20) // 16mb
+	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
 )
 
-func probablyLargeAbortSpan(ms enginepb.MVCCStats) bool {
-	// If there is "a lot" of data in Sys{Bytes,Count}, then we are likely
-	// experiencing a large abort span. The abort span is not supposed to
-	// become that large, but it does happen and causes stability fallout,
-	// usually due to a combination of shortcomings:
+func largeAbortSpan(ms enginepb.MVCCStats) bool {
+	// Checks if the size of the abort span exceeds the given threshold.
+	// The abort span is not supposed to become that large, but it does
+	// happen and causes stability fallout, usually due to a combination of
+	// shortcomings:
 	//
 	// 1. there's no trigger for GC based on abort span size alone (before
 	//    this code block here was written)
@@ -64,11 +64,19 @@ func probablyLargeAbortSpan(ms enginepb.MVCCStats) bool {
 	//    (and we suspect this also happens in user apps occasionally)
 	// 4. large snapshots would never complete due to the queue time limits
 	//    (addressed in https://github.com/cockroachdb/cockroach/pull/44952).
+
+	// Previously, we checked whether the sys bytes and sys count exceeded a
+	// certain threshold, which were likely indicators of a large abort span.
+	// Now, since we track abort span bytes in MVCC stats, we can directly
+	// check whether the abort span size exceeds this threshold.
 	//
-	// In an ideal world, we would factor in the abort span into this method
-	// directly, but until then the condition guarding this block will do.
-	return ms.SysCount >= probablyLargeAbortSpanSysCountThreshold &&
-		ms.SysBytes >= probablyLargeAbortSpanSysBytesThreshold
+	// However, we still keep the original check of sys bytes and sys count
+	// because, in the case of a mixed version cluster, the abort span bytes
+	// field is zeroed out until version upgrading is complete. This second
+	// condition should be able to be removed in release 21.1.
+	definitelyLargeAbortSpan := ms.AbortSpanBytes >= largeAbortSpanBytesThreshold
+	probablyLargeAbortSpan := ms.SysBytes >= largeAbortSpanBytesThreshold && ms.SysCount >= probablyLargeAbortSpanSysCountThreshold
+	return definitelyLargeAbortSpan || probablyLargeAbortSpan
 }
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -343,7 +351,7 @@ func makeGCQueueScoreImpl(
 	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold || r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
-	if probablyLargeAbortSpan(ms) && !r.ShouldQueue &&
+	if largeAbortSpan(ms) && !r.ShouldQueue &&
 		(r.LikelyLastGC == 0 || r.LikelyLastGC > kvserverbase.TxnCleanupThreshold) {
 		r.ShouldQueue = true
 		r.FinalScore++
