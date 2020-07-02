@@ -124,7 +124,12 @@ type ResettableOperator interface {
 	resetter
 }
 
-// Closer is an object that releases resources when Close is called.
+// Closer is an object that releases resources when Close is called. Note that
+// this interface must be implemented by all operators that could be planned on
+// top of other operators that do actually need to release the resources (e.g.
+// if we have a simple project on top of a disk-backed operator, that simple
+// project needs to implement this interface so that Close() call could be
+// propagated correctly).
 type Closer interface {
 	Close(ctx context.Context) error
 }
@@ -175,6 +180,29 @@ func (c *closerHelper) close() bool {
 type closableOperator interface {
 	colexecbase.Operator
 	Closer
+}
+
+func makeOneInputCloserHelper(input colexecbase.Operator) oneInputCloserHelper {
+	return oneInputCloserHelper{
+		OneInputNode: NewOneInputNode(input),
+	}
+}
+
+type oneInputCloserHelper struct {
+	OneInputNode
+	closerHelper
+}
+
+var _ Closer = &oneInputCloserHelper{}
+
+func (c *oneInputCloserHelper) Close(ctx context.Context) error {
+	if !c.close() {
+		return nil
+	}
+	if closer, ok := c.input.(Closer); ok {
+		return closer.Close(ctx)
+	}
+	return nil
 }
 
 type noopOperator struct {
@@ -321,7 +349,7 @@ var _ colexecbase.Operator = &FeedOperator{}
 //   ---------------------              in column at position of N+1)
 //
 type vectorTypeEnforcer struct {
-	OneInputNode
+	oneInputCloserHelper
 	NonExplainable
 
 	allocator *colmem.Allocator
@@ -329,16 +357,16 @@ type vectorTypeEnforcer struct {
 	idx       int
 }
 
-var _ colexecbase.Operator = &vectorTypeEnforcer{}
+var _ ResettableOperator = &vectorTypeEnforcer{}
 
 func newVectorTypeEnforcer(
 	allocator *colmem.Allocator, input colexecbase.Operator, typ *types.T, idx int,
 ) colexecbase.Operator {
 	return &vectorTypeEnforcer{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		typ:          typ,
-		idx:          idx,
+		oneInputCloserHelper: makeOneInputCloserHelper(input),
+		allocator:            allocator,
+		typ:                  typ,
+		idx:                  idx,
 	}
 }
 
@@ -355,6 +383,12 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 	return b
 }
 
+func (e *vectorTypeEnforcer) reset(ctx context.Context) {
+	if r, ok := e.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
 // BatchSchemaSubsetEnforcer is similar to vectorTypeEnforcer in its purpose,
 // but it enforces that the subset of the columns of the non-zero length batch
 // satisfies the desired schema. It needs to wrap the input to a "projecting"
@@ -369,7 +403,7 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 // NOTE: the type schema passed into BatchSchemaSubsetEnforcer *must* include
 // the output type of the Operator that the enforcer will be the input to.
 type BatchSchemaSubsetEnforcer struct {
-	OneInputNode
+	oneInputCloserHelper
 	NonExplainable
 
 	allocator                    *colmem.Allocator
@@ -390,11 +424,11 @@ func NewBatchSchemaSubsetEnforcer(
 	subsetStartIdx, subsetEndIdx int,
 ) *BatchSchemaSubsetEnforcer {
 	return &BatchSchemaSubsetEnforcer{
-		OneInputNode:   NewOneInputNode(input),
-		allocator:      allocator,
-		typs:           typs,
-		subsetStartIdx: subsetStartIdx,
-		subsetEndIdx:   subsetEndIdx,
+		oneInputCloserHelper: makeOneInputCloserHelper(input),
+		allocator:            allocator,
+		typs:                 typs,
+		subsetStartIdx:       subsetStartIdx,
+		subsetEndIdx:         subsetEndIdx,
 	}
 }
 

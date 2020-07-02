@@ -26,2304 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
-	castPerformed := false
-	switch inputVec.CanonicalTypeFamily() {
-	case types.BoolFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int16
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int16
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int32
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int32
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case types.DecimalFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Decimal()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-									r = v
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-									r = v
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-								r = v
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-								r = v
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Decimal()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-									r = v.Sign() != 0
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-									r = v.Sign() != 0
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-								r = v.Sign() != 0
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-								r = v.Sign() != 0
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case types.IntFamily:
-		switch inputVec.Type().Width() {
-		case 16:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int16
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int16
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		case 32:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int32
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int32
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int64
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int64
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case types.FloatFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r float64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r float64
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r float64
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									{
-										var tmpDec apd.Decimal
-										_, tmpErr := tmpDec.SetFloat64(float64(v))
-										if tmpErr != nil {
-											colexecerror.ExpectedError(tmpErr)
-										}
-										r = tmpDec
-									}
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r apd.Decimal
-
-									{
-										var tmpDec apd.Decimal
-										_, tmpErr := tmpDec.SetFloat64(float64(v))
-										if tmpErr != nil {
-											colexecerror.ExpectedError(tmpErr)
-										}
-										r = tmpDec
-									}
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								{
-									var tmpDec apd.Decimal
-									_, tmpErr := tmpDec.SetFloat64(float64(v))
-									if tmpErr != nil {
-										colexecerror.ExpectedError(tmpErr)
-									}
-									r = tmpDec
-								}
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r apd.Decimal
-
-								{
-									var tmpDec apd.Decimal
-									_, tmpErr := tmpDec.SetFloat64(float64(v))
-									if tmpErr != nil {
-										colexecerror.ExpectedError(tmpErr)
-									}
-									r = tmpDec
-								}
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int16
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int16
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int16
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int32
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int32
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int32
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r int64
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r int64
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r int64
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case typeconv.DatumVecCanonicalTypeFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Datum()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									{
-										_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-										if err != nil {
-											colexecerror.ExpectedError(err)
-										}
-										r = _castedDatum == tree.DBoolTrue
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol.Slice(0, n)
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									{
-										_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-										if err != nil {
-											colexecerror.ExpectedError(err)
-										}
-										r = _castedDatum == tree.DBoolTrue
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-
-								{
-									_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-									if err != nil {
-										colexecerror.ExpectedError(err)
-									}
-									r = _castedDatum == tree.DBoolTrue
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol.Slice(0, n)
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1)
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-
-								{
-									_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-									if err != nil {
-										colexecerror.ExpectedError(err)
-									}
-									r = _castedDatum == tree.DBoolTrue
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	}
-	if !castPerformed {
-		colexecerror.InternalError(fmt.Sprintf("unhandled cast %s -> %s", inputVec.Type(), outputVec.Type()))
-	}
-}
-
 func GetCastOperator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
@@ -2335,10 +37,10 @@ func GetCastOperator(
 	input = newVectorTypeEnforcer(allocator, input, toType, resultIdx)
 	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
-			OneInputNode: NewOneInputNode(input),
-			allocator:    allocator,
-			colIdx:       colIdx,
-			outputIdx:    resultIdx,
+			oneInputCloserHelper: makeOneInputCloserHelper(input),
+			allocator:            allocator,
+			colIdx:               colIdx,
+			outputIdx:            resultIdx,
 		}, nil
 	}
 	leftType, rightType := fromType, toType
@@ -2352,47 +54,47 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castBoolBoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castBoolFloat64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.IntFamily:
 				switch rightType.Width() {
 				case 16:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castBoolInt16Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case 32:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castBoolInt32Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castBoolInt64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2406,22 +108,22 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castDecimalDecimalOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castDecimalBoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2433,59 +135,59 @@ func GetCastOperator(
 			case types.IntFamily:
 				switch rightType.Width() {
 				case 16:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt16Int16Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case 32:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt16Int32Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt16Int64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt16BoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.DecimalFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt16DecimalOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt16Float64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2494,59 +196,59 @@ func GetCastOperator(
 			case types.IntFamily:
 				switch rightType.Width() {
 				case 16:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt32Int16Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case 32:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt32Int32Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt32Int64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt32BoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.DecimalFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt32DecimalOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt32Float64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2556,59 +258,59 @@ func GetCastOperator(
 			case types.IntFamily:
 				switch rightType.Width() {
 				case 16:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt64Int16Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case 32:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt64Int32Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt64Int64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt64BoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.DecimalFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt64DecimalOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.FloatFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castInt64Float64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2622,58 +324,58 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castFloat64Float64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.BoolFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castFloat64BoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.DecimalFamily:
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castFloat64DecimalOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			case types.IntFamily:
 				switch rightType.Width() {
 				case 16:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castFloat64Int16Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case 32:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castFloat64Int32Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castFloat64Int64Op{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2687,11 +389,11 @@ func GetCastOperator(
 				switch rightType.Width() {
 				case -1:
 				default:
-					return &castOp{
-						OneInputNode: NewOneInputNode(input),
-						allocator:    allocator,
-						colIdx:       colIdx,
-						outputIdx:    resultIdx,
+					return &castDatumBoolOp{
+						oneInputCloserHelper: makeOneInputCloserHelper(input),
+						allocator:            allocator,
+						colIdx:               colIdx,
+						outputIdx:            resultIdx,
 					}, nil
 				}
 			}
@@ -2701,13 +403,14 @@ func GetCastOperator(
 }
 
 type castOpNullAny struct {
-	OneInputNode
+	oneInputCloserHelper
+
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ colexecbase.Operator = &castOpNullAny{}
+var _ closableOperator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.input.Init()
@@ -2749,34 +452,3446 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-type castOp struct {
-	OneInputNode
+// TODO(yuzefovich): refactor castOp so that it is type-specific (meaning not
+// canonical type family specific, but actual type specific). This will
+// probably require changing the way we handle cast overloads as well.
+
+type castBoolBoolOp struct {
+	oneInputCloserHelper
+
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ colexecbase.Operator = &castOp{}
+var _ ResettableOperator = &castBoolBoolOp{}
+var _ closableOperator = &castBoolBoolOp{}
 
-func (c *castOp) Init() {
+func (c *castBoolBoolOp) Init() {
 	c.input.Init()
 }
 
-func (c *castOp) Next(ctx context.Context) coldata.Batch {
+func (c *castBoolBoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 	batch := c.input.Next(ctx)
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	vec := batch.ColVec(c.colIdx)
-	projVec := batch.ColVec(c.outputIdx)
-	if projVec.MaybeHasNulls() {
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
 		// output vector.
-		projVec.Nulls().UnsetNulls()
+		outputVec.Nulls().UnsetNulls()
 	}
 	c.allocator.PerformOperation(
-		[]coldata.Vec{projVec}, func() { cast(vec, projVec, n, batch.Selection()) },
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bool()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+							r = v
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+							r = v
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+						r = v
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+						r = v
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBoolFloat64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castBoolFloat64Op{}
+var _ closableOperator = &castBoolFloat64Op{}
+
+func (c *castBoolFloat64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castBoolFloat64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bool()
+			outputCol := outputVec.Float64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBoolInt16Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castBoolInt16Op{}
+var _ closableOperator = &castBoolInt16Op{}
+
+func (c *castBoolInt16Op) Init() {
+	c.input.Init()
+}
+
+func (c *castBoolInt16Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bool()
+			outputCol := outputVec.Int16()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int16
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int16
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBoolInt32Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castBoolInt32Op{}
+var _ closableOperator = &castBoolInt32Op{}
+
+func (c *castBoolInt32Op) Init() {
+	c.input.Init()
+}
+
+func (c *castBoolInt32Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bool()
+			outputCol := outputVec.Int32()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int32
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int32
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castBoolInt64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castBoolInt64Op{}
+var _ closableOperator = &castBoolInt64Op{}
+
+func (c *castBoolInt64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castBoolInt64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Bool()
+			outputCol := outputVec.Int64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							r = 0
+							if v {
+								r = 1
+							}
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int64
+
+						r = 0
+						if v {
+							r = 1
+						}
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalDecimalOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castDecimalDecimalOp{}
+var _ closableOperator = &castDecimalDecimalOp{}
+
+func (c *castDecimalDecimalOp) Init() {
+	c.input.Init()
+}
+
+func (c *castDecimalDecimalOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Decimal()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+							r = v
+							outputCol[i].Set(&r)
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+							r = v
+							outputCol[i].Set(&r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+						r = v
+						outputCol[i].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+						r = v
+						outputCol[i].Set(&r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDecimalBoolOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castDecimalBoolOp{}
+var _ closableOperator = &castDecimalBoolOp{}
+
+func (c *castDecimalBoolOp) Init() {
+	c.input.Init()
+}
+
+func (c *castDecimalBoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Decimal()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+							r = v.Sign() != 0
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+							r = v.Sign() != 0
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+						r = v.Sign() != 0
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+						r = v.Sign() != 0
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt16Int16Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt16Int16Op{}
+var _ closableOperator = &castInt16Int16Op{}
+
+func (c *castInt16Int16Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt16Int16Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt16Int16Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			outputCol := outputVec.Int16()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+							r = v
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+							r = v
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int16
+						r = v
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int16
+						r = v
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt16Int32Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt16Int32Op{}
+var _ closableOperator = &castInt16Int32Op{}
+
+func (c *castInt16Int32Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt16Int32Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt16Int32Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			outputCol := outputVec.Int32()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							r = int32(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							r = int32(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt16Int64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt16Int64Op{}
+var _ closableOperator = &castInt16Int64Op{}
+
+func (c *castInt16Int64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt16Int64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt16Int64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			outputCol := outputVec.Int64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							r = int64(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							r = int64(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt16BoolOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt16BoolOp{}
+var _ closableOperator = &castInt16BoolOp{}
+
+func (c *castInt16BoolOp) Init() {
+	c.input.Init()
+}
+
+func (c *castInt16BoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt16BoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt16DecimalOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt16DecimalOp{}
+var _ closableOperator = &castInt16DecimalOp{}
+
+func (c *castInt16DecimalOp) Init() {
+	c.input.Init()
+}
+
+func (c *castInt16DecimalOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			outputCol := outputVec.Decimal()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							r = *apd.New(int64(v), 0)
+
+							outputCol[i].Set(&r)
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							r = *apd.New(int64(v), 0)
+
+							outputCol[i].Set(&r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						r = *apd.New(int64(v), 0)
+
+						outputCol[i].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						r = *apd.New(int64(v), 0)
+
+						outputCol[i].Set(&r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt16Float64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt16Float64Op{}
+var _ closableOperator = &castInt16Float64Op{}
+
+func (c *castInt16Float64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt16Float64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt16Float64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int16()
+			outputCol := outputVec.Float64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = float64(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = float64(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt32Int16Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt32Int16Op{}
+var _ closableOperator = &castInt32Int16Op{}
+
+func (c *castInt32Int16Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt32Int16Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt32Int16Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			outputCol := outputVec.Int16()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							r = int16(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							r = int16(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt32Int32Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt32Int32Op{}
+var _ closableOperator = &castInt32Int32Op{}
+
+func (c *castInt32Int32Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt32Int32Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt32Int32Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			outputCol := outputVec.Int32()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+							r = v
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+							r = v
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int32
+						r = v
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int32
+						r = v
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt32Int64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt32Int64Op{}
+var _ closableOperator = &castInt32Int64Op{}
+
+func (c *castInt32Int64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt32Int64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt32Int64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			outputCol := outputVec.Int64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							r = int64(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							r = int64(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int64
+
+						r = int64(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt32BoolOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt32BoolOp{}
+var _ closableOperator = &castInt32BoolOp{}
+
+func (c *castInt32BoolOp) Init() {
+	c.input.Init()
+}
+
+func (c *castInt32BoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt32BoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt32DecimalOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt32DecimalOp{}
+var _ closableOperator = &castInt32DecimalOp{}
+
+func (c *castInt32DecimalOp) Init() {
+	c.input.Init()
+}
+
+func (c *castInt32DecimalOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			outputCol := outputVec.Decimal()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							r = *apd.New(int64(v), 0)
+
+							outputCol[i].Set(&r)
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							r = *apd.New(int64(v), 0)
+
+							outputCol[i].Set(&r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						r = *apd.New(int64(v), 0)
+
+						outputCol[i].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						r = *apd.New(int64(v), 0)
+
+						outputCol[i].Set(&r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt32Float64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt32Float64Op{}
+var _ closableOperator = &castInt32Float64Op{}
+
+func (c *castInt32Float64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt32Float64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt32Float64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int32()
+			outputCol := outputVec.Float64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = float64(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = float64(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt64Int16Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt64Int16Op{}
+var _ closableOperator = &castInt64Int16Op{}
+
+func (c *castInt64Int16Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt64Int16Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt64Int16Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			outputCol := outputVec.Int16()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							r = int16(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							r = int16(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int16
+
+						r = int16(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt64Int32Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt64Int32Op{}
+var _ closableOperator = &castInt64Int32Op{}
+
+func (c *castInt64Int32Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt64Int32Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt64Int32Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			outputCol := outputVec.Int32()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							r = int32(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							r = int32(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int32
+
+						r = int32(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt64Int64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt64Int64Op{}
+var _ closableOperator = &castInt64Int64Op{}
+
+func (c *castInt64Int64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt64Int64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt64Int64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			outputCol := outputVec.Int64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+							r = v
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+							r = v
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int64
+						r = v
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int64
+						r = v
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt64BoolOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt64BoolOp{}
+var _ closableOperator = &castInt64BoolOp{}
+
+func (c *castInt64BoolOp) Init() {
+	c.input.Init()
+}
+
+func (c *castInt64BoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt64BoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt64DecimalOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt64DecimalOp{}
+var _ closableOperator = &castInt64DecimalOp{}
+
+func (c *castInt64DecimalOp) Init() {
+	c.input.Init()
+}
+
+func (c *castInt64DecimalOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			outputCol := outputVec.Decimal()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							r = *apd.New(int64(v), 0)
+
+							outputCol[i].Set(&r)
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							r = *apd.New(int64(v), 0)
+
+							outputCol[i].Set(&r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						r = *apd.New(int64(v), 0)
+
+						outputCol[i].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						r = *apd.New(int64(v), 0)
+
+						outputCol[i].Set(&r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castInt64Float64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castInt64Float64Op{}
+var _ closableOperator = &castInt64Float64Op{}
+
+func (c *castInt64Float64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castInt64Float64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castInt64Float64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Int64()
+			outputCol := outputVec.Float64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = float64(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+
+							r = float64(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r float64
+
+						r = float64(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castFloat64Float64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castFloat64Float64Op{}
+var _ closableOperator = &castFloat64Float64Op{}
+
+func (c *castFloat64Float64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castFloat64Float64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			outputCol := outputVec.Float64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+							r = v
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r float64
+							r = v
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r float64
+						r = v
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r float64
+						r = v
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castFloat64BoolOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castFloat64BoolOp{}
+var _ closableOperator = &castFloat64BoolOp{}
+
+func (c *castFloat64BoolOp) Init() {
+	c.input.Init()
+}
+
+func (c *castFloat64BoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castFloat64BoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							r = v != 0
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+
+						r = v != 0
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castFloat64DecimalOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castFloat64DecimalOp{}
+var _ closableOperator = &castFloat64DecimalOp{}
+
+func (c *castFloat64DecimalOp) Init() {
+	c.input.Init()
+}
+
+func (c *castFloat64DecimalOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			outputCol := outputVec.Decimal()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							{
+								var tmpDec apd.Decimal
+								_, tmpErr := tmpDec.SetFloat64(float64(v))
+								if tmpErr != nil {
+									colexecerror.ExpectedError(tmpErr)
+								}
+								r = tmpDec
+							}
+
+							outputCol[i].Set(&r)
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r apd.Decimal
+
+							{
+								var tmpDec apd.Decimal
+								_, tmpErr := tmpDec.SetFloat64(float64(v))
+								if tmpErr != nil {
+									colexecerror.ExpectedError(tmpErr)
+								}
+								r = tmpDec
+							}
+
+							outputCol[i].Set(&r)
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						{
+							var tmpDec apd.Decimal
+							_, tmpErr := tmpDec.SetFloat64(float64(v))
+							if tmpErr != nil {
+								colexecerror.ExpectedError(tmpErr)
+							}
+							r = tmpDec
+						}
+
+						outputCol[i].Set(&r)
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r apd.Decimal
+
+						{
+							var tmpDec apd.Decimal
+							_, tmpErr := tmpDec.SetFloat64(float64(v))
+							if tmpErr != nil {
+								colexecerror.ExpectedError(tmpErr)
+							}
+							r = tmpDec
+						}
+
+						outputCol[i].Set(&r)
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castFloat64Int16Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castFloat64Int16Op{}
+var _ closableOperator = &castFloat64Int16Op{}
+
+func (c *castFloat64Int16Op) Init() {
+	c.input.Init()
+}
+
+func (c *castFloat64Int16Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			outputCol := outputVec.Int16()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int16(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int16
+
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int16(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int16
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int16(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int16
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int16(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castFloat64Int32Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castFloat64Int32Op{}
+var _ closableOperator = &castFloat64Int32Op{}
+
+func (c *castFloat64Int32Op) Init() {
+	c.input.Init()
+}
+
+func (c *castFloat64Int32Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			outputCol := outputVec.Int32()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int32(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int32
+
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int32(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int32
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int32(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int32
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int32(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castFloat64Int64Op struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castFloat64Int64Op{}
+var _ closableOperator = &castFloat64Int64Op{}
+
+func (c *castFloat64Int64Op) Init() {
+	c.input.Init()
+}
+
+func (c *castFloat64Int64Op) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Float64()
+			outputCol := outputVec.Int64()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(v)
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r int64
+
+							if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+							}
+							r = int64(v)
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r int64
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int64(v)
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol[0:n]
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r int64
+
+						if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+							colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+						}
+						r = int64(v)
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type castDatumBoolOp struct {
+	oneInputCloserHelper
+
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+}
+
+var _ ResettableOperator = &castDatumBoolOp{}
+var _ closableOperator = &castDatumBoolOp{}
+
+func (c *castDatumBoolOp) Init() {
+	c.input.Init()
+}
+
+func (c *castDatumBoolOp) reset(ctx context.Context) {
+	if r, ok := c.input.(resetter); ok {
+		r.reset(ctx)
+	}
+}
+
+func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{outputVec}, func() {
+			inputCol := inputVec.Datum()
+			outputCol := outputVec.Bool()
+			if inputVec.MaybeHasNulls() {
+				inputNulls := inputVec.Nulls()
+				outputNulls := outputVec.Nulls()
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = _castedDatum == tree.DBoolTrue
+							}
+
+							outputCol[i] = r
+						}
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol.Slice(0, n)
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						if inputNulls.NullAt(i) {
+							outputNulls.SetNull(i)
+						} else {
+							v := inputCol.Get(i)
+							var r bool
+
+							{
+								_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+								r = _castedDatum == tree.DBoolTrue
+							}
+
+							outputCol[i] = r
+						}
+					}
+				}
+			} else {
+				if sel != nil {
+					sel = sel[:n]
+					for _, i := range sel {
+						v := inputCol.Get(i)
+						var r bool
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _castedDatum == tree.DBoolTrue
+						}
+
+						outputCol[i] = r
+					}
+				} else {
+					// Remove bounds checks for inputCol[i] and outputCol[i].
+					inputCol = inputCol.Slice(0, n)
+					_ = inputCol.Get(n - 1)
+					_ = outputCol.Get(n - 1)
+					for i := 0; i < n; i++ {
+						v := inputCol.Get(i)
+						var r bool
+
+						{
+							_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							r = _castedDatum == tree.DBoolTrue
+						}
+
+						outputCol[i] = r
+					}
+				}
+			}
+		},
 	)
 	return batch
 }
