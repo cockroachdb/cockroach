@@ -441,6 +441,9 @@ func (rf *cFetcher) Init(
 	}
 
 	rf.table = table
+	// Change the allocation size to be the same as the capacity of the batch
+	// we allocated above.
+	rf.table.da.AllocSize = coldata.BatchSize()
 
 	return nil
 }

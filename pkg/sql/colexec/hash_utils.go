@@ -131,6 +131,12 @@ func (d *tupleHashDistributor) distribute(
 	n := b.Length()
 	initHash(d.buckets, n, d.initHashValue)
 
+	// Check if we received a batch with more tuples than the current
+	// allocation size and increase it if so.
+	if n > d.datumAlloc.AllocSize {
+		d.datumAlloc.AllocSize = n
+	}
+
 	for _, i := range hashCols {
 		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.overloadHelper, &d.datumAlloc)
 	}
