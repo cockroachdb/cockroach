@@ -198,6 +198,14 @@ const (
 // TestServer.
 type TestTenantArgs struct {
 	TenantID roachpb.TenantID
+
+	// TenantInfo is the metadata used if creating a tenant.
+	TenantInfo []byte
+
+	// Existing, if true, indicates an existing tenant, rather than a new tenant
+	// to be created by StartTenant.
+	Existing bool
+
 	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
 	// cluster settings.
 	AllowSettingClusterSettings bool

@@ -555,6 +555,11 @@ func WriteDescriptors(
 // same interleave parent row) we'll generate some no-op splits and route the
 // work to the same range, but the actual imported data is unaffected.
 func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
+	// TODO(dt): support rewriting tenant keys.
+	if bytes.HasPrefix(key, keys.TenantPrefix) {
+		return key, nil
+	}
+
 	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...), true /* isFromSpan */)
 	if err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -1019,6 +1024,13 @@ func createImportingDescriptors(
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 
+			for _, tenant := range details.Tenants {
+				const inactive = false
+				if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, tenant.ID, inactive, tenant.Info); err != nil {
+					return err
+				}
+			}
+
 			details.PrepareCompleted = true
 			details.TableDescs = tableDescs
 
@@ -1075,17 +1087,22 @@ func (r *restoreResumer) Resume(
 	}
 	r.latestStats = remapRelevantStatistics(backupStats, details.DescriptorRewrites)
 
-	if len(r.tables) == 0 {
+	if len(r.tables) == 0 && len(details.Tenants) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
-		log.Warning(ctx, "no tables to restore")
+		log.Warning(ctx, "nothing to restore")
 		return nil
 	}
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
 		return err
+	}
+
+	for _, tenant := range details.Tenants {
+		prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenant.ID))
+		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	}
 
 	res, err := restore(
@@ -1221,6 +1238,12 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			return errors.Wrap(err, "publishing tables")
 		}
 
+		for _, tenant := range details.Tenants {
+			if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
+				return err
+			}
+		}
+
 		// Update and persist the state of the job.
 		details.TablesPublished = true
 		details.TableDescs = newTables
@@ -1268,8 +1291,17 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
 
+	details := r.job.Details().(jobspb.RestoreDetails)
+
 	execCfg := phs.(sql.PlanHookState).ExecCfg()
 	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		for _, tenant := range details.Tenants {
+			// TODO(dt): this is a noop since the tenant is already active=false but
+			// that should be fixed in DestroyTenant.
+			if err := sql.DestroyTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
+				return err
+			}
+		}
 		return r.dropTables(ctx, execCfg.JobRegistry, txn)
 	})
 }
