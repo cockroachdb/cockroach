@@ -189,12 +189,7 @@ func (im *Implicator) FiltersImplyPredicate(
 
 	// Populate the constraint cache with any constraints already generated for
 	// FiltersItems that are atoms.
-	for _, f := range filters {
-		op := f.Condition.Op()
-		if f.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
-			im.cacheConstraint(f.Condition, f.ScalarProps().Constraints, f.ScalarProps().TightConstraints)
-		}
-	}
+	im.warmCache(filters, predicate)
 
 	// If no exact match was found, recursively check the sub-expressions of the
 	// filters and predicate. Use exactMatches to keep track of expressions in
@@ -452,6 +447,25 @@ func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (_ *constraint.Set, tigh
 		return res.c, res.tight, true
 	}
 	return nil, false, false
+}
+
+// warmCache adds atom constraints of filters and pred to the cache. This
+// prevents rebuilding constraints that have already have been built, reducing
+// the overhead of proving implication.
+func (im *Implicator) warmCache(filters memo.FiltersExpr, pred *memo.FiltersItem) {
+	// Cache the predicate constraint if it is an atom.
+	op := pred.Condition.Op()
+	if pred.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
+		im.cacheConstraint(pred.Condition, pred.ScalarProps().Constraints, pred.ScalarProps().TightConstraints)
+	}
+
+	// Cache any constraints already generated for FiltersItems filters.
+	for _, f := range filters {
+		op := f.Condition.Op()
+		if f.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
+			im.cacheConstraint(f.Condition, f.ScalarProps().Constraints, f.ScalarProps().TightConstraints)
+		}
+	}
 }
 
 // simplifyFiltersExpr returns a new FiltersExpr with any expressions in e that
