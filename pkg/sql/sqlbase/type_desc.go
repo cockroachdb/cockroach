@@ -49,8 +49,8 @@ func GetTypeDescFromID(
 type TypeDescriptorInterface interface {
 	BaseDescriptorInterface
 	TypeDesc() *TypeDescriptor
-	HydrateTypeInfoWithName(typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc) error
-	MakeTypesT(name *tree.TypeName, typeLookup TypeLookupFunc) (*types.T, error)
+	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, resolver TypeIDResolver) error
+	MakeTypesT(ctx context.Context, name *tree.TypeName, resolver TypeIDResolver) (*types.T, error)
 }
 
 var _ TypeDescriptorInterface = (*ImmutableTypeDescriptor)(nil)
@@ -190,18 +190,18 @@ func (desc *MutableTypeDescriptor) Immutable() DescriptorInterface {
 
 // MakeTypesT creates a types.T from the input type descriptor.
 func (desc *ImmutableTypeDescriptor) MakeTypesT(
-	name *tree.TypeName, typeLookup TypeLookupFunc,
+	ctx context.Context, name *tree.TypeName, resolver TypeIDResolver,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
 	case TypeDescriptor_ENUM:
 		typ := types.MakeEnum(uint32(desc.GetID()), uint32(desc.ArrayTypeID))
-		if err := desc.HydrateTypeInfoWithName(typ, name, typeLookup); err != nil {
+		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, resolver); err != nil {
 			return nil, err
 		}
 		return typ, nil
 	case TypeDescriptor_ALIAS:
 		// Hydrate the alias and return it.
-		if err := desc.HydrateTypeInfoWithName(desc.Alias, name, typeLookup); err != nil {
+		if err := desc.HydrateTypeInfoWithName(ctx, desc.Alias, name, resolver); err != nil {
 			return nil, err
 		}
 		return desc.Alias, nil
@@ -211,23 +211,41 @@ func (desc *ImmutableTypeDescriptor) MakeTypesT(
 }
 
 // TypeLookupFunc is a type alias for a function that looks up a type by ID.
-type TypeLookupFunc func(id ID) (*tree.TypeName, TypeDescriptorInterface, error)
+type TypeLookupFunc func(ctx context.Context, id ID) (*tree.TypeName, TypeDescriptorInterface, error)
+
+// GetTypeDescByID implements the TypeIDResolver interface.
+func (t TypeLookupFunc) GetTypeDescByID(
+	ctx context.Context, id ID,
+) (*tree.TypeName, TypeDescriptorInterface, error) {
+	return t(ctx, id)
+}
+
+// TypeIDResolver is an interface for accessing TypeDescriptor's by ID. It is
+// slightly different than tree.TypeReferenceResolver as it has the power to
+// return actual TypeDescriptors, rather than just types.T's.
+type TypeIDResolver interface {
+	// GetTypeDescByID returns a TypeName and TypeDescriptor that correspond to
+	// a desired ID.
+	GetTypeDescByID(ctx context.Context, id ID) (*tree.TypeName, TypeDescriptorInterface, error)
+}
 
 // HydrateTypesInTableDescriptor uses typeLookup to install metadata in the
 // types present in a table descriptor. typeLookup retrieves the fully
 // qualified name and descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupFunc) error {
+func HydrateTypesInTableDescriptor(
+	ctx context.Context, desc *TableDescriptor, resolver TypeIDResolver,
+) error {
 	hydrateCol := func(col *ColumnDescriptor) error {
 		if col.Type.UserDefined() {
 			// Look up its type descriptor.
-			name, typDesc, err := typeLookup(ID(col.Type.StableTypeID()))
+			name, typDesc, err := resolver.GetTypeDescByID(ctx, ID(col.Type.StableTypeID()))
 			if err != nil {
 				return err
 			}
 			// TODO (rohany): This should be a noop if the hydrated type
 			//  information present in the descriptor has the same version as
 			//  the resolved type descriptor we found here.
-			if err := typDesc.HydrateTypeInfoWithName(col.Type, name, typeLookup); err != nil {
+			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, name, resolver); err != nil {
 				return err
 			}
 		}
@@ -253,9 +271,15 @@ func HydrateTypesInTableDescriptor(desc *TableDescriptor, typeLookup TypeLookupF
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
 func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
-	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
+	ctx context.Context, typ *types.T, name *tree.TypeName, resolver TypeIDResolver,
 ) error {
-	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
+	typ.TypeMeta.Name = &types.UserDefinedTypeName{
+		ExplicitCatalog: name.ExplicitCatalog,
+		Catalog:         name.Catalog(),
+		ExplicitSchema:  name.ExplicitSchema,
+		Schema:          name.Schema(),
+		Name:            name.Type(),
+	}
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
@@ -279,11 +303,11 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				elemTypName, elemTypDesc, err := typeLookup(ID(elemType.StableTypeID()))
+				elemTypName, elemTypDesc, err := resolver.GetTypeDescByID(ctx, ID(elemType.StableTypeID()))
 				if err != nil {
 					return err
 				}
-				if err := elemTypDesc.HydrateTypeInfoWithName(elemType, elemTypName, typeLookup); err != nil {
+				if err := elemTypDesc.HydrateTypeInfoWithName(ctx, elemType, elemTypName, resolver); err != nil {
 					return err
 				}
 				return nil

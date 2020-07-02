@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -326,7 +327,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// Since we are constructing an EvalContext on a remote node, outfit it
 		// with a DistSQLTypeResolver.
-		evalCtx.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCtx}
+		evalCtx.TypeResolver = execinfrapb.MakeNewDistSQLTypeResolver(evalCtx, ds.ServerConfig.LeaseManager.(*lease.Manager))
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		var haveSequences bool

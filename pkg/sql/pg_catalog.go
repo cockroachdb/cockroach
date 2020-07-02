@@ -2765,8 +2765,9 @@ CREATE TABLE pg_catalog.pg_type (
 
 				return forEachTypeDesc(ctx, p, dbContext, func(_ *sqlbase.ImmutableDatabaseDescriptor, _ string, typDesc *sqlbase.ImmutableTypeDescriptor) error {
 					typ, err := typDesc.MakeTypesT(
+						ctx,
 						tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())),
-						p.makeTypeLookupFn(ctx),
+						p,
 					)
 					if err != nil {
 						return err

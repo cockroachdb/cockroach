@@ -15,9 +15,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -76,11 +75,32 @@ func ConvertToMappedSpecOrdering(
 }
 
 // DistSQLTypeResolver implements tree.ResolvableTypeReference for accessing
-// type information during DistSQL query evaluation.
+// type information during DistSQL query evaluation. This should not be
+// constructed directly. The DistSQLTypeResolver should not be used in
+// situations where a type modified or created in the current transaction could
+// be resolved. Because the DistSQLTypeResolver attempts to acquire leases on
+// the resolved types, types modified in the current transaction will cause
+// a conflict with the transaction that acquires the leases. The
+// DistSQLTypeResolver is not safe for concurrent usage.
 type DistSQLTypeResolver struct {
 	EvalContext *tree.EvalContext
-	// TODO (rohany): This struct should locally cache id -> types.T here
-	//  so that repeated lookups do not incur additional KV operations.
+	LeaseMgr    *lease.Manager
+	// resolvedDescs is a local cache of resolved descriptors to avoid asking
+	// the lease manager for descriptors once they have been resolved.
+	resolvedDescs map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor
+}
+
+var _ sqlbase.TypeIDResolver = &DistSQLTypeResolver{}
+
+// MakeNewDistSQLTypeResolver creates a new DistSQLTypeResolver.
+func MakeNewDistSQLTypeResolver(
+	ctx *tree.EvalContext, leaseMgr *lease.Manager,
+) *DistSQLTypeResolver {
+	return &DistSQLTypeResolver{
+		EvalContext:   ctx,
+		LeaseMgr:      leaseMgr,
+		resolvedDescs: make(map[sqlbase.ID]*sqlbase.ImmutableTypeDescriptor),
+	}
 }
 
 // ResolveType implements tree.ResolvableTypeReference.
@@ -90,38 +110,63 @@ func (tr *DistSQLTypeResolver) ResolveType(
 	return nil, errors.AssertionFailedf("cannot resolve types in DistSQL by name")
 }
 
-func makeTypeLookupFunc(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) sqlbase.TypeLookupFunc {
-	return func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
-	}
-}
-
 // ResolveTypeByID implements tree.ResolvableTypeReference.
 func (tr *DistSQLTypeResolver) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	// TODO (rohany): This should eventually look into the set of cached type
-	//  descriptors before attempting to access it here.
-	lookup := makeTypeLookupFunc(ctx, tr.EvalContext.Txn, tr.EvalContext.Codec)
-	name, typDesc, err := lookup(sqlbase.ID(id))
+	name, typeDesc, err := tr.GetTypeDescByID(ctx, sqlbase.ID(id))
 	if err != nil {
 		return nil, err
 	}
-	return typDesc.MakeTypesT(name, lookup)
+	return typeDesc.MakeTypesT(ctx, name, tr)
+}
+
+// GetTypeDescByID implements the sqlbase.TypeIDResolver interface.
+func (tr *DistSQLTypeResolver) GetTypeDescByID(
+	ctx context.Context, id sqlbase.ID,
+) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	var typeDesc *sqlbase.ImmutableTypeDescriptor
+	// First look in the local cache.
+	if desc, ok := tr.resolvedDescs[id]; ok {
+		typeDesc = desc
+	} else {
+		// Otherwise, check if we have a lease, and maybe acquire one.
+		rawDesc, _, err := tr.LeaseMgr.Acquire(ctx, tr.EvalContext.Txn.ReadTimestamp(), id)
+		if err != nil {
+			return nil, nil, err
+		}
+		var ok bool
+		typeDesc, ok = rawDesc.(*sqlbase.ImmutableTypeDescriptor)
+		if !ok {
+			return nil, nil, errors.AssertionFailedf("%d was not a type, but a %T", id, rawDesc)
+		}
+	}
+	// Note that we don't attempt to construct a fully qualified name here, as
+	// that would involve resolved the parent schema and database.
+	typeName := tree.NewUnqualifiedTypeName(tree.Name(typeDesc.Name))
+	return typeName, typeDesc, nil
 }
 
 // HydrateTypeSlice hydrates all user defined types in an input slice of types.
 func HydrateTypeSlice(evalCtx *tree.EvalContext, typs []*types.T) error {
-	// TODO (rohany): This should eventually look into the set of cached type
-	//  descriptors before attempting to access it here.
-	lookup := makeTypeLookupFunc(evalCtx.Context, evalCtx.Txn, evalCtx.Codec)
+	var res sqlbase.TypeIDResolver
+	// If the type resolver provides a TypeLookupFunc, then use it.
+	if tr, ok := evalCtx.TypeResolver.(sqlbase.TypeIDResolver); ok {
+		res = tr
+	} else {
+		// Otherwise, fall back to a slow type lookup function that uses the
+		// current transaction.
+		lookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+			return resolver.ResolveTypeDescByID(ctx, evalCtx.Txn, evalCtx.Codec, id, tree.ObjectLookupFlags{})
+		}
+		res = sqlbase.TypeLookupFunc(lookup)
+	}
+
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, typDesc, err := lookup(sqlbase.ID(t.StableTypeID()))
+			name, typDesc, err := res.GetTypeDescByID(evalCtx.Context, sqlbase.ID(t.StableTypeID()))
 			if err != nil {
 				return err
 			}
-			if err := typDesc.HydrateTypeInfoWithName(t, name, lookup); err != nil {
+			if err := typDesc.HydrateTypeInfoWithName(evalCtx.Context, t, name, res); err != nil {
 				return err
 			}
 		}

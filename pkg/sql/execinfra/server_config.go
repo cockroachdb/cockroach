@@ -137,7 +137,7 @@ type ServerConfig struct {
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
 
-	// LeaseManager is a *sql.LeaseManager. It's stored as an `interface{}` due
+	// LeaseManager is a *lease.Manager. It's stored as an `interface{}` due
 	// to package dependency cycles
 	LeaseManager interface{}
 

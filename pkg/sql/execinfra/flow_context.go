@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,7 +72,18 @@ type FlowCtx struct {
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 	evalCopy := ctx.EvalCtx.Copy()
-	evalCopy.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCopy}
+	// We don't want to overwrite the existing type resolver if the flow is local
+	// and the existing type resolver is set. In this case, the planner is the
+	// embedded type resolver, and is used to avoid attempting to take a lease
+	// on modified types in the same transaction.
+	if !ctx.Local || evalCopy.TypeResolver == nil {
+		// In some tests, the FlowContext's Cfg and LeaseManager are nil.
+		// TODO (rohany): This was happening in some logictests, when EXPLAIN
+		//  ANALYZE (DISTSQL) ... was used. That doesn't sound right?
+		if ctx.Cfg != nil && ctx.Cfg.LeaseManager != nil {
+			evalCopy.TypeResolver = execinfrapb.MakeNewDistSQLTypeResolver(evalCopy, ctx.Cfg.LeaseManager.(*lease.Manager))
+		}
+	}
 	return evalCopy
 }
 

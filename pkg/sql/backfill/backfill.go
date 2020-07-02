@@ -380,7 +380,6 @@ func (ib *IndexBackfiller) Init(
 	}
 
 	// Hydrate types used by the backfiller.
-	// TODO (rohany): As part of #49261, this needs to use cached enum data.
 	if evalCtx.Txn != nil {
 		// If the evalCtx has a transaction (if the schema change is running on a
 		// new table within a transaction), then use that.

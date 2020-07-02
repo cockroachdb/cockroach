@@ -151,6 +151,13 @@ func (p *planner) createDescriptorWithID(
 		}
 	}
 
+	// Add the uncommitted type.
+	if mutType, ok := descriptor.(*sqlbase.MutableTypeDescriptor); ok {
+		if err := p.Tables().AddUncommittedType(*mutType); err != nil {
+			return err
+		}
+	}
+
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}

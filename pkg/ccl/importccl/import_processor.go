@@ -136,8 +136,6 @@ func makeInputConverter(
 		// Otherwise, open up a new transaction to hydrate type metadata.
 		// We only perform this logic if evalCtx.DB != nil because there are
 		// some tests that pass an evalCtx with a nil DB to this function.
-		// TODO (rohany): Once we lease type descriptors, this should instead
-		//  look into the leased set using the DistSQLTypeResolver.
 		if err := evalCtx.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			evalCtx.Txn = txn
 			return installTypeMetadata(evalCtx)

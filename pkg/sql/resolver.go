@@ -142,12 +142,6 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
-func (p *planner) makeTypeLookupFn(ctx context.Context) sqlbase.TypeLookupFunc {
-	return func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
-		return resolver.ResolveTypeDescByID(ctx, p.txn, p.ExecCfg().Codec, id, tree.ObjectLookupFlags{})
-	}
-}
-
 // ResolveType implements the TypeReferenceResolver interface.
 func (p *planner) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
@@ -163,7 +157,7 @@ func (p *planner) ResolveType(
 	if err != nil {
 		return nil, err
 	}
-	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
+	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
 	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
 
 	// Disllow cross-database type resolution. Note that we check
@@ -179,24 +173,32 @@ func (p *planner) ResolveType(
 			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
 	}
 
-	return tdesc.MakeTypesT(&tn, p.makeTypeLookupFn(ctx))
+	return tdesc.MakeTypesT(ctx, &tn, p)
 }
 
 // ResolveTypeByID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error) {
-	name, desc, err := resolver.ResolveTypeDescByID(
+	name, desc, err := p.GetTypeDescByID(ctx, sqlbase.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return desc.MakeTypesT(ctx, name, p)
+}
+
+// GetTypeDescByID implements the sqlbase.TypeIDResolver interface.
+func (p *planner) GetTypeDescByID(
+	ctx context.Context, id sqlbase.ID,
+) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+	// TODO (rohany): This will look into the set of cached type descriptors.
+	return resolver.ResolveTypeDescByID(
 		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
-		sqlbase.ID(id),
+		id,
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{Required: true},
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	return desc.MakeTypesT(name, p.makeTypeLookupFn(ctx))
 }
 
 // maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.
@@ -211,7 +213,7 @@ func (p *planner) maybeHydrateTypesInDescriptor(
 	if tableDesc == nil {
 		return nil
 	}
-	return sqlbase.HydrateTypesInTableDescriptor(tableDesc, p.makeTypeLookupFn(ctx))
+	return sqlbase.HydrateTypesInTableDescriptor(ctx, tableDesc, p)
 }
 
 // ObjectLookupFlags is part of the resolver.SchemaResolver interface.

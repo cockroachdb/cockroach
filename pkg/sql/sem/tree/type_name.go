@@ -74,21 +74,14 @@ func NewUnqualifiedTypeName(typ Name) *TypeName {
 	}}
 }
 
-// MakeTypeNameFromPrefix creates a type name from an unqualified name
-// and a resolved prefix.
-func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
-	return TypeName{objName{
-		ObjectNamePrefix: prefix,
-		ObjectName:       object,
-	}}
-}
-
 // MakeNewQualifiedTypeName creates a fully qualified type name.
 func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 	return TypeName{objName{
 		ObjectNamePrefix: ObjectNamePrefix{
-			CatalogName: Name(db),
-			SchemaName:  Name(schema),
+			ExplicitCatalog: true,
+			CatalogName:     Name(db),
+			ExplicitSchema:  true,
+			SchemaName:      Name(schema),
 		},
 		ObjectName: Name(typ),
 	}}
@@ -96,7 +89,9 @@ func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
 
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into
-// *types.T's.
+// *types.T's. Implementers of TypeReferenceResolver should also implement
+// sqlbase.TypeIDResolver if sqlbase.TypeDescriptor is the metadata
+// representation of user defined types.
 type TypeReferenceResolver interface {
 	ResolveType(ctx context.Context, name *UnresolvedObjectName) (*types.T, error)
 	ResolveTypeByID(ctx context.Context, id uint32) (*types.T, error)

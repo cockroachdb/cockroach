@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -49,6 +50,14 @@ func runImport(
 	kvCh := make(chan row.KVBatch, 10)
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.DB = flowCtx.Cfg.DB
+	if flowCtx.Cfg.LeaseManager != nil {
+		// If this import happened to be planned locally, the type resolver installed
+		// in evalCtx is a planner that doesn't have a transaction. Type resolution
+		// through this transaction-less planner will error out, so ensure that the
+		// type resolver is a DistSQLTypeResolver whose transactions will be managed
+		// by the import processor itself.
+		evalCtx.TypeResolver = execinfrapb.MakeNewDistSQLTypeResolver(evalCtx, flowCtx.Cfg.LeaseManager.(*lease.Manager))
+	}
 	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh)
 	if err != nil {
 		return nil, err

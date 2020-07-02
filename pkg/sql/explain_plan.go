@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -193,6 +194,13 @@ func populateExplain(
 		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)
+	// TODO (rohany): Should we do this for explain plans too?
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if params.p.Tables().HasUncommittedTypes() {
+		distribution = physicalplan.LocalPlan
+	}
 	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, stmtType, plan.subqueryPlans, distribution)

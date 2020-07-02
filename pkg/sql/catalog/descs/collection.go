@@ -113,6 +113,9 @@ type Collection struct {
 	// an uncommitted transaction.
 	uncommittedDatabases []UncommittedDatabase
 
+	// Same as uncommittedTables, but applying to types.
+	uncommittedTypes []*sqlbase.MutableTypeDescriptor
+
 	// allDescriptors is a slice of all available descriptors. The descriptors
 	// are cached to avoid repeated lookups by users like virtual tables. The
 	// cache is purged whenever events would cause a scan of all descriptors to
@@ -538,6 +541,7 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommittedTables = nil
 	tc.uncommittedDatabases = nil
+	tc.uncommittedTypes = nil
 	tc.releaseAllDescriptors()
 }
 
@@ -572,6 +576,23 @@ func (tc *Collection) WaitForCacheToDropDatabases(ctx context.Context) {
 				return dbID > uc.id
 			})
 	}
+}
+
+// HasUncommittedTypes returns true if the Collection contains uncommitted
+// tables.
+func (tc *Collection) HasUncommittedTypes() bool {
+	return len(tc.uncommittedTypes) > 0
+}
+
+// AddUncommittedType adds desc to the Collection.
+func (tc *Collection) AddUncommittedType(desc sqlbase.MutableTypeDescriptor) error {
+	if desc.ClusterVersion != nil && desc.Version != desc.ClusterVersion.Version+1 {
+		return errors.Errorf(
+			"descriptor version %d not incremented from cluster version %d",
+			desc.Version, desc.ClusterVersion.Version)
+	}
+	tc.uncommittedTypes = append(tc.uncommittedTypes, &desc)
+	return nil
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
@@ -776,7 +797,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Since we just scanned all the descriptors, we already have everything
 			// we need to hydrate our types. Set up an accessor for the type hydration
 			// method to look into the scanned set of descriptors.
-			typeLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+			typeLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
 				if dbDesc == nil {
@@ -798,7 +819,7 @@ func (tc *Collection) GetAllDescriptors(
 			for i := range descs {
 				desc := descs[i]
 				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
-					if err := sqlbase.HydrateTypesInTableDescriptor(tblDesc.TableDesc(), typeLookup); err != nil {
+					if err := sqlbase.HydrateTypesInTableDescriptor(ctx, tblDesc.TableDesc(), sqlbase.TypeLookupFunc(typeLookup)); err != nil {
 						// If we ran into an error hydrating the types, that means that we
 						// have some sort of corrupted descriptor state. Rather than disable
 						// uses of GetAllDescriptors, just log the error.

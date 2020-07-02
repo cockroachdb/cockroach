@@ -563,7 +563,7 @@ func (sc *SchemaChanger) validateConstraints(
 				evalCtx.Txn = txn
 				semaCtx := tree.MakeSemaContext()
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
-				semaCtx.TypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: &evalCtx.EvalContext}
+				semaCtx.TypeResolver = execinfrapb.MakeNewDistSQLTypeResolver(&evalCtx.EvalContext, sc.leaseMgr)
 				switch c.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
 					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
@@ -659,10 +659,10 @@ func (sc *SchemaChanger) truncateIndexes(
 				// Hydrate types used in the retrieved table.
 				// TODO (rohany): This can be removed once table access from the
 				//  desc.Collection returns tables with hydrated types.
-				typLookup := func(id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
+				typLookup := func(ctx context.Context, id sqlbase.ID) (*tree.TypeName, sqlbase.TypeDescriptorInterface, error) {
 					return resolver.ResolveTypeDescByID(ctx, txn, sc.execCfg.Codec, id, tree.ObjectLookupFlags{})
 				}
-				if err := sqlbase.HydrateTypesInTableDescriptor(tableDesc.TableDesc(), typLookup); err != nil {
+				if err := sqlbase.HydrateTypesInTableDescriptor(ctx, tableDesc.TableDesc(), sqlbase.TypeLookupFunc(typLookup)); err != nil {
 					return err
 				}
 
