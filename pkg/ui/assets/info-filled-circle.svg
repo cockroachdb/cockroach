@@ -1,0 +1,5 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M0 10C0 4.47726 4.47726 0 10 0C15.5227 0 20 4.47726 20 10C20 15.5227 15.5227 20 10 20C4.47726 20 0 15.5227 0 10Z" fill="#0788FF"/>
+<rect x="10.833" y="15" width="1.66667" height="6.66667" rx="0.833334" transform="rotate(180 10.833 15)" fill="white"/>
+<ellipse cx="9.99967" cy="5.83329" rx="0.833334" ry="0.833333" transform="rotate(180 9.99967 5.83329)" fill="white"/>
+</svg>
