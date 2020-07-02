@@ -678,6 +678,7 @@ func (r *DistSQLReceiver) Push(
 		}
 		if len(meta.TraceData) > 0 {
 			span := opentracing.SpanFromContext(r.ctx)
+
 			if span == nil {
 				r.resultWriter.SetError(
 					errors.New("trying to ingest remote spans but there is no recording span set up"))
