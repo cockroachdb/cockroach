@@ -33,6 +33,18 @@ SELECT k FROM geo_table WHERE ST_CoveredBy('POINT(4.0 4.5)'::geometry, geom) ORD
 ----
 6
 
+query I
+SELECT k FROM geo_table WHERE ST_Intersects('POINT(2.5 2.5)'::geometry, geom) ORDER BY k
+----
+6
+
+query I
+SELECT k FROM geo_table WHERE ST_DWithin('POINT(2.5 2.5)'::geometry, geom, 1) ORDER BY k
+----
+2
+3
+6
+
 statement ok
 CREATE TABLE geo_table2(
   k int,

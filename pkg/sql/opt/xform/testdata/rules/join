@@ -1867,6 +1867,32 @@ memo (optimized, ~23KB, required=[presentation: name:13,popn_per_sqkm:16])
  ├── G32: (const 'Upper West Side')
  └── G33: (const 'Upper East Side')
 
+opt expect=GenerateGeoLookupJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_DWithin(c.geom, n.geom, 50)
+----
+project
+ ├── columns: name:13 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:13 n.geom:14
+      ├── key columns: [11] = [11]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:11!null
+      │    ├── inverted-expr
+      │    │    └── st_dwithin(c.geom:10, n.geom:14, 50.0)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_dwithin(c.geom:10, n.geom:14, 50.0) [outer=(10,14), immutable]
+
+
 # --------------------------------------------------
 # GenerateZigZagJoins
 # --------------------------------------------------

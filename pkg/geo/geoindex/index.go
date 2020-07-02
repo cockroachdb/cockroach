@@ -154,6 +154,14 @@ const (
 	// Intersects corresponds to the relationship in which one geospatial object
 	// intersects another geospatial object.
 	Intersects
+
+	// DWithin corresponds to a relationship where there exists a part of one
+	// geometry within d distance units of the other geometry.
+	DWithin
+
+	// DFullyWithin corresponds to a relationship where every pair of points in
+	// two geometries are within d distance units.
+	DFullyWithin
 )
 
 var geoRelationshipTypeStr = map[RelationshipType]string{
