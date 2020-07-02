@@ -982,9 +982,27 @@ func doRestorePlan(
 		return err
 	}
 
-	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
+	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return err
+	}
+
+	if len(tenants) > 0 {
+		if !p.ExecCfg().Codec.ForSystemTenant() {
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can restore other tenants")
+		}
+		for _, i := range tenants {
+			res, err := p.ExecCfg().InternalExecutor.Query(
+				ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
+				`SELECT active FROM system.tenants WHERE id = $1`, i.ID,
+			)
+			if err != nil {
+				return err
+			}
+			if len(res) != 0 {
+				return errors.Errorf("tenant %d already exists", i.ID)
+			}
+		}
 	}
 
 	databasesByID := make(map[sqlbase.ID]*sqlbase.ImmutableDatabaseDescriptor)
@@ -1069,6 +1087,7 @@ func doRestorePlan(
 			OverrideDB:         opts[restoreOptIntoDB],
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
+			Tenants:            tenants,
 		},
 		Progress: jobspb.RestoreProgress{},
 	})
