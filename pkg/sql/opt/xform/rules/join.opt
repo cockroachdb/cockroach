@@ -238,3 +238,33 @@
     (SortFilters (ExtractUnboundConditions $newOn $cols))
     (EmptyJoinPrivate)
 )
+
+# PushJoinIntoIndexJoin pushes an InnerJoin into an IndexJoin. The IndexJoin is
+# replaced with a LookupJoin, since it now must output columns from the right
+# side of the InnerJoin as well as from the original lookup table. This can
+# be useful when the InnerJoin that is pushed down reduces cardinality, since an
+# index lookup can be expensive.
+#
+# Matching conditions:
+# 1. The right input of the InnerJoin does not have outer columns.
+# 2. The ON condition of the InnerJoin only references columns from its right
+#    input and the input of the IndexJoin.
+# 3. The InnerJoin does not have any join hints.
+#
+# TODO(drewk): match LeftJoins as well if a good use case is found.
+[PushJoinIntoIndexJoin, Explore]
+(InnerJoin
+    $left:(IndexJoin $indexInput:* $indexPrivate:*)
+    $right:* & ^(HasOuterCols $right)
+    $on:* & (FiltersBoundBy $on (OutputCols2 $indexInput $right))
+    $joinPrivate:* & (NoJoinHints $joinPrivate)
+)
+=>
+(LookupJoin
+    (InnerJoin $indexInput $right $on $joinPrivate)
+    []
+    (ConvertIndexToLookupJoinPrivate
+        $indexPrivate
+        (OutputCols2 $left $right)
+    )
+)

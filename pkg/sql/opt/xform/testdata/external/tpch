@@ -727,36 +727,47 @@ sort
       │    │    ├── fd: (1)-->(4), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(41), (41)==(4)
       │    │    ├── inner-join (lookup lineitem)
       │    │    │    ├── columns: l_orderkey:8!null l_suppkey:10!null l_extendedprice:13!null l_discount:14!null l_shipdate:18!null o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
-      │    │    │    ├── key columns: [24] = [8]
+      │    │    │    ├── key columns: [8 11] = [8 11]
+      │    │    │    ├── lookup columns are key
       │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8)
-      │    │    │    ├── inner-join (lookup orders@o_ck)
-      │    │    │    │    ├── columns: o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
-      │    │    │    │    ├── key columns: [33] = [25]
-      │    │    │    │    ├── key: (24,41)
-      │    │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25)
-      │    │    │    │    ├── inner-join (lookup customer@c_nk)
-      │    │    │    │    │    ├── columns: c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
-      │    │    │    │    │    ├── key columns: [45] = [36]
-      │    │    │    │    │    ├── key: (33,41)
-      │    │    │    │    │    ├── fd: (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36)
-      │    │    │    │    │    ├── inner-join (cross)
-      │    │    │    │    │    │    ├── columns: n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
-      │    │    │    │    │    │    ├── key: (41,45)
-      │    │    │    │    │    │    ├── fd: (41)-->(42), (45)-->(46)
-      │    │    │    │    │    │    ├── scan n1
-      │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:41!null n1.n_name:42!null
-      │    │    │    │    │    │    │    ├── key: (41)
-      │    │    │    │    │    │    │    └── fd: (41)-->(42)
-      │    │    │    │    │    │    ├── scan n2
-      │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:45!null n2.n_name:46!null
-      │    │    │    │    │    │    │    ├── key: (45)
-      │    │    │    │    │    │    │    └── fd: (45)-->(46)
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── ((n1.n_name:42 = 'FRANCE') AND (n2.n_name:46 = 'GERMANY')) OR ((n1.n_name:42 = 'GERMANY') AND (n2.n_name:46 = 'FRANCE')) [outer=(42,46), constraints=(/42: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      │    │    │    ├── inner-join (hash)
+      │    │    │    │    ├── columns: l_orderkey:8!null l_linenumber:11!null l_shipdate:18!null o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
+      │    │    │    │    ├── key: (11,24,41)
+      │    │    │    │    ├── fd: (8,11)-->(18), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8)
+      │    │    │    │    ├── scan lineitem@l_sd
+      │    │    │    │    │    ├── columns: l_orderkey:8!null l_linenumber:11!null l_shipdate:18!null
+      │    │    │    │    │    ├── constraint: /18/8/11: [/'1995-01-01' - /'1996-12-31']
+      │    │    │    │    │    ├── key: (8,11)
+      │    │    │    │    │    └── fd: (8,11)-->(18)
+      │    │    │    │    ├── inner-join (lookup orders@o_ck)
+      │    │    │    │    │    ├── columns: o_orderkey:24!null o_custkey:25!null c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
+      │    │    │    │    │    ├── key columns: [33] = [25]
+      │    │    │    │    │    ├── key: (24,41)
+      │    │    │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25)
+      │    │    │    │    │    ├── inner-join (lookup customer@c_nk)
+      │    │    │    │    │    │    ├── columns: c_custkey:33!null c_nationkey:36!null n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
+      │    │    │    │    │    │    ├── key columns: [45] = [36]
+      │    │    │    │    │    │    ├── key: (33,41)
+      │    │    │    │    │    │    ├── fd: (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36)
+      │    │    │    │    │    │    ├── inner-join (cross)
+      │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:41!null n1.n_name:42!null n2.n_nationkey:45!null n2.n_name:46!null
+      │    │    │    │    │    │    │    ├── key: (41,45)
+      │    │    │    │    │    │    │    ├── fd: (41)-->(42), (45)-->(46)
+      │    │    │    │    │    │    │    ├── scan n1
+      │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:41!null n1.n_name:42!null
+      │    │    │    │    │    │    │    │    ├── key: (41)
+      │    │    │    │    │    │    │    │    └── fd: (41)-->(42)
+      │    │    │    │    │    │    │    ├── scan n2
+      │    │    │    │    │    │    │    │    ├── columns: n2.n_nationkey:45!null n2.n_name:46!null
+      │    │    │    │    │    │    │    │    ├── key: (45)
+      │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── ((n1.n_name:42 = 'FRANCE') AND (n2.n_name:46 = 'GERMANY')) OR ((n1.n_name:42 = 'GERMANY') AND (n2.n_name:46 = 'FRANCE')) [outer=(42,46), constraints=(/42: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY']; /46: [/'FRANCE' - /'FRANCE'] [/'GERMANY' - /'GERMANY'])]
+      │    │    │    │    │    │    └── filters (true)
       │    │    │    │    │    └── filters (true)
-      │    │    │    │    └── filters (true)
-      │    │    │    └── filters
-      │    │    │         └── (l_shipdate:18 >= '1995-01-01') AND (l_shipdate:18 <= '1996-12-31') [outer=(18), constraints=(/18: [/'1995-01-01' - /'1996-12-31']; tight)]
+      │    │    │    │    └── filters
+      │    │    │    │         └── o_orderkey:24 = l_orderkey:8 [outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ]), fd=(8)==(24), (24)==(8)]
+      │    │    │    └── filters (true)
       │    │    ├── scan supplier@s_nk
       │    │    │    ├── columns: s_suppkey:1!null s_nationkey:4!null
       │    │    │    ├── key: (1)
