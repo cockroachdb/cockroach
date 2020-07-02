@@ -4551,3 +4551,8 @@ func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
 
 	return desc.ID
 }
+
+// HasOwner returns true if the sequence options indicate an owner exists.
+func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
+	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
+}
