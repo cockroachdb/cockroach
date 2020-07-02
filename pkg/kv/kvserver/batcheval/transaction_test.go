@@ -14,14 +14,34 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+// getAbortSpanSize returns the sum of an abort span entry's key size
+// and value size.
+func getAbortSpanSize(
+	t *testing.T, rangeID roachpb.RangeID, entry *roachpb.AbortSpanEntry, txnID uuid.UUID,
+) int64 {
+	key := keys.AbortSpanKey(rangeID, txnID)
+	val := roachpb.Value{}
+	if err := val.SetProto(entry); err != nil {
+		t.Errorf("unexpected error: %+v", err)
+	}
+	meta := enginepb.MVCCMetadata{RawBytes: val.RawBytes}
+	keySize := int64(storage.MakeMVCCMetadataKey(key).EncodedSize())
+	valSize := int64(meta.Size())
+
+	return keySize + valSize
+}
 
 // TestUpdateAbortSpan tests the different ways that request can set, update,
 // and delete AbortSpan entries.
@@ -39,6 +59,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		StartKey: roachpb.RKey(startKey),
 		EndKey:   roachpb.RKey(endKey),
 	}
+	ms := enginepb.MVCCStats{}
 	as := abortspan.New(desc.RangeID)
 
 	txn := roachpb.MakeTransaction("test", txnKey, 0, hlc.Timestamp{WallTime: 1}, 0)
@@ -63,10 +84,10 @@ func TestUpdateAbortSpan(t *testing.T) {
 	type evalFn func(storage.ReadWriter, EvalContext) error
 	addIntent := func(b storage.ReadWriter, _ EvalContext) error {
 		val := roachpb.MakeValueFromString("val")
-		return storage.MVCCPut(ctx, b, nil /* ms */, intentKey, txn.ReadTimestamp, val, &txn)
+		return storage.MVCCPut(ctx, b, &ms, intentKey, txn.ReadTimestamp, val, &txn)
 	}
 	addPrevAbortSpanEntry := func(b storage.ReadWriter, rec EvalContext) error {
-		return UpdateAbortSpan(ctx, rec, b, nil /* ms */, prevTxn.TxnMeta, true /* poison */)
+		return UpdateAbortSpan(ctx, rec, b, &ms, prevTxn.TxnMeta, true /* poison */)
 	}
 	compose := func(fns ...evalFn) evalFn {
 		return func(b storage.ReadWriter, rec EvalContext) error {
@@ -93,7 +114,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				Timestamp: txn.ReadTimestamp,
 				Txn:       &txn,
 			},
-			Args: &req,
+			Args:  &req,
+			Stats: &ms,
 		}
 
 		var resp roachpb.EndTxnResponse
@@ -112,6 +134,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		args := CommandArgs{
 			EvalCtx: rec,
 			Args:    &req,
+			Stats:   &ms,
 		}
 
 		var resp roachpb.ResolveIntentResponse
@@ -130,6 +153,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		args := CommandArgs{
 			EvalCtx: rec,
 			Args:    &req,
+			Stats:   &ms,
 		}
 
 		var resp roachpb.ResolveIntentRangeResponse
@@ -137,12 +161,18 @@ func TestUpdateAbortSpan(t *testing.T) {
 		return err
 	}
 
+	// Expected changes in abort span size when clearing, adding, and updating abort span.
+	expClearAbortSpanDelta := -getAbortSpanSize(t, desc.RangeID, &prevTxnAbortSpanEntry, prevTxn.TxnMeta.ID)
+	expAddAbortSpanDelta := getAbortSpanSize(t, desc.RangeID, &newTxnAbortSpanEntry, txn.TxnMeta.ID)
+	expUpdateAbortSpanDelta := expClearAbortSpanDelta + expAddAbortSpanDelta
+
 	testCases := []struct {
-		name   string
-		before evalFn
-		run    evalFn                  // nil if invalid test case
-		exp    *roachpb.AbortSpanEntry // nil if no entry expected
-		expErr string                  // empty if no error expected
+		name                   string
+		before                 evalFn
+		run                    evalFn                  // nil if invalid test case
+		exp                    *roachpb.AbortSpanEntry // nil if no entry expected
+		expErr                 string                  // empty if no error expected
+		expAbortSpanBytesDelta int64
 	}{
 		///////////////////////////////////////////////////////////////////////
 		//                       EndTxnRequest                               //
@@ -162,7 +192,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
-			exp: nil,
+			exp:                    nil,
+			expAbortSpanBytesDelta: expClearAbortSpanDelta,
 		},
 		{
 			name: "end txn, rollback, poison, intent missing, abort span missing",
@@ -227,7 +258,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return endTxn(b, rec, false /* commit */, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
-			exp: nil,
+			exp:                    nil,
+			expAbortSpanBytesDelta: expClearAbortSpanDelta,
 		},
 		{
 			name:   "end txn, rollback, poison, intent present, abort span missing",
@@ -236,7 +268,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
 			// Poisoning, should add an abort span entry.
-			exp: &newTxnAbortSpanEntry,
+			exp:                    &newTxnAbortSpanEntry,
+			expAbortSpanBytesDelta: expAddAbortSpanDelta,
 		},
 		{
 			name:   "end txn, rollback, poison, intent present, abort span present",
@@ -245,7 +278,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return endTxn(b, rec, false /* commit */, true /* poison */)
 			},
 			// Poisoning, should update abort span entry.
-			exp: &newTxnAbortSpanEntry,
+			exp:                    &newTxnAbortSpanEntry,
+			expAbortSpanBytesDelta: expUpdateAbortSpanDelta,
 		},
 		{
 			name:   "end txn, commit, no poison, intent present, abort span missing",
@@ -367,7 +401,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntent(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
-			exp: nil,
+			exp:                    nil,
+			expAbortSpanBytesDelta: expClearAbortSpanDelta,
 		},
 		{
 			name:   "resolve intent, txn aborted, no poison, intent present, abort span missing",
@@ -385,7 +420,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntent(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
-			exp: nil,
+			exp:                    nil,
+			expAbortSpanBytesDelta: expClearAbortSpanDelta,
 		},
 		{
 			name: "resolve intent, txn aborted, poison, intent missing, abort span missing",
@@ -411,7 +447,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should add an abort span entry.
-			exp: &newTxnAbortSpanEntry,
+			exp:                    &newTxnAbortSpanEntry,
+			expAbortSpanBytesDelta: expAddAbortSpanDelta,
 		},
 		{
 			name:   "resolve intent, txn aborted, poison, intent present, abort span present",
@@ -420,7 +457,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntent(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should update abort span entry.
-			exp: &newTxnAbortSpanEntry,
+			exp:                    &newTxnAbortSpanEntry,
+			expAbortSpanBytesDelta: expUpdateAbortSpanDelta,
 		},
 		{
 			name: "resolve intent, txn committed, no poison, intent missing, abort span missing",
@@ -564,7 +602,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
-			exp: nil,
+			exp:                    nil,
+			expAbortSpanBytesDelta: expClearAbortSpanDelta,
 		},
 		{
 			name:   "resolve intent range, txn aborted, no poison, intent present, abort span missing",
@@ -582,7 +621,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, false /* poison */)
 			},
 			// Not poisoning, should clean up abort span entry.
-			exp: nil,
+			exp:                    nil,
+			expAbortSpanBytesDelta: expClearAbortSpanDelta,
 		},
 		{
 			name: "resolve intent range, txn aborted, poison, intent missing, abort span missing",
@@ -608,7 +648,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should add an abort span entry.
-			exp: &newTxnAbortSpanEntry,
+			exp:                    &newTxnAbortSpanEntry,
+			expAbortSpanBytesDelta: expAddAbortSpanDelta,
 		},
 		{
 			name:   "resolve intent range, txn aborted, poison, intent present, abort span present",
@@ -617,7 +658,8 @@ func TestUpdateAbortSpan(t *testing.T) {
 				return resolveIntentRange(b, rec, roachpb.ABORTED, true /* poison */)
 			},
 			// Poisoning, should update abort span entry.
-			exp: &newTxnAbortSpanEntry,
+			exp:                    &newTxnAbortSpanEntry,
+			expAbortSpanBytesDelta: expUpdateAbortSpanDelta,
 		},
 		{
 			name: "resolve intent range, txn committed, no poison, intent missing, abort span missing",
@@ -695,13 +737,13 @@ func TestUpdateAbortSpan(t *testing.T) {
 			if c.before != nil {
 				require.NoError(t, c.before(batch, evalCtx.EvalContext()))
 			}
-
+			prevAbortSpanBytes := ms.AbortSpanBytes
 			err := c.run(batch, evalCtx.EvalContext())
 			if c.expErr != "" {
 				require.Regexp(t, c.expErr, err)
 			} else {
 				require.NoError(t, err)
-
+				require.Equal(t, c.expAbortSpanBytesDelta, ms.AbortSpanBytes-prevAbortSpanBytes)
 				var curEntry roachpb.AbortSpanEntry
 				exists, err := as.Get(ctx, batch, txn.ID, &curEntry)
 				require.NoError(t, err)

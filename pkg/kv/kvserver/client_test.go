@@ -1625,7 +1625,7 @@ func verifyRangeStats(
 		return err
 	}
 	// Clear system counts as these are expected to vary.
-	ms.SysBytes, ms.SysCount = 0, 0
+	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	if ms != expMS {
 		return errors.Errorf("expected and actual stats differ:\n%s", pretty.Diff(expMS, ms))
 	}
