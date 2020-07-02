@@ -1197,6 +1197,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			newTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.TableDesc())
 			newTableDesc.Version++
 			newTableDesc.State = sqlbase.TableDescriptor_PUBLIC
+			newTableDesc.OfflineReason = ""
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			newJobs, err := createSchemaChangeJobsFromMutations(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, newTableDesc.TableDesc())
