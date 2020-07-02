@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -24,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -83,39 +86,38 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	sc := kvserver.TestStoreConfig(nil)
-	sc.Clock = nil // manual clock
-	kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-		// This test was written before the multiTestContext started creating many
-		// system ranges at startup, and hasn't been update to take that into
-		// account.
-		startWithSingleRange: true,
-	}
-	defer mtc.Stop()
-	mtc.Start(t, 3)
-	mtc.replicateRange(1, 1, 2)
-	db := mtc.dbs[0].NonTransactionalSender()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
 
-	// Split the range so that the RHS uses epoch-based leases.
-	startKey := []byte("a")
-	splitArgs := adminSplitArgs(startKey)
-	if _, pErr := kv.SendWrapped(ctx, db, splitArgs); pErr != nil {
-		t.Fatalf("split saw unexpected error: %v", pErr)
-	}
-	rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
-
-	// Insert a key before starting the rangefeeds.
-	initTime := mtc.clock().Now()
-	mtc.manualClock.Increment(1)
-	ts1 := mtc.clock().Now()
-	incArgs := incrementArgs(roachpb.Key("b"), 9)
-	_, pErr := kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts1}, incArgs)
+	ts := tc.Servers[0]
+	firstStore, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	mtc.waitForValues(roachpb.Key("b"), []int64{9, 9, 9})
+
+	db := firstStore.DB().NonTransactionalSender()
+
+	// Split the range so that the RHS uses epoch-based leases.
+	startKey := []byte("a")
+	tc.SplitRangeOrFatal(t, startKey)
+	tc.AddReplicasOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+	if pErr := tc.WaitForVoters(startKey, tc.Target(1), tc.Target(2)); pErr != nil {
+		t.Fatalf("Unexpected error waiting for replication: %v", pErr)
+	}
+	rangeID := firstStore.LookupReplica(startKey).RangeID
+
+	// Insert a key before starting the rangefeeds.
+	initTime := ts.Clock().Now()
+	ts1 := initTime.Add(0, 1)
+	incArgs := incrementArgs(roachpb.Key("b"), 9)
+	if _, pErr := kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts1}, incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9})
 
 	replNum := 3
 	streams := make([]*testStream, replNum)
@@ -124,6 +126,11 @@ func TestReplicaRangefeed(t *testing.T) {
 	for i := 0; i < replNum; i++ {
 		stream := newTestStream()
 		streams[i] = stream
+		ts := tc.Servers[i]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
 		go func(i int) {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
@@ -133,8 +140,8 @@ func TestReplicaRangefeed(t *testing.T) {
 				Span:     rangefeedSpan,
 				WithDiff: true,
 			}
-
-			pErr := mtc.Store(i).RangeFeed(&req, stream)
+			kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}(i)
 	}
@@ -181,40 +188,41 @@ func TestReplicaRangefeed(t *testing.T) {
 	checkForExpEvents(expEvents)
 
 	// Insert a key non-transactionally.
-	mtc.manualClock.Increment(1)
-	ts2 := mtc.clock().Now()
+	ts2 := initTime.Add(0, 2)
 	pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
-	_, pErr = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts2}, pArgs)
+	_, err := kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts2}, pArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server1 := tc.Servers[1]
+	store1, pErr := server1.Stores().GetStore(server1.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-
 	// Insert a second key transactionally.
-	mtc.manualClock.Increment(1)
-	ts3 := mtc.clock().Now()
-	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	ts3 := initTime.Add(0, 3)
+	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts3)
 		return txn.Put(ctx, roachpb.Key("m"), []byte("val3"))
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Read to force intent resolution.
-	if _, err := mtc.dbs[1].Get(ctx, roachpb.Key("m")); err != nil {
+	if _, err := store1.DB().Get(ctx, roachpb.Key("m")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Update the originally incremented key non-transactionally.
-	mtc.manualClock.Increment(1)
-	ts4 := mtc.clock().Now()
-	_, pErr = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts4}, incArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
+	ts4 := initTime.Add(0, 4)
+	_, err = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts4}, incArgs)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Update the originally incremented key transactionally.
-	mtc.manualClock.Increment(1)
-	ts5 := mtc.clock().Now()
-	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	ts5 := initTime.Add(0, 5)
+	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts5)
 		_, err := txn.Inc(ctx, incArgs.Key, 7)
 		return err
@@ -222,7 +230,7 @@ func TestReplicaRangefeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Read to force intent resolution.
-	if _, err := mtc.dbs[1].Get(ctx, roachpb.Key("b")); err != nil {
+	if _, err := store1.DB().Get(ctx, roachpb.Key("b")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -269,12 +277,12 @@ func TestReplicaRangefeed(t *testing.T) {
 	gcReq := &roachpb.GCRequest{
 		Threshold: initTime.Add(0, 1),
 	}
-	gcReq.Key = roachpb.Key(startKey)
-	gcReq.EndKey = mtc.Store(0).LookupReplica(startKey).Desc().EndKey.AsRawKey()
+	gcReq.Key = startKey
+	gcReq.EndKey = firstStore.LookupReplica(startKey).Desc().EndKey.AsRawKey()
 	var ba roachpb.BatchRequest
 	ba.RangeID = rangeID
 	ba.Add(gcReq)
-	if _, pErr := mtc.Store(0).Send(ctx, ba); pErr != nil {
+	if _, pErr := firstStore.Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -288,7 +296,12 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < replNum; i++ {
-			repl := mtc.Store(i).LookupReplica(startKey)
+			ts := tc.Servers[i]
+			store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+			repl := store.LookupReplica(startKey)
 			if repl == nil {
 				return errors.Errorf("replica not found on node #%d", i+1)
 			}
@@ -300,7 +313,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			defer timer.Stop()
 			defer stream.Cancel()
 
-			if pErr := mtc.Store(i).RangeFeed(&req, stream); !testutils.IsPError(
+			if pErr := store.RangeFeed(&req, stream); !testutils.IsPError(
 				pErr, `must be after replica GC threshold`,
 			) {
 				return pErr.GoError()
@@ -314,24 +327,15 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sc := kvserver.TestStoreConfig(nil)
-	sc.Clock = nil // manual clock
-	kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
-	mtc := &multiTestContext{
-		storeConfig: &sc,
-		// This test was written before the multiTestContext started creating many
-		// system ranges at startup, and hasn't been update to take that into
-		// account.
-		startWithSingleRange: true,
-	}
-	defer mtc.Stop()
-	mtc.Start(t, 1)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	store, _ := createTestStore(t, stopper)
 
 	// Establish a rangefeed on the replica we plan to remove.
 	stream := newTestStream()
 	req := roachpb.RangeFeedRequest{
 		Header: roachpb.Header{
-			RangeID: 1,
+			RangeID: store.LookupReplica(roachpb.RKey("a")).RangeID,
 		},
 		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 	}
@@ -340,7 +344,8 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	// immediately even if it didn't return the correct error.
 	stream.Cancel()
 
-	pErr := mtc.Store(0).RangeFeed(&req, stream)
+	kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+	pErr := store.RangeFeed(&req, stream)
 	const exp = "expiration-based leases are incompatible with rangefeeds"
 	if !testutils.IsPError(pErr, exp) {
 		t.Errorf("expected error %q, found %v", exp, pErr)
@@ -351,39 +356,35 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-
 	startKey := []byte("a")
-	setup := func(subT *testing.T) (*multiTestContext, roachpb.RangeID) {
-		subT.Helper()
-		sc := kvserver.TestStoreConfig(nil)
-		sc.Clock = nil // manual clock
-		kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
-		mtc := &multiTestContext{
-			storeConfig: &sc,
-			// This test was written before the multiTestContext started creating many
-			// system ranges at startup, and hasn't been update to take that into
-			// account.
-			startWithSingleRange: true,
-		}
-		mtc.Start(subT, 3)
-		mtc.replicateRange(1, 1, 2)
 
-		// Split the range so that the RHS uses epoch-based leases.
-		splitArgs := adminSplitArgs(startKey)
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
-			subT.Fatalf("split saw unexpected error: %v", pErr)
+	setup := func(subT *testing.T) (
+		*testcluster.TestCluster, roachpb.RangeID) {
+		subT.Helper()
+
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+			},
+		)
+
+		ts := tc.Servers[0]
+		store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
-		rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
+		tc.SplitRangeOrFatal(t, startKey)
+		tc.AddReplicasOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+		rangeID := store.LookupReplica(startKey).RangeID
 
 		// Write to the RHS of the split and wait for all replicas to process it.
 		// This ensures that all replicas have seen the split before we move on.
 		incArgs := incrementArgs(roachpb.Key("a"), 9)
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		mtc.waitForValues(roachpb.Key("a"), []int64{9, 9, 9})
-
-		return mtc, rangeID
+		tc.WaitForValues(t, roachpb.Key("a"), []int64{9, 9, 9})
+		return tc, rangeID
 	}
 
 	waitForInitialCheckpointAcrossSpan := func(
@@ -437,13 +438,18 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 	t.Run(roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED.String(), func(t *testing.T) {
 		const removeStore = 2
-		mtc, rangeID := setup(t)
-		defer mtc.Stop()
+		tc, rangeID := setup(t)
+		defer tc.Stopper().Stop(ctx)
 
 		// Establish a rangefeed on the replica we plan to remove.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
 		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
+		ts := tc.Servers[removeStore]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
@@ -451,8 +457,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				},
 				Span: rangefeedSpan,
 			}
-
-			pErr := mtc.Store(removeStore).RangeFeed(&req, stream)
+			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -460,20 +465,25 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Remove the replica from the range.
-		mtc.unreplicateRange(rangeID, removeStore)
+		tc.RemoveReplicasOrFatal(t, startKey, tc.Target(removeStore))
 
 		// Check the error.
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT.String(), func(t *testing.T) {
-		mtc, rangeID := setup(t)
-		defer mtc.Stop()
+		tc, rangeID := setup(t)
+		defer tc.Stopper().Stop(ctx)
 
 		// Establish a rangefeed on the replica we plan to split.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
 		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
+		ts := tc.Servers[0]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
@@ -481,43 +491,36 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				},
 				Span: rangefeedSpan,
 			}
-
-			pErr := mtc.Store(0).RangeFeed(&req, stream)
-			streamErrC <- pErr
+			streamErrC <- store.RangeFeed(&req, stream)
 		}()
 
 		// Wait for the first checkpoint event.
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 
 		// Split the range.
-		args := adminSplitArgs([]byte("m"))
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], args); pErr != nil {
-			t.Fatalf("split saw unexpected error: %v", pErr)
-		}
+		tc.SplitRangeOrFatal(t, []byte("m"))
 
 		// Check the error.
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RANGE_MERGED.String(), func(t *testing.T) {
-		mtc, rangeID := setup(t)
-		defer mtc.Stop()
+		tc, rangeID := setup(t)
+		defer tc.Stopper().Stop(ctx)
 
+		ts := tc.Servers[0]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
 		// Split the range.
 		splitKey := []byte("m")
-		splitArgs := adminSplitArgs(splitKey)
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
-			t.Fatalf("split saw unexpected error: %v", pErr)
+		tc.SplitRangeOrFatal(t, splitKey)
+		if pErr := tc.WaitForSplitAndInitialization(splitKey); pErr != nil {
+			t.Fatalf("Unexpected error waiting for range split: %v", pErr)
 		}
-		rightRangeID := mtc.Store(0).LookupReplica(splitKey).RangeID
 
-		// Write to the RHS of the split and wait for all replicas to process it.
-		// This ensures that all replicas have seen the split before we move on.
-		incArgs := incrementArgs(roachpb.Key("n"), 9)
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-		mtc.waitForValues(roachpb.Key("n"), []int64{9, 9, 9})
+		rightRangeID := store.LookupReplica(splitKey).RangeID
 
 		// Establish a rangefeed on the left replica.
 		streamLeft := newTestStream()
@@ -531,7 +534,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: rangefeedLeftSpan,
 			}
 
-			pErr := mtc.Store(0).RangeFeed(&req, streamLeft)
+			pErr := store.RangeFeed(&req, streamLeft)
 			streamLeftErrC <- pErr
 		}()
 
@@ -547,7 +550,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				Span: rangefeedRightSpan,
 			}
 
-			pErr := mtc.Store(0).RangeFeed(&req, streamRight)
+			pErr := store.RangeFeed(&req, streamRight)
 			streamRightErrC <- pErr
 		}()
 
@@ -557,7 +560,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Merge the ranges back together
 		mergeArgs := adminMergeArgs(startKey)
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], mergeArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), mergeArgs); pErr != nil {
 			t.Fatalf("merge saw unexpected error: %v", pErr)
 		}
 
@@ -567,13 +570,27 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErrRight, roachpb.RangeFeedRetryError_REASON_RANGE_MERGED)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT.String(), func(t *testing.T) {
-		mtc, rangeID := setup(t)
-		defer mtc.Stop()
-		partitionStore := mtc.Store(2)
+		tc, rangeID := setup(t)
+		defer tc.Stopper().Stop(ctx)
 
-		mtc.stores[0].SetReplicaGCQueueActive(false)
-		mtc.stores[1].SetReplicaGCQueueActive(false)
-		mtc.stores[2].SetReplicaGCQueueActive(false)
+		ts2 := tc.Servers[2]
+		partitionStore, err := ts2.Stores().GetStore(ts2.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ts := tc.Servers[0]
+		firstStore, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, server := range tc.Servers {
+			store, err := server.Stores().GetStore(server.GetFirstStoreID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			store.SetReplicaGCQueueActive(false)
+		}
 
 		// Establish a rangefeed on the replica we plan to partition.
 		stream := newTestStream()
@@ -614,19 +631,19 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		})
 
 		// Partition the replica from the rest of its range.
-		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
 			rangeID:            rangeID,
 			RaftMessageHandler: partitionStore,
 		})
 
 		// Perform a write on the range.
 		pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, firstStore.TestSender(), pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
 		// Get that command's log index.
-		repl, err := mtc.Store(0).GetReplica(rangeID)
+		repl, err := firstStore.GetReplica(rangeID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -640,12 +657,12 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// replica rejoins the rest of the range.
 		truncArgs := truncateLogArgs(index+1, rangeID)
 		truncArgs.Key = startKey
-		if _, err := kv.SendWrapped(ctx, mtc.distSenders[0], truncArgs); err != nil {
+		if _, err := kv.SendWrapped(ctx, firstStore.TestSender(), truncArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Remove the partition. Snapshot should follow.
-		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
 			rangeID:            rangeID,
 			RaftMessageHandler: partitionStore,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
@@ -667,17 +684,20 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING.String(), func(t *testing.T) {
-		mtc, _ := setup(t)
-		defer mtc.Stop()
+		tc, _ := setup(t)
+		defer tc.Stopper().Stop(ctx)
 
+		ts := tc.Servers[0]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
 		// Split the range so that the RHS is not a system range and thus will
 		// respect the rangefeed_enabled cluster setting.
 		startKey := keys.UserTableDataMin
-		splitArgs := adminSplitArgs(startKey)
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
-			t.Fatalf("split saw unexpected error: %v", pErr)
-		}
-		rightRangeID := mtc.Store(0).LookupReplica(roachpb.RKey(startKey)).RangeID
+		tc.SplitRangeOrFatal(t, startKey)
+
+		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
 
 		// Establish a rangefeed.
 		stream := newTestStream()
@@ -692,8 +712,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				},
 				Span: rangefeedSpan,
 			}
-
-			pErr := mtc.Store(0).RangeFeed(&req, stream)
+			kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
+			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}()
 
@@ -702,12 +722,12 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
-		kvserver.RangefeedEnabled.Override(&mtc.storeConfig.Settings.SV, false)
+		kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, false)
 
 		// Perform a write on the range.
 		writeKey := encoding.EncodeStringAscending(keys.SystemSQLCodec.TablePrefix(55), "c")
 		pArgs := putArgs(writeKey, []byte("val2"))
-		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 

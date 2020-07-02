@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -28,8 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -886,6 +890,57 @@ func (tc *TestCluster) ToggleReplicateQueues(active bool) {
 			return nil
 		})
 	}
+}
+
+// readIntFromStores reads the current integer value at the given key
+// from all configured engines, filling in zeros when the value is not
+// found.
+func (tc *TestCluster) readIntFromStores(key roachpb.Key) []int64 {
+	results := make([]int64, 0, len(tc.Servers))
+	for _, server := range tc.Servers {
+		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
+			val, _, err := storage.MVCCGet(context.Background(), s.Engine(), key,
+				server.Clock().Now(), storage.MVCCGetOptions{})
+			if err != nil {
+				log.VEventf(context.Background(), 1, "store %d: error reading from key %s: %s", s.StoreID(), key, err)
+			} else if val == nil {
+				log.VEventf(context.Background(), 1, "store %d: missing key %s", s.StoreID(), key)
+			} else {
+				result, err := val.GetInt()
+				if err != nil {
+					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), val, key, err)
+				}
+				results = append(results, result)
+			}
+			return nil
+		})
+		if err != nil {
+			log.VEventf(context.Background(), 1, "node %d: error reading from key %s: %s", server.NodeID(), key, err)
+		}
+	}
+	return results
+}
+
+// WaitForValues waits up to the given duration for the integer values
+// at the given key to match the expected slice (across all stores).
+// Fails the test if they do not match.
+func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []int64) {
+	t.Helper()
+	// This test relies on concurrently waiting for a value to change in the
+	// underlying engine(s). Since the teeing engine does not respond well to
+	// value mismatches, whether transient or permanent, skip this test if the
+	// teeing engine is being used. See
+	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
+	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
+		skip.IgnoreLint(t, "disabled on teeing engine")
+	}
+	testutils.SucceedsSoon(t, func() error {
+		actual := tc.readIntFromStores(key)
+		if !reflect.DeepEqual(expected, actual) {
+			return errors.Errorf("expected %v, got %v", expected, actual)
+		}
+		return nil
+	})
 }
 
 type testClusterFactoryImpl struct{}
