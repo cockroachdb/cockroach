@@ -198,7 +198,7 @@ type DatumRowConverter struct {
 	IsTargetCol map[int]struct{}
 
 	// The rest of these are derived from tableDesc, just cached here.
-	hidden                int
+	rowIDs                []int
 	ri                    Inserter
 	EvalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
@@ -302,14 +302,18 @@ func NewDatumRowConverter(
 		_, ok := isTargetColID[col.ID]
 		return ok
 	}
-	c.hidden = -1
+	hidden := -1
+	c.rowIDs = make([]int, 0)
 	for i := range cols {
 		col := &cols[i]
+		if !isTargetCol(col) && col.HasDefault() && col.DefaultExprStr() == "unique_rowid()" {
+			c.rowIDs = append(c.rowIDs, i)
+		}
 		if col.Hidden {
-			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || c.hidden != -1 {
+			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || hidden != -1 {
 				return nil, errors.New("unexpected hidden column")
 			}
-			c.hidden = i
+			hidden = i
 			c.Datums = append(c.Datums, nil)
 		} else {
 			if !isTargetCol(col) && col.DefaultExpr != nil {
@@ -318,7 +322,7 @@ func NewDatumRowConverter(
 				//
 				// TODO (anzoteh96): add support to non-constant default expressions. Perhaps
 				// we can start with those with Stable volatility, like now().
-				if !tree.IsConst(evalCtx, defaultExprs[i]) {
+				if !(col.DefaultExprStr() == "unique_rowid()" || tree.IsConst(evalCtx, defaultExprs[i])) {
 					return nil, errors.Newf(
 						"non-constant default expression %s for non-targeted column %q is not supported by IMPORT INTO",
 						defaultExprs[i].String(),
@@ -350,8 +354,8 @@ const rowIDBits = 64 - builtins.NodeIDBits
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
-	if c.hidden >= 0 {
-		// We don't want to call unique_rowid() for the hidden PK column because it
+	for i, pos := range c.rowIDs {
+		// We don't want to call unique_rowid() for columns with such default expressions because it
 		// is not idempotent and has unfortunate overlapping of output spans since
 		// it puts the uniqueness-ensuring per-generator part (nodeID) in the
 		// low-bits. Instead, make our own IDs that attempt to keep each generator
@@ -377,14 +381,23 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		// fileIndex*desc.Version) could improve on this. For now, if this
 		// best-effort collision avoidance scheme doesn't work in some cases we can
 		// just recommend an explicit PK as a workaround.
+		//
+		// TODO(anzoteh96): As per the issue in #51004, having too many columns with
+		// default expression unique_rowid() could cause collisions when IMPORTs are run
+		// too close to each other. It will therefore be nice to fix this problem.
 		avoidCollisionsWithSQLsIDs := uint64(1 << 63)
-		rowID := (uint64(sourceID) << rowIDBits) ^ uint64(rowIndex)
-		c.Datums[c.hidden] = tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | rowID))
+		shiftedRowIndex := int64(len(c.rowIDs))*rowIndex + int64(i)
+		rowID := (uint64(sourceID) << rowIDBits) ^ uint64(shiftedRowIndex)
+		c.Datums[pos] = tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | rowID))
 	}
 
+	isTargetCol := func(i int) bool {
+		_, ok := c.IsTargetCol[i]
+		return ok
+	}
 	for i := range c.cols {
 		col := &c.cols[i]
-		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
+		if !isTargetCol(i) && col.DefaultExpr != nil && col.DefaultExprStr() != "unique_rowid()" {
 			datum, err := c.defaultExprs[i].Eval(c.EvalCtx)
 			if err != nil {
 				return errors.Wrapf(err, "error evaluating default expression for IMPORT INTO")

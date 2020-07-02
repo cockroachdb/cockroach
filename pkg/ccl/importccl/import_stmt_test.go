@@ -63,6 +63,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// This checks that the selected columns of a query string have
+// all unique elements. It's useful for checking unique_rowid.
+func checkUnique(allStr [][]string, inds []int) bool {
+	uniqStr := make(map[string]struct{}, len(allStr))
+	for _, slice := range allStr {
+		for _, ind := range inds {
+			s := slice[ind]
+			if _, ok := uniqStr[s]; ok {
+				return false
+			}
+			uniqStr[s] = struct{}{}
+		}
+	}
+	return true
+}
+
+// This checks that the selected columns of a query string have
+// no "NULL" elements. It's useful for checking unique_rowid.
+func checkNoNull(allStr [][]string, inds []int) bool {
+	for _, slice := range allStr {
+		for _, ind := range inds {
+			if slice[ind] == "NULL" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validUniqueRowID(allStr [][]string, inds []int) bool {
+	return checkUnique(allStr, inds) && checkNoNull(allStr, inds)
+}
+
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2475,8 +2508,10 @@ func TestImportIntoCSV(t *testing.T) {
 	// Test that IMPORT INTO works when columns with default expressions are present.
 	// The default expressions supported by IMPORT INTO are constant expressions,
 	// which are literals and functions that always return the same value given the
-	// same arguments (examples of non-constant expressions are given in the last two
-	// subtests below). The default expression of a column is used when this column is not
+	// same arguments (examples of non-constant expressions are given as now()
+	// and nextval()). `unique_rowid()` is also supported.
+	//
+	// The default expression of a column is used when this column is not
 	// targeted; otherwise, data from source file (like CSV) is used. It also checks
 	// that IMPORT TABLE works when there are default columns.
 	t.Run("import-into-default", func(t *testing.T) {
@@ -2598,6 +2633,24 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.ExpectErr(t,
 				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
 				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+		})
+		t.Run("unique_rowid", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT, c STRING, d INT DEFAULT unique_rowid())`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (3, 'CAT')`))
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (4, 'DOG')`))
+			IDstr := sqlDB.QueryStr(t, `SELECT a, d FROM t`)
+			require.True(t, validUniqueRowID(IDstr, []int{0, 1}))
+		})
+		t.Run("unique_rowid_with_pk", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT PRIMARY KEY, c STRING)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (-3, 'CAT')`))
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (-4, 'DOG')`))
+			IDstr := sqlDB.QueryStr(t, `SELECT a FROM t`)
+			require.True(t, validUniqueRowID(IDstr, []int{0}))
 		})
 	})
 
