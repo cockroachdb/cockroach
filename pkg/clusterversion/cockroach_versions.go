@@ -73,7 +73,7 @@ const (
 	VersionNodeMembershipStatus
 	VersionRangeStatsRespHasDesc
 	VersionMinPasswordLength
-
+	VersionAbortSpanBytes
 	// Add new versions here (step one of two).
 )
 
@@ -551,7 +551,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionMinPasswordLength,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
 	},
-
+	{
+		// VersionAbortSpanBytes adds a field to MVCCStats
+		// (MVCCStats.AbortSpanBytes) that tracks the size of a
+		// range's abort span.
+		Key:     VersionAbortSpanBytes,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
+	},
 	// Add new versions here (step two of two).
 
 })

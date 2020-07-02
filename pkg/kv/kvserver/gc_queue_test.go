@@ -143,8 +143,9 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const seed = 1
 	var ms enginepb.MVCCStats
-	ms.SysCount += probablyLargeAbortSpanSysCountThreshold
-	ms.SysBytes += probablyLargeAbortSpanSysBytesThreshold
+	ms.AbortSpanBytes += largeAbortSpanBytesThreshold
+	ms.SysBytes += largeAbortSpanBytesThreshold
+	ms.SysCount++
 
 	gcThresh := hlc.Timestamp{WallTime: 1}
 	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
@@ -195,11 +196,11 @@ func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
 	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
 		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
 			first: [cacheFirstLen]enginepb.MVCCStats{
-				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
 			},
-			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
 		},
 	}
 	return &cws

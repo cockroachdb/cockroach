@@ -185,6 +185,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		SysBytes:          1,
 		SysCount:          1,
 		LastUpdateNanos:   1,
+		AbortSpanBytes:    1,
 	}
 	if err := zerofields.NoZeroField(&goldMS); err != nil {
 		t.Fatal(err) // prevent rot as fields are added
