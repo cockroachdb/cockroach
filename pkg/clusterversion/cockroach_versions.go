@@ -69,7 +69,7 @@ const (
 	VersionAddScheduledJobsTable
 	VersionUserDefinedSchemas
 	VersionNoOriginFKIndexes
-
+	VersionAbortSpanBytes
 	// Add new versions here (step one of two).
 )
 
@@ -524,7 +524,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionNoOriginFKIndexes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
 	},
-
+	{
+		// VersionAbortSpanBytes adds a field to MVCCStats
+		// (MVCCStats.AbortSpanBytes) that tracks the size of a
+		// range's abort span.
+		Key:     VersionAbortSpanBytes,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
+	},
 	// Add new versions here (step two of two).
 
 })
