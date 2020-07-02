@@ -35,3 +35,13 @@ SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, r
 2  16
 3  12
 3  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom, rtable.geom, 2) ORDER BY (lk, rk)
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16

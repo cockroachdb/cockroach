@@ -1982,16 +1982,20 @@ func (c *CustomFuncs) IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 	return IsGeoIndexFunction(fn)
 }
 
-// HasAllVariableArgs returns true if all the arguments to the given function
-// are variables.
-func (c *CustomFuncs) HasAllVariableArgs(fn opt.ScalarExpr) bool {
+// HasTwoVariableArgs returns true if the first two arguments to the given
+// function are variables.
+// TODO: what if both of the arguments are the same variable?
+func (c *CustomFuncs) HasTwoVariableArgs(fn opt.ScalarExpr) bool {
 	function := fn.(*memo.FunctionExpr)
+	variableCount := 0
 	for i, n := 0, function.Args.ChildCount(); i < n; i++ {
 		if _, ok := function.Args.Child(i).(*memo.VariableExpr); !ok {
-			return false
+			break
+		} else {
+			variableCount++
 		}
 	}
-	return true
+	return variableCount == 2
 }
 
 // findConstantFilter tries to find a filter that is exactly equivalent to
