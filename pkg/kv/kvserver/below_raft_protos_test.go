@@ -48,7 +48,9 @@ const goldenSeed = 1337
 const itersPerProto = 20
 
 type fixture struct {
-	populatedConstructor   func(*rand.Rand) protoutil.Message
+	populatedConstructor func(*rand.Rand) protoutil.Message
+	// If new fields are added to `MVCCStats`, the expected populatedSum
+	// will change and should be updated accordingly.
 	emptySum, populatedSum uint64
 }
 

@@ -60,6 +60,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 		StartKey: roachpb.RKey(startKey),
 		EndKey:   roachpb.RKey(endKey),
 	}
+	ms := enginepb.MVCCStats{}
 	as := abortspan.New(desc.RangeID)
 
 	txn := roachpb.MakeTransaction("test", txnKey, 0, hlc.Timestamp{WallTime: 1}, 0)

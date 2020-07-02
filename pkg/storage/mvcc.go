@@ -190,7 +190,7 @@ func updateStatsForInline(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
-) {
+) error {
 	sys := isSysLocal(key)
 	// Remove counts for this key if the original size is non-zero.
 	if origMetaKeySize != 0 {
@@ -229,6 +229,7 @@ func updateStatsForInline(
 			ms.ValCount++
 		}
 	}
+	return nil
 }
 
 // updateStatsOnMerge updates metadata stats while merging inlined
@@ -1499,7 +1500,9 @@ func mvccPutInternal(
 			metaKeySize, metaValSize, err = buf.putMeta(writer, metaKey, &buf.meta)
 		}
 		if ms != nil {
-			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
+			if err := updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize); err != nil {
+				return err
+			}
 		}
 		if err == nil {
 			writer.LogLogicalOp(MVCCWriteValueOpType, MVCCLogicalOpDetails{
@@ -3255,7 +3258,9 @@ func MVCCGarbageCollect(
 			}
 			if ms != nil {
 				if inlinedValue {
-					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
+					if err := updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0); err != nil {
+						return err
+					}
 					ms.AgeTo(timestamp.WallTime)
 				} else {
 					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime))

@@ -764,6 +764,7 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   void clear_has_sys_count();
   void set_has_abort_span_bytes();
   void clear_has_abort_span_bytes();
+<<<<<<< HEAD
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -993,6 +994,8 @@ class MVCCStatsLegacyRepresentation : public ::google::protobuf::MessageLite /* 
   void clear_has_sys_bytes();
   void set_has_sys_count();
   void clear_has_sys_count();
+=======
+>>>>>>> d49a64c7bd... wip: testing FatalOnStatsMismatch = true
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -1011,6 +1014,7 @@ class MVCCStatsLegacyRepresentation : public ::google::protobuf::MessageLite /* 
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
   ::google::protobuf::int64 contains_estimates_;
+  ::google::protobuf::int64 abort_span_bytes_;
   friend struct ::protobuf_storage_2fenginepb_2fmvcc_2eproto::TableStruct;
 };
 // ===================================================================
@@ -1915,6 +1919,7 @@ inline void MVCCStats::set_abort_span_bytes(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStats.abort_span_bytes)
 }
 
+<<<<<<< HEAD
 // -------------------------------------------------------------------
 
 // MVCCStatsLegacyRepresentation
@@ -2241,6 +2246,8 @@ inline void MVCCStatsLegacyRepresentation::set_sys_count(::google::protobuf::int
   // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStatsLegacyRepresentation.sys_count)
 }
 
+=======
+>>>>>>> d49a64c7bd... wip: testing FatalOnStatsMismatch = true
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
