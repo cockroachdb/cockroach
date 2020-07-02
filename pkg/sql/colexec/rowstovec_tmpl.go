@@ -44,7 +44,7 @@ type _GOTYPE interface{}
 
 func _ROWS_TO_COL_VEC(
 	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
-) error { // */}}
+) { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
 	datumToPhysicalFn := GetDatumToPhysicalFn(t)
@@ -60,11 +60,7 @@ func _ROWS_TO_COL_VEC(
 		if datum == tree.DNull {
 			vec.Nulls().SetNull(i)
 		} else {
-			v, err = datumToPhysicalFn(datum)
-			if err != nil {
-				return
-			}
-
+			v = datumToPhysicalFn(datum)
 			castV := v.(_GOTYPE)
 			execgen.SET(col, i, castV)
 		}

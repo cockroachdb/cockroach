@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -197,227 +195,127 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 }
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
-// ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
+// ColumnType to the corresponding Go type. Note that the signature of the
+// return function doesn't contain an error since we assume that the conversion
+// must succeed. If for some reason it fails, a panic will be emitted and will
+// be caught by the panic-catcher mechanism of the vectorized engine and will
+// be propagated as an error accordingly.
+func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 	switch ct.Family() {
 	case types.BoolFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DBool)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DBool, found %s", reflect.TypeOf(datum))
-			}
-			return bool(*d), nil
+		return func(datum tree.Datum) interface{} {
+			return bool(*datum.(*tree.DBool))
 		}
 	case types.BytesFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DBytes)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DBytes, found %s", reflect.TypeOf(datum))
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+		return func(datum tree.Datum) interface{} {
+			return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DBytes)))
 		}
 	case types.IntFamily:
 		switch ct.Width() {
 		case 16:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int16(*d), nil
+			return func(datum tree.Datum) interface{} {
+				return int16(*datum.(*tree.DInt))
 			}
 		case 32:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int32(*d), nil
+			return func(datum tree.Datum) interface{} {
+				return int32(*datum.(*tree.DInt))
 			}
 		case 0, 64:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int64(*d), nil
+			return func(datum tree.Datum) interface{} {
+				return int64(*datum.(*tree.DInt))
 			}
 		}
 		colexecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
 	case types.DateFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DDate)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DDate, found %s", reflect.TypeOf(datum))
-			}
-			return d.UnixEpochDaysWithOrig(), nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DDate).UnixEpochDaysWithOrig()
 		}
 	case types.FloatFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DFloat)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DFloat, found %s", reflect.TypeOf(datum))
-			}
-			return float64(*d), nil
+		return func(datum tree.Datum) interface{} {
+			return float64(*datum.(*tree.DFloat))
 		}
 	case types.OidFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DOid)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DOid, found %s", reflect.TypeOf(datum))
-			}
-			return int64(d.DInt), nil
+		return func(datum tree.Datum) interface{} {
+			return int64(datum.(*tree.DOid).DInt)
 		}
 	case types.StringFamily:
-		return func(datum tree.Datum) (interface{}, error) {
+		return func(datum tree.Datum) interface{} {
 			// Handle other STRING-related OID types, like oid.T_name.
 			wrapper, ok := datum.(*tree.DOidWrapper)
 			if ok {
 				datum = wrapper.Wrapped
 			}
-
-			d, ok := datum.(*tree.DString)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+			return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
 		}
 	case types.DecimalFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DDecimal)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
-			}
-			return d.Decimal, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DDecimal).Decimal
 		}
 	case types.UuidFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DUuid)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DUuid, found %s", reflect.TypeOf(datum))
-			}
-			return d.UUID.GetBytesMut(), nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DUuid).UUID.GetBytesMut()
 		}
 	case types.TimestampFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTimestamp)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTimestamp, found %s", reflect.TypeOf(datum))
-			}
-			return d.Time, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DTimestamp).Time
 		}
 	case types.TimestampTZFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTimestampTZ)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTimestampTZ, found %s", reflect.TypeOf(datum))
-			}
-			return d.Time, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DTimestampTZ).Time
 		}
 	case types.IntervalFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DInterval)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DInterval, found %s", reflect.TypeOf(datum))
-			}
-			return d.Duration, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DInterval).Duration
 		}
 
 	// Types backed by tree.Datums.
 	case types.CollatedStringFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DCollatedString)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DCollatedString, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DCollatedString)
 		}
 	case types.UnknownFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			if datum != tree.DNull {
-				return nil, errors.Errorf("unexpectedly datum is not tree.DNull for types.UnknownFamily: %+v", datum)
-			}
-			return tree.DNull, nil
+		return func(datum tree.Datum) interface{} {
+			return tree.DNull
 		}
 	case types.ArrayFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DArray)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DArray, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DArray)
 		}
 	case types.INetFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DIPAddr)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DIPAddr, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DIPAddr)
 		}
 	case types.TimeFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTime)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTime, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DTime)
 		}
 	case types.JsonFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DJSON)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DJSON, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DJSON)
 		}
 	case types.TimeTZFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTimeTZ)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTimeTZ, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DTimeTZ)
 		}
 	case types.TupleFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTuple)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTuple, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DTuple)
 		}
 	case types.BitFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DBitArray)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DBitArray, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DBitArray)
 		}
 	case types.GeometryFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DGeometry)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DGeometry, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DGeometry)
 		}
 	case types.GeographyFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DGeography)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DGeography, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DGeography)
 		}
 	case types.EnumFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DEnum)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DEnum, found %s", reflect.TypeOf(datum))
-			}
-			return d, nil
+		return func(datum tree.Datum) interface{} {
+			return datum.(*tree.DEnum)
 		}
 	}
 	colexecerror.InternalError(fmt.Sprintf("unexpectedly unhandled type %s", ct.DebugString()))

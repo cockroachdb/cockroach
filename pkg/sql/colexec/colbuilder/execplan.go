@@ -1637,10 +1637,7 @@ func planProjectionOperators(
 			op = colexec.NewConstNullOp(colmem.NewAllocator(ctx, acc, factory), input, resultIdx)
 			return op, resultIdx, typs, internalMemUsed, nil
 		}
-		constVal, err := colexec.GetDatumToPhysicalFn(datumType)(t)
-		if err != nil {
-			return nil, resultIdx, typs, internalMemUsed, err
-		}
+		constVal := colexec.GetDatumToPhysicalFn(datumType)(t)
 		op, err := colexec.NewConstOp(colmem.NewAllocator(ctx, acc, factory), input, datumType, constVal, resultIdx)
 		if err != nil {
 			return nil, resultIdx, typs, internalMemUsed, err

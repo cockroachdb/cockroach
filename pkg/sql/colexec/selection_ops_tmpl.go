@@ -278,10 +278,7 @@ func GetSelectionConstOperator(
 	constArg tree.Datum,
 	binFn *tree.BinOp,
 ) (colexecbase.Operator, error) {
-	c, err := GetDatumToPhysicalFn(constType)(constArg)
-	if err != nil {
-		return nil, err
-	}
+	c := GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
 		OneInputNode:   NewOneInputNode(input),
 		colIdx:         colIdx,
