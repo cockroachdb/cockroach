@@ -547,6 +547,12 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::google::protobuf::int64 contains_estimates() const;
   void set_contains_estimates(::google::protobuf::int64 value);
 
+  // sint64 abort_span_bytes = 15;
+  void clear_abort_span_bytes();
+  static const int kAbortSpanBytesFieldNumber = 15;
+  ::google::protobuf::int64 abort_span_bytes() const;
+  void set_abort_span_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.MVCCStatsDelta)
  private:
 
@@ -565,6 +571,7 @@ class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
   ::google::protobuf::int64 contains_estimates_;
+  ::google::protobuf::int64 abort_span_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -738,6 +745,12 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
   ::google::protobuf::int64 contains_estimates() const;
   void set_contains_estimates(::google::protobuf::int64 value);
 
+  // int64 abort_span_bytes = 15;
+  void clear_abort_span_bytes();
+  static const int kAbortSpanBytesFieldNumber = 15;
+  ::google::protobuf::int64 abort_span_bytes() const;
+  void set_abort_span_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.storage.enginepb.MVCCPersistentStats)
  private:
 
@@ -756,6 +769,7 @@ class MVCCPersistentStats : public ::google::protobuf::MessageLite /* @@protoc_i
   ::google::protobuf::int64 sys_bytes_;
   ::google::protobuf::int64 sys_count_;
   ::google::protobuf::int64 contains_estimates_;
+  ::google::protobuf::int64 abort_span_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -2328,6 +2342,20 @@ inline void MVCCStatsDelta::set_sys_count(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStatsDelta.sys_count)
 }
 
+// sint64 abort_span_bytes = 15;
+inline void MVCCStatsDelta::clear_abort_span_bytes() {
+  abort_span_bytes_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 MVCCStatsDelta::abort_span_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCStatsDelta.abort_span_bytes)
+  return abort_span_bytes_;
+}
+inline void MVCCStatsDelta::set_abort_span_bytes(::google::protobuf::int64 value) {
+  
+  abort_span_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCStatsDelta.abort_span_bytes)
+}
+
 // -------------------------------------------------------------------
 
 // MVCCPersistentStats
@@ -2525,6 +2553,20 @@ inline void MVCCPersistentStats::set_sys_count(::google::protobuf::int64 value) 
   
   sys_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCPersistentStats.sys_count)
+}
+
+// int64 abort_span_bytes = 15;
+inline void MVCCPersistentStats::clear_abort_span_bytes() {
+  abort_span_bytes_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 MVCCPersistentStats::abort_span_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.enginepb.MVCCPersistentStats.abort_span_bytes)
+  return abort_span_bytes_;
+}
+inline void MVCCPersistentStats::set_abort_span_bytes(::google::protobuf::int64 value) {
+  
+  abort_span_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.enginepb.MVCCPersistentStats.abort_span_bytes)
 }
 
 // -------------------------------------------------------------------
