@@ -174,10 +174,6 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
 		rngInfo, err := ri.ds.getRoutingInfo(ctx, ri.key, ri.token, ri.scanDir == Descending)
 
-		if log.V(2) {
-			log.Infof(ctx, "key: %s, desc: %s err: %v", ri.key, rngInfo.Desc(), err)
-		}
-
 		// getRoutingInfo may fail retryably if, for example, the first
 		// range isn't available via Gossip. Assume that all errors at
 		// this level are retryable. Non-retryable errors would be for
@@ -187,11 +183,11 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 			log.VEventf(ctx, 1, "range descriptor lookup failed: %s", err)
 			continue
 		}
+		if log.V(2) {
+			log.Infof(ctx, "key: %s, desc: %s", ri.key, rngInfo.Desc())
+		}
 
 		ri.token = rngInfo
-		if log.V(2) {
-			log.Infof(ctx, "returning; key: %s, desc: %s", ri.key, ri.Desc())
-		}
 		return
 	}
 
