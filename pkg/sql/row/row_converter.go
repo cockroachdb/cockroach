@@ -318,7 +318,7 @@ func NewDatumRowConverter(
 				//
 				// TODO (anzoteh96): add support to non-constant default expressions. Perhaps
 				// we can start with those with Stable volatility, like now().
-				if !tree.IsConst(evalCtx, defaultExprs[i]) {
+				if !(col.DefaultExprStr() == "unique_rowid()" || tree.IsConst(evalCtx, defaultExprs[i])) {
 					return nil, errors.Newf(
 						"non-constant default expression %s for non-targeted column %q is not supported by IMPORT INTO",
 						defaultExprs[i].String(),
@@ -385,11 +385,18 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	for i := range c.cols {
 		col := &c.cols[i]
 		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
-			datum, err := c.defaultExprs[i].Eval(c.EvalCtx)
-			if err != nil {
-				return errors.Wrapf(err, "error evaluating default expression for IMPORT INTO")
+			if col.DefaultExprStr() == "unique_rowid()" {
+				if c.hidden < 0 {
+					return errors.Newf("error supporting unique_rowid() as default expression for IMPORT INTO")
+				}
+				c.Datums[i] = c.Datums[c.hidden]
+			} else {
+				datum, err := c.defaultExprs[i].Eval(c.EvalCtx)
+				if err != nil {
+					return errors.Wrapf(err, "error evaluating default expression for IMPORT INTO")
+				}
+				c.Datums[i] = datum
 			}
-			c.Datums[i] = datum
 		}
 	}
 

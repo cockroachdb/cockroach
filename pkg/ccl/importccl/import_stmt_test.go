@@ -63,6 +63,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// This checks that the ind-th column of a query string has all unique elements.
+func checkUnique(allStr [][]string, ind int) bool {
+	uniqStr := make(map[string]struct{}, len(allStr))
+	for _, slice := range allStr {
+		s := slice[ind]
+		if _, ok := uniqStr[s]; ok {
+			return false
+		}
+		uniqStr[s] = struct{}{}
+	}
+	return true
+}
+
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2475,8 +2488,8 @@ func TestImportIntoCSV(t *testing.T) {
 	// Test that IMPORT INTO works when columns with default expressions are present.
 	// The default expressions supported by IMPORT INTO are constant expressions,
 	// which are literals and functions that always return the same value given the
-	// same arguments (examples of non-constant expressions are given in the last two
-	// subtests below). The default expression of a column is used when this column is not
+	// same arguments (examples of non-constant expressions are given as now()
+	// and nextval()). The default expression of a column is used when this column is not
 	// targeted; otherwise, data from source file (like CSV) is used. It also checks
 	// that IMPORT TABLE works when there are default columns.
 	t.Run("import-into-default", func(t *testing.T) {
@@ -2598,6 +2611,15 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.ExpectErr(t,
 				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
 				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+		})
+		t.Run("unique_rowid", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE t(a INT DEFAULT unique_rowid(), b INT, c STRING)`)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (3, 'CAT')`))
+			sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (b, c) CSV DATA (%s)`, strings.Join(testFiles.files, ", ")))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (b, c) VALUES (4, 'DOG')`))
+			IDstr := sqlDB.QueryStr(t, `SELECT a FROM t`)
+			require.True(t, checkUnique(IDstr, 0))
 		})
 	})
 
