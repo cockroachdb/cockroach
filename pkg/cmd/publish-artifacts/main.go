@@ -287,15 +287,8 @@ func buildOneWorkload(svc s3putter, o opts) {
 		log.Fatalf("refusing to build workload in release mode")
 	}
 
-	{
-		cmd := exec.Command("make", "bin/workload")
-		cmd.Dir = o.PkgDir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if err := cmd.Run(); err != nil {
-			log.Fatalf("%s: %s", cmd.Args, err)
-		}
+	if err := release.MakeWorkload(o.PkgDir); err != nil {
+		log.Fatal(err)
 	}
 
 	o.Base = "workload"
