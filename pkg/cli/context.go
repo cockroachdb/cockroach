@@ -49,6 +49,7 @@ func initCLIDefaults() {
 	setNetworkBenchContextDefaults()
 	setSqlfmtContextDefaults()
 	setDemoContextDefaults()
+	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
 
 	initPreFlagsDefaults()
@@ -504,6 +505,16 @@ func setDemoContextDefaults() {
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
+}
+
+// stmtDiagCtx captures the command-line parameters of the 'statement-diag'
+// command.
+var stmtDiagCtx struct {
+	all bool
+}
+
+func setStmtDiagContextDefaults() {
+	stmtDiagCtx.all = false
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside
