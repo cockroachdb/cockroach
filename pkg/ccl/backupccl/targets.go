@@ -13,8 +13,10 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -714,10 +716,15 @@ func CheckObjectExists(
 
 func fullClusterTargetsRestore(
 	allDescs []sqlbase.Descriptor,
-) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (
+	[]sqlbase.Descriptor,
+	[]*sqlbase.ImmutableDatabaseDescriptor,
+	[]jobspb.RestoreDetails_Tenant,
+	error,
+) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	filteredDescs := make([]sqlbase.Descriptor, 0, len(fullClusterDescs))
 	for _, desc := range fullClusterDescs {
@@ -732,7 +739,7 @@ func fullClusterTargetsRestore(
 		}
 	}
 
-	return filteredDescs, filteredDBs, nil
+	return filteredDescs, filteredDBs, nil, nil
 }
 
 func selectTargets(
@@ -742,28 +749,44 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, []*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (
+	[]sqlbase.Descriptor,
+	[]*sqlbase.ImmutableDatabaseDescriptor,
+	[]jobspb.RestoreDetails_Tenant,
+	error,
+) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(allDescs)
 	}
 
+	if targets.Tenant != (roachpb.TenantID{}) {
+		for _, tenant := range lastBackupManifest.Tenants {
+			// TODO(dt): for now it is zero-or-one but when that changes, we should
+			// either keep it sorted or build a set here.
+			if tenant.ID == targets.Tenant.ToUint64() {
+				return nil, nil, []jobspb.RestoreDetails_Tenant{{ID: tenant.ID, Info: tenant.Info}}, nil
+			}
+		}
+		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.Tenant.ToUint64())
+	}
+
 	matched, err := descriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if len(matched.descs) == 0 {
-		return nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
+		return nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
 	if lastBackupManifest.FormatVersion >= BackupFormatDescriptorTrackingVersion {
 		if err := matched.checkExpansions(lastBackupManifest.CompleteDbs); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
-	return matched.descs, matched.requestedDBs, nil
+	return matched.descs, matched.requestedDBs, nil, nil
 }
