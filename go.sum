@@ -178,8 +178,6 @@ github.com/cpuguy83/go-md2man v1.0.10 h1:BSKMNlYxDvnunlTymqtgONjNnaRV1sTpcovwwjF
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/d4l3k/messagediff v1.2.1 h1:ZcAIMYsUg0EAp9X+tt8/enBE/Q8Yd5kzPynLyKptt9U=
-github.com/d4l3k/messagediff v1.2.1/go.mod h1:Oozbb1TVXFac9FtSIxHBMnBCq2qeH/2KkEQxENCrlLo=
 github.com/dave/dst v0.24.0 h1:5wtsjxee7nUDlKEz4i6ewJVn1193vfv2UpEXKqzmaUI=
 github.com/dave/dst v0.24.0/go.mod h1:UMDJuIRPfyUCC78eFuB+SV/WI8oDeyFDvM/JR6NI3IU=
 github.com/dave/gopackages v0.0.0-20170318123100-46e7023ec56e/go.mod h1:i00+b/gKdIDIxuLDFob7ustLAVqhsZRk2qVZrArELGQ=
@@ -597,8 +595,8 @@ github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
-github.com/twpayne/go-geom v1.3.0 h1:jwhmbnQv5VTfAgohevKBuzisQSdXGjfquZ7FC8aVUzU=
-github.com/twpayne/go-geom v1.3.0/go.mod h1:90yvs0wf/gyT5eQ9W4v5WOZ9w/Xnrj5RMlA9XNKqxyA=
+github.com/twpayne/go-geom v1.3.2 h1:4E9aSr+B5y+wjTFf2fNmxsnYSZD2k1nSdDyos3ZQ/EY=
+github.com/twpayne/go-geom v1.3.2/go.mod h1:vFTJTOBkeN903mbhV6FYSTOUjglpV6WA8J11fNiUXaQ=
 github.com/twpayne/go-kml v1.5.0 h1:CNWBxCmyWg1158dWbfdZsuUkUtHITrkntJS3iJhazJQ=
 github.com/twpayne/go-kml v1.5.0/go.mod h1:g/OG8Q8JUxqFw8LGXE44W7osn1uXDAYaVFr1Yld43yc=
 github.com/twpayne/go-polyline v1.0.0/go.mod h1:ICh24bcLYBX8CknfvNPKqoTbe+eg+MX1NPyJmSBo7pU=
