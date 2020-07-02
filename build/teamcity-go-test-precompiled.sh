@@ -20,6 +20,9 @@ shift
 # Throw `go test`s binary away.
 shift
 
+# Ensure the artifacts still get saved to the artifacts directory.
+ln -s "$(dirname $0)/artifacts" artifacts
+
 # Following the example, invoke `./acceptance.test`.
 GOROOT=/home/agent/work/.go "./$(basename "$actual")" "$@"
 
