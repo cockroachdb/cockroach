@@ -93,6 +93,16 @@ func WithMakeReleaseOptionExecFn(r ExecFn) MakeReleaseOption {
 	}
 }
 
+// MakeWorkload makes the bin/workload binary.
+func MakeWorkload(pkgDir string) error {
+	cmd := exec.Command("make", "bin/workload")
+	cmd.Dir = pkgDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	log.Printf("%s %s", cmd.Env, cmd.Args)
+	return cmd.Run()
+}
+
 // MakeRelease makes the release binary.
 func MakeRelease(b SupportedTarget, pkgDir string, opts ...MakeReleaseOption) error {
 	params := makeReleaseAndVerifyOptions{
