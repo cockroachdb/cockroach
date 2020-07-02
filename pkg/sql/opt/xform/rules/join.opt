@@ -118,7 +118,8 @@
         (FiltersItem
             $fn:(Function) &
                 (IsGeoIndexFunction $fn) &
-                (HasAllVariableArgs $fn)
+                (FirstArgIsVariable $fn) &
+                (SecondArgIsVariable $fn)
         )
         ...
     ]
