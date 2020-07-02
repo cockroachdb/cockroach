@@ -140,7 +140,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
-	github.com/twpayne/go-geom v1.3.0
+	github.com/twpayne/go-geom v1.3.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
 	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59

@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEWKBToWKT(t *testing.T) {
+func TestSpatialObjectToWKT(t *testing.T) {
 	testCases := []struct {
 		ewkt             geopb.EWKT
 		maxDecimalDigits int
@@ -32,14 +32,14 @@ func TestEWKBToWKT(t *testing.T) {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToWKT(so.EWKB, tc.maxDecimalDigits)
+			encoded, err := SpatialObjectToWKT(so, tc.maxDecimalDigits)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
 	}
 }
 
-func TestEWKBToEWKT(t *testing.T) {
+func TestSpatialObjectToEWKT(t *testing.T) {
 	testCases := []struct {
 		ewkt             geopb.EWKT
 		maxDecimalDigits int
@@ -54,14 +54,14 @@ func TestEWKBToEWKT(t *testing.T) {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToEWKT(so.EWKB, tc.maxDecimalDigits)
+			encoded, err := SpatialObjectToEWKT(so, tc.maxDecimalDigits)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
 	}
 }
 
-func TestEWKBToWKB(t *testing.T) {
+func TestSpatialObjectToWKB(t *testing.T) {
 	testCases := []struct {
 		ewkt     geopb.EWKT
 		expected geopb.WKB
@@ -74,48 +74,48 @@ func TestEWKBToWKB(t *testing.T) {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToWKB(so.EWKB, DefaultEWKBEncodingFormat)
+			encoded, err := SpatialObjectToWKB(so, DefaultEWKBEncodingFormat)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
 	}
 }
 
-func TestEWKBToGeoJSON(t *testing.T) {
+func TestSpatialObjectToGeoJSON(t *testing.T) {
 	testCases := []struct {
 		ewkt     geopb.EWKT
-		flag     EWKBToGeoJSONFlag
+		flag     SpatialObjectToGeoJSONFlag
 		expected string
 	}{
-		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagZero, `{"type":"Point","coordinates":[1,1]}`},
-		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
-		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS | EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
-		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS, `{"type":"Point","coordinates":[1,1]}`},
-		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagLongCRS, `{"type":"Point","coordinates":[1,1]}`},
-		{"POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1,1]}`},
-		{"POINT(1.1234567 1.9876543)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1.123457,1.987654]}`},
-		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagZero, `{"type":"Point","coordinates":[1,1]}`},
-		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
-		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagLongCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}`},
-		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4326"}},"coordinates":[1,1]}`},
-		{"SRID=4004;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
-		{"SRID=4004;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRS | EWKBToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
-		{"SRID=4326;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1,1]}`},
-		{"SRID=4004;POINT(1.0 1.0)", EWKBToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagZero, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRS | SpatialObjectToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRS, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagLongCRS, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1,1]}`},
+		{"POINT(1.1234567 1.9876543)", SpatialObjectToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1.123457,1.987654]}`},
+		{"SRID=4326;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagZero, `{"type":"Point","coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagLongCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4326"}},"coordinates":[1,1]}`},
+		{"SRID=4004;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRS, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
+		{"SRID=4004;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRS | SpatialObjectToGeoJSONFlagIncludeBBox, `{"type":"Point","bbox":[1,1,1,1],"crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
+		{"SRID=4326;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","coordinates":[1,1]}`},
+		{"SRID=4004;POINT(1.0 1.0)", SpatialObjectToGeoJSONFlagShortCRSIfNot4326, `{"type":"Point","crs":{"type":"name","properties":{"name":"EPSG:4004"}},"coordinates":[1,1]}`},
 	}
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToGeoJSON(so.EWKB, 6, tc.flag)
+			encoded, err := SpatialObjectToGeoJSON(so, 6, tc.flag)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, string(encoded))
 		})
 	}
 }
 
-func TestEWKBToWKBHex(t *testing.T) {
+func TestSpatialObjectToWKBHex(t *testing.T) {
 	testCases := []struct {
 		ewkt     geopb.EWKT
 		expected string
@@ -128,14 +128,14 @@ func TestEWKBToWKBHex(t *testing.T) {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToWKBHex(so.EWKB)
+			encoded, err := SpatialObjectToWKBHex(so)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
 	}
 }
 
-func TestEWKBToKML(t *testing.T) {
+func TestSpatialObjectToKML(t *testing.T) {
 	testCases := []struct {
 		ewkt     geopb.EWKT
 		expected string
@@ -150,7 +150,7 @@ func TestEWKBToKML(t *testing.T) {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
 			so, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
-			encoded, err := EWKBToKML(so.EWKB)
+			encoded, err := SpatialObjectToKML(so)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, encoded)
 		})
