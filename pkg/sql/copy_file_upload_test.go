@@ -14,22 +14,29 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
+const defaultQualifiedDBSchemaName = "defaultdb.public."
 const filename = "/test/test_file_upload.csv"
+
+var fileUploadModes = []string{NodelocalFileUploadTable, UserFileUploadTable}
 
 func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 	err := os.MkdirAll(filepath.Dir(testSendFile), 0755)
@@ -42,7 +49,23 @@ func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 	}
 }
 
-func runCopyFile(t *testing.T, db *gosql.DB, testSendFile string) error {
+func prepareFileUploadURI(user, testSendFile, copyInternalTable string) (string, error) {
+	var uri string
+	if copyInternalTable == NodelocalFileUploadTable {
+		testSendFile = strings.TrimPrefix(testSendFile, "/")
+		uri = fmt.Sprintf("nodelocal://self/%s", testSendFile)
+	} else if copyInternalTable == UserFileUploadTable {
+		if !strings.HasPrefix(testSendFile, "/") {
+			return "", errors.New("userfile destination must start with a /")
+		}
+		uri = fmt.Sprintf("userfile://%s%s",
+			defaultQualifiedDBSchemaName+user, testSendFile)
+	}
+
+	return uri, nil
+}
+
+func runCopyFile(t *testing.T, db *gosql.DB, user, testSendFile, copyInternalTable string) error {
 	// Make sure we can open this file first
 	reader, err := os.Open(testSendFile)
 	if err != nil {
@@ -59,7 +82,11 @@ func runCopyFile(t *testing.T, db *gosql.DB, testSendFile string) error {
 		}
 	}()
 
-	stmt, err := txn.Prepare(CopyInFileStmt(filename, crdbInternalName, fileUploadTable))
+	fileUploadURI, err := prepareFileUploadURI(user, testSendFile, copyInternalTable)
+	if err != nil {
+		return err
+	}
+	stmt, err := txn.Prepare(CopyInFileStmt(fileUploadURI, CrdbInternalName, copyInternalTable))
 	if err != nil {
 		return err
 	}
@@ -86,9 +113,39 @@ func runCopyFile(t *testing.T, db *gosql.DB, testSendFile string) error {
 	return nil
 }
 
+func checkNodelocalContent(
+	t *testing.T, localExternalDir, filename string, expectedContent []byte,
+) {
+	content, err := ioutil.ReadFile(filepath.Join(localExternalDir, filename))
+	require.NoError(t, err)
+	if !bytes.Equal(expectedContent, content) {
+		t.Fatalf("content not the same. expected: %s got: %s", expectedContent, content)
+	}
+}
+
+func checkUserFileContent(
+	ctx context.Context,
+	t *testing.T,
+	s serverutils.TestServerInterface,
+	user, filename string,
+	expectedContent []byte,
+) {
+	uri, err := prepareFileUploadURI(user, filename, UserFileUploadTable)
+	require.NoError(t, err)
+	store, err := s.ExecutorConfig().(ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx, uri,
+		user)
+	require.NoError(t, err)
+	reader, err := store.ReadFile(ctx, "")
+	require.NoError(t, err)
+	got, err := ioutil.ReadAll(reader)
+	require.NoError(t, err)
+	require.True(t, bytes.Equal(got, expectedContent))
+}
+
 func TestFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -103,23 +160,20 @@ func TestFileUpload(t *testing.T) {
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err := runCopyFile(t, db, testSendFile)
-	if err != nil {
-		t.Fatal(err)
+	for _, table := range fileUploadModes {
+		err := runCopyFile(t, db, security.RootUser, testSendFile, table)
+		require.NoError(t, err)
 	}
 
-	content, err := ioutil.ReadFile(filepath.Join(localExternalDir, filename))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(fileContent, content) {
-		t.Fatalf("content not the same. expected: %s got: %s", fileContent, content)
-	}
+	// Verify contents of the uploaded file.
+	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
+	checkUserFileContent(ctx, t, s, security.RootUser, testSendFile, fileContent)
 }
 
 func TestUploadEmptyFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -133,18 +187,14 @@ func TestUploadEmptyFile(t *testing.T) {
 	fileContent := []byte("")
 	writeFile(t, testSendFile, fileContent)
 
-	err := runCopyFile(t, db, testSendFile)
-	if err != nil {
-		t.Fatal(err)
+	for _, table := range fileUploadModes {
+		err := runCopyFile(t, db, security.RootUser, testSendFile, table)
+		require.NoError(t, err)
 	}
 
-	content, err := ioutil.ReadFile(filepath.Join(localExternalDir, filename))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(fileContent, content) {
-		t.Fatalf("content not the same. expected: %s got: %s", fileContent, content)
-	}
+	// Verify contents of the uploaded file.
+	checkNodelocalContent(t, localExternalDir, testSendFile, fileContent)
+	checkUserFileContent(ctx, t, s, security.RootUser, testSendFile, fileContent)
 }
 
 func TestFileNotExist(t *testing.T) {
@@ -157,10 +207,10 @@ func TestFileNotExist(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	err := runCopyFile(t, db, filepath.Join(localExternalDir, filename))
 	expectedErr := "no such file"
-	if !testutils.IsError(err, expectedErr) {
-		t.Fatalf(`expected error: %s, got: %s`, expectedErr, err)
+	for _, table := range fileUploadModes {
+		err := runCopyFile(t, db, security.RootUser, filename, table)
+		require.True(t, testutils.IsError(err, expectedErr))
 	}
 }
 
@@ -174,17 +224,27 @@ func TestFileExist(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	destination := filepath.Join(localExternalDir, filename)
-	writeFile(t, destination, []byte("file exists"))
+	testFileDir, cleanup2 := testutils.TempDir(t)
+	defer cleanup2()
+	testSendFile := filepath.Join(testFileDir, filename)
+	writeFile(t, testSendFile, []byte("file exists"))
 
-	err := runCopyFile(t, db, destination)
-	expectedErr := "file already exists"
-	if !testutils.IsError(err, expectedErr) {
-		t.Fatalf(`expected error: %s, got: %s`, expectedErr, err)
+	// Write successfully the first time.
+	for _, table := range fileUploadModes {
+		err := runCopyFile(t, db, security.RootUser, testSendFile, table)
+		require.NoError(t, err)
+	}
+
+	// Writes fail the second time.
+	for _, table := range fileUploadModes {
+		require.True(t, testutils.IsError(runCopyFile(t, db, security.RootUser, testSendFile,
+			table), "file already exists"))
 	}
 }
 
-func TestNotAdmin(t *testing.T) {
+// TestNodelocalNotAdmin ensures that non-admin users cannot interact with
+// nodelocal storage.
+func TestNodelocalNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := tests.CreateTestServerParams()
@@ -213,9 +273,45 @@ func TestNotAdmin(t *testing.T) {
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err = runCopyFile(t, userDB, testSendFile)
+	err = runCopyFile(t, userDB, "jsmith", testSendFile, NodelocalFileUploadTable)
 	expectedErr := "only users with the admin role are allowed to upload"
-	if !testutils.IsError(err, expectedErr) {
-		t.Fatalf(`expected error: %s, got: %s`, expectedErr, err)
-	}
+	require.True(t, testutils.IsError(err, expectedErr))
+}
+
+// TestUserfileNotAdmin ensures that non-admin users with CREATE privileges can
+// interact with the FileTable ExternalStorage.
+func TestUserfileNotAdmin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	localExternalDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	params.ExternalIODir = localExternalDir
+	params.Insecure = true
+	s, rootDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	_, err := rootDB.Exec("CREATE USER jsmith")
+	require.NoError(t, err)
+	_, err = rootDB.Exec("GRANT CREATE ON DATABASE defaultdb TO jsmith")
+	require.NoError(t, err)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
+		t, s.ServingSQLAddr(), "notAdmin", url.User("jsmith"), false, /* withCerts */
+	)
+	defer cleanupGoDB()
+	pgURL.RawQuery = "sslmode=disable"
+	userDB, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer userDB.Close()
+
+	testFileDir, cleanup2 := testutils.TempDir(t)
+	defer cleanup2()
+	testSendFile := filepath.Join(testFileDir, filename)
+	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
+	writeFile(t, testSendFile, fileContent)
+
+	err = runCopyFile(t, userDB, "jsmith", testSendFile, UserFileUploadTable)
+	require.NoError(t, err)
+	checkUserFileContent(context.Background(), t, s, "jsmith", testSendFile, fileContent)
 }
