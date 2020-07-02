@@ -40,7 +40,6 @@ func FakePHS(opName, user string) (interface{}, func()) {
 
 func TestRegistryCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO: set the cluster as non finalized nad enable the test.")
 
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -64,7 +63,10 @@ func TestRegistryCancelation(t *testing.T) {
 		db,
 		nil, /* ex */
 		base.TestingIDContainer,
-		cluster.NoSettings,
+		cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 19, Minor: 2},
+			roachpb.Version{Major: 19, Minor: 2},
+			true),
 		histogramWindowInterval,
 		FakePHS,
 		"",

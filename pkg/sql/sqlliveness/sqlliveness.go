@@ -30,7 +30,6 @@ type Claim struct {
 // OptionalNodeLivenessI is the interface used in OptionalNodeLiveness.
 type ClaimManager interface {
 	GetLiveEpoch(context.Context, string, time.Duration) (int64, error)
-	ExtendClaim(context.Context, *Claim, time.Duration) (*time.Time, error)
 	GetLiveClaims(context.Context) ([]Claim, error)
 }
 
@@ -112,28 +111,4 @@ func (l *SqlLiveness) GetLiveEpoch(
 		return -1, err
 	}
 	return epoch, nil
-}
-
-func (l *SqlLiveness) ExtendClaim(
-	ctx context.Context, c *Claim, d time.Duration,
-) (*time.Time, error) {
-	var res *time.Time
-	err := l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		row, err := l.ex.QueryRowEx(
-			ctx, "extend-claim", txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			`UPDATE system.sqlliveness SET expiration = now() + '$1 microsecond'
-			WHERE name = $2 AND epoch = $3 RETURNING expiration`,
-			d.Microseconds(), c.Name, c.Epoch,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "extend liveness claim (%s, %d)", c.Name, c.Epoch)
-		}
-		if row == nil {
-			return errors.Wrapf(MissingClaimErr, "claim (%s, %d)", c.Name, c.Epoch)
-		}
-		res = &row[0].(*tree.DTimestampTZ).Time
-		return nil
-	})
-	return res, err
 }

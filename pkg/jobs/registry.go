@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	types "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -397,7 +397,8 @@ func (r *Registry) NewJob(record Record) *Job {
 //lease.
 func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
-	if !r.settings.Version.IsActive(ctx, clusterversion.VersionStart20_2) {
+	if !r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
 		// TODO(spaskob): remove in 20.2 as this code path is only needed while
 		// migrating to 20.2 cluster.
 		if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
@@ -467,7 +468,8 @@ func (r *Registry) CreateStartableJobWithTxn(
 	}
 	resumerCtx, cancel := r.makeCtx()
 
-	if r.settings.Version.IsActive(ctx, clusterversion.VersionStart20_2) {
+	if r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
@@ -600,7 +602,6 @@ func (r *Registry) Start(
 			log.Errorf(ctx, "error getting live claims: %s", err)
 			return
 		}
-		//TODO log.Infof(ctx, "Cluster live claims (clipped at 100): %+v", liveClaims[0:100])
 
 		if err := r.claimJobs(ctx, liveEpoch, liveClaims); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
@@ -622,7 +623,8 @@ func (r *Registry) Start(
 				return
 			case <-r.adoptionCh:
 				// Try to adopt the most recently created job.
-				if r.settings.Version.IsActive(ctx, clusterversion.VersionStart20_2) {
+				if r.settings.Version.IsActive(
+					ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
 					claimAndProcessJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
@@ -630,7 +632,8 @@ func (r *Registry) Start(
 					maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
 				}
 			case <-time.After(adoptInterval):
-				if r.settings.Version.IsActive(ctx, clusterversion.VersionStart20_2) {
+				if r.settings.Version.IsActive(
+					ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
 					claimAndProcessJobs(ctx)
 				} else {
 					// TODO(spaskob): remove in 20.2 as this code path is only needed while
@@ -655,7 +658,8 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNode
 	default:
 	}
 
-	if r.settings.Version.IsActive(ctx, clusterversion.VersionStart20_2) {
+	if r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		// If the cluster is finalized, kill any remaining legacy jobs. They will be
