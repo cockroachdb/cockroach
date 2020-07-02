@@ -486,6 +486,7 @@ func init() {
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, nodeLocalCmds...)
+	clientCmds = append(clientCmds, stmtDiagCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		VarFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
@@ -600,6 +601,7 @@ func init() {
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
+	sqlCmds = append(sqlCmds, stmtDiagCmds...)
 	sqlCmds = append(sqlCmds, nodeLocalCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.Flags()
@@ -678,6 +680,12 @@ func init() {
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, demoCtx.useEmptyDatabase)
+
+	// statement-diag command.
+	{
+		BoolFlag(stmtDiagDeleteCmd.Flags(), &stmtDiagCtx.all, cliflags.StmtDiagDeleteAll, false)
+		BoolFlag(stmtDiagCancelCmd.Flags(), &stmtDiagCtx.all, cliflags.StmtDiagCancelAll, false)
+	}
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()
