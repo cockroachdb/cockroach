@@ -27,6 +27,7 @@ func genCastOperators(inputFileContents string, wr io.Writer) error {
 		"_R_GO_TYPE", "{{.Right.GoType}}",
 		"_L_TYP", "{{.Left.VecMethod}}",
 		"_R_TYP", "{{.Right.VecMethod}}",
+		"_NAME", "{{.Left.VecMethod}}{{.Right.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
 

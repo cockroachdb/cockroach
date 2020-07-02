@@ -713,10 +713,8 @@ func (hj *externalHashJoiner) Close(ctx context.Context) error {
 	if err := hj.rightPartitioner.Close(ctx); err != nil && retErr == nil {
 		retErr = err
 	}
-	if c, ok := hj.diskBackedSortMerge.(Closer); ok {
-		if err := c.Close(ctx); err != nil && retErr == nil {
-			retErr = err
-		}
+	if err := hj.diskBackedSortMerge.(Closer).Close(ctx); err != nil && retErr == nil {
+		retErr = err
 	}
 	if !hj.testingKnobs.delegateFDAcquisitions && hj.fdState.acquiredFDs > 0 {
 		hj.fdState.fdSemaphore.Release(hj.fdState.acquiredFDs)

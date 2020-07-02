@@ -42,67 +42,7 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftType := o.left.sourceTypes[leftColIdx]
-		rightType := o.right.sourceTypes[rightColIdx]
-		colType := leftType
-		// Merge joiner only supports the case when the physical types in the
-		// equality columns in both inputs are the same. If that is not the case,
-		// we need to cast one of the vectors to another's physical type putting
-		// the result of the cast into a temporary vector that is used instead of
-		// the original.
-		leftCanonicalTypeFamily := o.left.canonicalTypeFamilies[leftColIdx]
-		isNumeric := leftCanonicalTypeFamily == types.IntFamily ||
-			leftCanonicalTypeFamily == types.FloatFamily ||
-			leftCanonicalTypeFamily == types.DecimalFamily
-		if isNumeric && !leftType.Identical(rightType) {
-			castLeftToRight := false
-			// There is a hierarchy of valid casts:
-			//   Int16 -> Int32 -> Int64 -> Float64 -> Decimal
-			// and the cast is valid if 'fromType' is mentioned before 'toType'
-			// in this chain.
-			switch leftCanonicalTypeFamily {
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					castLeftToRight = true
-				case 32:
-					castLeftToRight = !rightType.Identical(types.Int2)
-				case 64:
-					castLeftToRight = !rightType.Identical(types.Int2) && !rightType.Identical(types.Int4)
-				}
-			case types.FloatFamily:
-				castLeftToRight = o.right.canonicalTypeFamilies[rightColIdx] == types.DecimalFamily
-			}
-
-			toType := leftType
-			if castLeftToRight {
-				toType = rightType
-			}
-			var tempVec coldata.Vec
-			for _, vec := range o.scratch.tempVecs {
-				if vec.Type().Identical(toType) {
-					tempVec = vec
-					break
-				}
-			}
-			if tempVec == nil {
-				tempVec = o.unlimitedAllocator.NewMemColumn(toType, coldata.BatchSize())
-				o.scratch.tempVecs = append(o.scratch.tempVecs, tempVec)
-			} else {
-				tempVec.Nulls().UnsetNulls()
-				if tempVec.CanonicalTypeFamily() == types.BytesFamily {
-					tempVec.Bytes().Reset()
-				}
-			}
-			if castLeftToRight {
-				cast(lVec, tempVec, o.proberState.lBatch.Length(), lSel)
-				lVec = tempVec
-				colType = rightType
-			} else {
-				cast(rVec, tempVec, o.proberState.rBatch.Length(), rSel)
-				rVec = tempVec
-			}
-		}
+		colType := o.left.sourceTypes[leftColIdx]
 		if lVec.MaybeHasNulls() {
 			if rVec.MaybeHasNulls() {
 
@@ -8965,67 +8905,7 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftType := o.left.sourceTypes[leftColIdx]
-		rightType := o.right.sourceTypes[rightColIdx]
-		colType := leftType
-		// Merge joiner only supports the case when the physical types in the
-		// equality columns in both inputs are the same. If that is not the case,
-		// we need to cast one of the vectors to another's physical type putting
-		// the result of the cast into a temporary vector that is used instead of
-		// the original.
-		leftCanonicalTypeFamily := o.left.canonicalTypeFamilies[leftColIdx]
-		isNumeric := leftCanonicalTypeFamily == types.IntFamily ||
-			leftCanonicalTypeFamily == types.FloatFamily ||
-			leftCanonicalTypeFamily == types.DecimalFamily
-		if isNumeric && !leftType.Identical(rightType) {
-			castLeftToRight := false
-			// There is a hierarchy of valid casts:
-			//   Int16 -> Int32 -> Int64 -> Float64 -> Decimal
-			// and the cast is valid if 'fromType' is mentioned before 'toType'
-			// in this chain.
-			switch leftCanonicalTypeFamily {
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					castLeftToRight = true
-				case 32:
-					castLeftToRight = !rightType.Identical(types.Int2)
-				case 64:
-					castLeftToRight = !rightType.Identical(types.Int2) && !rightType.Identical(types.Int4)
-				}
-			case types.FloatFamily:
-				castLeftToRight = o.right.canonicalTypeFamilies[rightColIdx] == types.DecimalFamily
-			}
-
-			toType := leftType
-			if castLeftToRight {
-				toType = rightType
-			}
-			var tempVec coldata.Vec
-			for _, vec := range o.scratch.tempVecs {
-				if vec.Type().Identical(toType) {
-					tempVec = vec
-					break
-				}
-			}
-			if tempVec == nil {
-				tempVec = o.unlimitedAllocator.NewMemColumn(toType, coldata.BatchSize())
-				o.scratch.tempVecs = append(o.scratch.tempVecs, tempVec)
-			} else {
-				tempVec.Nulls().UnsetNulls()
-				if tempVec.CanonicalTypeFamily() == types.BytesFamily {
-					tempVec.Bytes().Reset()
-				}
-			}
-			if castLeftToRight {
-				cast(lVec, tempVec, o.proberState.lBatch.Length(), lSel)
-				lVec = tempVec
-				colType = rightType
-			} else {
-				cast(rVec, tempVec, o.proberState.rBatch.Length(), rSel)
-				rVec = tempVec
-			}
-		}
+		colType := o.left.sourceTypes[leftColIdx]
 		if lVec.MaybeHasNulls() {
 			if rVec.MaybeHasNulls() {
 
@@ -17888,67 +17768,7 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftType := o.left.sourceTypes[leftColIdx]
-		rightType := o.right.sourceTypes[rightColIdx]
-		colType := leftType
-		// Merge joiner only supports the case when the physical types in the
-		// equality columns in both inputs are the same. If that is not the case,
-		// we need to cast one of the vectors to another's physical type putting
-		// the result of the cast into a temporary vector that is used instead of
-		// the original.
-		leftCanonicalTypeFamily := o.left.canonicalTypeFamilies[leftColIdx]
-		isNumeric := leftCanonicalTypeFamily == types.IntFamily ||
-			leftCanonicalTypeFamily == types.FloatFamily ||
-			leftCanonicalTypeFamily == types.DecimalFamily
-		if isNumeric && !leftType.Identical(rightType) {
-			castLeftToRight := false
-			// There is a hierarchy of valid casts:
-			//   Int16 -> Int32 -> Int64 -> Float64 -> Decimal
-			// and the cast is valid if 'fromType' is mentioned before 'toType'
-			// in this chain.
-			switch leftCanonicalTypeFamily {
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					castLeftToRight = true
-				case 32:
-					castLeftToRight = !rightType.Identical(types.Int2)
-				case 64:
-					castLeftToRight = !rightType.Identical(types.Int2) && !rightType.Identical(types.Int4)
-				}
-			case types.FloatFamily:
-				castLeftToRight = o.right.canonicalTypeFamilies[rightColIdx] == types.DecimalFamily
-			}
-
-			toType := leftType
-			if castLeftToRight {
-				toType = rightType
-			}
-			var tempVec coldata.Vec
-			for _, vec := range o.scratch.tempVecs {
-				if vec.Type().Identical(toType) {
-					tempVec = vec
-					break
-				}
-			}
-			if tempVec == nil {
-				tempVec = o.unlimitedAllocator.NewMemColumn(toType, coldata.BatchSize())
-				o.scratch.tempVecs = append(o.scratch.tempVecs, tempVec)
-			} else {
-				tempVec.Nulls().UnsetNulls()
-				if tempVec.CanonicalTypeFamily() == types.BytesFamily {
-					tempVec.Bytes().Reset()
-				}
-			}
-			if castLeftToRight {
-				cast(lVec, tempVec, o.proberState.lBatch.Length(), lSel)
-				lVec = tempVec
-				colType = rightType
-			} else {
-				cast(rVec, tempVec, o.proberState.rBatch.Length(), rSel)
-				rVec = tempVec
-			}
-		}
+		colType := o.left.sourceTypes[leftColIdx]
 		if lVec.MaybeHasNulls() {
 			if rVec.MaybeHasNulls() {
 
@@ -26811,67 +26631,7 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftType := o.left.sourceTypes[leftColIdx]
-		rightType := o.right.sourceTypes[rightColIdx]
-		colType := leftType
-		// Merge joiner only supports the case when the physical types in the
-		// equality columns in both inputs are the same. If that is not the case,
-		// we need to cast one of the vectors to another's physical type putting
-		// the result of the cast into a temporary vector that is used instead of
-		// the original.
-		leftCanonicalTypeFamily := o.left.canonicalTypeFamilies[leftColIdx]
-		isNumeric := leftCanonicalTypeFamily == types.IntFamily ||
-			leftCanonicalTypeFamily == types.FloatFamily ||
-			leftCanonicalTypeFamily == types.DecimalFamily
-		if isNumeric && !leftType.Identical(rightType) {
-			castLeftToRight := false
-			// There is a hierarchy of valid casts:
-			//   Int16 -> Int32 -> Int64 -> Float64 -> Decimal
-			// and the cast is valid if 'fromType' is mentioned before 'toType'
-			// in this chain.
-			switch leftCanonicalTypeFamily {
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					castLeftToRight = true
-				case 32:
-					castLeftToRight = !rightType.Identical(types.Int2)
-				case 64:
-					castLeftToRight = !rightType.Identical(types.Int2) && !rightType.Identical(types.Int4)
-				}
-			case types.FloatFamily:
-				castLeftToRight = o.right.canonicalTypeFamilies[rightColIdx] == types.DecimalFamily
-			}
-
-			toType := leftType
-			if castLeftToRight {
-				toType = rightType
-			}
-			var tempVec coldata.Vec
-			for _, vec := range o.scratch.tempVecs {
-				if vec.Type().Identical(toType) {
-					tempVec = vec
-					break
-				}
-			}
-			if tempVec == nil {
-				tempVec = o.unlimitedAllocator.NewMemColumn(toType, coldata.BatchSize())
-				o.scratch.tempVecs = append(o.scratch.tempVecs, tempVec)
-			} else {
-				tempVec.Nulls().UnsetNulls()
-				if tempVec.CanonicalTypeFamily() == types.BytesFamily {
-					tempVec.Bytes().Reset()
-				}
-			}
-			if castLeftToRight {
-				cast(lVec, tempVec, o.proberState.lBatch.Length(), lSel)
-				lVec = tempVec
-				colType = rightType
-			} else {
-				cast(rVec, tempVec, o.proberState.rBatch.Length(), rSel)
-				rVec = tempVec
-			}
-		}
+		colType := o.left.sourceTypes[leftColIdx]
 		if lVec.MaybeHasNulls() {
 			if rVec.MaybeHasNulls() {
 

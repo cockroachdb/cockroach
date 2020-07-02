@@ -20,8 +20,7 @@ import (
 // limitOp is an operator that implements limit, returning only the first n
 // tuples from its input.
 type limitOp struct {
-	OneInputNode
-	closerHelper
+	oneInputCloserHelper
 
 	limit int
 
@@ -37,8 +36,8 @@ var _ closableOperator = &limitOp{}
 // NewLimitOp returns a new limit operator with the given limit.
 func NewLimitOp(input colexecbase.Operator, limit int) colexecbase.Operator {
 	c := &limitOp{
-		OneInputNode: NewOneInputNode(input),
-		limit:        limit,
+		oneInputCloserHelper: makeOneInputCloserHelper(input),
+		limit:                limit,
 	}
 	return c
 }
@@ -64,19 +63,4 @@ func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	}
 	c.seen = newSeen
 	return bat
-}
-
-// Close closes the limitOp's input.
-// TODO(asubiotto): Remove this method. It only exists so that we can call Close
-//  from some runTests subtests when not draining the input fully. The test
-//  should pass in the testing.T object used so that the caller can decide to
-//  explicitly close the input after checking the test.
-func (c *limitOp) Close(ctx context.Context) error {
-	if !c.close() {
-		return nil
-	}
-	if closer, ok := c.input.(Closer); ok {
-		return closer.Close(ctx)
-	}
-	return nil
 }
