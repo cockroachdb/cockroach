@@ -46,3 +46,47 @@ query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk9GPk0AQxt_9KzbjS6t7gaX4ssklGOWUSw9O4KLJhYe9MrYkHIu7S2LT9H83wCUV5Gobjb6xu_P7Zub7wg70txI4JP7Sf5eSRpXkKo5uyL3_5Xb5NgjJ7H2QpMmn5Zw8lbzqC0qy9K9Sch0FIVHkLgnCD2Qm5uTzRz_2iSCXxMmAQiVzDMUjauD3wICCAxmFWskVai1Ve73rioL8O3CbQlHVjWmvMworqRD4DkxhSgQOqXgoMUaRo7JarRyNKMpOulbFo1BbTwGFpBaV5sRyLizHegnZnoJszJPsQe1hSzZCb4Y6HoNsn1HQRqwRuLOnz4x30GkqqXJUmA-Uspb8XcnEjjeo1ngtiwqVtRjOlm5r5L3t0V3qx535QKHEr2bmsdfzS1WsN_0nUIgaw4nHqOdQzx25cNhw8QcbTowfygtZW-7YisnW7qA1Oz17ezr78u9mz54d719k7_zX7CeGi1HXstJ4UrR2ux7ma-zt0rJRK7xVctW16Y9Rx3XO5qhN_-r2h6Dqnrrf73SYHYfZGLZ_hp0BzMawcxR-M4DtMbw4Y-dfOh-H2XHYPWvnbP_iRwAAAP__W2L0nA==
+
+# Test that we can handle merge joins with equality columns of integers with
+# different widths.
+statement ok
+CREATE TABLE numbers (_int2 INT2, _int4 INT4, _int8 INT8, _float FLOAT, _decimal DECIMAL);
+INSERT INTO numbers VALUES (1, 1, 1, 1, 1)
+
+# Place the single range on node 1 for determinism.
+statement ok
+ALTER TABLE numbers EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1)
+
+query T
+EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int2 = t2._int4
+----
+│
+└ Node 1
+  └ *colexec.mergeJoinInnerOp
+    ├ *colexec.castInt16Int32Op
+    │ └ *colexec.sortOp
+    │   └ *colfetcher.colBatchScan
+    └ *colexec.sortOp
+      └ *colfetcher.colBatchScan
+
+query T
+EXPLAIN (VEC) SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._int2
+----
+│
+└ Node 1
+  └ *colexec.mergeJoinInnerOp
+    ├ *colexec.sortOp
+    │ └ *colfetcher.colBatchScan
+    └ *colexec.castInt16Int64Op
+      └ *colexec.sortOp
+        └ *colfetcher.colBatchScan
+
+# Also check that we cannot plan a merge join with other numeric types.
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._float
+
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._int8 = t2._decimal
+
+statement error could not produce a query plan conforming to the MERGE JOIN hint
+EXPLAIN SELECT * FROM numbers AS t1 INNER MERGE JOIN numbers AS t2 ON t1._float = t2._decimal

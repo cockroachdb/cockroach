@@ -34,6 +34,7 @@ type simpleProjectOp struct {
 }
 
 var _ closableOperator = &simpleProjectOp{}
+var _ ResettableOperator = &simpleProjectOp{}
 
 // projectingBatch is a Batch that applies a simple projection to another,
 // underlying batch, discarding all columns but the ones in its projection
@@ -122,6 +123,9 @@ func (d *simpleProjectOp) Init() {
 
 func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	batch := d.input.Next(ctx)
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
 	projBatch, found := d.batches[batch]
 	if !found {
 		projBatch = newProjectionBatch(d.projection)
@@ -150,4 +154,10 @@ func (d *simpleProjectOp) Close(ctx context.Context) error {
 		return c.Close(ctx)
 	}
 	return nil
+}
+
+func (d *simpleProjectOp) reset(ctx context.Context) {
+	if r, ok := d.input.(resetter); ok {
+		r.reset(ctx)
+	}
 }

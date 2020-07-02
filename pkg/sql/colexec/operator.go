@@ -329,7 +329,7 @@ type vectorTypeEnforcer struct {
 	idx       int
 }
 
-var _ colexecbase.Operator = &vectorTypeEnforcer{}
+var _ ResettableOperator = &vectorTypeEnforcer{}
 
 func newVectorTypeEnforcer(
 	allocator *colmem.Allocator, input colexecbase.Operator, typ *types.T, idx int,
@@ -353,6 +353,12 @@ func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
 	}
 	e.allocator.MaybeAppendColumn(b, e.typ, e.idx)
 	return b
+}
+
+func (e *vectorTypeEnforcer) reset(ctx context.Context) {
+	if r, ok := e.input.(resetter); ok {
+		r.reset(ctx)
+	}
 }
 
 // BatchSchemaSubsetEnforcer is similar to vectorTypeEnforcer in its purpose,
