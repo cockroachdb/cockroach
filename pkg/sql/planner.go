@@ -67,7 +67,13 @@ type extendedEvalContext struct {
 
 	TxnModesSetter txnModesSetter
 
+	// Jobs refers to jobs in extraTxnState. Jobs is a pointer to a jobsCollection
+	// which is a slice because we need calls to resetExtraTxnState to reset the
+	// jobsCollection.
 	Jobs *jobsCollection
+
+	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
+	SchemaChangeJobCache map[sqlbase.ID]*jobs.Job
 
 	schemaAccessors *schemaInterface
 
