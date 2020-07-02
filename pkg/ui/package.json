@@ -115,6 +115,7 @@
     "rimraf": "^2.6.1",
     "sinon": "^7.5.0",
     "source-map-loader": "^0.2.0",
+    "string-replace-webpack-plugin": "^0.1.3",
     "style-loader": "^1.1.2",
     "stylint": "^1.5.9",
     "stylus": "^0.54.5",
