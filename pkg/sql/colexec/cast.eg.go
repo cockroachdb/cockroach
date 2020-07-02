@@ -26,2304 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
-	castPerformed := false
-	switch inputVec.CanonicalTypeFamily() {
-	case types.BoolFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Bool()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									r = 0
-									if v {
-										r = 1
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								r = 0
-								if v {
-									r = 1
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case types.DecimalFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Decimal()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-									r = v
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-									r = v
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-								r = v
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-								r = v
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Decimal()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-									r = v.Sign() != 0
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-									r = v.Sign() != 0
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-								r = v.Sign() != 0
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-								r = v.Sign() != 0
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case types.IntFamily:
-		switch inputVec.Type().Width() {
-		case 16:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int16()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		case 32:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int32()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									r = *apd.New(int64(v), 0)
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								r = *apd.New(int64(v), 0)
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Int64()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-
-									r = float64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-
-								r = float64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case types.FloatFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.FloatFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Float64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r float64
-									r = v
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-								r = v
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r float64
-								r = v
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r bool
-
-									r = v != 0
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r bool
-
-								r = v != 0
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.DecimalFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Decimal()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									{
-										var tmpDec apd.Decimal
-										_, tmpErr := tmpDec.SetFloat64(float64(v))
-										if tmpErr != nil {
-											colexecerror.ExpectedError(tmpErr)
-										}
-										r = tmpDec
-									}
-
-									outputCol[i].Set(&r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r apd.Decimal
-
-									{
-										var tmpDec apd.Decimal
-										_, tmpErr := tmpDec.SetFloat64(float64(v))
-										if tmpErr != nil {
-											colexecerror.ExpectedError(tmpErr)
-										}
-										r = tmpDec
-									}
-
-									outputCol[i].Set(&r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								{
-									var tmpDec apd.Decimal
-									_, tmpErr := tmpDec.SetFloat64(float64(v))
-									if tmpErr != nil {
-										colexecerror.ExpectedError(tmpErr)
-									}
-									r = tmpDec
-								}
-
-								outputCol[i].Set(&r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r apd.Decimal
-
-								{
-									var tmpDec apd.Decimal
-									_, tmpErr := tmpDec.SetFloat64(float64(v))
-									if tmpErr != nil {
-										colexecerror.ExpectedError(tmpErr)
-									}
-									r = tmpDec
-								}
-
-								outputCol[i].Set(&r)
-							}
-						}
-					}
-					castPerformed = true
-				}
-			case types.IntFamily:
-				switch outputVec.Type().Width() {
-				case 16:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Int16()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int16
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int16(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int16
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int16(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case 32:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Int32()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int32
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int32(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int32
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int32(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				case -1:
-				default:
-					inputCol := inputVec.Float64()
-					outputCol := outputVec.Int64()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i) //gcassert:inline
-									var r int64
-
-									if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-										colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-									}
-									r = int64(v)
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol[0:n]
-							_ = inputCol.Get(n - 1)  //gcassert:inline
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i) //gcassert:inline
-								var r int64
-
-								if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
-									colexecerror.ExpectedError(tree.ErrIntOutOfRange)
-								}
-								r = int64(v)
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	case typeconv.DatumVecCanonicalTypeFamily:
-		switch inputVec.Type().Width() {
-		case -1:
-		default:
-			switch outputVec.CanonicalTypeFamily() {
-			case types.BoolFamily:
-				switch outputVec.Type().Width() {
-				case -1:
-				default:
-					inputCol := inputVec.Datum()
-					outputCol := outputVec.Bool()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									{
-										_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-										if err != nil {
-											colexecerror.ExpectedError(err)
-										}
-										r = _castedDatum == tree.DBoolTrue
-									}
-
-									outputCol[i] = r
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol.Slice(0, n)
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := inputCol.Get(i)
-									var r bool
-
-									{
-										_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-										if err != nil {
-											colexecerror.ExpectedError(err)
-										}
-										r = _castedDatum == tree.DBoolTrue
-									}
-
-									outputCol[i] = r
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := inputCol.Get(i)
-								var r bool
-
-								{
-									_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-									if err != nil {
-										colexecerror.ExpectedError(err)
-									}
-									r = _castedDatum == tree.DBoolTrue
-								}
-
-								outputCol[i] = r
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = inputCol.Slice(0, n)
-							_ = inputCol.Get(n - 1)
-							_ = outputCol.Get(n - 1) //gcassert:inline
-							for i := 0; i < n; i++ {
-								v := inputCol.Get(i)
-								var r bool
-
-								{
-									_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
-									if err != nil {
-										colexecerror.ExpectedError(err)
-									}
-									r = _castedDatum == tree.DBoolTrue
-								}
-
-								outputCol[i] = r
-							}
-						}
-					}
-					castPerformed = true
-				}
-			}
-		}
-	}
-	if !castPerformed {
-		colexecerror.InternalError(fmt.Sprintf("unhandled cast %s -> %s", inputVec.Type(), outputVec.Type()))
-	}
-}
-
 func GetCastOperator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
@@ -2749,6 +451,8 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+// TODO(yuzefovich): refactor castOp so that it is type-specific. This will
+// probably require changing the way we handle cast overloads as well.
 type castOp struct {
 	OneInputNode
 	allocator *colmem.Allocator
@@ -2768,15 +472,2276 @@ func (c *castOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	vec := batch.ColVec(c.colIdx)
-	projVec := batch.ColVec(c.outputIdx)
-	if projVec.MaybeHasNulls() {
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
 		// output vector.
-		projVec.Nulls().UnsetNulls()
+		outputVec.Nulls().UnsetNulls()
 	}
 	c.allocator.PerformOperation(
-		[]coldata.Vec{projVec}, func() { cast(vec, projVec, n, batch.Selection()) },
+		[]coldata.Vec{outputVec}, func() {
+			switch inputVec.CanonicalTypeFamily() {
+			case types.BoolFamily:
+				switch inputVec.Type().Width() {
+				case -1:
+				default:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Bool()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+											r = v
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+											r = v
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+										r = v
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+										r = v
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.FloatFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Bool()
+							outputCol := outputVec.Float64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.IntFamily:
+						switch outputVec.Type().Width() {
+						case 16:
+							inputCol := inputVec.Bool()
+							outputCol := outputVec.Int16()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case 32:
+							inputCol := inputVec.Bool()
+							outputCol := outputVec.Int32()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case -1:
+						default:
+							inputCol := inputVec.Bool()
+							outputCol := outputVec.Int64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											r = 0
+											if v {
+												r = 1
+											}
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										r = 0
+										if v {
+											r = 1
+										}
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				}
+			case types.DecimalFamily:
+				switch inputVec.Type().Width() {
+				case -1:
+				default:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.DecimalFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Decimal()
+							outputCol := outputVec.Decimal()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+											r = v
+											outputCol[i].Set(&r)
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+											r = v
+											outputCol[i].Set(&r)
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+										r = v
+										outputCol[i].Set(&r)
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+										r = v
+										outputCol[i].Set(&r)
+									}
+								}
+							}
+						}
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Decimal()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+											r = v.Sign() != 0
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+											r = v.Sign() != 0
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+										r = v.Sign() != 0
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+										r = v.Sign() != 0
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				}
+			case types.IntFamily:
+				switch inputVec.Type().Width() {
+				case 16:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.IntFamily:
+						switch outputVec.Type().Width() {
+						case 16:
+							inputCol := inputVec.Int16()
+							outputCol := outputVec.Int16()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+											r = v
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+											r = v
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+										r = v
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+										r = v
+										outputCol[i] = r
+									}
+								}
+							}
+						case 32:
+							inputCol := inputVec.Int16()
+							outputCol := outputVec.Int32()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											r = int32(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											r = int32(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										r = int32(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										r = int32(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case -1:
+						default:
+							inputCol := inputVec.Int16()
+							outputCol := outputVec.Int64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											r = int64(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											r = int64(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										r = int64(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										r = int64(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int16()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.DecimalFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int16()
+							outputCol := outputVec.Decimal()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											r = *apd.New(int64(v), 0)
+
+											outputCol[i].Set(&r)
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											r = *apd.New(int64(v), 0)
+
+											outputCol[i].Set(&r)
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										r = *apd.New(int64(v), 0)
+
+										outputCol[i].Set(&r)
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										r = *apd.New(int64(v), 0)
+
+										outputCol[i].Set(&r)
+									}
+								}
+							}
+						}
+					case types.FloatFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int16()
+							outputCol := outputVec.Float64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = float64(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = float64(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = float64(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = float64(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				case 32:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.IntFamily:
+						switch outputVec.Type().Width() {
+						case 16:
+							inputCol := inputVec.Int32()
+							outputCol := outputVec.Int16()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											r = int16(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											r = int16(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										r = int16(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										r = int16(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case 32:
+							inputCol := inputVec.Int32()
+							outputCol := outputVec.Int32()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+											r = v
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+											r = v
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+										r = v
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+										r = v
+										outputCol[i] = r
+									}
+								}
+							}
+						case -1:
+						default:
+							inputCol := inputVec.Int32()
+							outputCol := outputVec.Int64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											r = int64(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											r = int64(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										r = int64(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										r = int64(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int32()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.DecimalFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int32()
+							outputCol := outputVec.Decimal()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											r = *apd.New(int64(v), 0)
+
+											outputCol[i].Set(&r)
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											r = *apd.New(int64(v), 0)
+
+											outputCol[i].Set(&r)
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										r = *apd.New(int64(v), 0)
+
+										outputCol[i].Set(&r)
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										r = *apd.New(int64(v), 0)
+
+										outputCol[i].Set(&r)
+									}
+								}
+							}
+						}
+					case types.FloatFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int32()
+							outputCol := outputVec.Float64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = float64(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = float64(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = float64(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = float64(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				case -1:
+				default:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.IntFamily:
+						switch outputVec.Type().Width() {
+						case 16:
+							inputCol := inputVec.Int64()
+							outputCol := outputVec.Int16()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											r = int16(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											r = int16(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										r = int16(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										r = int16(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case 32:
+							inputCol := inputVec.Int64()
+							outputCol := outputVec.Int32()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											r = int32(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											r = int32(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										r = int32(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										r = int32(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case -1:
+						default:
+							inputCol := inputVec.Int64()
+							outputCol := outputVec.Int64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+											r = v
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+											r = v
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+										r = v
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+										r = v
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int64()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.DecimalFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int64()
+							outputCol := outputVec.Decimal()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											r = *apd.New(int64(v), 0)
+
+											outputCol[i].Set(&r)
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											r = *apd.New(int64(v), 0)
+
+											outputCol[i].Set(&r)
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										r = *apd.New(int64(v), 0)
+
+										outputCol[i].Set(&r)
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										r = *apd.New(int64(v), 0)
+
+										outputCol[i].Set(&r)
+									}
+								}
+							}
+						}
+					case types.FloatFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Int64()
+							outputCol := outputVec.Float64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = float64(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+
+											r = float64(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = float64(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+
+										r = float64(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				}
+			case types.FloatFamily:
+				switch inputVec.Type().Width() {
+				case -1:
+				default:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.FloatFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Float64()
+							outputCol := outputVec.Float64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+											r = v
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r float64
+											r = v
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+										r = v
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r float64
+										r = v
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Float64()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r bool
+
+											r = v != 0
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r bool
+
+										r = v != 0
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					case types.DecimalFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Float64()
+							outputCol := outputVec.Decimal()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											{
+												var tmpDec apd.Decimal
+												_, tmpErr := tmpDec.SetFloat64(float64(v))
+												if tmpErr != nil {
+													colexecerror.ExpectedError(tmpErr)
+												}
+												r = tmpDec
+											}
+
+											outputCol[i].Set(&r)
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r apd.Decimal
+
+											{
+												var tmpDec apd.Decimal
+												_, tmpErr := tmpDec.SetFloat64(float64(v))
+												if tmpErr != nil {
+													colexecerror.ExpectedError(tmpErr)
+												}
+												r = tmpDec
+											}
+
+											outputCol[i].Set(&r)
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										{
+											var tmpDec apd.Decimal
+											_, tmpErr := tmpDec.SetFloat64(float64(v))
+											if tmpErr != nil {
+												colexecerror.ExpectedError(tmpErr)
+											}
+											r = tmpDec
+										}
+
+										outputCol[i].Set(&r)
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r apd.Decimal
+
+										{
+											var tmpDec apd.Decimal
+											_, tmpErr := tmpDec.SetFloat64(float64(v))
+											if tmpErr != nil {
+												colexecerror.ExpectedError(tmpErr)
+											}
+											r = tmpDec
+										}
+
+										outputCol[i].Set(&r)
+									}
+								}
+							}
+						}
+					case types.IntFamily:
+						switch outputVec.Type().Width() {
+						case 16:
+							inputCol := inputVec.Float64()
+							outputCol := outputVec.Int16()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+												colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+											}
+											r = int16(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int16
+
+											if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+												colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+											}
+											r = int16(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+											colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+										}
+										r = int16(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int16
+
+										if math.IsNaN(float64(v)) || v <= float64(math.MinInt16) || v >= float64(math.MaxInt16) {
+											colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+										}
+										r = int16(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case 32:
+							inputCol := inputVec.Float64()
+							outputCol := outputVec.Int32()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+												colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+											}
+											r = int32(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int32
+
+											if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+												colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+											}
+											r = int32(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+											colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+										}
+										r = int32(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int32
+
+										if math.IsNaN(float64(v)) || v <= float64(math.MinInt32) || v >= float64(math.MaxInt32) {
+											colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+										}
+										r = int32(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						case -1:
+						default:
+							inputCol := inputVec.Float64()
+							outputCol := outputVec.Int64()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+												colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+											}
+											r = int64(v)
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i) //gcassert:inline
+											var r int64
+
+											if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+												colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+											}
+											r = int64(v)
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+											colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+										}
+										r = int64(v)
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol[0:n]
+									_ = inputCol.Get(n - 1)  //gcassert:inline
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i) //gcassert:inline
+										var r int64
+
+										if math.IsNaN(float64(v)) || v <= float64(math.MinInt64) || v >= float64(math.MaxInt64) {
+											colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+										}
+										r = int64(v)
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				}
+			case typeconv.DatumVecCanonicalTypeFamily:
+				switch inputVec.Type().Width() {
+				case -1:
+				default:
+					switch outputVec.CanonicalTypeFamily() {
+					case types.BoolFamily:
+						switch outputVec.Type().Width() {
+						case -1:
+						default:
+							inputCol := inputVec.Datum()
+							outputCol := outputVec.Bool()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i)
+											var r bool
+
+											{
+												_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+												if err != nil {
+													colexecerror.ExpectedError(err)
+												}
+												r = _castedDatum == tree.DBoolTrue
+											}
+
+											outputCol[i] = r
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol.Slice(0, n)
+									_ = inputCol.Get(n - 1)
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := inputCol.Get(i)
+											var r bool
+
+											{
+												_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+												if err != nil {
+													colexecerror.ExpectedError(err)
+												}
+												r = _castedDatum == tree.DBoolTrue
+											}
+
+											outputCol[i] = r
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := inputCol.Get(i)
+										var r bool
+
+										{
+											_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+											if err != nil {
+												colexecerror.ExpectedError(err)
+											}
+											r = _castedDatum == tree.DBoolTrue
+										}
+
+										outputCol[i] = r
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = inputCol.Slice(0, n)
+									_ = inputCol.Get(n - 1)
+									_ = outputCol.Get(n - 1) //gcassert:inline
+									for i := 0; i < n; i++ {
+										v := inputCol.Get(i)
+										var r bool
+
+										{
+											_castedDatum, err := v.(*coldataext.Datum).Cast(inputCol, types.Bool)
+											if err != nil {
+												colexecerror.ExpectedError(err)
+											}
+											r = _castedDatum == tree.DBoolTrue
+										}
+
+										outputCol[i] = r
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 	)
 	return batch
 }

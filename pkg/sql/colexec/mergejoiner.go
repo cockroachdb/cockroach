@@ -249,30 +249,126 @@ func NewMergeJoinOp(
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
 ) (ResettableOperator, error) {
+	// Merge joiner only supports the case when the physical types in the
+	// equality columns in both inputs are the same. We, however, also need to
+	// support joining on integer columns of different widths. If we encounter
+	// width mismatch, we need to cast one of the vectors to another and use
+	// the cast vector for equality check.
+	// Note that there are type pairs of other numeric types that are valid for
+	// equality check (e.g. FLOAT vs INT4, or INT8 vs DECIMAL, etc), but we
+	// don't plan merge joins in such scenarios - instead, we have a cross join
+	// with a filter on top, and the cross joins are handled by falling back to
+	// rowexec.hashJoiner since we don't have a cross join operator at the
+	// moment (#46205).
+
+	// Make a copy of types and orderings to be sure that we don't modify
+	// anything unwillingly.
+	actualLeftTypes, actualRightTypes := append([]*types.T{}, leftTypes...), append([]*types.T{}, rightTypes...)
+	actualLeftOrdering := make([]execinfrapb.Ordering_Column, len(leftOrdering))
+	actualRightOrdering := make([]execinfrapb.Ordering_Column, len(rightOrdering))
+	copy(actualLeftOrdering, leftOrdering)
+	copy(actualRightOrdering, rightOrdering)
+	// Iterate over each equality column and check whether a cast is needed. If
+	// it is needed for some column, then a cast operator is planned on top of
+	// the input from the corresponding side and the types and ordering are
+	// adjusted accordingly. We will also need to project out that temporary
+	// column, so a simple project will be planned below.
+	needProjection := false
+	for i := range leftOrdering {
+		leftColIdx := leftOrdering[i].ColIdx
+		rightColIdx := rightOrdering[i].ColIdx
+		leftType := leftTypes[leftColIdx]
+		rightType := rightTypes[rightColIdx]
+		if leftType.Identical(rightType) {
+			// The types are the same, so no cast is needed.
+			continue
+		}
+		var err error
+		if leftType.Family() != types.IntFamily || rightType.Family() != types.IntFamily {
+			return nil, errors.AssertionFailedf(
+				"attempting to create a merge joiner on equality columns of different non-integer types",
+			)
+		}
+		// There is a hierarchy of valid casts:
+		//   INT2 -> INT4 -> INT8
+		// and the cast is valid if 'fromType' is mentioned before 'toType'
+		// in this chain.
+		castLeftToRight := false
+		switch leftType.Width() {
+		case 16:
+			castLeftToRight = true
+		case 32:
+			castLeftToRight = !rightType.Identical(types.Int2)
+		}
+		if castLeftToRight {
+			castColumnIdx := len(actualLeftTypes)
+			left, err = GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType)
+			if err != nil {
+				return nil, err
+			}
+			actualLeftTypes = append(actualLeftTypes, rightType)
+			actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
+		} else {
+			castColumnIdx := len(actualRightTypes)
+			right, err = GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType)
+			if err != nil {
+				return nil, err
+			}
+			actualRightTypes = append(actualRightTypes, leftType)
+			actualRightOrdering[i].ColIdx = uint32(castColumnIdx)
+		}
+		needProjection = true
+	}
 	base, err := newMergeJoinBase(
-		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType,
-		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering, diskAcc,
+		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType, left, right,
+		actualLeftTypes, actualRightTypes, actualLeftOrdering, actualRightOrdering, diskAcc,
 	)
+	if err != nil {
+		return nil, err
+	}
+	var mergeJoinerOp ResettableOperator
 	switch joinType {
 	case sqlbase.InnerJoin:
-		return &mergeJoinInnerOp{base}, err
+		mergeJoinerOp = &mergeJoinInnerOp{base}
 	case sqlbase.LeftOuterJoin:
-		return &mergeJoinLeftOuterOp{base}, err
+		mergeJoinerOp = &mergeJoinLeftOuterOp{base}
 	case sqlbase.RightOuterJoin:
-		return &mergeJoinRightOuterOp{base}, err
+		mergeJoinerOp = &mergeJoinRightOuterOp{base}
 	case sqlbase.FullOuterJoin:
-		return &mergeJoinFullOuterOp{base}, err
+		mergeJoinerOp = &mergeJoinFullOuterOp{base}
 	case sqlbase.LeftSemiJoin:
-		return &mergeJoinLeftSemiOp{base}, err
+		mergeJoinerOp = &mergeJoinLeftSemiOp{base}
 	case sqlbase.LeftAntiJoin:
-		return &mergeJoinLeftAntiOp{base}, err
+		mergeJoinerOp = &mergeJoinLeftAntiOp{base}
 	case sqlbase.IntersectAllJoin:
-		return &mergeJoinIntersectAllOp{base}, err
+		mergeJoinerOp = &mergeJoinIntersectAllOp{base}
 	case sqlbase.ExceptAllJoin:
-		return &mergeJoinExceptAllOp{base}, err
+		mergeJoinerOp = &mergeJoinExceptAllOp{base}
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}
+	if !needProjection {
+		// We didn't add any cast operators, so we can just return the operator
+		// right away.
+		return mergeJoinerOp, nil
+	}
+	// We need to add a projection to remove all the cast columns we have added
+	// above. Note that all extra columns were appended to the corresponding
+	// types slices, so we simply need to include first len(leftTypes) from the
+	// left and first len(rightTypes) from the right.
+	projection := make([]uint32, 0, len(leftTypes)+len(rightTypes))
+	for i := range leftTypes {
+		projection = append(projection, uint32(i))
+	}
+	for i := range rightTypes {
+		// Merge joiner outputs all columns from both sides, and the columns
+		// from the right have indices in [len(actualLeftTypes),
+		// len(actualLeftTypes) + len(actualRightColumns)) range.
+		projection = append(projection, uint32(len(actualLeftTypes)+i))
+	}
+	return NewSimpleProjectOp(
+		mergeJoinerOp, len(actualLeftTypes)+len(actualRightTypes), projection,
+	).(ResettableOperator), nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.

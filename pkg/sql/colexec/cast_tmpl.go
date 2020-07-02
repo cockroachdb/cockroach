@@ -81,89 +81,6 @@ func _L_SLICE(col, i, j interface{}) interface{} {
 
 // */}}
 
-func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
-	castPerformed := false
-	switch inputVec.CanonicalTypeFamily() {
-	// {{range .LeftFamilies}}
-	case _LEFT_CANONICAL_TYPE_FAMILY:
-		switch inputVec.Type().Width() {
-		// {{range .LeftWidths}}
-		case _LEFT_TYPE_WIDTH:
-			switch outputVec.CanonicalTypeFamily() {
-			// {{range .RightFamilies}}
-			case _RIGHT_CANONICAL_TYPE_FAMILY:
-				switch outputVec.Type().Width() {
-				// {{range .RightWidths}}
-				case _RIGHT_TYPE_WIDTH:
-					inputCol := inputVec._L_TYP()
-					outputCol := outputVec._R_TYP()
-					if inputVec.MaybeHasNulls() {
-						inputNulls := inputVec.Nulls()
-						outputNulls := outputVec.Nulls()
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := _L_UNSAFEGET(inputCol, i)
-									var r _R_GO_TYPE
-									_CAST(r, v, inputCol)
-									_R_SET(outputCol, i, r)
-								}
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = _L_SLICE(inputCol, 0, n)
-							_ = _L_UNSAFEGET(inputCol, n-1)
-							_ = _R_UNSAFEGET(outputCol, n-1)
-							for i := 0; i < n; i++ {
-								if inputNulls.NullAt(i) {
-									outputNulls.SetNull(i)
-								} else {
-									v := _L_UNSAFEGET(inputCol, i)
-									var r _R_GO_TYPE
-									_CAST(r, v, inputCol)
-									_R_SET(outputCol, i, r)
-								}
-							}
-						}
-					} else {
-						if sel != nil {
-							sel = sel[:n]
-							for _, i := range sel {
-								v := _L_UNSAFEGET(inputCol, i)
-								var r _R_GO_TYPE
-								_CAST(r, v, inputCol)
-								_R_SET(outputCol, i, r)
-							}
-						} else {
-							// Remove bounds checks for inputCol[i] and outputCol[i].
-							inputCol = _L_SLICE(inputCol, 0, n)
-							_ = _L_UNSAFEGET(inputCol, n-1)
-							_ = _R_UNSAFEGET(outputCol, n-1)
-							for i := 0; i < n; i++ {
-								v := _L_UNSAFEGET(inputCol, i)
-								var r _R_GO_TYPE
-								_CAST(r, v, inputCol)
-								_R_SET(outputCol, i, r)
-							}
-						}
-					}
-					castPerformed = true
-					// {{end}}
-				}
-				// {{end}}
-			}
-			// {{end}}
-		}
-		// {{end}}
-	}
-	if !castPerformed {
-		colexecerror.InternalError(fmt.Sprintf("unhandled cast %s -> %s", inputVec.Type(), outputVec.Type()))
-	}
-}
-
 func GetCastOperator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
@@ -260,6 +177,8 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+// TODO(yuzefovich): refactor castOp so that it is type-specific. This will
+// probably require changing the way we handle cast overloads as well.
 type castOp struct {
 	OneInputNode
 	allocator *colmem.Allocator
@@ -279,15 +198,92 @@ func (c *castOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	vec := batch.ColVec(c.colIdx)
-	projVec := batch.ColVec(c.outputIdx)
-	if projVec.MaybeHasNulls() {
+	sel := batch.Selection()
+	inputVec := batch.ColVec(c.colIdx)
+	outputVec := batch.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
 		// output vector.
-		projVec.Nulls().UnsetNulls()
+		outputVec.Nulls().UnsetNulls()
 	}
 	c.allocator.PerformOperation(
-		[]coldata.Vec{projVec}, func() { cast(vec, projVec, n, batch.Selection()) },
+		[]coldata.Vec{outputVec}, func() {
+			switch inputVec.CanonicalTypeFamily() {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch inputVec.Type().Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch outputVec.CanonicalTypeFamily() {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch outputVec.Type().Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							inputCol := inputVec._L_TYP()
+							outputCol := outputVec._R_TYP()
+							if inputVec.MaybeHasNulls() {
+								inputNulls := inputVec.Nulls()
+								outputNulls := outputVec.Nulls()
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := _L_UNSAFEGET(inputCol, i)
+											var r _R_GO_TYPE
+											_CAST(r, v, inputCol)
+											_R_SET(outputCol, i, r)
+										}
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = _L_SLICE(inputCol, 0, n)
+									_ = _L_UNSAFEGET(inputCol, n-1)
+									_ = _R_UNSAFEGET(outputCol, n-1)
+									for i := 0; i < n; i++ {
+										if inputNulls.NullAt(i) {
+											outputNulls.SetNull(i)
+										} else {
+											v := _L_UNSAFEGET(inputCol, i)
+											var r _R_GO_TYPE
+											_CAST(r, v, inputCol)
+											_R_SET(outputCol, i, r)
+										}
+									}
+								}
+							} else {
+								if sel != nil {
+									sel = sel[:n]
+									for _, i := range sel {
+										v := _L_UNSAFEGET(inputCol, i)
+										var r _R_GO_TYPE
+										_CAST(r, v, inputCol)
+										_R_SET(outputCol, i, r)
+									}
+								} else {
+									// Remove bounds checks for inputCol[i] and outputCol[i].
+									inputCol = _L_SLICE(inputCol, 0, n)
+									_ = _L_UNSAFEGET(inputCol, n-1)
+									_ = _R_UNSAFEGET(outputCol, n-1)
+									for i := 0; i < n; i++ {
+										v := _L_UNSAFEGET(inputCol, i)
+										var r _R_GO_TYPE
+										_CAST(r, v, inputCol)
+										_R_SET(outputCol, i, r)
+									}
+								}
+							}
+							// {{end}}
+						}
+						// {{end}}
+					}
+					// {{end}}
+				}
+				// {{end}}
+			}
+		},
 	)
 	return batch
 }
