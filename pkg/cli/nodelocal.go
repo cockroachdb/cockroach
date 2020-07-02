@@ -11,9 +11,11 @@
 package cli
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -50,7 +52,11 @@ func runUpload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer reader.Close()
-	return uploadFile(conn, reader, destination)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	return uploadFile(ctx, conn, reader, destination)
 }
 
 func openSourceFile(source string) (io.ReadCloser, error) {
@@ -68,16 +74,24 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
+func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destination string) error {
 	if err := conn.ensureConn(); err != nil {
 		return err
 	}
 
-	if _, err := conn.conn.Exec(`BEGIN`, nil); err != nil {
+	ex := conn.conn.(driver.ExecerContext)
+	if _, err := ex.ExecContext(ctx, `BEGIN`, nil); err != nil {
 		return err
 	}
 
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(destination, "crdb_internal", "file_upload"))
+	// Construct the nodelocal URI as the destination for the CopyIn stmt.
+	nodelocalURL := url.URL{
+		Scheme: "nodelocal",
+		Host:   "self",
+		Path:   destination,
+	}
+	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
+		sql.NodelocalFileUploadTable))
 	if err != nil {
 		return err
 	}
@@ -85,7 +99,7 @@ func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
 	defer func() {
 		if stmt != nil {
 			_ = stmt.Close()
-			_, _ = conn.conn.Exec(`ROLLBACK`, nil)
+			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
 		}
 	}()
 
@@ -93,6 +107,8 @@ func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
 	for {
 		n, err := reader.Read(send)
 		if n > 0 {
+			// TODO(adityamaru): Switch to StmtExecContext once the copyin driver
+			// supports it.
 			_, err = stmt.Exec([]driver.Value{string(send[:n])})
 			if err != nil {
 				return err
@@ -108,7 +124,7 @@ func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
 	}
 	stmt = nil
 
-	if _, err := conn.conn.Exec(`COMMIT`, nil); err != nil {
+	if _, err := ex.ExecContext(ctx, `COMMIT`, nil); err != nil {
 		return err
 	}
 
