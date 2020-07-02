@@ -1448,6 +1448,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
 				// Using deprecated method to COPY.
 				stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
+				stream.GrepNot(`pkg/cli/userfile.go:.* stmt.Exec is deprecated: .*`),
 				// Cause is a method used by pkg/cockroachdb/errors (through an unnamed
 				// interface).
 				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),

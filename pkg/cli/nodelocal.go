@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
@@ -77,7 +78,15 @@ func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
 		return err
 	}
 
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(destination, "crdb_internal", "file_upload"))
+	// Construct the nodelocal URI as the destination for the CopyIn stmt.
+	// We trim a / to compensate for the / we add one when constructing
+	// nodelocalURI. This only has implications when pretty printing error
+	// messages because we clean the path before using in the nodelocal
+	// ExternalStorage methods.
+	destination = strings.TrimPrefix(destination, "/")
+	nodelocalURI := fmt.Sprintf("nodelocal://self/%s", destination)
+	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(nodelocalURI, "crdb_internal",
+		"nodelocal_file_upload"))
 	if err != nil {
 		return err
 	}
