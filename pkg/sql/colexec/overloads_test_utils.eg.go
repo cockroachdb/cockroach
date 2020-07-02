@@ -2265,7 +2265,7 @@ func performFloorDivInt16Int16(a int16, b int16) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2284,7 +2284,7 @@ func performFloorDivInt16Int32(a int16, b int32) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2303,7 +2303,7 @@ func performFloorDivInt16Int64(a int16, b int64) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2322,7 +2322,7 @@ func performFloorDivInt32Int16(a int32, b int16) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2341,7 +2341,7 @@ func performFloorDivInt32Int32(a int32, b int32) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2360,7 +2360,7 @@ func performFloorDivInt32Int64(a int32, b int64) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2379,7 +2379,7 @@ func performFloorDivInt64Int16(a int64, b int16) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2398,7 +2398,7 @@ func performFloorDivInt64Int32(a int64, b int32) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
@@ -2417,7 +2417,7 @@ func performFloorDivInt64Int64(a int64, b int64) int64 {
 		if int64(b) == 0 {
 			colexecerror.ExpectedError(tree.ErrDivByZero)
 		}
-		r = int64(a) // int64(b)
+		r = int64(a) / int64(b)
 	}
 
 	return r
