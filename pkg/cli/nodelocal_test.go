@@ -43,7 +43,7 @@ func Example_nodelocal() {
 	// nodelocal upload test.csv /test/file1.csv
 	// ERROR: destination file already exists for /test/file1.csv
 	// nodelocal upload test.csv /test/../../file1.csv
-	// ERROR: local file access to paths outside of external-io-dir is not allowed: /test/../../file1.csv
+	// ERROR: local file access to paths outside of external-io-dir is not allowed: ../file1.csv
 	// nodelocal upload notexist.csv /test/file1.csv
 	// ERROR: open notexist.csv: no such file or directory
 }

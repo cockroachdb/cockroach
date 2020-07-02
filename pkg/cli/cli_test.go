@@ -297,7 +297,7 @@ func isSQLCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "sql", "dump", "workload", "nodelocal", "statement-diag":
+	case "sql", "dump", "workload", "nodelocal", "userfile", "statement-diag":
 		return true
 	case "node":
 		if len(args) == 0 {
@@ -1411,6 +1411,7 @@ Available Commands:
   dump              dump sql tables
 
   nodelocal         upload and delete nodelocal files
+  userfile          upload and delete user scoped files
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information

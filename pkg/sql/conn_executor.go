@@ -1715,6 +1715,16 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 	}
 }
 
+// isCopyToExternalStorage returns true if the CopyIn command is writing to an
+// ExternalStorage such as nodelocal or userfile. It does so by checking the
+// target table/schema names against the sentinel, internal table/schema names
+// used by these commands.
+func isCopyToExternalStorage(cmd CopyIn) bool {
+	stmt := cmd.Stmt
+	return (stmt.Table.Table() == NodelocalFileUploadTable ||
+		stmt.Table.Table() == UserFileUploadTable) && stmt.Table.SchemaName == CrdbInternalName
+}
+
 // We handle the CopyFrom statement by creating a copyMachine and handing it
 // control over the connection until the copying is done. The contract is that,
 // when this is called, the pgwire.conn is not reading from the network
@@ -1774,7 +1784,7 @@ func (ex *connExecutor) execCopyIn(
 	}
 	var cm copyMachineInterface
 	var err error
-	if table := cmd.Stmt.Table; table.Table() == fileUploadTable && table.Schema() == crdbInternalName {
+	if isCopyToExternalStorage(cmd) {
 		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg)
 	} else {
 		cm, err = newCopyMachine(
