@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -45,6 +46,8 @@ var geoRelationshipMap = map[string]geoindex.RelationshipType{
 	"st_contains":         geoindex.Covers,
 	"st_containsproperly": geoindex.Covers,
 	"st_crosses":          geoindex.Intersects,
+	"st_dwithin":          geoindex.DWithin,
+	"st_dfullywithin":     geoindex.DFullyWithin,
 	"st_equals":           geoindex.Intersects,
 	"st_intersects":       geoindex.Intersects,
 	"st_overlaps":         geoindex.Intersects,
@@ -65,7 +68,7 @@ func IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 // geospatial relationship. It is implemented by getSpanExprForGeographyIndex
 // and getSpanExprForGeometryIndex and used in constrainGeoIndex.
 type getSpanExprForGeoIndexFn func(
-	context.Context, tree.Datum, geoindex.RelationshipType, *geoindex.Config,
+	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, *geoindex.Config,
 ) *invertedexpr.SpanExpression
 
 // tryConstrainGeoIndex tries to derive an inverted index constraint for the
@@ -114,6 +117,7 @@ func tryConstrainGeoIndex(
 func getSpanExprForGeographyIndex(
 	ctx context.Context,
 	d tree.Datum,
+	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
 	indexConfig *geoindex.Config,
 ) *invertedexpr.SpanExpression {
@@ -138,6 +142,33 @@ func getSpanExprForGeographyIndex(
 			panic(err)
 		}
 
+	case geoindex.DWithin:
+		// Parameters are type checked earlier. Keep this consistent with the definition
+		// in geo_builtins.go.
+		if len(additionalParams) != 1 && len(additionalParams) != 2 {
+			panic(errors.AssertionFailedf("unexpected param length %d", len(additionalParams)))
+		}
+		d, ok := additionalParams[0].(*tree.DFloat)
+		if !ok {
+			panic(errors.AssertionFailedf("parameter is not float"))
+		}
+		distanceMeters := float64(*d)
+		useSpheroid := geogfn.UseSpheroid
+		if len(additionalParams) == 2 {
+			b, ok := additionalParams[1].(*tree.DBool)
+			if !ok {
+				panic(errors.AssertionFailedf("parameter is not bool"))
+			}
+			if !*b {
+				useSpheroid = geogfn.UseSphere
+			}
+		}
+		unionKeySpans, err := geogIdx.DWithin(ctx, geog, distanceMeters, useSpheroid)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
 	case geoindex.Intersects:
 		unionKeySpans, err := geogIdx.Intersects(ctx, geog)
 		if err != nil {
@@ -152,11 +183,26 @@ func getSpanExprForGeographyIndex(
 	return spanExpr
 }
 
+// Helper for DWithin and DFullyWithin.
+func getDistanceParam(params []tree.Datum) float64 {
+	// Parameters are type checked earlier. Keep this consistent with the definition
+	// in geo_builtins.go.
+	if len(params) != 1 {
+		panic(errors.AssertionFailedf("unexpected param length %d", len(params)))
+	}
+	d, ok := params[0].(*tree.DFloat)
+	if !ok {
+		panic(errors.AssertionFailedf("parameter is not float"))
+	}
+	return float64(*d)
+}
+
 // getSpanExprForGeometryIndex gets a SpanExpression that constrains the given
 // geometry index according to the given constant and geospatial relationship.
 func getSpanExprForGeometryIndex(
 	ctx context.Context,
 	d tree.Datum,
+	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
 	indexConfig *geoindex.Config,
 ) *invertedexpr.SpanExpression {
@@ -180,6 +226,22 @@ func getSpanExprForGeometryIndex(
 		if spanExpr, err = invertedexpr.GeoRPKeyExprToSpanExpr(rpKeyExpr); err != nil {
 			panic(err)
 		}
+
+	case geoindex.DFullyWithin:
+		distance := getDistanceParam(additionalParams)
+		unionKeySpans, err := geomIdx.DFullyWithin(ctx, geom, distance)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
+
+	case geoindex.DWithin:
+		distance := getDistanceParam(additionalParams)
+		unionKeySpans, err := geomIdx.DWithin(ctx, geom, distance)
+		if err != nil {
+			panic(err)
+		}
+		spanExpr = invertedexpr.GeoUnionKeySpansToSpanExpr(unionKeySpans)
 
 	case geoindex.Intersects:
 		unionKeySpans, err := geomIdx.Intersects(ctx, geom)
@@ -247,6 +309,7 @@ func constrainGeoIndex(
 	if !ok {
 		// TODO(rytaft): Commute the geospatial function in this case.
 		//   Covers      <->  CoveredBy
+		//   DWithin     <->  DWithin
 		//   Intersects  <->  Intersects
 		return invertedexpr.NonInvertedColExpression{}
 	}
@@ -254,19 +317,27 @@ func constrainGeoIndex(
 		// The column in the function does not match the index column.
 		return invertedexpr.NonInvertedColExpression{}
 	}
-
+	// Any additional params must be constant.
+	var additionalParams []tree.Datum
+	for i := 2; i < fn.Args.ChildCount(); i++ {
+		if !memo.CanExtractConstDatum(fn.Args.Child(i)) {
+			return invertedexpr.NonInvertedColExpression{}
+		}
+		additionalParams = append(additionalParams, memo.ExtractConstDatum(fn.Args.Child(i)))
+	}
 	relationship := geoRelationshipMap[fn.Name]
-	return getSpanExpr(ctx, d, relationship, index.GeoConfig())
+	return getSpanExpr(ctx, d, additionalParams, relationship, index.GeoConfig())
 }
 
 // geoDatumToInvertedExpr implements invertedexpr.DatumToInvertedExpr for
 // geospatial columns.
 type geoDatumToInvertedExpr struct {
-	relationship geoindex.RelationshipType
-	indexConfig  *geoindex.Config
-	typ          *types.T
-	getSpanExpr  getSpanExprForGeoIndexFn
-	alloc        sqlbase.DatumAlloc
+	relationship     geoindex.RelationshipType
+	additionalParams []tree.Datum
+	indexConfig      *geoindex.Config
+	typ              *types.T
+	getSpanExpr      getSpanExprForGeoIndexFn
+	alloc            sqlbase.DatumAlloc
 }
 
 var _ invertedexpr.DatumToInvertedExpr = &geoDatumToInvertedExpr{}
@@ -279,6 +350,8 @@ func NewGeoDatumToInvertedExpr(
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
 	}
 
+	// TODO: extract the additional constant parameters for DWithin and DFullyWithin.
+	// Are they the FuncExpr.Exprs[2] and FuncExpr.Exprs[3]
 	fn, ok := expr.(*tree.FuncExpr)
 	if !ok {
 		return nil, fmt.Errorf("inverted joins are currently only supported for single geospatial functions")
@@ -290,9 +363,19 @@ func NewGeoDatumToInvertedExpr(
 		return nil, fmt.Errorf("%s cannot be index-accelerated", name)
 	}
 
+	var additionalParams []tree.Datum
+	for i := 2; i < len(fn.Exprs); i++ {
+		datum, ok := fn.Exprs[i].(tree.Datum)
+		if !ok {
+			return nil, fmt.Errorf("non constant additional parameter for %s", name)
+		}
+		additionalParams = append(additionalParams, datum)
+	}
+
 	g := &geoDatumToInvertedExpr{
-		relationship: relationship,
-		indexConfig:  config,
+		relationship:     relationship,
+		additionalParams: additionalParams,
+		indexConfig:      config,
 	}
 	if geoindex.IsGeographyConfig(config) {
 		g.typ = types.Geography
@@ -314,7 +397,7 @@ func (g *geoDatumToInvertedExpr) Convert(
 	if err := d.EnsureDecoded(g.typ, &g.alloc); err != nil {
 		return nil, err
 	}
-	spanExpr := g.getSpanExpr(ctx, d.Datum, g.relationship, g.indexConfig)
+	spanExpr := g.getSpanExpr(ctx, d.Datum, g.additionalParams, g.relationship, g.indexConfig)
 	return spanExpr.ToProto(), nil
 }
 
