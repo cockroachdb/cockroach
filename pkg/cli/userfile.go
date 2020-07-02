@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -17,29 +17,27 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
-const (
-	chunkSize = 4 * 1024
-)
+const defaultQualifiedDBSchemaName = "defaultdb.public."
 
-var nodeLocalUploadCmd = &cobra.Command{
+var userFileUploadCmd = &cobra.Command{
 	Use:   "upload <source> <destination>",
 	Short: "Upload file from source to destination",
 	Long: `
-Uploads a file to a gateway node's local file system using a SQL connection.
+Uploads a file to the user scoped file storage using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(2),
-	RunE: maybeShoutError(runUpload),
+	RunE: maybeShoutError(runUserFileUpload),
 }
 
-func runUpload(cmd *cobra.Command, args []string) error {
-	conn, err := makeSQLClient("cockroach nodelocal", useSystemDb)
+func runUserFileUpload(cmd *cobra.Command, args []string) error {
+	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
 		return err
 	}
@@ -47,16 +45,16 @@ func runUpload(cmd *cobra.Command, args []string) error {
 
 	source := args[0]
 	destination := args[1]
-	reader, err := openSourceFile(source)
+	reader, err := openUserFile(source)
 	if err != nil {
 		return err
 	}
 	defer reader.Close()
 
-	return uploadFile(context.Background(), conn, reader, destination)
+	return uploadUserFile(context.Background(), conn, reader, destination)
 }
 
-func openSourceFile(source string) (io.ReadCloser, error) {
+func openUserFile(source string) (io.ReadCloser, error) {
 	f, err := os.Open(source)
 	if err != nil {
 		return nil, err
@@ -71,7 +69,9 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
-func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destination string) error {
+func uploadUserFile(
+	ctx context.Context, conn *sqlConn, reader io.Reader, destination string,
+) error {
 	if err := conn.ensureConn(); err != nil {
 		return err
 	}
@@ -81,14 +81,29 @@ func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destinatio
 		return err
 	}
 
-	// Construct the nodelocal URI as the destination for the CopyIn stmt.
-	nodelocalURL := url.URL{
-		Scheme: "nodelocal",
-		Host:   "self",
+	// TODO(adityamaru): In the future we may want to allow users to specify a
+	// fully qualified db.schema.table where their underlying SQL file tables will
+	// be created. Enforcing the filepath to begin with a / allows for easy
+	// disambiguation between the qualified name and the filepath.
+	if !strings.HasPrefix(destination, "/") {
+		return errors.Newf("userfile upload destination path must begin with /")
+	}
+
+	connURL, err := url.Parse(conn.url)
+	if err != nil {
+		return err
+	}
+
+	// Construct the userfile URI as the destination for the CopyIn stmt.
+	// Currently we hardcode the db.schema prefix, in the future we might allow
+	// users to specify this.
+	userfileURL := url.URL{
+		Scheme: "userfile",
+		Host:   defaultQualifiedDBSchemaName + connURL.User.Username(),
 		Path:   destination,
 	}
-	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName,
-		sql.NodelocalFileUploadTable))
+	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(userfileURL.String(), sql.CrdbInternalName,
+		sql.UserFileUploadTable))
 	if err != nil {
 		return err
 	}
@@ -125,25 +140,21 @@ func uploadFile(ctx context.Context, conn *sqlConn, reader io.Reader, destinatio
 		return err
 	}
 
-	nodeID, _, _, err := conn.getServerMetadata()
-	if err != nil {
-		return errors.Wrap(err, "unable to get node id")
-	}
-	fmt.Printf("successfully uploaded to nodelocal://%s\n", filepath.Join(nodeID.String(), destination))
+	fmt.Printf("successfully uploaded to %s\n", userfileURL.String())
 	return nil
 }
 
-var nodeLocalCmds = []*cobra.Command{
-	nodeLocalUploadCmd,
+var userFileCmds = []*cobra.Command{
+	userFileUploadCmd,
 }
 
-var nodeLocalCmd = &cobra.Command{
-	Use:   "nodelocal [command]",
-	Short: "upload and delete nodelocal files",
-	Long:  "Upload and delete files on the gateway node's local file system.",
+var userFileCmd = &cobra.Command{
+	Use:   "userfile [command]",
+	Short: "upload and delete user scoped files",
+	Long:  "Upload and delete files from the user scoped file storage.",
 	RunE:  usageAndErr,
 }
 
 func init() {
-	nodeLocalCmd.AddCommand(nodeLocalCmds...)
+	userFileCmd.AddCommand(userFileCmds...)
 }
