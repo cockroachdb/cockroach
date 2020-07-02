@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -520,7 +522,38 @@ func backupPlanHook(
 			}
 		}
 
-		spans := spansForAllTableIndexes(p.ExecCfg().Codec, tables, revs)
+		var spans []roachpb.Span
+		var tenants []BackupManifest_Tenant
+		if backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
+			if !p.ExecCfg().Codec.ForSystemTenant() {
+				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
+			}
+			id := backupStmt.Targets.Tenant.ToUint64()
+
+			res, err := p.ExecCfg().InternalExecutor.Query(
+				ctx, "backup-lookup-tenant", p.ExtendedEvalContext().Txn,
+				`select active, info from system.tenants where id = $1`, id,
+			)
+			if err != nil {
+				return err
+			}
+			if len(res) == 0 {
+				return errors.Errorf("tenant %d does not exist", id)
+			}
+			if !tree.MustBeDBool(res[0][0]) {
+				return errors.Errorf("tenant %d is not active", id)
+			}
+			var info []byte
+			if res[0][1] != tree.DNull {
+				info = []byte(tree.MustBeDBytes(res[0][1]))
+			}
+
+			prefix := keys.MakeSQLCodec(backupStmt.Targets.Tenant).TenantPrefix()
+			spans = []roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
+			tenants = []BackupManifest_Tenant{{ID: id, Info: info}}
+		} else {
+			spans = spansForAllTableIndexes(p.ExecCfg().Codec, tables, revs)
+		}
 
 		if len(prevBackups) > 0 {
 			tablesInPrev := make(map[sqlbase.ID]struct{})
@@ -580,6 +613,7 @@ func backupPlanHook(
 			EndTime:             endTime,
 			MVCCFilter:          mvccFilter,
 			Descriptors:         targetDescs,
+			Tenants:             tenants,
 			DescriptorChanges:   revs,
 			CompleteDbs:         completeDBs,
 			Spans:               spans,

@@ -137,6 +137,9 @@ func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbas
 // byte that we're likely at the end anyway and do not need to search for any
 // further table IDs to replace.
 func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, error) {
+	if bytes.HasPrefix(key, keys.TenantPrefix) {
+		return key, true, nil
+	}
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
