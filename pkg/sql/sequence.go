@@ -328,7 +328,7 @@ func removeSequenceOwnerIfExists(
 	sequenceID sqlbase.ID,
 	opts *sqlbase.TableDescriptor_SequenceOpts,
 ) error {
-	if opts.SequenceOwner.Equal(sqlbase.TableDescriptor_SequenceOpts_SequenceOwner{}) {
+	if !opts.HasOwner() {
 		return nil
 	}
 	tableDesc, err := p.Tables().GetMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
