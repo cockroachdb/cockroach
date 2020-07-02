@@ -1773,7 +1773,8 @@ func (ex *connExecutor) execCopyIn(
 	}
 	var cm copyMachineInterface
 	var err error
-	if table := cmd.Stmt.Table; table.Table() == fileUploadTable && table.Schema() == crdbInternalName {
+	if table := cmd.Stmt.Table; (table.Table() == nodelocalFileUploadTable ||
+		table.Table() == userFileUploadTable) && table.Schema() == crdbInternalName {
 		cm, err = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg)
 	} else {
 		cm, err = newCopyMachine(
