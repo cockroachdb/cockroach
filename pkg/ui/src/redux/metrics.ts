@@ -38,7 +38,7 @@ export const FETCH_COMPLETE = "cockroachui/metrics/FETCH_COMPLETE";
  * WithID is a convenient interface for associating arbitrary data structures
  * with a component ID.
  */
-interface WithID<T> {
+export interface WithID<T> {
   id: string;
   data: T;
 }
@@ -46,7 +46,7 @@ interface WithID<T> {
 /**
  * A request/response pair.
  */
-interface RequestWithResponse {
+export interface RequestWithResponse {
   request: TSRequest;
   response: TSResponse;
 }
