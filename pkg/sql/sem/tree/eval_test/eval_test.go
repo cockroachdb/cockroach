@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -129,10 +128,6 @@ func TestEval(t *testing.T) {
 
 	t.Run("vectorized", func(t *testing.T) {
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
-			if d.Input == "B'11111111111111111111111110000101'::int4" {
-				// Skip this test: https://github.com/cockroachdb/cockroach/pull/40790#issuecomment-532597294.
-				return strings.TrimSpace(d.Expected)
-			}
 			flowCtx := &execinfra.FlowCtx{
 				EvalCtx: evalCtx,
 			}
@@ -154,24 +149,16 @@ func TestEval(t *testing.T) {
 				// caught before execution.
 				return strings.TrimSpace(d.Expected)
 			}
-			typs := []*types.T{typedExpr.ResolvedType()}
-
-			// inputTyps has no relation to the actual expression result type. Used
-			// for generating a batch.
-			inputTyps := []*types.T{types.Int}
 
 			batchesReturned := 0
 			args := &colexec.NewColOperatorArgs{
 				Spec: &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{
-						Type:        execinfrapb.InputSyncSpec_UNORDERED,
-						ColumnTypes: inputTyps,
-					}},
+					Input: []execinfrapb.InputSyncSpec{{}},
 					Core: execinfrapb.ProcessorCoreUnion{
 						Noop: &execinfrapb.NoopCoreSpec{},
 					},
 					Post: execinfrapb.PostProcessSpec{
-						RenderExprs: []execinfrapb.Expression{{Expr: d.Input}},
+						RenderExprs: []execinfrapb.Expression{{LocalExpr: typedExpr}},
 					},
 				},
 				Inputs: []colexecbase.Operator{
@@ -181,7 +168,7 @@ func TestEval(t *testing.T) {
 								return coldata.ZeroBatch
 							}
 							// It doesn't matter what types we create the input batch with.
-							batch := coldata.NewMemBatch(inputTyps, coldata.StandardColumnFactory)
+							batch := coldata.NewMemBatch([]*types.T{}, coldata.StandardColumnFactory)
 							batch.SetLength(1)
 							batchesReturned++
 							return batch
@@ -195,19 +182,13 @@ func TestEval(t *testing.T) {
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
-			if testutils.IsError(err, "unsupported type") {
-				// Skip this test as execution is not supported by the vectorized
-				// engine.
-				return strings.TrimSpace(d.Expected)
-			} else {
-				require.NoError(t, err)
-			}
+			require.NoError(t, err)
 
 			mat, err := colexec.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
 				result.Op,
-				typs,
+				[]*types.T{typedExpr.ResolvedType()},
 				nil, /* output */
 				result.MetadataSources,
 				nil, /* toClose */
