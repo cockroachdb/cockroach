@@ -149,6 +149,7 @@ message MVCCStatsDelta {
   sint64 intent_count = 11;
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
+  sint64 abort_span_bytes = 15;
 }
 
 // MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
@@ -173,6 +174,7 @@ message MVCCPersistentStats {
   int64 intent_count = 11;
   int64 sys_bytes = 12;
   int64 sys_count = 13;
+  int64 abort_span_bytes = 15;
 }
 
 // RangeAppliedState combines the raft and lease applied indices with

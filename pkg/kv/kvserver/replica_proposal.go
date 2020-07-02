@@ -811,6 +811,13 @@ func (r *Replica) evaluateProposal(
 			}
 		}
 
+		// If the cluster version doesn't track abort span size in MVCCStats, we
+		// zero it out to prevent inconsistencies in MVCCStats across nodes in a possibly
+		// mixed-version cluster.
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionAbortSpanBytes) {
+			res.Replicated.Delta.AbortSpanBytes = 0
+		}
+
 		// If the RangeAppliedState key is not being used and the cluster version is
 		// high enough to guarantee that all current and future binaries will
 		// understand the key, we send the migration flag through Raft. Because
