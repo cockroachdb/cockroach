@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -49,6 +50,22 @@ func createTestAbortSpan(
 	return New(rangeID), eng
 }
 
+// getExpAbortSpanBytes returns the bytes needed to store the
+// given abort span entry (including the key it is stored under).
+func getExpAbortSpanBytes(entry *roachpb.AbortSpanEntry, rangeID roachpb.RangeID) (int64, error) {
+	key := keys.AbortSpanKey(rangeID, testTxnID)
+	value := roachpb.Value{}
+	if err := value.SetProto(entry); err != nil {
+		return 0, err
+	}
+	meta := enginepb.MVCCMetadata{RawBytes: value.RawBytes}
+	metaKeySize := int64(storage.MakeMVCCMetadataKey(key).EncodedSize())
+	metaValSize := int64(meta.Size())
+	expBytes := metaKeySize + metaValSize
+
+	return expBytes, nil
+}
+
 // TestAbortSpanPutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
 func TestAbortSpanPutGetClearData(t *testing.T) {
@@ -63,14 +80,28 @@ func TestAbortSpanPutGetClearData(t *testing.T) {
 	} else if readErr != nil {
 		t.Fatalf("unexpected read error: %s", readErr)
 	}
-
+	ms := enginepb.MVCCStats{}
 	entry = roachpb.AbortSpanEntry{
 		Key:       testTxnKey,
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
 	}
-	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
+	if err := sc.Put(context.Background(), e, &ms, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting response: %+v", err)
+	}
+
+	expAbortSpanBytes, err := getExpAbortSpanBytes(&entry, sc.rangeID)
+	if err != nil {
+		t.Errorf("unexpected error: %+v", err)
+	}
+	if ms.AbortSpanBytes != expAbortSpanBytes {
+		t.Errorf("got AbortSpanBytes: %d; expected %d", ms.AbortSpanBytes, expAbortSpanBytes)
+	}
+	if ms.SysBytes != expAbortSpanBytes {
+		t.Errorf("got SysBytes: %d; expected %d", ms.SysBytes, expAbortSpanBytes)
+	}
+	if ms.SysCount != 1 {
+		t.Errorf("got AbortSpanBytes: %d; expected %d", ms.SysCount, 1)
 	}
 
 	tryHit := func(expAbort bool, expEntry roachpb.AbortSpanEntry) {
@@ -97,14 +128,28 @@ func TestAbortSpanEmptyParams(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sc, e := createTestAbortSpan(t, 1, stopper)
-
+	ms := enginepb.MVCCStats{}
 	entry := roachpb.AbortSpanEntry{
 		Key:       testTxnKey,
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
 	}
 	// Put value for test response.
-	if err := sc.Put(context.Background(), e, nil, testTxnID, &entry); err != nil {
+	if err := sc.Put(context.Background(), e, &ms, testTxnID, &entry); err != nil {
 		t.Errorf("unexpected error putting response: %+v", err)
+	}
+
+	expAbortSpanBytes, err := getExpAbortSpanBytes(&entry, sc.rangeID)
+	if err != nil {
+		t.Errorf("unexpected error: %+v", err)
+	}
+	if ms.AbortSpanBytes != expAbortSpanBytes {
+		t.Errorf("got AbortSpanBytes: %d; expected %d", ms.AbortSpanBytes, expAbortSpanBytes)
+	}
+	if ms.SysBytes != expAbortSpanBytes {
+		t.Errorf("got SysBytes: %d; expected %d", ms.SysBytes, expAbortSpanBytes)
+	}
+	if ms.SysCount != 1 {
+		t.Errorf("got AbortSpanBytes: %d; expected %d", ms.SysCount, 1)
 	}
 }

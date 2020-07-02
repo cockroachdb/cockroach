@@ -781,6 +781,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Size",
 				Metrics: []string{
+					"abortspanbytes",
 					"intentbytes",
 					"keybytes",
 					"livebytes",
@@ -2039,6 +2040,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Size",
 				Metrics: []string{
+					"abortspanbytes",
 					"intentbytes",
 					"keybytes",
 					"livebytes",

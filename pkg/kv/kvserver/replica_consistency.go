@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -230,10 +231,20 @@ func (r *Replica) CheckConsistency(
 				// Intentionally continue with the assumption that it's the current version.
 				v = r.store.cfg.Settings.Version.ActiveVersion(ctx).Version
 			}
-			// For clusters that ever ran <19.1, we're not so sure that the stats are
-			// consistent. Verify this only for clusters that started out on 19.1 or
+			// For clusters that ever ran <19.1, we're not so sure that the stats
+			// are consistent. Verify this only for clusters that started out on 19.1 or
 			// higher.
 			if !v.Less(roachpb.Version{Major: 19, Minor: 1}) {
+				// If version >= 19.1 but < VersionAbortSpanBytes, we want to ignore any delta
+				// in AbortSpanBytes when comparing stats since older versions will not be
+				// tracking abort span bytes.
+				if v.Less(clusterversion.VersionByKey(clusterversion.VersionAbortSpanBytes)) {
+					delta.AbortSpanBytes = 0
+					haveDelta = delta != enginepb.MVCCStats{}
+				}
+				if !haveDelta {
+					return resp, nil
+				}
 				log.Fatalf(ctx, "found a delta of %+v", log.Safe(delta))
 			}
 		}

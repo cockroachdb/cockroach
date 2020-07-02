@@ -139,6 +139,22 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
       if (isSys) {
         stats.sys_bytes += total_bytes;
         stats.sys_count++;
+        if (decoded_key.starts_with(kLocalRangeIDPrefix)) {
+          // RangeID-local key.
+          int64_t range_id = 0;
+          rocksdb::Slice infix, suffix, detail;
+          if (!DecodeRangeIDKey(decoded_key, &range_id, &infix, &suffix, &detail)) {
+            stats.status = FmtStatus("unable to decode rangeID key");
+            return stats;
+          }
+          if (infix.compare(kLocalRangeIDReplicatedInfix) == 0) {
+            // Replicated RangeID-local key.
+            if (suffix.compare(kLocalAbortSpanSuffix) == 0) {
+              // Abort span key.
+              stats.abort_span_bytes += total_bytes;
+            }
+          }
+        }
       } else {
         if (!meta.deleted()) {
           stats.live_bytes += total_bytes;

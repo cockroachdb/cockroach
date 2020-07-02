@@ -307,6 +307,7 @@ typedef struct {
   int64_t gc_bytes_age;
   int64_t sys_bytes;
   int64_t sys_count;
+  int64_t abort_span_bytes;
   int64_t last_update_nanos;
 } MVCCStatsResult;
 
