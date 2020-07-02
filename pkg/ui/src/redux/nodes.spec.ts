@@ -59,10 +59,10 @@ describe("node data selectors", function() {
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
       assert.deepEqual(addressesByID, {
-        1: "addressA (n1)",
-        2: "addressB (n2)",
-        3: "addressC (n3)",
-        4: "addressD (n4)",
+        1: "(n1) addressA",
+        2: "(n2) addressB",
+        3: "(n3) addressC",
+        4: "(n4) addressD",
       });
     });
 
@@ -79,13 +79,13 @@ describe("node data selectors", function() {
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
       assert.deepEqual(addressesByID, {
-        1: "addressA (n1)",
-        2: "addressB (n2)",
-        3: "addressC (n3)",
-        4: "addressD (n4)",
-        5: "addressA (n5)",
-        6: "addressC (n6)",
-        7: "addressA (n7)",
+        1: "(n1) addressA",
+        2: "(n2) addressB",
+        3: "(n3) addressC",
+        4: "(n4) addressD",
+        5: "(n5) addressA",
+        6: "(n6) addressC",
+        7: "(n7) addressA",
       });
     });
 
@@ -103,17 +103,17 @@ describe("node data selectors", function() {
       );
 
       const addressesByID = nodeDisplayNameByIDSelector(state);
-      assert.equal(addressesByID[1], "[decommissioned] addressA (n1)");
+      assert.equal(addressesByID[1], "[decommissioned] (n1) addressA");
       assert.deepEqual(addressesByID, {
-        1: "[decommissioned] addressA (n1)",
-        2: "addressB (n2)",
-        3: "[decommissioned] addressC (n3)",
-        4: "addressD (n4)",
-        5: "[decommissioned] addressA (n5)",
-        6: "addressC (n6)",
-        7: "addressA (n7)",
-        8: "addressE (n8)",
-        9: "addressF (n9)",
+        1: "[decommissioned] (n1) addressA",
+        2: "(n2) addressB",
+        3: "[decommissioned] (n3) addressC",
+        4: "(n4) addressD",
+        5: "[decommissioned] (n5) addressA",
+        6: "(n6) addressC",
+        7: "(n7) addressA",
+        8: "(n8) addressE",
+        9: "(n9) addressF",
       });
     });
 
