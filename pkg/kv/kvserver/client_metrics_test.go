@@ -114,6 +114,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 		checkGauge(t, idString, m.IntentCount, realStats.IntentCount)
 		checkGauge(t, idString, m.SysBytes, realStats.SysBytes)
 		checkGauge(t, idString, m.SysCount, realStats.SysCount)
+		checkGauge(t, idString, m.AbortSpanBytes, realStats.AbortSpanBytes)
 		// "Ages" will be different depending on how much time has passed. Even with
 		// a manual clock, this can be an issue in tests. Therefore, we do not
 		// verify them in this test.

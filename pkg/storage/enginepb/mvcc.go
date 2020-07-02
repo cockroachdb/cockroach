@@ -167,6 +167,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.IntentCount += oms.IntentCount
 	ms.SysBytes += oms.SysBytes
 	ms.SysCount += oms.SysCount
+	ms.AbortSpanBytes += oms.AbortSpanBytes
 }
 
 // Subtract removes oms from ms. The ages will be moved forward to the larger of
@@ -192,6 +193,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.IntentCount -= oms.IntentCount
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
+	ms.AbortSpanBytes -= oms.AbortSpanBytes
 }
 
 // IsInline returns true if the value is inlined in the metadata.

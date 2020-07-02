@@ -71,7 +71,7 @@ const (
 	VersionNoOriginFKIndexes
 	VersionClientRangeInfosOnBatchResponse
 	VersionNodeMembershipStatus
-
+	VersionAbortSpanBytes
 	// Add new versions here (step one of two).
 )
 
@@ -539,7 +539,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionNodeMembershipStatus,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 11},
 	},
-
+	{
+		// VersionAbortSpanBytes adds a field to MVCCStats
+		// (MVCCStats.AbortSpanBytes) that tracks the size of a
+		// range's abort span.
+		Key:     VersionAbortSpanBytes,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 12},
+	},
 	// Add new versions here (step two of two).
 
 })
