@@ -33,4 +33,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+
+	if err := release.MakeWorkload(pkg.Dir); err != nil {
+		log.Fatal(err)
+	}
 }
