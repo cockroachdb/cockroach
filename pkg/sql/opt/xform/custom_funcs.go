@@ -1982,16 +1982,26 @@ func (c *CustomFuncs) IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 	return IsGeoIndexFunction(fn)
 }
 
-// HasAllVariableArgs returns true if all the arguments to the given function
-// are variables.
-func (c *CustomFuncs) HasAllVariableArgs(fn opt.ScalarExpr) bool {
+// FirstArgIsVariable returns true if the first argument to the given
+// function is a variable.
+func (c *CustomFuncs) FirstArgIsVariable(fn opt.ScalarExpr) bool {
+	return argNumIsVariable(fn, 0)
+}
+
+// SecondArgIsVariable returns true if the second argument to the given
+// function is a variable.
+func (c *CustomFuncs) SecondArgIsVariable(fn opt.ScalarExpr) bool {
+	return argNumIsVariable(fn, 1)
+}
+
+func argNumIsVariable(fn opt.ScalarExpr, index int) bool {
 	function := fn.(*memo.FunctionExpr)
-	for i, n := 0, function.Args.ChildCount(); i < n; i++ {
-		if _, ok := function.Args.Child(i).(*memo.VariableExpr); !ok {
-			return false
-		}
+	numArgs := function.Args.ChildCount()
+	if index >= numArgs {
+		return false
 	}
-	return true
+	_, ok := function.Args.Child(index).(*memo.VariableExpr)
+	return ok
 }
 
 // findConstantFilter tries to find a filter that is exactly equivalent to
