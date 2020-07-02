@@ -1186,7 +1186,7 @@ the 'zfs rollback' command:
 			return fmt.Errorf("unknown filesystem %q", fs)
 		}
 
-		err = c.Run(os.Stdout, os.Stderr, c.Nodes, install.OtherCmd, "reformatting", fmt.Sprintf(`
+		err = c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
   sudo zpool destroy -f data1
@@ -1228,7 +1228,7 @@ var runCmd = &cobra.Command{
 		if len(title) > 30 {
 			title = title[:27] + "..."
 		}
-		return c.Run(os.Stdout, os.Stderr, c.Nodes, install.CockroachCmd, title, cmd)
+		return c.Run(os.Stdout, os.Stderr, c.Nodes, title, cmd)
 	}),
 }
 
