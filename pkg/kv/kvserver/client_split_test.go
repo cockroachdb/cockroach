@@ -775,7 +775,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		ValCount:    msLeft.ValCount + msRight.ValCount,
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
-	ms.SysBytes, ms.SysCount = 0, 0
+	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	ms.LastUpdateNanos = 0
 	if expMS != ms {
 		t.Errorf("expected left plus right ranges to equal original, but\n %+v\n+\n %+v\n!=\n %+v", msLeft, msRight, ms)

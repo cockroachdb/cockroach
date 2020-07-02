@@ -266,6 +266,12 @@ var (
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAbortSpanBytes = metric.Metadata{
+		Name:        "abortspanbytes",
+		Help:        "Number of bytes in the abort span",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	// Metrics used by the rebalancing logic that aren't already captured elsewhere.
 	metaAverageQueriesPerSecond = metric.Metadata{
@@ -1049,6 +1055,7 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 	SysBytes           *metric.Gauge
 	SysCount           *metric.Gauge
+	AbortSpanBytes     *metric.Gauge
 
 	// Rebalancing metrics.
 	AverageQueriesPerSecond *metric.GaugeFloat64
@@ -1243,12 +1250,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ResolveAbortCount:  metric.NewCounter(metaResolveAbort),
 		ResolvePoisonCount: metric.NewCounter(metaResolvePoison),
 
-		Capacity:  metric.NewGauge(metaCapacity),
-		Available: metric.NewGauge(metaAvailable),
-		Used:      metric.NewGauge(metaUsed),
-		Reserved:  metric.NewGauge(metaReserved),
-		SysBytes:  metric.NewGauge(metaSysBytes),
-		SysCount:  metric.NewGauge(metaSysCount),
+		Capacity:       metric.NewGauge(metaCapacity),
+		Available:      metric.NewGauge(metaAvailable),
+		Used:           metric.NewGauge(metaUsed),
+		Reserved:       metric.NewGauge(metaReserved),
+		SysBytes:       metric.NewGauge(metaSysBytes),
+		SysCount:       metric.NewGauge(metaSysCount),
+		AbortSpanBytes: metric.NewGauge(metaAbortSpanBytes),
 
 		// Rebalancing metrics.
 		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
@@ -1429,6 +1437,7 @@ func (sm *StoreMetrics) incMVCCGauges(delta enginepb.MVCCStats) {
 	sm.LastUpdateNanos.Inc(delta.LastUpdateNanos)
 	sm.SysBytes.Inc(delta.SysBytes)
 	sm.SysCount.Inc(delta.SysCount)
+	sm.AbortSpanBytes.Inc(delta.AbortSpanBytes)
 }
 
 func (sm *StoreMetrics) addMVCCStats(delta enginepb.MVCCStats) {
