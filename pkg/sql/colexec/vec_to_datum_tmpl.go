@@ -46,9 +46,7 @@ import (
 type vecToDatumConverter struct {
 	convertedVecs    []tree.Datums
 	vecIdxsToConvert []int
-	// TODO(yuzefovich): consider customizing the allocation size of DatumAlloc
-	// for vectorized purposes.
-	da sqlbase.DatumAlloc
+	da               sqlbase.DatumAlloc
 }
 
 // newVecToDatumConverter creates a new vecToDatumConverter.
@@ -80,6 +78,9 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 		for _, vecIdx := range c.vecIdxsToConvert {
 			c.convertedVecs[vecIdx] = make([]tree.Datum, batchLength)
 		}
+		// Adjust the datum alloc according to the length of the batch since
+		// this batch is the longest we've seen so far.
+		c.da.AllocSize = batchLength
 	} else {
 		for _, vecIdx := range c.vecIdxsToConvert {
 			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:batchLength]

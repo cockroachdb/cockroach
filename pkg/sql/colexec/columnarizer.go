@@ -122,6 +122,12 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 		copy(c.buffered[nRows], row)
 	}
 
+	// Check if we have buffered more rows than the current allocation size
+	// and increase it if so.
+	if nRows > c.da.AllocSize {
+		c.da.AllocSize = nRows
+	}
+
 	// Write each column into the output batch.
 	for idx, ct := range columnTypes {
 		err := EncDatumRowsToColVec(c.allocator, c.buffered[:nRows], c.batch.ColVec(idx), idx, ct, &c.da)

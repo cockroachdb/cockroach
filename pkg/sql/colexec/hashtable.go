@@ -380,6 +380,12 @@ func (ht *hashTable) computeBuckets(
 		return
 	}
 
+	// Check if we received a batch with more tuples than the current
+	// allocation size and increase it if so.
+	if nKeys > ht.datumAlloc.AllocSize {
+		ht.datumAlloc.AllocSize = nKeys
+	}
+
 	for i := range ht.keyCols {
 		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.overloadHelper, &ht.datumAlloc)
 	}
