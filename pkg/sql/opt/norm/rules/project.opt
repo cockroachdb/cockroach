@@ -12,7 +12,7 @@
 # it has a chance to fire before the Project can be removed.
 [EliminateJoinUnderProjectLeft, Normalize]
 (Project
-    $join:(InnerJoin | LeftJoin $left:* $right:*) &
+    $join:(InnerJoin | LeftJoin | SemiJoin $left:* $right:*) &
         (JoinDoesNotDuplicateLeftRows $join) &
         (JoinPreservesLeftRows $join)
     $projections:* &

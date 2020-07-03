@@ -2211,6 +2211,7 @@ sort
            ├── fd: ()-->(9), (1)-->(2-4), (4)==(8), (8)==(4)
            ├── semi-join (hash)
            │    ├── columns: s_suppkey:1!null s_name:2!null s_address:3!null s_nationkey:4!null
+           │    ├── multiplicity: left-rows(zero-or-one)
            │    ├── immutable
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)

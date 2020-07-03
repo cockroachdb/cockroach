@@ -756,7 +756,6 @@ project
  ├── fd: (5)-->(6)
  ├── full-join (cross)
  │    ├── columns: k:1 x:5 y:6
- │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── key: (1,5)
  │    ├── fd: (5)-->(6)
  │    ├── scan a
@@ -927,10 +926,12 @@ project
  ├── columns: i:2
  └── semi-join (hash)
       ├── columns: k:1!null i:2
+      ├── multiplicity: left-rows(zero-or-one)
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── semi-join (hash)
       │    ├── columns: k:1!null i:2
+      │    ├── multiplicity: left-rows(zero-or-one)
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan a
@@ -1045,7 +1046,6 @@ project
  ├── fd: (1)-->(2)
  ├── full-join (cross)
  │    ├── columns: x:1 y:2 k:3
- │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2)
  │    ├── scan xy
@@ -1294,7 +1294,6 @@ scalar-group-by
  │    │    ├── fd: (1)-->(6)
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: k:1!null i:2 y:6
- │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    ├── fd: (1)-->(2)
  │    │    │    ├── scan a
  │    │    │    │    ├── columns: k:1!null i:2
@@ -2876,6 +2875,7 @@ SELECT a, b, c FROM abcde WHERE EXISTS (SELECT * FROM family WHERE abcde.a=famil
 ----
 semi-join (hash)
  ├── columns: a:1!null b:2 c:3
+ ├── multiplicity: left-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── scan abcde
@@ -2894,6 +2894,7 @@ SELECT a, b, c FROM abcde WHERE EXISTS (SELECT * FROM family WHERE abcde.a=famil
 ----
 semi-join (hash)
  ├── columns: a:1!null b:2 c:3
+ ├── multiplicity: left-rows(zero-or-one)
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)

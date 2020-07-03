@@ -78,22 +78,23 @@ root                         ·             ·                                  
 
 # IN expression transformed into semi-join.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc)
+EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc WHERE b < 0)
 ----
-·           distribution        local        ·    ·
-·           vectorized          true         ·    ·
-merge-join  ·                   ·            (a)  ·
- │          type                semi         ·    ·
- │          equality            (a) = (a)    ·    ·
- │          left cols are key   ·            ·    ·
- │          right cols are key  ·            ·    ·
- │          mergeJoinOrder      +"(a=a)"     ·    ·
- ├── scan   ·                   ·            (a)  +a
- │          table               abc@primary  ·    ·
- │          spans               FULL SCAN    ·    ·
- └── scan   ·                   ·            (a)  +a
-·           table               abc@primary  ·    ·
-·           spans               FULL SCAN    ·    ·
+·           distribution        local        ·       ·
+·           vectorized          true         ·       ·
+merge-join  ·                   ·            (a)     ·
+ │          type                semi         ·       ·
+ │          equality            (a) = (a)    ·       ·
+ │          left cols are key   ·            ·       ·
+ │          right cols are key  ·            ·       ·
+ │          mergeJoinOrder      +"(a=a)"     ·       ·
+ ├── scan   ·                   ·            (a)     +a
+ │          table               abc@primary  ·       ·
+ │          spans               FULL SCAN    ·       ·
+ └── scan   ·                   ·            (a, b)  +a
+·           table               abc@primary  ·       ·
+·           spans               FULL SCAN    ·       ·
+·           filter              b < 0        ·       ·
 
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1

@@ -320,6 +320,7 @@ SELECT * FROM xysd WHERE EXISTS (SELECT * FROM uv WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one)
  ├── stats: [rows=500, distinct(1)=500, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -423,6 +424,7 @@ project
       ├── fd: (2)-->(8)
       ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── multiplicity: left-rows(zero-or-one)
       │    ├── immutable
       │    ├── stats: [rows=166.666667, distinct(1)=166.666667, null(1)=0, distinct(2)=138.170075, null(2)=0]
       │    ├── key: (1)
@@ -820,7 +822,6 @@ SELECT *, rowid FROM xysd FULL JOIN uv ON u > 4 AND u < 2
 ----
 full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── stats: [rows=50000000, distinct(2)=400, null(2)=25000000, distinct(3)=500, null(3)=500000, distinct(5)=500, null(5)=25000000, distinct(2,3)=5000, null(2,3)=250000, distinct(3,5)=250000, null(3,5)=250000, distinct(1,2,7)=50000000, null(1,2,7)=0]
  ├── key: (1,7)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (7)-->(5,6)
@@ -866,6 +867,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM uv WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── multiplicity: left-rows(zero-or-one)
  ├── stats: [rows=500, distinct(1)=500, null(1)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
@@ -885,6 +887,7 @@ SELECT * FROM uv WHERE EXISTS(SELECT * FROM xysd WHERE x=u)
 ----
 semi-join (hash)
  ├── columns: u:1(int) v:2(int!null)
+ ├── multiplicity: left-rows(zero-or-one)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
  ├── scan uv
  │    ├── columns: u:1(int) v:2(int!null)
@@ -1475,6 +1478,7 @@ expr
 semi-join (cross)
  ├── columns: a:1(int!null) b:2(int!null)
  ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one)
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1,2)

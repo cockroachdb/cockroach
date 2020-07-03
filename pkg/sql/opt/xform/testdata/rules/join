@@ -175,7 +175,6 @@ SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
 ----
 full-join (hash)
  ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan xyz
  │    └── columns: x:5 y:6 z:7
  ├── scan abc@bc
@@ -294,7 +293,6 @@ SELECT * FROM (SELECT * FROM abc WHERE b=1) RIGHT OUTER JOIN xyz ON a=z
 ----
 left-join (hash)
  ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
- ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── scan xyz
  │    └── columns: x:5 y:6 z:7
  ├── scan abc@bc
@@ -1022,7 +1020,6 @@ GenerateLookupJoins
 Source expression:
   left-join (hash)
    ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
-   ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
    ├── scan xyz
    │    └── columns: x:5 y:6 z:7
    ├── scan abc
@@ -1096,7 +1093,6 @@ GenerateLookupJoins
 Source expression:
   left-join (hash)
    ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
-   ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
    ├── scan abc
    │    └── columns: a:1 b:2 c:3
    ├── scan xyz
@@ -1125,7 +1121,6 @@ GenerateLookupJoins
 Source expression:
   left-join (hash)
    ├── columns: a:1 b:2 c:3 x:5 y:6 z:7
-   ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
    ├── scan xyz
    │    └── columns: x:5 y:6 z:7
    ├── scan abc
@@ -1584,6 +1579,7 @@ project
  └── semi-join (cross)
       ├── columns: pk:1!null col0:2!null col2:4!null col4:5!null
       ├── cardinality: [0 - 1]
+      ├── multiplicity: left-rows(zero-or-one)
       ├── key: ()
       ├── fd: ()-->(1,2,4,5)
       ├── select

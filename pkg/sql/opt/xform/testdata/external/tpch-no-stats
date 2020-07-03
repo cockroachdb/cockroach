@@ -2205,6 +2205,7 @@ sort
            │         │    ├── key: (13)
            │         │    └── semi-join (hash)
            │         │         ├── columns: ps_partkey:12!null ps_suppkey:13!null
+           │         │         ├── multiplicity: left-rows(zero-or-one)
            │         │         ├── immutable
            │         │         ├── key: (12,13)
            │         │         ├── project

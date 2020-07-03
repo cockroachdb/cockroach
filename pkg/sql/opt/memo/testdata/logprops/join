@@ -490,6 +490,7 @@ semi-join-apply
  ├── semi-join (cross)
  │    ├── columns: v:6(int!null)
  │    ├── outer: (1)
+ │    ├── multiplicity: left-rows(zero-or-one)
  │    ├── fd: ()-->(6)
  │    ├── scan uv
  │    │    ├── columns: v:6(int!null)
@@ -849,7 +850,6 @@ SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON Tru
 left-join (cross)
  ├── columns: column1:1(int!null) u:2(int) v:3(int)
  ├── cardinality: [3 - 6]
- ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── prune: (1-3)
  ├── reject-nulls: (2,3)
  ├── values
@@ -926,7 +926,6 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON T
 full-join (cross)
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [2 - 4]
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
  ├── values
@@ -988,7 +987,6 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a
 full-join (cross)
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [2 - 4]
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
@@ -1019,7 +1017,6 @@ SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
 full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
  ├── cardinality: [2 - ]
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-5)
  ├── reject-nulls: (1-5)
@@ -1092,7 +1089,6 @@ SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT N
 ----
 left-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
- ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
  ├── prune: (1-4,8)
@@ -1134,7 +1130,6 @@ SELECT * FROM xysd LEFT JOIN (SELECT u, sum(v) FROM uv WHERE u IS NOT NULL GROUP
 ----
 left-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) sum:8(decimal)
- ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)-->(8)
  ├── prune: (1-4,8)
@@ -1272,7 +1267,6 @@ SELECT * FROM xysd FULL JOIN (SELECT u, sum(v) FROM uv GROUP BY u) ON u IS NOT N
 ----
 full-join (cross)
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) sum:8(decimal)
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (5)~~>(8), (1,5)-->(8)
  ├── prune: (1-4,8)
@@ -1314,7 +1308,6 @@ SELECT * FROM (SELECT u, sum(v) FROM uv GROUP BY u) FULL JOIN xysd ON u IS NOT N
 ----
 full-join (cross)
  ├── columns: u:1(int) sum:4(decimal) x:5(int) y:6(int) s:7(string) d:8(decimal)
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,5)
  ├── fd: (5)-->(6-8), (7,8)~~>(5,6), (1)~~>(4), (1,5)-->(4)
  ├── prune: (4-8)
@@ -1924,7 +1917,6 @@ inner-join (hash)
  ├── full-join (cross)
  │    ├── columns: x:5(int) y:6(int) s:7(string) d:8(decimal) column1:9(int)
  │    ├── cardinality: [2 - ]
- │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    ├── fd: (5)-->(6-8), (7,8)~~>(5,6)
  │    ├── prune: (5-9)
  │    ├── reject-nulls: (5-9)
@@ -2062,7 +2054,6 @@ project
  ├── interesting orderings: (+1) (+2,+1) (+3) (-5,+6,+3)
  └── left-join (hash)
       ├── columns: m:1(int!null) n:2(int) x:3(int) y:4(int) s:5(string) d:6(decimal) column7:7(int)
-      ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
       ├── immutable
       ├── key: (1,3)
       ├── fd: (1)-->(2), (2)~~>(1), (2)-->(7), (3)-->(4-6), (5,6)~~>(3,4)

@@ -79,6 +79,7 @@ sort
            ├── semi-join (hash)
            │    ├── save-table-name: q20_semi_join_4
            │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
+           │    ├── multiplicity: left-rows(zero-or-one)
            │    ├── immutable
            │    ├── stats: [rows=9818.7403, distinct(1)=9740.19038, null(1)=0, distinct(2)=9809.64703, null(2)=0, distinct(3)=9818.7403, null(3)=0, distinct(4)=25, null(4)=0]
            │    ├── key: (1)
