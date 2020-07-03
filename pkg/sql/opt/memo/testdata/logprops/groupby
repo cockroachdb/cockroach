@@ -14,69 +14,69 @@ WHERE s IS NOT NULL
 GROUP BY x, y
 ----
 project
- ├── columns: y:2(int) sum:5(float!null) x:1(int!null) bool:10(bool!null) avg:7(float) string_agg:9(string!null)
+ ├── columns: y:2(int) sum:6(float!null) x:1(int!null) bool:11(bool!null) avg:8(float) string_agg:10(string!null)
  ├── key: (1)
- ├── fd: ()-->(10), (1)-->(2,5,7,9)
- ├── prune: (1,2,5,7,9,10)
+ ├── fd: ()-->(11), (1)-->(2,6,8,10)
+ ├── prune: (1,2,6,8,10,11)
  ├── interesting orderings: (+1)
  ├── group-by
- │    ├── columns: x:1(int!null) y:2(int) sum:5(float!null) avg:7(float) string_agg:9(string!null)
+ │    ├── columns: x:1(int!null) y:2(int) sum:6(float!null) avg:8(float) string_agg:10(string!null)
  │    ├── grouping columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,5,7,9)
- │    ├── prune: (5,7,9)
+ │    ├── fd: (1)-->(2,6,8,10)
+ │    ├── prune: (6,8,10)
  │    ├── interesting orderings: (+1)
  │    ├── project
- │    │    ├── columns: column6:6(bool!null) column8:8(string!null) x:1(int!null) y:2(int) z:3(float!null) s:4(string!null)
+ │    │    ├── columns: column7:7(bool!null) column9:9(string!null) x:1(int!null) y:2(int) z:3(float!null) s:4(string!null)
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(8), (1)-->(2-4,6), (3,4)-->(1,2)
- │    │    ├── prune: (1-4,6,8)
+ │    │    ├── fd: ()-->(9), (1)-->(2-4,7), (3,4)-->(1,2)
+ │    │    ├── prune: (1-4,7,9)
  │    │    ├── interesting orderings: (+1) (-4,+3,+1)
  │    │    ├── select
- │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string!null)
+ │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string!null) crdb_internal_mvcc_timestamp:5(decimal)
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(2-4), (3,4)-->(1,2)
- │    │    │    ├── prune: (1-3)
+ │    │    │    ├── fd: (1)-->(2-5), (3,4)-->(1,2)
+ │    │    │    ├── prune: (1-3,5)
  │    │    │    ├── interesting orderings: (+1) (-4,+3,+1)
  │    │    │    ├── scan xyzs
- │    │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
  │    │    │    │    ├── key: (1)
- │    │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    │    │    │    ├── prune: (1-4)
+ │    │    │    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+ │    │    │    │    ├── prune: (1-5)
  │    │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
  │    │    │    └── filters
  │    │    │         └── is-not [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
  │    │    │              ├── variable: s:4 [type=string]
  │    │    │              └── null [type=unknown]
  │    │    └── projections
- │    │         ├── gt [as=column6:6, type=bool, outer=(3)]
+ │    │         ├── gt [as=column7:7, type=bool, outer=(3)]
  │    │         │    ├── variable: z:3 [type=float]
  │    │         │    └── const: 0.0 [type=float]
- │    │         └── const: ',' [as=column8:8, type=string]
+ │    │         └── const: ',' [as=column9:9, type=string]
  │    └── aggregations
- │         ├── sum [as=sum:5, type=float, outer=(3)]
+ │         ├── sum [as=sum:6, type=float, outer=(3)]
  │         │    └── variable: z:3 [type=float]
- │         ├── agg-filter [as=avg:7, type=float, outer=(3,6)]
+ │         ├── agg-filter [as=avg:8, type=float, outer=(3,7)]
  │         │    ├── avg [type=float]
  │         │    │    └── variable: z:3 [type=float]
- │         │    └── variable: column6:6 [type=bool]
- │         └── agg-distinct [as=string_agg:9, type=string, outer=(4,8)]
+ │         │    └── variable: column7:7 [type=bool]
+ │         └── agg-distinct [as=string_agg:10, type=string, outer=(4,9)]
  │              └── string-agg [type=string]
  │                   ├── variable: s:4 [type=string]
- │                   └── variable: column8:8 [type=string]
+ │                   └── variable: column9:9 [type=string]
  └── projections
-      └── false [as=bool:10, type=bool]
+      └── false [as=bool:11, type=bool]
 
 # Scalar groupby.
 build
 SELECT sum(x), max(y), count(x) FROM xyzs
 ----
 scalar-group-by
- ├── columns: sum:5(decimal) max:6(int) count:7(int!null)
+ ├── columns: sum:6(decimal) max:7(int) count:8(int!null)
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5-7)
- ├── prune: (5-7)
+ ├── fd: ()-->(6-8)
+ ├── prune: (6-8)
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -84,17 +84,17 @@ scalar-group-by
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xyzs
- │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │         ├── prune: (1-4)
+ │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+ │         ├── prune: (1-5)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations
-      ├── sum [as=sum:5, type=decimal, outer=(1)]
+      ├── sum [as=sum:6, type=decimal, outer=(1)]
       │    └── variable: x:1 [type=int]
-      ├── max [as=max:6, type=int, outer=(2)]
+      ├── max [as=max:7, type=int, outer=(2)]
       │    └── variable: y:2 [type=int]
-      └── count [as=count:7, type=int, outer=(1)]
+      └── count [as=count:8, type=int, outer=(1)]
            └── variable: x:1 [type=int]
 
 # Group by unique index columns.
@@ -116,10 +116,10 @@ project
            ├── prune: (3,4)
            ├── interesting orderings: (-4,+3)
            └── scan xyzs
-                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
                 ├── key: (1)
-                ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-                ├── prune: (1-4)
+                ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+                ├── prune: (1-5)
                 └── interesting orderings: (+1) (-4,+3,+1)
 
 # Group by columns that otherwise wouldn't be weak key.
@@ -127,25 +127,25 @@ build
 SELECT y, sum(z) FROM xyzs GROUP BY z, y
 ----
 project
- ├── columns: y:2(int) sum:5(float!null)
- ├── prune: (2,5)
+ ├── columns: y:2(int) sum:6(float!null)
+ ├── prune: (2,6)
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) sum:5(float!null)
+      ├── columns: y:2(int) z:3(float!null) sum:6(float!null)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── key: (2,3)
-      ├── fd: (2,3)-->(5)
-      ├── prune: (5)
+      ├── fd: (2,3)-->(6)
+      ├── prune: (6)
       ├── project
       │    ├── columns: y:2(int) z:3(float!null)
       │    ├── prune: (2,3)
       │    └── scan xyzs
-      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
       │         ├── key: (1)
-      │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │         ├── prune: (1-4)
+      │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+      │         ├── prune: (1-5)
       │         └── interesting orderings: (+1) (-4,+3,+1)
       └── aggregations
-           └── sum [as=sum:5, type=float, outer=(3)]
+           └── sum [as=sum:6, type=float, outer=(3)]
                 └── variable: z:3 [type=float]
 
 # Group by column that is subset of unique index.
@@ -153,24 +153,24 @@ build
 SELECT z, max(s) FROM xyzs GROUP BY z
 ----
 group-by
- ├── columns: z:3(float!null) max:5(string)
+ ├── columns: z:3(float!null) max:6(string)
  ├── grouping columns: z:3(float!null)
  ├── key: (3)
- ├── fd: (3)-->(5)
- ├── prune: (5)
+ ├── fd: (3)-->(6)
+ ├── prune: (6)
  ├── project
  │    ├── columns: z:3(float!null) s:4(string)
  │    ├── lax-key: (3,4)
  │    ├── prune: (3,4)
  │    ├── interesting orderings: (-4,+3)
  │    └── scan xyzs
- │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
  │         ├── key: (1)
- │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │         ├── prune: (1-4)
+ │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+ │         ├── prune: (1-5)
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations
-      └── max [as=max:5, type=string, outer=(4)]
+      └── max [as=max:6, type=string, outer=(4)]
            └── variable: s:4 [type=string]
 
 # Group by all columns.
@@ -187,80 +187,86 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── interesting orderings: (+1) (-4,+3,+1)
-      └── scan xyzs
+      └── project
            ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
            ├── key: (1)
            ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
            ├── prune: (1-4)
-           └── interesting orderings: (+1) (-4,+3,+1)
+           ├── interesting orderings: (+1) (-4,+3,+1)
+           └── scan xyzs
+                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
+                ├── key: (1)
+                ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+                ├── prune: (1-5)
+                └── interesting orderings: (+1) (-4,+3,+1)
 
 # Propagate outer columns.
 build
 SELECT (SELECT sum(x) FROM (SELECT y, u FROM kuv) GROUP BY u) FROM xyzs GROUP BY y
 ----
 project
- ├── columns: sum:12(decimal)
- ├── prune: (12)
+ ├── columns: sum:14(decimal)
+ ├── prune: (14)
  ├── group-by
- │    ├── columns: xyzs.y:2(int) sum:10(decimal!null)
+ │    ├── columns: xyzs.y:2(int) sum:12(decimal!null)
  │    ├── grouping columns: xyzs.y:2(int)
  │    ├── key: (2)
- │    ├── fd: (2)-->(10)
- │    ├── prune: (10)
+ │    ├── fd: (2)-->(12)
+ │    ├── prune: (12)
  │    ├── project
- │    │    ├── columns: x:9(int!null) xyzs.y:2(int)
- │    │    ├── key: (9)
- │    │    ├── fd: (9)-->(2)
- │    │    ├── prune: (2,9)
+ │    │    ├── columns: x:11(int!null) xyzs.y:2(int)
+ │    │    ├── key: (11)
+ │    │    ├── fd: (11)-->(2)
+ │    │    ├── prune: (2,11)
  │    │    ├── scan xyzs
- │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string)
+ │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal)
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    │    │    ├── prune: (1-4)
+ │    │    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+ │    │    │    ├── prune: (1-5)
  │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
  │    │    └── projections
- │    │         └── variable: xyzs.x:1 [as=x:9, type=int, outer=(1)]
+ │    │         └── variable: xyzs.x:1 [as=x:11, type=int, outer=(1)]
  │    └── aggregations
- │         └── sum [as=sum:10, type=decimal, outer=(9)]
- │              └── variable: x:9 [type=int]
+ │         └── sum [as=sum:12, type=decimal, outer=(11)]
+ │              └── variable: x:11 [type=int]
  └── projections
-      └── subquery [as=sum:12, type=decimal, outer=(2,10), correlated-subquery]
+      └── subquery [as=sum:14, type=decimal, outer=(2,12), correlated-subquery]
            └── max1-row
-                ├── columns: sum:11(decimal)
+                ├── columns: sum:13(decimal)
                 ├── error: "more than one row returned by a subquery used as an expression"
-                ├── outer: (2,10)
+                ├── outer: (2,12)
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(11)
+                ├── fd: ()-->(13)
                 └── project
-                     ├── columns: sum:11(decimal)
-                     ├── outer: (2,10)
-                     ├── fd: ()-->(11)
-                     ├── prune: (11)
+                     ├── columns: sum:13(decimal)
+                     ├── outer: (2,12)
+                     ├── fd: ()-->(13)
+                     ├── prune: (13)
                      ├── group-by
-                     │    ├── columns: u:6(float)
-                     │    ├── grouping columns: u:6(float)
+                     │    ├── columns: u:7(float)
+                     │    ├── grouping columns: u:7(float)
                      │    ├── outer: (2)
-                     │    ├── key: (6)
+                     │    ├── key: (7)
                      │    └── project
-                     │         ├── columns: u:6(float)
+                     │         ├── columns: u:7(float)
                      │         ├── outer: (2)
-                     │         ├── prune: (6)
+                     │         ├── prune: (7)
                      │         └── project
-                     │              ├── columns: y:8(int) u:6(float)
+                     │              ├── columns: y:10(int) u:7(float)
                      │              ├── outer: (2)
-                     │              ├── fd: ()-->(8)
-                     │              ├── prune: (6,8)
+                     │              ├── fd: ()-->(10)
+                     │              ├── prune: (7,10)
                      │              ├── scan kuv
-                     │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-                     │              │    ├── key: (5)
-                     │              │    ├── fd: (5)-->(6,7)
-                     │              │    ├── prune: (5-7)
-                     │              │    └── interesting orderings: (+5)
+                     │              │    ├── columns: k:6(int!null) u:7(float) v:8(string) kuv.crdb_internal_mvcc_timestamp:9(decimal)
+                     │              │    ├── key: (6)
+                     │              │    ├── fd: (6)-->(7-9)
+                     │              │    ├── prune: (6-9)
+                     │              │    └── interesting orderings: (+6)
                      │              └── projections
-                     │                   └── variable: xyzs.y:2 [as=y:8, type=int, outer=(2)]
+                     │                   └── variable: xyzs.y:2 [as=y:10, type=int, outer=(2)]
                      └── projections
-                          └── variable: sum:10 [as=sum:11, type=decimal, outer=(10)]
+                          └── variable: sum:12 [as=sum:13, type=decimal, outer=(12)]
 
 # Calculate groupby cardinality.
 build
@@ -292,11 +298,11 @@ opt
 SELECT x, count(y) FROM xyzs GROUP BY x HAVING x=1
 ----
 group-by
- ├── columns: x:1(int!null) count:5(int!null)
+ ├── columns: x:1(int!null) count:6(int!null)
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1,5)
- ├── prune: (1,5)
+ ├── fd: ()-->(1,6)
+ ├── prune: (1,6)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /1]
@@ -306,7 +312,7 @@ group-by
  │    ├── prune: (2)
  │    └── interesting orderings: (+1)
  └── aggregations
-      ├── count [as=count:5, type=int, outer=(2)]
+      ├── count [as=count:6, type=int, outer=(2)]
       │    └── variable: y:2 [type=int]
       └── const-agg [as=x:1, type=int, outer=(1)]
            └── variable: x:1 [type=int]
@@ -319,14 +325,14 @@ FROM xyzs
 GROUP BY x, y
 ----
 project
- ├── columns: variance:5(decimal) stddev:6(decimal) corr:7(float)
- ├── prune: (5-7)
+ ├── columns: variance:6(decimal) stddev:7(decimal) corr:8(float)
+ ├── prune: (6-8)
  └── group-by
-      ├── columns: x:1(int!null) y:2(int) variance:5(decimal) stddev:6(decimal) corr:7(float)
+      ├── columns: x:1(int!null) y:2(int) variance:6(decimal) stddev:7(decimal) corr:8(float)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── key: (1)
-      ├── fd: (1)-->(2,5-7)
-      ├── prune: (5-7)
+      ├── fd: (1)-->(2,6-8)
+      ├── prune: (6-8)
       ├── interesting orderings: (+1)
       ├── project
       │    ├── columns: x:1(int!null) y:2(int)
@@ -335,16 +341,16 @@ project
       │    ├── prune: (1,2)
       │    ├── interesting orderings: (+1)
       │    └── scan xyzs
-      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
       │         ├── key: (1)
-      │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │         ├── prune: (1-4)
+      │         ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+      │         ├── prune: (1-5)
       │         └── interesting orderings: (+1) (-4,+3,+1)
       └── aggregations
-           ├── variance [as=variance:5, type=decimal, outer=(1)]
+           ├── variance [as=variance:6, type=decimal, outer=(1)]
            │    └── variable: x:1 [type=int]
-           ├── std-dev [as=stddev:6, type=decimal, outer=(1)]
+           ├── std-dev [as=stddev:7, type=decimal, outer=(1)]
            │    └── variable: x:1 [type=int]
-           └── corr [as=corr:7, type=float, outer=(1,2)]
+           └── corr [as=corr:8, type=float, outer=(1,2)]
                 ├── variable: x:1 [type=int]
                 └── variable: y:2 [type=int]

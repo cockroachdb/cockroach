@@ -6,31 +6,31 @@ opt format=show-all
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int!null)  [hidden: t.public.t.a:1(int)]
+ ├── columns: "?column?":6(int) min:5(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
  ├── stats: [rows=98.1771622]
  ├── cost: 1097.87224
  ├── key: (1)
- ├── fd: (1)-->(4,5)
+ ├── fd: (1)-->(5,6)
  ├── ordering: +1
- ├── prune: (1,4,5)
+ ├── prune: (1,5,6)
  └── project
-      ├── columns: "?column?":5(int) t.public.t.a:1(int) min:4(int!null)
+      ├── columns: "?column?":6(int) t.public.t.a:1(int) min:5(int!null)
       ├── immutable
       ├── stats: [rows=98.1771622]
       ├── cost: 1082.90531
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
-      ├── prune: (1,4,5)
+      ├── fd: (1)-->(5,6)
+      ├── prune: (1,5,6)
       ├── group-by
-      │    ├── columns: t.public.t.a:1(int) min:4(int!null)
+      │    ├── columns: t.public.t.a:1(int) min:5(int!null)
       │    ├── grouping columns: t.public.t.a:1(int)
       │    ├── immutable
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
       │    ├── cost: 1080.93177
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    ├── prune: (4)
+      │    ├── fd: (1)-->(5)
+      │    ├── prune: (5)
       │    ├── select
       │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
       │    │    ├── immutable
@@ -54,10 +54,10 @@ sort
       │    │                   ├── variable: t.public.t.k:3 [type=int]
       │    │                   └── variable: t.public.t.a:1 [type=int]
       │    └── aggregations
-      │         └── min [as=min:4, type=int, outer=(2)]
+      │         └── min [as=min:5, type=int, outer=(2)]
       │              └── variable: t.public.t.b:2 [type=int]
       └── projections
-           └── plus [as="?column?":5, type=int, outer=(1), immutable]
+           └── plus [as="?column?":6, type=int, outer=(1), immutable]
                 ├── variable: t.public.t.a:1 [type=int]
                 └── const: 1 [type=int]
 
@@ -65,16 +65,16 @@ opt format=(hide-miscprops,hide-constraints,hide-funcdeps,hide-ruleprops)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int!null)  [hidden: t.public.t.a:1(int)]
+ ├── columns: "?column?":6(int) min:5(int!null)  [hidden: t.public.t.a:1(int)]
  ├── stats: [rows=98.1771622]
  ├── cost: 1097.87224
  ├── ordering: +1
  └── project
-      ├── columns: "?column?":5(int) t.public.t.a:1(int) min:4(int!null)
+      ├── columns: "?column?":6(int) t.public.t.a:1(int) min:5(int!null)
       ├── stats: [rows=98.1771622]
       ├── cost: 1082.90531
       ├── group-by
-      │    ├── columns: t.public.t.a:1(int) min:4(int!null)
+      │    ├── columns: t.public.t.a:1(int) min:5(int!null)
       │    ├── grouping columns: t.public.t.a:1(int)
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
       │    ├── cost: 1080.93177
@@ -93,10 +93,10 @@ sort
       │    │                   ├── variable: t.public.t.k:3 [type=int]
       │    │                   └── variable: t.public.t.a:1 [type=int]
       │    └── aggregations
-      │         └── min [as=min:4, type=int]
+      │         └── min [as=min:5, type=int]
       │              └── variable: t.public.t.b:2 [type=int]
       └── projections
-           └── plus [as="?column?":5, type=int]
+           └── plus [as="?column?":6, type=int]
                 ├── variable: t.public.t.a:1 [type=int]
                 └── const: 1 [type=int]
 
@@ -104,25 +104,25 @@ opt format=(hide-stats,hide-cost,hide-qual,hide-scalars)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int!null)  [hidden: a:1(int)]
+ ├── columns: "?column?":6(int) min:5(int!null)  [hidden: a:1(int)]
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(4,5)
+ ├── fd: (1)-->(5,6)
  ├── ordering: +1
- ├── prune: (1,4,5)
+ ├── prune: (1,5,6)
  └── project
-      ├── columns: "?column?":5(int) a:1(int) min:4(int!null)
+      ├── columns: "?column?":6(int) a:1(int) min:5(int!null)
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
-      ├── prune: (1,4,5)
+      ├── fd: (1)-->(5,6)
+      ├── prune: (1,5,6)
       ├── group-by
-      │    ├── columns: a:1(int) min:4(int!null)
+      │    ├── columns: a:1(int) min:5(int!null)
       │    ├── grouping columns: a:1(int)
       │    ├── immutable
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    ├── prune: (4)
+      │    ├── fd: (1)-->(5)
+      │    ├── prune: (5)
       │    ├── select
       │    │    ├── columns: a:1(int) b:2(int!null) k:3(int!null)
       │    │    ├── immutable
@@ -138,34 +138,34 @@ sort
       │    │    └── filters
       │    │         └── b:2 < (k:3 + a:1) [type=bool, outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
       │    └── aggregations
-      │         └── min [as=min:4, type=int, outer=(2)]
+      │         └── min [as=min:5, type=int, outer=(2)]
       │              └── b:2 [type=int]
       └── projections
-           └── a:1 + 1 [as="?column?":5, type=int, outer=(1), immutable]
+           └── a:1 + 1 [as="?column?":6, type=int, outer=(1), immutable]
 
 opt format=(hide-stats,hide-cost,hide-qual,hide-scalars,hide-types)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5 min:4!null  [hidden: a:1]
+ ├── columns: "?column?":6 min:5!null  [hidden: a:1]
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(4,5)
+ ├── fd: (1)-->(5,6)
  ├── ordering: +1
- ├── prune: (1,4,5)
+ ├── prune: (1,5,6)
  └── project
-      ├── columns: "?column?":5 a:1 min:4!null
+      ├── columns: "?column?":6 a:1 min:5!null
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
-      ├── prune: (1,4,5)
+      ├── fd: (1)-->(5,6)
+      ├── prune: (1,5,6)
       ├── group-by
-      │    ├── columns: a:1 min:4!null
+      │    ├── columns: a:1 min:5!null
       │    ├── grouping columns: a:1
       │    ├── immutable
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    ├── prune: (4)
+      │    ├── fd: (1)-->(5)
+      │    ├── prune: (5)
       │    ├── select
       │    │    ├── columns: a:1 b:2!null k:3!null
       │    │    ├── immutable
@@ -181,34 +181,34 @@ sort
       │    │    └── filters
       │    │         └── b:2 < (k:3 + a:1) [outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
       │    └── aggregations
-      │         └── min [as=min:4, outer=(2)]
+      │         └── min [as=min:5, outer=(2)]
       │              └── b:2
       └── projections
-           └── a:1 + 1 [as="?column?":5, outer=(1), immutable]
+           └── a:1 + 1 [as="?column?":6, outer=(1), immutable]
 
 opt format=(hide-stats,hide-cost,hide-qual,hide-scalars,hide-notnull)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5(int) min:4(int)  [hidden: a:1(int)]
+ ├── columns: "?column?":6(int) min:5(int)  [hidden: a:1(int)]
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(4,5)
+ ├── fd: (1)-->(5,6)
  ├── ordering: +1
- ├── prune: (1,4,5)
+ ├── prune: (1,5,6)
  └── project
-      ├── columns: "?column?":5(int) a:1(int) min:4(int)
+      ├── columns: "?column?":6(int) a:1(int) min:5(int)
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
-      ├── prune: (1,4,5)
+      ├── fd: (1)-->(5,6)
+      ├── prune: (1,5,6)
       ├── group-by
-      │    ├── columns: a:1(int) min:4(int)
+      │    ├── columns: a:1(int) min:5(int)
       │    ├── grouping columns: a:1(int)
       │    ├── immutable
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    ├── prune: (4)
+      │    ├── fd: (1)-->(5)
+      │    ├── prune: (5)
       │    ├── select
       │    │    ├── columns: a:1(int) b:2(int) k:3(int)
       │    │    ├── immutable
@@ -224,34 +224,34 @@ sort
       │    │    └── filters
       │    │         └── b:2 < (k:3 + a:1) [type=bool, outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
       │    └── aggregations
-      │         └── min [as=min:4, type=int, outer=(2)]
+      │         └── min [as=min:5, type=int, outer=(2)]
       │              └── b:2 [type=int]
       └── projections
-           └── a:1 + 1 [as="?column?":5, type=int, outer=(1), immutable]
+           └── a:1 + 1 [as="?column?":6, type=int, outer=(1), immutable]
 
 opt format=(hide-stats,hide-cost,hide-qual,hide-scalars,hide-types,hide-notnull)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 sort
- ├── columns: "?column?":5 min:4  [hidden: a:1]
+ ├── columns: "?column?":6 min:5  [hidden: a:1]
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(4,5)
+ ├── fd: (1)-->(5,6)
  ├── ordering: +1
- ├── prune: (1,4,5)
+ ├── prune: (1,5,6)
  └── project
-      ├── columns: "?column?":5 a:1 min:4
+      ├── columns: "?column?":6 a:1 min:5
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
-      ├── prune: (1,4,5)
+      ├── fd: (1)-->(5,6)
+      ├── prune: (1,5,6)
       ├── group-by
-      │    ├── columns: a:1 min:4
+      │    ├── columns: a:1 min:5
       │    ├── grouping columns: a:1
       │    ├── immutable
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    ├── prune: (4)
+      │    ├── fd: (1)-->(5)
+      │    ├── prune: (5)
       │    ├── select
       │    │    ├── columns: a:1 b:2 k:3
       │    │    ├── immutable
@@ -267,10 +267,10 @@ sort
       │    │    └── filters
       │    │         └── b:2 < (k:3 + a:1) [outer=(1-3), immutable, constraints=(/2: (/NULL - ])]
       │    └── aggregations
-      │         └── min [as=min:4, outer=(2)]
+      │         └── min [as=min:5, outer=(2)]
       │              └── b:2
       └── projections
-           └── a:1 + 1 [as="?column?":5, outer=(1), immutable]
+           └── a:1 + 1 [as="?column?":6, outer=(1), immutable]
 
 opt format=(hide-miscprops,hide-physprops,hide-columns)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
@@ -279,20 +279,20 @@ sort
  ├── stats: [rows=98.1771622]
  ├── cost: 1097.87224
  ├── key: (1)
- ├── fd: (1)-->(4,5)
- ├── prune: (1,4,5)
+ ├── fd: (1)-->(5,6)
+ ├── prune: (1,5,6)
  └── project
       ├── stats: [rows=98.1771622]
       ├── cost: 1082.90531
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
-      ├── prune: (1,4,5)
+      ├── fd: (1)-->(5,6)
+      ├── prune: (1,5,6)
       ├── group-by
       │    ├── stats: [rows=98.1771622, distinct(1)=98.1771622, null(1)=1]
       │    ├── cost: 1080.93177
       │    ├── key: (1)
-      │    ├── fd: (1)-->(4)
-      │    ├── prune: (4)
+      │    ├── fd: (1)-->(5)
+      │    ├── prune: (5)
       │    ├── select
       │    │    ├── stats: [rows=330, distinct(1)=98.1771622, null(1)=3.3, distinct(2)=100, null(2)=0]
       │    │    ├── cost: 1070.03
