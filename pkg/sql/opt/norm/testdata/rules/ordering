@@ -113,10 +113,10 @@ norm
 SELECT array_agg(b), a, c FROM abcde GROUP BY b, a, c ORDER BY a, b, c
 ----
 group-by
- ├── columns: array_agg:6 a:1!null c:3
+ ├── columns: array_agg:7 a:1!null c:3
  ├── grouping columns: a:1!null
  ├── key: (1)
- ├── fd: (1)-->(3,6)
+ ├── fd: (1)-->(3,7)
  ├── ordering: +1
  ├── scan abcde
  │    ├── columns: a:1!null b:2 c:3
@@ -124,7 +124,7 @@ group-by
  │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
  │    └── ordering: +1
  └── aggregations
-      ├── array-agg [as=array_agg:6, outer=(2)]
+      ├── array-agg [as=array_agg:7, outer=(2)]
       │    └── b:2
       └── const-agg [as=c:3, outer=(3)]
            └── c:3
@@ -134,18 +134,18 @@ norm expect=SimplifyGroupByOrdering
 SELECT array_agg(b) FROM (SELECT * FROM abcde ORDER BY a, b, c)
 ----
 scalar-group-by
- ├── columns: array_agg:6
+ ├── columns: array_agg:7
  ├── internal-ordering: +1
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(6)
+ ├── fd: ()-->(7)
  ├── scan abcde
  │    ├── columns: a:1!null b:2
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      └── array-agg [as=array_agg:6, outer=(2)]
+      └── array-agg [as=array_agg:7, outer=(2)]
            └── b:2
 
 # DistinctOn case.
@@ -180,9 +180,9 @@ norm expect=SimplifyOrdinalityOrdering
 SELECT * FROM (SELECT * FROM abcde WHERE b IS NOT NULL AND c IS NOT NULL ORDER BY c, d, b, e) WITH ORDINALITY
 ----
 ordinality
- ├── columns: a:1!null b:2!null c:3!null d:4 e:5 ordinality:6!null
+ ├── columns: a:1!null b:2!null c:3!null d:4 e:5 ordinality:7!null
  ├── key: (1)
- ├── fd: (1)-->(2-6), (2,3)-->(1,4,5), (6)-->(1-5)
+ ├── fd: (1)-->(2-5,7), (2,3)-->(1,4,5), (7)-->(1-5)
  └── sort
       ├── columns: a:1!null b:2!null c:3!null d:4 e:5
       ├── key: (1)
@@ -208,24 +208,24 @@ norm expect=SimplifyExplainOrdering
 EXPLAIN SELECT b, b+1 AS plus, c FROM abcde ORDER BY b, plus, c
 ----
 explain
- ├── columns: tree:7 field:8 description:9
+ ├── columns: tree:8 field:9 description:10
  ├── immutable
  └── sort
-      ├── columns: b:2 plus:6 c:3
+      ├── columns: b:2 plus:7 c:3
       ├── immutable
       ├── lax-key: (2,3)
-      ├── fd: (2)-->(6)
+      ├── fd: (2)-->(7)
       ├── ordering: +2,+3
       └── project
-           ├── columns: plus:6 b:2 c:3
+           ├── columns: plus:7 b:2 c:3
            ├── immutable
            ├── lax-key: (2,3)
-           ├── fd: (2)-->(6)
+           ├── fd: (2)-->(7)
            ├── scan abcde
            │    ├── columns: b:2 c:3
            │    └── lax-key: (2,3)
            └── projections
-                └── b:2 + 1 [as=plus:6, outer=(2), immutable]
+                └── b:2 + 1 [as=plus:7, outer=(2), immutable]
 
 # Regression: Explain a statement having constant column, but with no ordering.
 norm

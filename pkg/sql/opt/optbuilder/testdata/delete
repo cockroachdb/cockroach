@@ -42,14 +42,14 @@ DELETE FROM abcde
 ----
 delete abcde
  ├── columns: <none>
- ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  └── scan abcde
-      ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       └── computed column expressions
-           ├── d:10
-           │    └── (b:8 + c:9) + 1
-           └── e:11
-                └── a:7
+           ├── d:11
+           │    └── (b:9 + c:10) + 1
+           └── e:12
+                └── a:8
 
 # Use WHERE, ORDER BY, LIMIT.
 build
@@ -57,25 +57,25 @@ DELETE FROM abcde WHERE a>0 ORDER BY a LIMIT 10
 ----
 delete abcde
  ├── columns: <none>
- ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  └── limit
-      ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
-      ├── internal-ordering: +7
+      ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      ├── internal-ordering: +8
       ├── sort
-      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
-      │    ├── ordering: +7
+      │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │    ├── ordering: +8
       │    ├── limit hint: 10.00
       │    └── select
-      │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │         ├── scan abcde
-      │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │         │    └── computed column expressions
-      │         │         ├── d:10
-      │         │         │    └── (b:8 + c:9) + 1
-      │         │         └── e:11
-      │         │              └── a:7
+      │         │         ├── d:11
+      │         │         │    └── (b:9 + c:10) + 1
+      │         │         └── e:12
+      │         │              └── a:8
       │         └── filters
-      │              └── a:7 > 0
+      │              └── a:8 > 0
       └── 10
 
 # Use aliased table name.
@@ -84,25 +84,25 @@ DELETE FROM abcde AS foo WHERE foo.a>0 ORDER BY foo.a LIMIT 10
 ----
 delete foo
  ├── columns: <none>
- ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
+ ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  └── limit
-      ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
-      ├── internal-ordering: +7
+      ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      ├── internal-ordering: +8
       ├── sort
-      │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
-      │    ├── ordering: +7
+      │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      │    ├── ordering: +8
       │    ├── limit hint: 10.00
       │    └── select
-      │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │         ├── scan foo
-      │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+      │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │         │    └── computed column expressions
-      │         │         ├── d:10
-      │         │         │    └── (b:8 + c:9) + 1
-      │         │         └── e:11
-      │         │              └── a:7
+      │         │         ├── d:11
+      │         │         │    └── (b:9 + c:10) + 1
+      │         │         └── e:12
+      │         │              └── a:8
       │         └── filters
-      │              └── a:7 > 0
+      │              └── a:8 > 0
       └── 10
 
 # DELETE with index hints.
@@ -121,9 +121,9 @@ DELETE FROM xyzw@primary
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5 y:6 z:7 w:8
+ ├── fetch columns: x:6 y:7 z:8 w:9
  └── scan xyzw
-      ├── columns: x:5!null y:6 z:7 w:8
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
       └── flags: force-index=primary
 
 build
@@ -131,9 +131,9 @@ DELETE FROM xyzw@foo
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5 y:6 z:7 w:8
+ ├── fetch columns: x:6 y:7 z:8 w:9
  └── scan xyzw
-      ├── columns: x:5!null y:6 z:7 w:8
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
       └── flags: force-index=foo
 
 build
@@ -141,9 +141,9 @@ DELETE FROM xyzw@{FORCE_INDEX=foo,ASC}
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5 y:6 z:7 w:8
+ ├── fetch columns: x:6 y:7 z:8 w:9
  └── scan xyzw
-      ├── columns: x:5!null y:6 z:7 w:8
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
       └── flags: force-index=foo,fwd
 
 build
@@ -151,9 +151,9 @@ DELETE FROM xyzw@{FORCE_INDEX=foo,DESC}
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5 y:6 z:7 w:8
+ ├── fetch columns: x:6 y:7 z:8 w:9
  └── scan xyzw,rev
-      ├── columns: x:5!null y:6 z:7 w:8
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
       └── flags: force-index=foo,rev
 
 build
@@ -161,9 +161,9 @@ DELETE FROM xyzw@{NO_INDEX_JOIN}
 ----
 delete xyzw
  ├── columns: <none>
- ├── fetch columns: x:5 y:6 z:7 w:8
+ ├── fetch columns: x:6 y:7 z:8 w:9
  └── scan xyzw
-      ├── columns: x:5!null y:6 z:7 w:8
+      ├── columns: x:6!null y:7 z:8 w:9 crdb_internal_mvcc_timestamp:10
       └── flags: no-index-join
 
 build
@@ -177,24 +177,24 @@ DELETE FROM xyz WHERE x=$1 ORDER BY y+$2 DESC LIMIT 2
 ----
 delete xyz
  ├── columns: <none>
- ├── fetch columns: x:4 y:5 z:6
+ ├── fetch columns: x:5 y:6 z:7
  └── limit
-      ├── columns: x:4!null y:5 z:6 column7:7
-      ├── internal-ordering: -7
+      ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8 column9:9
+      ├── internal-ordering: -9
       ├── sort
-      │    ├── columns: x:4!null y:5 z:6 column7:7
-      │    ├── ordering: -7
+      │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8 column9:9
+      │    ├── ordering: -9
       │    ├── limit hint: 2.00
       │    └── project
-      │         ├── columns: column7:7 x:4!null y:5 z:6
+      │         ├── columns: column9:9 x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
       │         ├── select
-      │         │    ├── columns: x:4!null y:5 z:6
+      │         │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
       │         │    ├── scan xyz
-      │         │    │    └── columns: x:4!null y:5 z:6
+      │         │    │    └── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
       │         │    └── filters
-      │         │         └── x:4 = $1
+      │         │         └── x:5 = $1
       │         └── projections
-      │              └── y:5 + $2 [as=column7:7]
+      │              └── y:6 + $2 [as=column9:9]
       └── 2
 
 
@@ -206,25 +206,25 @@ with &1 (cte)
  ├── project
  │    ├── columns: xyz.x:1!null
  │    └── scan xyz
- │         └── columns: xyz.x:1!null y:2 z:3
+ │         └── columns: xyz.x:1!null y:2 z:3 xyz.crdb_internal_mvcc_timestamp:4
  └── delete abcde
       ├── columns: <none>
-      ├── fetch columns: a:10 b:11 c:12 d:13 e:14 rowid:15
+      ├── fetch columns: a:12 b:13 c:14 d:15 e:16 rowid:17
       └── select
-           ├── columns: a:10!null b:11 c:12 d:13 e:14 rowid:15!null
+           ├── columns: a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
            ├── scan abcde
-           │    ├── columns: a:10!null b:11 c:12 d:13 e:14 rowid:15!null
+           │    ├── columns: a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
            │    └── computed column expressions
-           │         ├── d:13
-           │         │    └── (b:11 + c:12) + 1
-           │         └── e:14
-           │              └── a:10
+           │         ├── d:15
+           │         │    └── (b:13 + c:14) + 1
+           │         └── e:16
+           │              └── a:12
            └── filters
                 └── exists
                      └── with-scan &1 (cte)
-                          ├── columns: x:16!null
+                          ├── columns: x:19!null
                           └── mapping:
-                               └──  xyz.x:1 => x:16
+                               └──  xyz.x:1 => x:19
 
 # Unknown target table.
 build
@@ -247,43 +247,43 @@ with &1
  │    ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5
  │    └── delete abcde
  │         ├── columns: abcde.a:1!null abcde.b:2!null abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
- │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
+ │         ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13
  │         └── select
- │              ├── columns: abcde.a:7!null abcde.b:8!null abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
+ │              ├── columns: abcde.a:8!null abcde.b:9!null abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              ├── scan abcde
- │              │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
+ │              │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              │    └── computed column expressions
- │              │         ├── abcde.d:10
- │              │         │    └── (abcde.b:8 + abcde.c:9) + 1
- │              │         └── abcde.e:11
- │              │              └── abcde.a:7
+ │              │         ├── abcde.d:11
+ │              │         │    └── (abcde.b:9 + abcde.c:10) + 1
+ │              │         └── abcde.e:12
+ │              │              └── abcde.a:8
  │              └── filters
- │                   └── abcde.a:7 = abcde.b:8
+ │                   └── abcde.a:8 = abcde.b:9
  └── with &2 (cte)
       ├── project
-      │    ├── columns: b:14!null
+      │    ├── columns: b:16!null
       │    └── with-scan &1
-      │         ├── columns: a:13!null b:14!null c:15 d:16 e:17
+      │         ├── columns: a:15!null b:16!null c:17 d:18 e:19
       │         └── mapping:
-      │              ├──  abcde.a:1 => a:13
-      │              ├──  abcde.b:2 => b:14
-      │              ├──  abcde.c:3 => c:15
-      │              ├──  abcde.d:4 => d:16
-      │              └──  abcde.e:5 => e:17
+      │              ├──  abcde.a:1 => a:15
+      │              ├──  abcde.b:2 => b:16
+      │              ├──  abcde.c:3 => c:17
+      │              ├──  abcde.d:4 => d:18
+      │              └──  abcde.e:5 => e:19
       └── delete abcde
            ├── columns: <none>
-           ├── fetch columns: abcde.a:24 abcde.b:25 abcde.c:26 abcde.d:27 abcde.e:28 rowid:29
+           ├── fetch columns: abcde.a:27 abcde.b:28 abcde.c:29 abcde.d:30 abcde.e:31 rowid:32
            └── select
-                ├── columns: abcde.a:24!null abcde.b:25!null abcde.c:26 abcde.d:27 abcde.e:28 rowid:29!null
+                ├── columns: abcde.a:27!null abcde.b:28!null abcde.c:29 abcde.d:30 abcde.e:31 rowid:32!null crdb_internal_mvcc_timestamp:33
                 ├── scan abcde
-                │    ├── columns: abcde.a:24!null abcde.b:25 abcde.c:26 abcde.d:27 abcde.e:28 rowid:29!null
+                │    ├── columns: abcde.a:27!null abcde.b:28 abcde.c:29 abcde.d:30 abcde.e:31 rowid:32!null crdb_internal_mvcc_timestamp:33
                 │    └── computed column expressions
-                │         ├── abcde.d:27
-                │         │    └── (abcde.b:25 + abcde.c:26) + 1
-                │         └── abcde.e:28
-                │              └── abcde.a:24
+                │         ├── abcde.d:30
+                │         │    └── (abcde.b:28 + abcde.c:29) + 1
+                │         └── abcde.e:31
+                │              └── abcde.a:27
                 └── filters
-                     └── abcde.a:24 = abcde.b:25
+                     └── abcde.a:27 = abcde.b:28
 
 # With alias, original table name should be inaccessible.
 build
@@ -309,83 +309,83 @@ project
  ├── columns: a:1!null b:2 c:3 d:4 e:5
  └── delete abcde
       ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
-      ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
+      ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
       └── select
-           ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+           ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
            ├── scan abcde
-           │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+           │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
            │    └── computed column expressions
-           │         ├── d:10
-           │         │    └── (b:8 + c:9) + 1
-           │         └── e:11
-           │              └── a:7
+           │         ├── d:11
+           │         │    └── (b:9 + c:10) + 1
+           │         └── e:12
+           │              └── a:8
            └── filters
-                └── a:7 = 1
+                └── a:8 = 1
 
 # Return values from aliased table.
 build
 DELETE FROM abcde AS foo WHERE a=1 RETURNING foo.a+1, foo.b * foo.d
 ----
 project
- ├── columns: "?column?":13!null "?column?":14
+ ├── columns: "?column?":15!null "?column?":16
  ├── delete foo
  │    ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
- │    ├── fetch columns: a:7 b:8 c:9 d:10 e:11 rowid:12
+ │    ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  │    └── select
- │         ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+ │         ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │         ├── scan foo
- │         │    ├── columns: a:7!null b:8 c:9 d:10 e:11 rowid:12!null
+ │         │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │         │    └── computed column expressions
- │         │         ├── d:10
- │         │         │    └── (b:8 + c:9) + 1
- │         │         └── e:11
- │         │              └── a:7
+ │         │         ├── d:11
+ │         │         │    └── (b:9 + c:10) + 1
+ │         │         └── e:12
+ │         │              └── a:8
  │         └── filters
- │              └── a:7 = 1
+ │              └── a:8 = 1
  └── projections
-      ├── a:1 + 1 [as="?column?":13]
-      └── b:2 * d:4 [as="?column?":14]
+      ├── a:1 + 1 [as="?column?":15]
+      └── b:2 * d:4 [as="?column?":16]
 
 # Use returning DELETE as a FROM expression.
 build
 SELECT a, d FROM [DELETE FROM abcde WHERE a>0 ORDER BY b LIMIT 10 RETURNING *]
 ----
 with &1
- ├── columns: a:13!null d:16
+ ├── columns: a:15!null d:18
  ├── project
  │    ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5
  │    └── delete abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
- │         ├── fetch columns: abcde.a:7 abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12
+ │         ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13
  │         └── limit
- │              ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
- │              ├── internal-ordering: +8
+ │              ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              ├── internal-ordering: +9
  │              ├── sort
- │              │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
- │              │    ├── ordering: +8
+ │              │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              │    ├── ordering: +9
  │              │    ├── limit hint: 10.00
  │              │    └── select
- │              │         ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
+ │              │         ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              │         ├── scan abcde
- │              │         │    ├── columns: abcde.a:7!null abcde.b:8 abcde.c:9 abcde.d:10 abcde.e:11 rowid:12!null
+ │              │         │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              │         │    └── computed column expressions
- │              │         │         ├── abcde.d:10
- │              │         │         │    └── (abcde.b:8 + abcde.c:9) + 1
- │              │         │         └── abcde.e:11
- │              │         │              └── abcde.a:7
+ │              │         │         ├── abcde.d:11
+ │              │         │         │    └── (abcde.b:9 + abcde.c:10) + 1
+ │              │         │         └── abcde.e:12
+ │              │         │              └── abcde.a:8
  │              │         └── filters
- │              │              └── abcde.a:7 > 0
+ │              │              └── abcde.a:8 > 0
  │              └── 10
  └── project
-      ├── columns: a:13!null d:16
+      ├── columns: a:15!null d:18
       └── with-scan &1
-           ├── columns: a:13!null b:14 c:15 d:16 e:17
+           ├── columns: a:15!null b:16 c:17 d:18 e:19
            └── mapping:
-                ├──  abcde.a:1 => a:13
-                ├──  abcde.b:2 => b:14
-                ├──  abcde.c:3 => c:15
-                ├──  abcde.d:4 => d:16
-                └──  abcde.e:5 => e:17
+                ├──  abcde.a:1 => a:15
+                ├──  abcde.b:2 => b:16
+                ├──  abcde.c:3 => c:17
+                ├──  abcde.d:4 => d:18
+                └──  abcde.e:5 => e:19
 
 # ------------------------------------------------------------------------------
 # Tests with mutations.
@@ -397,13 +397,13 @@ DELETE FROM mutation WHERE m=1
 ----
 delete mutation
  ├── columns: <none>
- ├── fetch columns: m:5 n:6 o:7 p:8
+ ├── fetch columns: m:6 n:7 o:8 p:9
  └── select
-      ├── columns: m:5!null n:6 o:7 p:8
+      ├── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
       ├── scan mutation
-      │    └── columns: m:5!null n:6 o:7 p:8
+      │    └── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
       └── filters
-           └── m:5 = 1
+           └── m:6 = 1
 
 # With RETURNING clause.
 build
@@ -411,13 +411,13 @@ DELETE FROM mutation WHERE m=1 RETURNING *
 ----
 delete mutation
  ├── columns: m:1!null n:2
- ├── fetch columns: m:5 n:6 o:7 p:8
+ ├── fetch columns: m:6 n:7 o:8 p:9
  └── select
-      ├── columns: m:5!null n:6 o:7 p:8
+      ├── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
       ├── scan mutation
-      │    └── columns: m:5!null n:6 o:7 p:8
+      │    └── columns: m:6!null n:7 o:8 p:9 crdb_internal_mvcc_timestamp:10
       └── filters
-           └── m:5 = 1
+           └── m:6 = 1
 
 
 # Try to return a mutation column.
@@ -458,14 +458,14 @@ DELETE FROM partial_indexes
 ----
 delete partial_indexes
  ├── columns: <none>
- ├── fetch columns: a:4 b:5 c:6
+ ├── fetch columns: a:5 b:6 c:7
  └── project
-      ├── columns: partial_index_del1:7 partial_index_del2:8 a:4!null b:5 c:6
+      ├── columns: partial_index_del1:9 partial_index_del2:10 a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       ├── scan partial_indexes
-      │    ├── columns: a:4!null b:5 c:6
+      │    ├── columns: a:5!null b:6 c:7 crdb_internal_mvcc_timestamp:8
       │    └── partial index predicates
-      │         ├── secondary: c:6 = 'foo'
-      │         └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      │         ├── secondary: c:7 = 'foo'
+      │         └── secondary: (a:5 > b:6) AND (c:7 = 'bar')
       └── projections
-           ├── c:6 = 'foo' [as=partial_index_del1:7]
-           └── (a:4 > b:5) AND (c:6 = 'bar') [as=partial_index_del2:8]
+           ├── c:7 = 'foo' [as=partial_index_del1:9]
+           └── (a:5 > b:6) AND (c:7 = 'bar') [as=partial_index_del2:10]

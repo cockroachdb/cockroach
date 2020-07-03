@@ -45,7 +45,7 @@ func TestColumns_RemapColumns(t *testing.T) {
 		t.Errorf("\noriginal Columns were changed: %s", originalColumns.String())
 	}
 
-	expected = "/5/-7/8"
+	expected = "/6/-8/9"
 	if remappedColumns.String() != expected {
 		t.Errorf("\nexpected: %s\nactual: %s\n", expected, remappedColumns.String())
 	}

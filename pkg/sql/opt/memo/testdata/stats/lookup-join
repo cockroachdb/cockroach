@@ -25,16 +25,16 @@ opt
 SELECT * FROM small JOIN abcd ON a=m
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int)
- ├── key columns: [7] = [7]
+ ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) c:7(int)
+ ├── key columns: [8] = [8]
  ├── lookup columns are key
- ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
- ├── fd: (1)==(4), (4)==(1)
+ ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
  ├── inner-join (lookup abcd@secondary)
- │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
- │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
- │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
@@ -47,16 +47,16 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE n > 2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) c:6(int)
- ├── key columns: [7] = [7]
+ ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int) c:7(int)
+ ├── key columns: [8] = [8]
  ├── lookup columns are key
- ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(4)=9.9, null(4)=0]
- ├── fd: (1)==(4), (4)==(1)
+ ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(5)=9.9, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
  ├── inner-join (lookup abcd@secondary)
- │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
- │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(4)=9.9, null(4)=0]
- │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(5)=9.9, null(5)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
  │    ├── select
  │    │    ├── columns: m:1(int) n:2(int!null)
  │    │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
@@ -74,21 +74,21 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE b > 2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) c:6(int)
- ├── key columns: [7] = [7]
+ ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int!null) c:7(int)
+ ├── key columns: [8] = [8]
  ├── lookup columns are key
- ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
- ├── fd: (1)==(4), (4)==(1)
+ ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
  ├── inner-join (lookup abcd@secondary)
- │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
- │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0, distinct(5)=33, null(5)=0]
- │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int!null) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0, distinct(6)=33, null(6)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
  │    └── filters
- │         └── b:5 > 2 [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
+ │         └── b:6 > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
  └── filters (true)
 
 # Filter that can only be applied after the primary index join.
@@ -96,44 +96,44 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE c>2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) c:6(int!null)
- ├── key columns: [7] = [7]
+ ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) c:7(int!null)
+ ├── key columns: [8] = [8]
  ├── lookup columns are key
- ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
- ├── fd: (1)==(4), (4)==(1)
+ ├── stats: [rows=33.5823697, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ ├── fd: (1)==(5), (5)==(1)
  ├── inner-join (lookup abcd@secondary)
- │    ├── columns: m:1(int!null) n:2(int) a:4(int!null) b:5(int) abcd.rowid:7(int!null)
- │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
- │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
+ │    ├── columns: m:1(int!null) n:2(int) a:5(int!null) b:6(int) abcd.rowid:8(int!null)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(5)=10, null(5)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0]
  │    └── filters (true)
  └── filters
-      └── c:6 > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+      └── c:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
 
 # Multiple equalities.
 opt
 SELECT * FROM small JOIN abcd ON a=m AND b=n WHERE c>2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) c:6(int!null)
- ├── key columns: [7] = [7]
+ ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int!null) c:7(int!null)
+ ├── key columns: [8] = [8]
  ├── lookup columns are key
- ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(4)=0.334949339, null(4)=0, distinct(5)=1e-10, null(5)=0]
- ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2)
+ ├── stats: [rows=0.334949339, distinct(1)=0.334949339, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(5)=0.334949339, null(5)=0, distinct(6)=1e-10, null(6)=0]
+ ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  ├── inner-join (lookup abcd@secondary)
- │    ├── columns: m:1(int!null) n:2(int!null) a:4(int!null) b:5(int!null) abcd.rowid:7(int!null)
- │    ├── key columns: [1 2] = [4 5]
- │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(4)=0.970299, null(4)=0, distinct(5)=1e-10, null(5)=0]
- │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1), (2)==(5), (5)==(2)
+ │    ├── columns: m:1(int!null) n:2(int!null) a:5(int!null) b:6(int!null) abcd.rowid:8(int!null)
+ │    ├── key columns: [1 2] = [5 6]
+ │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(5)=0.970299, null(5)=0, distinct(6)=1e-10, null(6)=0]
+ │    ├── fd: (8)-->(5,6), (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0.1]
  │    └── filters (true)
  └── filters
-      └── c:6 > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+      └── c:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
 
 exec-ddl
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
@@ -183,11 +183,11 @@ opt
 SELECT a, b, c, d, e, f FROM abc JOIN def ON a = f
 ----
 inner-join (lookup def)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
- ├── key columns: [1] = [6]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(6)=100, null(6)=0]
- ├── key: (3,5,6)
- ├── fd: (1,3)-->(2), (5,6)-->(4), (1)==(6), (6)==(1)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int!null) f:7(int!null)
+ ├── key columns: [1] = [7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(7)=100, null(7)=0]
+ ├── key: (3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5), (1)==(7), (7)==(1)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
@@ -200,12 +200,12 @@ opt
 SELECT a, b, c, d, e, f FROM abc JOIN def ON a = e
 ----
 inner-join (merge)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int!null) f:7(int!null)
  ├── left ordering: +1
- ├── right ordering: +5
- ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
- ├── key: (3,5,6)
- ├── fd: (1,3)-->(2), (5,6)-->(4), (1)==(5), (5)==(1)
+ ├── right ordering: +6
+ ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(6)=100, null(6)=0]
+ ├── key: (3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5), (1)==(6), (6)==(1)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
@@ -213,23 +213,23 @@ inner-join (merge)
  │    ├── fd: (1,3)-->(2)
  │    └── ordering: +1
  ├── scan def@e_idx
- │    ├── columns: d:4(int) e:5(int!null) f:6(int!null)
- │    ├── stats: [rows=10000, distinct(5)=100, null(5)=0, distinct(6)=10000, null(6)=0]
- │    ├── key: (5,6)
- │    ├── fd: (5,6)-->(4)
- │    └── ordering: +5
+ │    ├── columns: d:5(int) e:6(int!null) f:7(int!null)
+ │    ├── stats: [rows=10000, distinct(6)=100, null(6)=0, distinct(7)=10000, null(7)=0]
+ │    ├── key: (6,7)
+ │    ├── fd: (6,7)-->(5)
+ │    └── ordering: +6
  └── filters (true)
 
 # Check column statistics for lookup join.
-opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=5 colstat=6 colstat=(2,5,6)
+opt colstat=1 colstat=2 colstat=3 colstat=5 colstat=6 colstat=7 colstat=(2,6,7)
 SELECT a, b, c, d, e, f FROM abc JOIN DEF ON a = f
 ----
 inner-join (lookup def)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
- ├── key columns: [1] = [6]
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=9.99954623, null(2)=1, distinct(3)=9.99954623, null(3)=0, distinct(4)=95.1671064, null(4)=0, distinct(5)=63.2138954, null(5)=0, distinct(6)=100, null(6)=0, distinct(2,5,6)=100, null(2,5,6)=0]
- ├── key: (3,5,6)
- ├── fd: (1,3)-->(2), (5,6)-->(4), (1)==(6), (6)==(1)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int!null) f:7(int!null)
+ ├── key columns: [1] = [7]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=9.99954623, null(2)=1, distinct(3)=9.99954623, null(3)=0, distinct(5)=95.1671064, null(5)=0, distinct(6)=63.2138954, null(6)=0, distinct(7)=100, null(7)=0, distinct(2,6,7)=100, null(2,6,7)=0]
+ ├── key: (3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5), (1)==(7), (7)==(1)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
@@ -238,22 +238,22 @@ inner-join (lookup def)
  └── filters (true)
 
 # Check column statistics for double lookup join.
-opt colstat=7
+opt colstat=8
 SELECT * FROM abc LEFT JOIN DEF ON a = d AND b = 3
 ----
 left-join (lookup def)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) f:6(int) g:7(float)
- ├── key columns: [6 5] = [6 5]
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int) f:7(int) g:8(float)
+ ├── key columns: [7 6] = [7 6]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(4)=10, null(4)=90, distinct(7)=9.95021575, null(7)=91]
- ├── key: (1,3,5,6)
- ├── fd: (1,3)-->(2), (5,6)-->(4,7)
+ ├── stats: [rows=100, distinct(5)=10, null(5)=90, distinct(8)=9.95021575, null(8)=91]
+ ├── key: (1,3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5,8)
  ├── left-join (lookup def@d_idx)
- │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) f:6(int)
- │    ├── key columns: [1] = [4]
- │    ├── stats: [rows=100, distinct(4)=10, null(4)=90]
- │    ├── key: (1,3,5,6)
- │    ├── fd: (1,3)-->(2), (5,6)-->(4)
+ │    ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int) f:7(int)
+ │    ├── key columns: [1] = [5]
+ │    ├── stats: [rows=100, distinct(5)=10, null(5)=90]
+ │    ├── key: (1,3,6,7)
+ │    ├── fd: (1,3)-->(2), (6,7)-->(5)
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
@@ -265,26 +265,26 @@ left-join (lookup def)
 
 # The filter a=e is not very selective, so we do not expect a lookup join, even
 # though there is an additional filter.
-opt colstat=7
+opt colstat=8
 SELECT * FROM abc LEFT JOIN DEF ON a = e AND b = 3
 ----
 right-join (hash)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int) f:6(int) g:7(float)
- ├── stats: [rows=100, distinct(5)=100, null(5)=0, distinct(7)=95.1671064, null(7)=1]
- ├── key: (1,3,5,6)
- ├── fd: (1,3)-->(2), (5,6)-->(4,7)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:5(int) e:6(int) f:7(int) g:8(float)
+ ├── stats: [rows=100, distinct(6)=100, null(6)=0, distinct(8)=95.1671064, null(8)=1]
+ ├── key: (1,3,6,7)
+ ├── fd: (1,3)-->(2), (6,7)-->(5,8)
  ├── scan def
- │    ├── columns: d:4(int) e:5(int!null) f:6(int!null) g:7(float)
- │    ├── stats: [rows=10000, distinct(5)=100, null(5)=0, distinct(7)=1000, null(7)=100]
- │    ├── key: (5,6)
- │    └── fd: (5,6)-->(4,7)
+ │    ├── columns: d:5(int) e:6(int!null) f:7(int!null) g:8(float)
+ │    ├── stats: [rows=10000, distinct(6)=100, null(6)=0, distinct(8)=1000, null(8)=100]
+ │    ├── key: (6,7)
+ │    └── fd: (6,7)-->(5,8)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=1, distinct(3)=10, null(3)=0]
  │    ├── key: (1,3)
  │    └── fd: (1,3)-->(2)
  └── filters
-      ├── a:1 = e:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      ├── a:1 = e:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── b:2 = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
 exec-ddl
@@ -335,9 +335,9 @@ SELECT * FROM u WHERE EXISTS (SELECT * FROM t WHERE u.x=t.x AND u.y=t.y);
 ----
 semi-join (lookup t@xy_idx)
  ├── columns: x:1(int) y:2(int)
- ├── key columns: [1 2] = [4 5]
+ ├── key columns: [1 2] = [5 6]
  ├── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
- ├── scan u
+ ├── scan u@x_idx
  │    ├── columns: u.x:1(int) u.y:2(int)
  │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
  └── filters (true)
@@ -347,9 +347,9 @@ SELECT * FROM u WHERE NOT EXISTS (SELECT * FROM t WHERE u.x=t.x AND u.y=t.y);
 ----
 anti-join (lookup t@xy_idx)
  ├── columns: x:1(int) y:2(int)
- ├── key columns: [1 2] = [4 5]
+ ├── key columns: [1 2] = [5 6]
  ├── stats: [rows=1e-10]
- ├── scan u
+ ├── scan u@x_idx
  │    ├── columns: u.x:1(int) u.y:2(int)
  │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
  └── filters (true)
@@ -395,25 +395,25 @@ opt
 SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
 ----
 inner-join (lookup wxyz)
- ├── columns: m:1(int!null) n:2(int) w:4(int) x:5(int!null) y:6(int!null) z:7(int)
- ├── key columns: [8] = [8]
+ ├── columns: m:1(int!null) n:2(int) w:5(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(5)=39.1263061, null(5)=0]
- ├── fd: ()-->(6), (1)==(5), (5)==(1)
+ ├── stats: [rows=49.3441882, distinct(1)=39.1263061, null(1)=0, distinct(6)=39.1263061, null(6)=0]
+ ├── fd: ()-->(7), (1)==(6), (6)==(1)
  ├── inner-join (lookup wxyz@secondary)
- │    ├── columns: m:1(int!null) n:2(int) x:5(int!null) y:6(int!null) z:7(int) wxyz.rowid:8(int!null)
- │    ├── key columns: [1 9] = [5 6]
- │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(5)=19.8, null(5)=0, distinct(6)=1, null(6)=0, distinct(9)=1, null(9)=0]
- │    ├── fd: ()-->(6), (8)-->(5,7), (1)==(5), (5)==(1)
+ │    ├── columns: m:1(int!null) n:2(int) x:6(int!null) y:7(int!null) z:8(int) wxyz.rowid:9(int!null)
+ │    ├── key columns: [1 11] = [6 7]
+ │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(6)=19.8, null(6)=0, distinct(7)=1, null(7)=0, distinct(11)=1, null(11)=0]
+ │    ├── fd: ()-->(7), (9)-->(6,8), (1)==(6), (6)==(1)
  │    ├── project
- │    │    ├── columns: "project_const_col_@6":9(int!null) m:1(int) n:2(int)
- │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, distinct(9)=1, null(9)=0]
- │    │    ├── fd: ()-->(9)
+ │    │    ├── columns: "project_const_col_@7":11(int!null) m:1(int) n:2(int)
+ │    │    ├── stats: [rows=40, distinct(1)=40, null(1)=0, distinct(11)=1, null(11)=0]
+ │    │    ├── fd: ()-->(11)
  │    │    ├── scan medium
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
  │    │    └── projections
- │    │         └── 10 [as="project_const_col_@6":9, type=int]
+ │    │         └── 10 [as="project_const_col_@7":11, type=int]
  │    └── filters (true)
  └── filters (true)
 
@@ -438,24 +438,24 @@ opt
 SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
 ----
 inner-join (hash)
- ├── columns: m:1(int!null) n:2(int) w:4(int) x:5(int!null) y:6(int!null) z:7(int)
- ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, distinct(5)=40, null(5)=0]
- ├── fd: ()-->(6), (1)==(5), (5)==(1)
+ ├── columns: m:1(int!null) n:2(int) w:5(int) x:6(int!null) y:7(int!null) z:8(int)
+ ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, distinct(6)=40, null(6)=0]
+ ├── fd: ()-->(7), (1)==(6), (6)==(1)
  ├── select
- │    ├── columns: w:4(int) x:5(int) y:6(int!null) z:7(int)
- │    ├── stats: [rows=900, distinct(5)=100, null(5)=9, distinct(6)=1, null(6)=0]
- │    │   histogram(6)=  0 900
+ │    ├── columns: w:5(int) x:6(int) y:7(int!null) z:8(int)
+ │    ├── stats: [rows=900, distinct(6)=100, null(6)=9, distinct(7)=1, null(7)=0]
+ │    │   histogram(7)=  0 900
  │    │                <--- 10
- │    ├── fd: ()-->(6)
+ │    ├── fd: ()-->(7)
  │    ├── scan wxyz
- │    │    ├── columns: w:4(int) x:5(int) y:6(int) z:7(int)
- │    │    └── stats: [rows=1000, distinct(5)=100, null(5)=10, distinct(6)=11, null(6)=0]
- │    │        histogram(6)=  0 10  90 900
+ │    │    ├── columns: w:5(int) x:6(int) y:7(int) z:8(int)
+ │    │    └── stats: [rows=1000, distinct(6)=100, null(6)=10, distinct(7)=11, null(7)=0]
+ │    │        histogram(7)=  0 10  90 900
  │    │                     <--- 0 ---- 10
  │    └── filters
- │         └── y:6 = 10 [type=bool, outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+ │         └── y:7 = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
  ├── scan medium
  │    ├── columns: m:1(int) n:2(int)
  │    └── stats: [rows=40, distinct(1)=40, null(1)=0]
  └── filters
-      └── m:1 = x:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── m:1 = x:6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]

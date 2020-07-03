@@ -24,75 +24,75 @@ SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1),
   variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 scalar-group-by
- ├── columns: min:6 max:7 count:8!null sum_int:9 avg:10 sum:11 stddev:12 variance:13 bool_and:15 bool_or:17 xor_agg:19
+ ├── columns: min:7 max:8 count:9!null sum_int:10 avg:11 sum:12 stddev:13 variance:14 bool_and:16 bool_or:18 xor_agg:20
  ├── project
- │    ├── columns: column5:5!null column14:14!null column16:16!null column18:18!null
+ │    ├── columns: column6:6!null column15:15!null column17:17!null column19:19!null
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         ├── 1 [as=column5:5]
- │         ├── true [as=column14:14]
- │         ├── false [as=column16:16]
- │         └── '\x01' [as=column18:18]
+ │         ├── 1 [as=column6:6]
+ │         ├── true [as=column15:15]
+ │         ├── false [as=column17:17]
+ │         └── '\x01' [as=column19:19]
  └── aggregations
-      ├── min [as=min:6]
-      │    └── column5:5
-      ├── max [as=max:7]
-      │    └── column5:5
-      ├── count [as=count:8]
-      │    └── column5:5
-      ├── sum-int [as=sum_int:9]
-      │    └── column5:5
-      ├── avg [as=avg:10]
-      │    └── column5:5
-      ├── sum [as=sum:11]
-      │    └── column5:5
-      ├── std-dev [as=stddev:12]
-      │    └── column5:5
-      ├── variance [as=variance:13]
-      │    └── column5:5
-      ├── bool-and [as=bool_and:15]
-      │    └── column14:14
-      ├── bool-or [as=bool_or:17]
-      │    └── column16:16
-      └── xor-agg [as=xor_agg:19]
-           └── column18:18
+      ├── min [as=min:7]
+      │    └── column6:6
+      ├── max [as=max:8]
+      │    └── column6:6
+      ├── count [as=count:9]
+      │    └── column6:6
+      ├── sum-int [as=sum_int:10]
+      │    └── column6:6
+      ├── avg [as=avg:11]
+      │    └── column6:6
+      ├── sum [as=sum:12]
+      │    └── column6:6
+      ├── std-dev [as=stddev:13]
+      │    └── column6:6
+      ├── variance [as=variance:14]
+      │    └── column6:6
+      ├── bool-and [as=bool_and:16]
+      │    └── column15:15
+      ├── bool-or [as=bool_or:18]
+      │    └── column17:17
+      └── xor-agg [as=xor_agg:20]
+           └── column19:19
 
 build
 SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v),
   variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 scalar-group-by
- ├── columns: min:5 max:6 count:7!null sum_int:9 avg:10 sum:11 stddev:12 variance:13 bool_and:15 bool_and:15 xor_agg:17
+ ├── columns: min:6 max:7 count:8!null sum_int:10 avg:11 sum:12 stddev:13 variance:14 bool_and:16 bool_and:16 xor_agg:18
  ├── project
- │    ├── columns: column8:8!null column14:14 column16:16 v:2
+ │    ├── columns: column9:9!null column15:15 column17:17 v:2
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         ├── 1 [as=column8:8]
- │         ├── v:2 = 1 [as=column14:14]
- │         └── s:4::BYTES [as=column16:16]
+ │         ├── 1 [as=column9:9]
+ │         ├── v:2 = 1 [as=column15:15]
+ │         └── s:4::BYTES [as=column17:17]
  └── aggregations
-      ├── min [as=min:5]
+      ├── min [as=min:6]
       │    └── v:2
-      ├── max [as=max:6]
+      ├── max [as=max:7]
       │    └── v:2
-      ├── count [as=count:7]
+      ├── count [as=count:8]
       │    └── v:2
-      ├── sum-int [as=sum_int:9]
-      │    └── column8:8
-      ├── avg [as=avg:10]
+      ├── sum-int [as=sum_int:10]
+      │    └── column9:9
+      ├── avg [as=avg:11]
       │    └── v:2
-      ├── sum [as=sum:11]
+      ├── sum [as=sum:12]
       │    └── v:2
-      ├── std-dev [as=stddev:12]
+      ├── std-dev [as=stddev:13]
       │    └── v:2
-      ├── variance [as=variance:13]
+      ├── variance [as=variance:14]
       │    └── v:2
-      ├── bool-and [as=bool_and:15]
-      │    └── column14:14
-      └── xor-agg [as=xor_agg:17]
-           └── column16:16
+      ├── bool-and [as=bool_and:16]
+      │    └── column15:15
+      └── xor-agg [as=xor_agg:18]
+           └── column17:17
 
 build
 SELECT min(1, 2)
@@ -147,28 +147,28 @@ build
 SELECT array_agg(1) FROM kv
 ----
 scalar-group-by
- ├── columns: array_agg:6
+ ├── columns: array_agg:7
  ├── project
- │    ├── columns: column5:5!null
+ │    ├── columns: column6:6!null
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── 1 [as=column5:5]
+ │         └── 1 [as=column6:6]
  └── aggregations
-      └── array-agg [as=array_agg:6]
-           └── column5:5
+      └── array-agg [as=array_agg:7]
+           └── column6:6
 
 build
 SELECT json_agg(v) FROM kv
 ----
 scalar-group-by
- ├── columns: json_agg:5
+ ├── columns: json_agg:6
  ├── project
  │    ├── columns: v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── json-agg [as=json_agg:5]
+      └── json-agg [as=json_agg:6]
            └── v:2
 
 build
@@ -191,16 +191,16 @@ build
 SELECT 1 r FROM kv GROUP BY v
 ----
 project
- ├── columns: r:5!null
+ ├── columns: r:6!null
  ├── group-by
  │    ├── columns: v:2
  │    ├── grouping columns: v:2
  │    └── project
  │         ├── columns: v:2
  │         └── scan kv
- │              └── columns: k:1!null v:2 w:3 s:4
+ │              └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── 1 [as=r:5]
+      └── 1 [as=r:6]
 
 # This should ideally return {NULL}, but this is a pathological case, and
 # Postgres has the same behavior, so it's sufficient for now.
@@ -247,28 +247,28 @@ build
 SELECT (SELECT COALESCE(max(1), 0) FROM kv)
 ----
 project
- ├── columns: coalesce:8
+ ├── columns: coalesce:9
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=coalesce:8]
+      └── subquery [as=coalesce:9]
            └── max1-row
-                ├── columns: coalesce:7
+                ├── columns: coalesce:8
                 └── project
-                     ├── columns: coalesce:7
+                     ├── columns: coalesce:8
                      ├── scalar-group-by
-                     │    ├── columns: max:6
+                     │    ├── columns: max:7
                      │    ├── project
-                     │    │    ├── columns: column5:5!null
+                     │    │    ├── columns: column6:6!null
                      │    │    ├── scan kv
-                     │    │    │    └── columns: k:1!null v:2 w:3 s:4
+                     │    │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
                      │    │    └── projections
-                     │    │         └── 1 [as=column5:5]
+                     │    │         └── 1 [as=column6:6]
                      │    └── aggregations
-                     │         └── max [as=max:6]
-                     │              └── column5:5
+                     │         └── max [as=max:7]
+                     │              └── column6:6
                      └── projections
-                          └── COALESCE(max:6, 0) [as=coalesce:7]
+                          └── COALESCE(max:7, 0) [as=coalesce:8]
 
 build
 SELECT count(*), k FROM kv
@@ -284,28 +284,28 @@ build
 SELECT count(*), k FROM kv GROUP BY k
 ----
 group-by
- ├── columns: count:5!null k:1!null
+ ├── columns: count:6!null k:1!null
  ├── grouping columns: k:1!null
  ├── project
  │    ├── columns: k:1!null
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 # GROUP BY specified using column index works.
 build
 SELECT count(*), k FROM kv GROUP BY 2
 ----
 group-by
- ├── columns: count:5!null k:1!null
+ ├── columns: count:6!null k:1!null
  ├── grouping columns: k:1!null
  ├── project
  │    ├── columns: k:1!null
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 build
 SELECT * FROM kv GROUP BY v, count(w)
@@ -352,150 +352,150 @@ build
 SELECT count(*), kv.s FROM kv GROUP BY s
 ----
 group-by
- ├── columns: count:5!null s:4
+ ├── columns: count:6!null s:4
  ├── grouping columns: s:4
  ├── project
  │    ├── columns: s:4
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 build
 SELECT count(*), s FROM kv GROUP BY kv.s
 ----
 group-by
- ├── columns: count:5!null s:4
+ ├── columns: count:6!null s:4
  ├── grouping columns: s:4
  ├── project
  │    ├── columns: s:4
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 build
 SELECT count(*), kv.s FROM kv GROUP BY kv.s
 ----
 group-by
- ├── columns: count:5!null s:4
+ ├── columns: count:6!null s:4
  ├── grouping columns: s:4
  ├── project
  │    ├── columns: s:4
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 build
 SELECT count(*), s FROM kv GROUP BY s
 ----
 group-by
- ├── columns: count:5!null s:4
+ ├── columns: count:6!null s:4
  ├── grouping columns: s:4
  ├── project
  │    ├── columns: s:4
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 # Grouping by more than one column works.
 build
 SELECT v, count(*), w FROM kv GROUP BY v, w
 ----
 group-by
- ├── columns: v:2 count:5!null w:3
+ ├── columns: v:2 count:6!null w:3
  ├── grouping columns: v:2 w:3
  ├── project
  │    ├── columns: v:2 w:3
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 # Grouping by more than one column using column numbers works.
 build
 SELECT v, count(*), w FROM kv GROUP BY 1, 3
 ----
 group-by
- ├── columns: v:2 count:5!null w:3
+ ├── columns: v:2 count:6!null w:3
  ├── grouping columns: v:2 w:3
  ├── project
  │    ├── columns: v:2 w:3
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 # Selecting and grouping on a function expression works.
 build
 SELECT count(*), upper(s) FROM kv GROUP BY upper(s)
 ----
 group-by
- ├── columns: count:5!null upper:6
- ├── grouping columns: column6:6
+ ├── columns: count:6!null upper:7
+ ├── grouping columns: column7:7
  ├── project
- │    ├── columns: column6:6
+ │    ├── columns: column7:7
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── upper(s:4) [as=column6:6]
+ │         └── upper(s:4) [as=column7:7]
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 # Selecting and grouping on a constant works.
 build
 SELECT count(*) FROM kv GROUP BY 1+2
 ----
 project
- ├── columns: count:5!null
+ ├── columns: count:6!null
  └── group-by
-      ├── columns: count_rows:5!null column6:6!null
-      ├── grouping columns: column6:6!null
+      ├── columns: count_rows:6!null column7:7!null
+      ├── grouping columns: column7:7!null
       ├── project
-      │    ├── columns: column6:6!null
+      │    ├── columns: column7:7!null
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 s:4
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         └── 1 + 2 [as=column6:6]
+      │         └── 1 + 2 [as=column7:7]
       └── aggregations
-           └── count-rows [as=count_rows:5]
+           └── count-rows [as=count_rows:6]
 
 build
 SELECT count(*) FROM kv GROUP BY length('abc')
 ----
 project
- ├── columns: count:5!null
+ ├── columns: count:6!null
  └── group-by
-      ├── columns: count_rows:5!null column6:6
-      ├── grouping columns: column6:6
+      ├── columns: count_rows:6!null column7:7
+      ├── grouping columns: column7:7
       ├── project
-      │    ├── columns: column6:6
+      │    ├── columns: column7:7
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 s:4
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         └── length('abc') [as=column6:6]
+      │         └── length('abc') [as=column7:7]
       └── aggregations
-           └── count-rows [as=count_rows:5]
+           └── count-rows [as=count_rows:6]
 
 # Selecting a function of something which is grouped works.
 build
 SELECT count(*), upper(s) FROM kv GROUP BY s
 ----
 project
- ├── columns: count:5!null upper:6
+ ├── columns: count:6!null upper:7
  ├── group-by
- │    ├── columns: s:4 count_rows:5!null
+ │    ├── columns: s:4 count_rows:6!null
  │    ├── grouping columns: s:4
  │    ├── project
  │    │    ├── columns: s:4
  │    │    └── scan kv
- │    │         └── columns: k:1!null v:2 w:3 s:4
+ │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         └── count-rows [as=count_rows:5]
+ │         └── count-rows [as=count_rows:6]
  └── projections
-      └── upper(s:4) [as=upper:6]
+      └── upper(s:4) [as=upper:7]
 
 # Selecting a value that is not grouped, even if a function of it it, does not work.
 build
@@ -508,16 +508,16 @@ build
 SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 group-by
- ├── columns: count:5!null r:6
- ├── grouping columns: column6:6
+ ├── columns: count:6!null r:7
+ ├── grouping columns: column7:7
  ├── project
- │    ├── columns: column6:6
+ │    ├── columns: column7:7
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── k:1 + v:2 [as=column6:6]
+ │         └── k:1 + v:2 [as=column7:7]
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
@@ -525,18 +525,18 @@ build
 SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 project
- ├── columns: count:5!null r:6
+ ├── columns: count:6!null r:7
  ├── group-by
- │    ├── columns: k:1!null v:2 count_rows:5!null
+ │    ├── columns: k:1!null v:2 count_rows:6!null
  │    ├── grouping columns: k:1!null v:2
  │    ├── project
  │    │    ├── columns: k:1!null v:2
  │    │    └── scan kv
- │    │         └── columns: k:1!null v:2 w:3 s:4
+ │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         └── count-rows [as=count_rows:5]
+ │         └── count-rows [as=count_rows:6]
  └── projections
-      └── k:1 + v:2 [as=r:6]
+      └── k:1 + v:2 [as=r:7]
 
 build
 SELECT count(*), k+v FROM kv GROUP BY v
@@ -563,16 +563,16 @@ build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
 group-by
- ├── columns: count_1:5!null lx:6
- ├── grouping columns: column6:6
+ ├── columns: count_1:6!null lx:7
+ ├── grouping columns: column7:7
  ├── project
- │    ├── columns: column6:6 k:1!null
+ │    ├── columns: column7:7 k:1!null
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── v:2 + w:3 [as=column6:6]
+ │         └── v:2 + w:3 [as=column7:7]
  └── aggregations
-      └── count [as=count:5]
+      └── count [as=count:6]
            └── k:1
 
 build
@@ -589,13 +589,13 @@ build
 SELECT count(k) from kv
 ----
 scalar-group-by
- ├── columns: count:5!null
+ ├── columns: count:6!null
  ├── project
  │    ├── columns: k:1!null
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count [as=count:5]
+      └── count [as=count:6]
            └── k:1
 
 build
@@ -617,16 +617,16 @@ build
 SELECT count(1) from kv
 ----
 scalar-group-by
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── project
- │    ├── columns: column5:5!null
+ │    ├── columns: column6:6!null
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── 1 [as=column5:5]
+ │         └── 1 [as=column6:6]
  └── aggregations
-      └── count [as=count:6]
-           └── column5:5
+      └── count [as=count:7]
+           └── column6:6
 
 build
 SELECT count(k, v) FROM kv
@@ -637,153 +637,153 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v
 ----
 sort
- ├── columns: v:2 count:5!null
+ ├── columns: v:2 count:6!null
  ├── ordering: +2
  └── group-by
-      ├── columns: v:2 count:5!null
+      ├── columns: v:2 count:6!null
       ├── grouping columns: v:2
       ├── project
       │    ├── columns: k:1!null v:2
       │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
-           └── count [as=count:5]
+           └── count [as=count:6]
                 └── k:1
 
 build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v DESC
 ----
 sort
- ├── columns: v:2 count:5!null
+ ├── columns: v:2 count:6!null
  ├── ordering: -2
  └── group-by
-      ├── columns: v:2 count:5!null
+      ├── columns: v:2 count:6!null
       ├── grouping columns: v:2
       ├── project
       │    ├── columns: k:1!null v:2
       │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
-           └── count [as=count:5]
+           └── count [as=count:6]
                 └── k:1
 
 build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k) DESC
 ----
 sort
- ├── columns: v:2 count:5!null
- ├── ordering: -5
+ ├── columns: v:2 count:6!null
+ ├── ordering: -6
  └── group-by
-      ├── columns: v:2 count:5!null
+      ├── columns: v:2 count:6!null
       ├── grouping columns: v:2
       ├── project
       │    ├── columns: k:1!null v:2
       │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
-           └── count [as=count:5]
+           └── count [as=count:6]
                 └── k:1
 
 build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v-count(k)
 ----
 sort
- ├── columns: v:2 count:5!null  [hidden: column6:6]
- ├── ordering: +6
+ ├── columns: v:2 count:6!null  [hidden: column7:7]
+ ├── ordering: +7
  └── project
-      ├── columns: column6:6 v:2 count:5!null
+      ├── columns: column7:7 v:2 count:6!null
       ├── group-by
-      │    ├── columns: v:2 count:5!null
+      │    ├── columns: v:2 count:6!null
       │    ├── grouping columns: v:2
       │    ├── project
       │    │    ├── columns: k:1!null v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1!null v:2 w:3 s:4
+      │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── aggregations
-      │         └── count [as=count:5]
+      │         └── count [as=count:6]
       │              └── k:1
       └── projections
-           └── v:2 - count:5 [as=column6:6]
+           └── v:2 - count:6 [as=column7:7]
 
 build
 SELECT v FROM kv GROUP BY v ORDER BY sum(k)
 ----
 sort
- ├── columns: v:2  [hidden: sum:5!null]
- ├── ordering: +5
+ ├── columns: v:2  [hidden: sum:6!null]
+ ├── ordering: +6
  └── group-by
-      ├── columns: v:2 sum:5!null
+      ├── columns: v:2 sum:6!null
       ├── grouping columns: v:2
       ├── project
       │    ├── columns: k:1!null v:2
       │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
-           └── sum [as=sum:5]
+           └── sum [as=sum:6]
                 └── k:1
 
 build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY 1 DESC
 ----
 sort
- ├── columns: v:2 count:5!null
+ ├── columns: v:2 count:6!null
  ├── ordering: -2
  └── group-by
-      ├── columns: v:2 count:5!null
+      ├── columns: v:2 count:6!null
       ├── grouping columns: v:2
       ├── project
       │    ├── columns: k:1!null v:2
       │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
-           └── count [as=count:5]
+           └── count [as=count:6]
                 └── k:1
 
 build
 SELECT count(*), count(k), count(kv.v) FROM kv
 ----
 scalar-group-by
- ├── columns: count:5!null count:6!null count:7!null
+ ├── columns: count:6!null count:7!null count:8!null
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── count-rows [as=count_rows:5]
-      ├── count [as=count:6]
+      ├── count-rows [as=count_rows:6]
+      ├── count [as=count:7]
       │    └── k:1
-      └── count [as=count:7]
+      └── count [as=count:8]
            └── v:2
 
 build
 SELECT count(kv.*) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── project
- │    ├── columns: column5:5
+ │    ├── columns: column6:6
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── ((k:1, v:2, w:3, s:4) AS k, v, w, s) [as=column5:5]
+ │         └── ((k:1, v:2, w:3, s:4) AS k, v, w, s) [as=column6:6]
  └── aggregations
-      └── count [as=count:6]
-           └── column5:5
+      └── count [as=count:7]
+           └── column6:6
 
 build
 SELECT count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv
 ----
 scalar-group-by
- ├── columns: count:5!null count:6!null count:6!null
+ ├── columns: count:6!null count:7!null count:7!null
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── agg-distinct [as=count:5]
+      ├── agg-distinct [as=count:6]
       │    └── count
       │         └── k:1
-      └── agg-distinct [as=count:6]
+      └── agg-distinct [as=count:7]
            └── count
                 └── v:2
 
@@ -791,19 +791,19 @@ build
 SELECT upper(s), count(DISTINCT k), count(DISTINCT v), count(DISTINCT (v)) FROM kv GROUP BY upper(s)
 ----
 group-by
- ├── columns: upper:7 count:5!null count:6!null count:6!null
- ├── grouping columns: column7:7
+ ├── columns: upper:8 count:6!null count:7!null count:7!null
+ ├── grouping columns: column8:8
  ├── project
- │    ├── columns: column7:7 k:1!null v:2
+ │    ├── columns: column8:8 k:1!null v:2
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── upper(s:4) [as=column7:7]
+ │         └── upper(s:4) [as=column8:8]
  └── aggregations
-      ├── agg-distinct [as=count:5]
+      ├── agg-distinct [as=count:6]
       │    └── count
       │         └── k:1
-      └── agg-distinct [as=count:6]
+      └── agg-distinct [as=count:7]
            └── count
                 └── v:2
 
@@ -811,120 +811,120 @@ build
 SELECT count((k, v)) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── project
- │    ├── columns: column5:5
+ │    ├── columns: column6:6
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── (k:1, v:2) [as=column5:5]
+ │         └── (k:1, v:2) [as=column6:6]
  └── aggregations
-      └── count [as=count:6]
-           └── column5:5
+      └── count [as=count:7]
+           └── column6:6
 
 build
 SELECT count(DISTINCT (k, v)) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── project
- │    ├── columns: column5:5
+ │    ├── columns: column6:6
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── (k:1, v:2) [as=column5:5]
+ │         └── (k:1, v:2) [as=column6:6]
  └── aggregations
-      └── agg-distinct [as=count:6]
+      └── agg-distinct [as=count:7]
            └── count
-                └── column5:5
+                └── column6:6
 
 build
 SELECT count(DISTINCT (k, (v))) FROM kv
 ----
 scalar-group-by
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── project
- │    ├── columns: column5:5
+ │    ├── columns: column6:6
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── (k:1, v:2) [as=column5:5]
+ │         └── (k:1, v:2) [as=column6:6]
  └── aggregations
-      └── agg-distinct [as=count:6]
+      └── agg-distinct [as=count:7]
            └── count
-                └── column5:5
+                └── column6:6
 
 build
 SELECT count(*) FROM kv a, kv b
 ----
 scalar-group-by
- ├── columns: count:9!null
+ ├── columns: count:11!null
  ├── project
  │    └── inner-join (cross)
- │         ├── columns: a.k:1!null a.v:2 a.w:3 a.s:4 b.k:5!null b.v:6 b.w:7 b.s:8
+ │         ├── columns: a.k:1!null a.v:2 a.w:3 a.s:4 a.crdb_internal_mvcc_timestamp:5 b.k:6!null b.v:7 b.w:8 b.s:9 b.crdb_internal_mvcc_timestamp:10
  │         ├── scan a
- │         │    └── columns: a.k:1!null a.v:2 a.w:3 a.s:4
+ │         │    └── columns: a.k:1!null a.v:2 a.w:3 a.s:4 a.crdb_internal_mvcc_timestamp:5
  │         ├── scan b
- │         │    └── columns: b.k:5!null b.v:6 b.w:7 b.s:8
+ │         │    └── columns: b.k:6!null b.v:7 b.w:8 b.s:9 b.crdb_internal_mvcc_timestamp:10
  │         └── filters (true)
  └── aggregations
-      └── count-rows [as=count_rows:9]
+      └── count-rows [as=count_rows:11]
 
 build
 SELECT count((k, v)) FROM kv LIMIT 1
 ----
 limit
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── scalar-group-by
- │    ├── columns: count:6!null
+ │    ├── columns: count:7!null
  │    ├── limit hint: 1.00
  │    ├── project
- │    │    ├── columns: column5:5
+ │    │    ├── columns: column6:6
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── (k:1, v:2) [as=column5:5]
+ │    │         └── (k:1, v:2) [as=column6:6]
  │    └── aggregations
- │         └── count [as=count:6]
- │              └── column5:5
+ │         └── count [as=count:7]
+ │              └── column6:6
  └── 1
 
 build
 SELECT count((k, v)) FROM kv OFFSET 1
 ----
 offset
- ├── columns: count:6!null
+ ├── columns: count:7!null
  ├── scalar-group-by
- │    ├── columns: count:6!null
+ │    ├── columns: count:7!null
  │    ├── project
- │    │    ├── columns: column5:5
+ │    │    ├── columns: column6:6
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── (k:1, v:2) [as=column5:5]
+ │    │         └── (k:1, v:2) [as=column6:6]
  │    └── aggregations
- │         └── count [as=count:6]
- │              └── column5:5
+ │         └── count [as=count:7]
+ │              └── column6:6
  └── 1
 
 build
 SELECT count(k)+count(kv.v) AS r FROM kv
 ----
 project
- ├── columns: r:7!null
+ ├── columns: r:8!null
  ├── scalar-group-by
- │    ├── columns: count:5!null count:6!null
+ │    ├── columns: count:6!null count:7!null
  │    ├── project
  │    │    ├── columns: k:1!null v:2
  │    │    └── scan kv
- │    │         └── columns: k:1!null v:2 w:3 s:4
+ │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         ├── count [as=count:5]
+ │         ├── count [as=count:6]
  │         │    └── k:1
- │         └── count [as=count:6]
+ │         └── count [as=count:7]
  │              └── v:2
  └── projections
-      └── count:5 + count:6 [as=r:7]
+      └── count:6 + count:7 [as=r:8]
 
 build
 SELECT count(NULL::int), count((NULL, NULL))
@@ -948,67 +948,67 @@ build
 SELECT min(k), max(k), min(v), max(v) FROM kv
 ----
 scalar-group-by
- ├── columns: min:5 max:6 min:7 max:8
+ ├── columns: min:6 max:7 min:8 max:9
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── min [as=min:5]
+      ├── min [as=min:6]
       │    └── k:1
-      ├── max [as=max:6]
+      ├── max [as=max:7]
       │    └── k:1
-      ├── min [as=min:7]
+      ├── min [as=min:8]
       │    └── v:2
-      └── max [as=max:8]
+      └── max [as=max:9]
            └── v:2
 
 build
 SELECT min(k), max(k), min(v), max(v) FROM kv WHERE k > 8
 ----
 scalar-group-by
- ├── columns: min:5 max:6 min:7 max:8
+ ├── columns: min:6 max:7 min:8 max:9
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── select
- │         ├── columns: k:1!null v:2 w:3 s:4
+ │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── filters
  │              └── k:1 > 8
  └── aggregations
-      ├── min [as=min:5]
+      ├── min [as=min:6]
       │    └── k:1
-      ├── max [as=max:6]
+      ├── max [as=max:7]
       │    └── k:1
-      ├── min [as=min:7]
+      ├── min [as=min:8]
       │    └── v:2
-      └── max [as=max:8]
+      └── max [as=max:9]
            └── v:2
 
 build
 SELECT array_agg(k), array_agg(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
 scalar-group-by
- ├── columns: array_agg:5 array_agg:6
+ ├── columns: array_agg:6 array_agg:7
  ├── internal-ordering: +1
  ├── project
  │    ├── columns: k:1!null s:4
  │    ├── ordering: +1
  │    └── scan kv
- │         ├── columns: k:1!null v:2 w:3 s:4
+ │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── ordering: +1
  └── aggregations
-      ├── array-agg [as=array_agg:5]
+      ├── array-agg [as=array_agg:6]
       │    └── k:1
-      └── array-agg [as=array_agg:6]
+      └── array-agg [as=array_agg:7]
            └── s:4
 
 build
 SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
 scalar-group-by
- ├── columns: array_agg:5
+ ├── columns: array_agg:6
  ├── internal-ordering: +4
  ├── sort
  │    ├── columns: k:1!null s:4
@@ -1016,24 +1016,24 @@ scalar-group-by
  │    └── project
  │         ├── columns: k:1!null s:4
  │         └── scan kv
- │              └── columns: k:1!null v:2 w:3 s:4
+ │              └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── array-agg [as=array_agg:5]
+      └── array-agg [as=array_agg:6]
            └── k:1
 
 build
 SELECT max(k) FROM (SELECT k FROM kv ORDER BY s)
 ----
 scalar-group-by
- ├── columns: max:5
+ ├── columns: max:6
  ├── project
  │    ├── columns: k:1!null
  │    └── project
  │         ├── columns: k:1!null s:4
  │         └── scan kv
- │              └── columns: k:1!null v:2 w:3 s:4
+ │              └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── max [as=max:5]
+      └── max [as=max:6]
            └── k:1
 
 
@@ -1041,9 +1041,9 @@ build
 SELECT array_agg(k) || 1 FROM (SELECT k FROM kv ORDER BY s)
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── scalar-group-by
- │    ├── columns: array_agg:5
+ │    ├── columns: array_agg:6
  │    ├── internal-ordering: +4
  │    ├── sort
  │    │    ├── columns: k:1!null s:4
@@ -1051,91 +1051,91 @@ project
  │    │    └── project
  │    │         ├── columns: k:1!null s:4
  │    │         └── scan kv
- │    │              └── columns: k:1!null v:2 w:3 s:4
+ │    │              └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         └── array-agg [as=array_agg:5]
+ │         └── array-agg [as=array_agg:6]
  │              └── k:1
  └── projections
-      └── array_agg:5 || 1 [as="?column?":6]
+      └── array_agg:6 || 1 [as="?column?":7]
 
 build
 SELECT array_agg(s) FROM kv WHERE s IS NULL
 ----
 scalar-group-by
- ├── columns: array_agg:5
+ ├── columns: array_agg:6
  ├── project
  │    ├── columns: s:4
  │    └── select
- │         ├── columns: k:1!null v:2 w:3 s:4
+ │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── filters
  │              └── s:4 IS NULL
  └── aggregations
-      └── array-agg [as=array_agg:5]
+      └── array-agg [as=array_agg:6]
            └── s:4
 
 build
 SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
 scalar-group-by
- ├── columns: avg:5 avg:6 sum:7 sum:8
+ ├── columns: avg:6 avg:7 sum:8 sum:9
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── avg [as=avg:5]
-      │    └── k:1
       ├── avg [as=avg:6]
-      │    └── v:2
-      ├── sum [as=sum:7]
       │    └── k:1
-      └── sum [as=sum:8]
+      ├── avg [as=avg:7]
+      │    └── v:2
+      ├── sum [as=sum:8]
+      │    └── k:1
+      └── sum [as=sum:9]
            └── v:2
 
 build
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
 scalar-group-by
- ├── columns: avg:6 avg:8 sum:9 sum:10
+ ├── columns: avg:7 avg:9 sum:10 sum:11
  ├── project
- │    ├── columns: column5:5!null column7:7
+ │    ├── columns: column6:6!null column8:8
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         ├── k:1::DECIMAL [as=column5:5]
- │         └── v:2::DECIMAL [as=column7:7]
+ │         ├── k:1::DECIMAL [as=column6:6]
+ │         └── v:2::DECIMAL [as=column8:8]
  └── aggregations
-      ├── avg [as=avg:6]
-      │    └── column5:5
-      ├── avg [as=avg:8]
-      │    └── column7:7
-      ├── sum [as=sum:9]
-      │    └── column5:5
-      └── sum [as=sum:10]
-           └── column7:7
+      ├── avg [as=avg:7]
+      │    └── column6:6
+      ├── avg [as=avg:9]
+      │    └── column8:8
+      ├── sum [as=sum:10]
+      │    └── column6:6
+      └── sum [as=sum:11]
+           └── column8:8
 
 build
 SELECT avg(DISTINCT k), avg(DISTINCT v), sum(DISTINCT k), sum(DISTINCT v) FROM kv
 ----
 scalar-group-by
- ├── columns: avg:5 avg:6 sum:7 sum:8
+ ├── columns: avg:6 avg:7 sum:8 sum:9
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── agg-distinct [as=avg:5]
-      │    └── avg
-      │         └── k:1
       ├── agg-distinct [as=avg:6]
       │    └── avg
+      │         └── k:1
+      ├── agg-distinct [as=avg:7]
+      │    └── avg
       │         └── v:2
-      ├── agg-distinct [as=sum:7]
+      ├── agg-distinct [as=sum:8]
       │    └── sum
       │         └── k:1
-      └── agg-distinct [as=sum:8]
+      └── agg-distinct [as=sum:9]
            └── sum
                 └── v:2
 
@@ -1143,43 +1143,43 @@ build
 SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv
 ----
 project
- ├── columns: r:7
+ ├── columns: r:8
  ├── scalar-group-by
- │    ├── columns: avg:5 max:6
+ │    ├── columns: avg:6 max:7
  │    ├── project
  │    │    ├── columns: k:1!null v:2
  │    │    └── scan kv
- │    │         └── columns: k:1!null v:2 w:3 s:4
+ │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         ├── avg [as=avg:5]
+ │         ├── avg [as=avg:6]
  │         │    └── k:1
- │         └── max [as=max:6]
+ │         └── max [as=max:7]
  │              └── v:2
  └── projections
-      └── (avg:5 * 2.0) + max:6::DECIMAL [as=r:7]
+      └── (avg:6 * 2.0) + max:7::DECIMAL [as=r:8]
 
 build
 SELECT avg(k) * 2.0 + max(v)::DECIMAL AS r FROM kv WHERE w*2 = k
 ----
 project
- ├── columns: r:7
+ ├── columns: r:8
  ├── scalar-group-by
- │    ├── columns: avg:5 max:6
+ │    ├── columns: avg:6 max:7
  │    ├── project
  │    │    ├── columns: k:1!null v:2
  │    │    └── select
- │    │         ├── columns: k:1!null v:2 w:3 s:4
+ │    │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │         ├── scan kv
- │    │         │    └── columns: k:1!null v:2 w:3 s:4
+ │    │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │         └── filters
  │    │              └── (w:3 * 2) = k:1
  │    └── aggregations
- │         ├── avg [as=avg:5]
+ │         ├── avg [as=avg:6]
  │         │    └── k:1
- │         └── max [as=max:6]
+ │         └── max [as=max:7]
  │              └── v:2
  └── projections
-      └── (avg:5 * 2.0) + max:6::DECIMAL [as=r:7]
+      └── (avg:6 * 2.0) + max:7::DECIMAL [as=r:8]
 
 exec-ddl
 CREATE TABLE abc (
@@ -1194,53 +1194,57 @@ build
 SELECT min(a), min(b), min(c), min(d) FROM abc
 ----
 scalar-group-by
- ├── columns: min:5 min:6 min:7 min:8
- ├── scan abc
- │    └── columns: a:1!null b:2 c:3 d:4
+ ├── columns: min:6 min:7 min:8 min:9
+ ├── project
+ │    ├── columns: a:1!null b:2 c:3 d:4
+ │    └── scan abc
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── min [as=min:5]
-      │    └── a:1
       ├── min [as=min:6]
-      │    └── b:2
+      │    └── a:1
       ├── min [as=min:7]
+      │    └── b:2
+      ├── min [as=min:8]
       │    └── c:3
-      └── min [as=min:8]
+      └── min [as=min:9]
            └── d:4
 
 build
 SELECT max(a), max(b), max(c), max(d) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5 max:6 max:7 max:8
- ├── scan abc
- │    └── columns: a:1!null b:2 c:3 d:4
+ ├── columns: max:6 max:7 max:8 max:9
+ ├── project
+ │    ├── columns: a:1!null b:2 c:3 d:4
+ │    └── scan abc
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── max [as=max:5]
-      │    └── a:1
       ├── max [as=max:6]
-      │    └── b:2
+      │    └── a:1
       ├── max [as=max:7]
+      │    └── b:2
+      ├── max [as=max:8]
       │    └── c:3
-      └── max [as=max:8]
+      └── max [as=max:9]
            └── d:4
 
 build
 SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
 scalar-group-by
- ├── columns: avg:5 sum:6 avg:7 sum:8
+ ├── columns: avg:6 sum:7 avg:8 sum:9
  ├── project
  │    ├── columns: b:2 d:4
  │    └── scan abc
- │         └── columns: a:1!null b:2 c:3 d:4
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── avg [as=avg:5]
+      ├── avg [as=avg:6]
       │    └── b:2
-      ├── sum [as=sum:6]
+      ├── sum [as=sum:7]
       │    └── b:2
-      ├── avg [as=avg:7]
+      ├── avg [as=avg:8]
       │    └── d:4
-      └── sum [as=sum:8]
+      └── sum [as=sum:9]
            └── d:4
 
 # Verify summing of intervals
@@ -1254,11 +1258,13 @@ build
 SELECT sum(a) FROM intervals
 ----
 scalar-group-by
- ├── columns: sum:2
- ├── scan intervals
- │    └── columns: a:1!null
+ ├── columns: sum:3
+ ├── project
+ │    ├── columns: a:1!null
+ │    └── scan intervals
+ │         └── columns: a:1!null crdb_internal_mvcc_timestamp:2
  └── aggregations
-      └── sum [as=sum:2]
+      └── sum [as=sum:3]
            └── a:1
 
 build
@@ -1308,111 +1314,111 @@ build
 SELECT min(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── project
  │    ├── columns: x:1!null
  │    └── scan xyz
- │         └── columns: x:1!null y:2 z:3
+ │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  └── aggregations
-      └── min [as=min:4]
+      └── min [as=min:5]
            └── x:1
 
 build
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── project
  │    ├── columns: x:1!null
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── x:1 IN (0, 4, 7)
  └── aggregations
-      └── min [as=min:4]
+      └── min [as=min:5]
            └── x:1
 
 build
 SELECT max(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── project
  │    ├── columns: x:1!null
  │    └── scan xyz
- │         └── columns: x:1!null y:2 z:3
+ │         └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  └── aggregations
-      └── max [as=max:4]
+      └── max [as=max:5]
            └── x:1
 
 build
 SELECT max(y) FROM xyz WHERE x = 1
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── project
  │    ├── columns: y:2
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── x:1 = 1
  └── aggregations
-      └── max [as=max:4]
+      └── max [as=max:5]
            └── y:2
 
 build
 SELECT min(y) FROM xyz WHERE x = 7
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── project
  │    ├── columns: y:2
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── x:1 = 7
  └── aggregations
-      └── min [as=min:4]
+      └── min [as=min:5]
            └── y:2
 
 build
 SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── project
  │    ├── columns: x:1!null
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── (y:2, z:3) = (2, 3.0)
  └── aggregations
-      └── min [as=min:4]
+      └── min [as=min:5]
            └── x:1
 
 build
 SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── project
  │    ├── columns: x:1!null
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── (z:3, y:2) = (3.0, 2)
  └── aggregations
-      └── max [as=max:4]
+      └── max [as=max:5]
            └── x:1
 
 
@@ -1422,80 +1428,80 @@ build
 SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz
 ----
 project
- ├── columns: variance:4 variance:6 round:8
+ ├── columns: variance:5 variance:7 round:9
  ├── scalar-group-by
- │    ├── columns: variance:4 variance:6 variance:7
+ │    ├── columns: variance:5 variance:7 variance:8
  │    ├── project
- │    │    ├── columns: column5:5 x:1!null z:3
+ │    │    ├── columns: column6:6 x:1!null z:3
  │    │    ├── scan xyz
- │    │    │    └── columns: x:1!null y:2 z:3
+ │    │    │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    │    └── projections
- │    │         └── y:2::DECIMAL [as=column5:5]
+ │    │         └── y:2::DECIMAL [as=column6:6]
  │    └── aggregations
- │         ├── variance [as=variance:4]
+ │         ├── variance [as=variance:5]
  │         │    └── x:1
- │         ├── variance [as=variance:6]
- │         │    └── column5:5
- │         └── variance [as=variance:7]
+ │         ├── variance [as=variance:7]
+ │         │    └── column6:6
+ │         └── variance [as=variance:8]
  │              └── z:3
  └── projections
-      └── round(variance:7, 14) [as=round:8]
+      └── round(variance:8, 14) [as=round:9]
 
 build
 SELECT variance(x) FROM xyz WHERE x = 10
 ----
 scalar-group-by
- ├── columns: variance:4
+ ├── columns: variance:5
  ├── project
  │    ├── columns: x:1!null
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── x:1 = 10
  └── aggregations
-      └── variance [as=variance:4]
+      └── variance [as=variance:5]
            └── x:1
 
 build
 SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
 ----
 project
- ├── columns: stddev:4 stddev:6 round:8
+ ├── columns: stddev:5 stddev:7 round:9
  ├── scalar-group-by
- │    ├── columns: stddev:4 stddev:6 stddev:7
+ │    ├── columns: stddev:5 stddev:7 stddev:8
  │    ├── project
- │    │    ├── columns: column5:5 x:1!null z:3
+ │    │    ├── columns: column6:6 x:1!null z:3
  │    │    ├── scan xyz
- │    │    │    └── columns: x:1!null y:2 z:3
+ │    │    │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    │    └── projections
- │    │         └── y:2::DECIMAL [as=column5:5]
+ │    │         └── y:2::DECIMAL [as=column6:6]
  │    └── aggregations
- │         ├── std-dev [as=stddev:4]
+ │         ├── std-dev [as=stddev:5]
  │         │    └── x:1
- │         ├── std-dev [as=stddev:6]
- │         │    └── column5:5
- │         └── std-dev [as=stddev:7]
+ │         ├── std-dev [as=stddev:7]
+ │         │    └── column6:6
+ │         └── std-dev [as=stddev:8]
  │              └── z:3
  └── projections
-      └── round(stddev:7, 14) [as=round:8]
+      └── round(stddev:8, 14) [as=round:9]
 
 build
 SELECT stddev(x) FROM xyz WHERE x = 1
 ----
 scalar-group-by
- ├── columns: stddev:4
+ ├── columns: stddev:5
  ├── project
  │    ├── columns: x:1!null
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │         └── filters
  │              └── x:1 = 1
  └── aggregations
-      └── std-dev [as=stddev:4]
+      └── std-dev [as=stddev:5]
            └── x:1
 
 build
@@ -1613,58 +1619,58 @@ build
 SELECT x > (SELECT avg(0)) AS r FROM xyz LIMIT 1
 ----
 limit
- ├── columns: r:6
+ ├── columns: r:7
  ├── project
- │    ├── columns: r:6
+ │    ├── columns: r:7
  │    ├── limit hint: 1.00
  │    ├── scan xyz
- │    │    ├── columns: x:1!null y:2 z:3
+ │    │    ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    │    └── limit hint: 1.00
  │    └── projections
- │         └── gt [as=r:6]
+ │         └── gt [as=r:7]
  │              ├── x:1
  │              └── subquery
  │                   └── max1-row
- │                        ├── columns: avg:5
+ │                        ├── columns: avg:6
  │                        └── scalar-group-by
- │                             ├── columns: avg:5
+ │                             ├── columns: avg:6
  │                             ├── project
- │                             │    ├── columns: column4:4!null
+ │                             │    ├── columns: column5:5!null
  │                             │    ├── values
  │                             │    │    └── ()
  │                             │    └── projections
- │                             │         └── 0 [as=column4:4]
+ │                             │         └── 0 [as=column5:5]
  │                             └── aggregations
- │                                  └── avg [as=avg:5]
- │                                       └── column4:4
+ │                                  └── avg [as=avg:6]
+ │                                       └── column5:5
  └── 1
 
 build
 SELECT x > (SELECT avg(y) FROM xyz) AS r FROM xyz LIMIT 1
 ----
 limit
- ├── columns: r:8
+ ├── columns: r:10
  ├── project
- │    ├── columns: r:8
+ │    ├── columns: r:10
  │    ├── limit hint: 1.00
  │    ├── scan xyz
- │    │    ├── columns: x:1!null y:2 z:3
+ │    │    ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    │    └── limit hint: 1.00
  │    └── projections
- │         └── gt [as=r:8]
+ │         └── gt [as=r:10]
  │              ├── x:1
  │              └── subquery
  │                   └── max1-row
- │                        ├── columns: avg:7
+ │                        ├── columns: avg:9
  │                        └── scalar-group-by
- │                             ├── columns: avg:7
+ │                             ├── columns: avg:9
  │                             ├── project
- │                             │    ├── columns: y:5
+ │                             │    ├── columns: y:6
  │                             │    └── scan xyz
- │                             │         └── columns: x:4!null y:5 z:6
+ │                             │         └── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
  │                             └── aggregations
- │                                  └── avg [as=avg:7]
- │                                       └── y:5
+ │                                  └── avg [as=avg:9]
+ │                                       └── y:6
  └── 1
 
 exec-ddl
@@ -1675,15 +1681,15 @@ build
 SELECT bool_and(b), bool_or(b) FROM bools
 ----
 scalar-group-by
- ├── columns: bool_and:3 bool_or:4
+ ├── columns: bool_and:4 bool_or:5
  ├── project
  │    ├── columns: b:1
  │    └── scan bools
- │         └── columns: b:1 rowid:2!null
+ │         └── columns: b:1 rowid:2!null crdb_internal_mvcc_timestamp:3
  └── aggregations
-      ├── bool-and [as=bool_and:3]
+      ├── bool-and [as=bool_and:4]
       │    └── b:1
-      └── bool-or [as=bool_or:4]
+      └── bool-or [as=bool_or:5]
            └── b:1
 
 
@@ -1692,14 +1698,16 @@ build
 SELECT 1 r FROM kv GROUP BY kv.*;
 ----
 project
- ├── columns: r:5!null
+ ├── columns: r:6!null
  ├── group-by
  │    ├── columns: k:1!null v:2 w:3 s:4
  │    ├── grouping columns: k:1!null v:2 w:3 s:4
- │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │    └── project
+ │         ├── columns: k:1!null v:2 w:3 s:4
+ │         └── scan kv
+ │              └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── 1 [as=r:5]
+      └── 1 [as=r:6]
 
 exec-ddl
 CREATE TABLE xor_bytes (a bytes, b int, c int)
@@ -1709,43 +1717,43 @@ build
 SELECT to_hex(xor_agg(a)), xor_agg(c) FROM xor_bytes
 ----
 project
- ├── columns: to_hex:7 xor_agg:6
+ ├── columns: to_hex:8 xor_agg:7
  ├── scalar-group-by
- │    ├── columns: xor_agg:5 xor_agg:6
+ │    ├── columns: xor_agg:6 xor_agg:7
  │    ├── project
  │    │    ├── columns: a:1 c:3
  │    │    └── scan xor_bytes
- │    │         └── columns: a:1 b:2 c:3 rowid:4!null
+ │    │         └── columns: a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         ├── xor-agg [as=xor_agg:5]
+ │         ├── xor-agg [as=xor_agg:6]
  │         │    └── a:1
- │         └── xor-agg [as=xor_agg:6]
+ │         └── xor-agg [as=xor_agg:7]
  │              └── c:3
  └── projections
-      └── to_hex(xor_agg:5) [as=to_hex:7]
+      └── to_hex(xor_agg:6) [as=to_hex:8]
 
 build
 SELECT to_hex(xor_agg(a)), b, xor_agg(c) FROM xor_bytes GROUP BY b ORDER BY b
 ----
 sort
- ├── columns: to_hex:7 b:2 xor_agg:6
+ ├── columns: to_hex:8 b:2 xor_agg:7
  ├── ordering: +2
  └── project
-      ├── columns: to_hex:7 b:2 xor_agg:6
+      ├── columns: to_hex:8 b:2 xor_agg:7
       ├── group-by
-      │    ├── columns: b:2 xor_agg:5 xor_agg:6
+      │    ├── columns: b:2 xor_agg:6 xor_agg:7
       │    ├── grouping columns: b:2
       │    ├── project
       │    │    ├── columns: a:1 b:2 c:3
       │    │    └── scan xor_bytes
-      │    │         └── columns: a:1 b:2 c:3 rowid:4!null
+      │    │         └── columns: a:1 b:2 c:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    └── aggregations
-      │         ├── xor-agg [as=xor_agg:5]
+      │         ├── xor-agg [as=xor_agg:6]
       │         │    └── a:1
-      │         └── xor-agg [as=xor_agg:6]
+      │         └── xor-agg [as=xor_agg:7]
       │              └── c:3
       └── projections
-           └── to_hex(xor_agg:5) [as=to_hex:7]
+           └── to_hex(xor_agg:6) [as=to_hex:8]
 
 # At execution time, this query will cause the error:
 # "arguments to xor must all be the same length"
@@ -1783,48 +1791,48 @@ build
 SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 scalar-group-by
- ├── columns: concat_agg:5
+ ├── columns: concat_agg:6
  ├── internal-ordering: +1
  ├── project
  │    ├── columns: k:1!null s:4
  │    ├── ordering: +1
  │    └── scan kv
- │         ├── columns: k:1!null v:2 w:3 s:4
+ │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── ordering: +1
  └── aggregations
-      └── concat-agg [as=concat_agg:5]
+      └── concat-agg [as=concat_agg:6]
            └── s:4
 
 build
 SELECT json_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 scalar-group-by
- ├── columns: json_agg:5
+ ├── columns: json_agg:6
  ├── internal-ordering: +1
  ├── project
  │    ├── columns: k:1!null s:4
  │    ├── ordering: +1
  │    └── scan kv
- │         ├── columns: k:1!null v:2 w:3 s:4
+ │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── ordering: +1
  └── aggregations
-      └── json-agg [as=json_agg:5]
+      └── json-agg [as=json_agg:6]
            └── s:4
 
 build
 SELECT jsonb_agg(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 scalar-group-by
- ├── columns: jsonb_agg:5
+ ├── columns: jsonb_agg:6
  ├── internal-ordering: +1
  ├── project
  │    ├── columns: k:1!null s:4
  │    ├── ordering: +1
  │    └── scan kv
- │         ├── columns: k:1!null v:2 w:3 s:4
+ │         ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── ordering: +1
  └── aggregations
-      └── jsonb-agg [as=jsonb_agg:5]
+      └── jsonb-agg [as=jsonb_agg:6]
            └── s:4
 
 exec-ddl
@@ -1845,74 +1853,43 @@ build
 SELECT (b, a) AS r FROM ab GROUP BY (b, a)
 ----
 project
- ├── columns: r:3
+ ├── columns: r:4
  ├── group-by
  │    ├── columns: a:1!null b:2
  │    ├── grouping columns: a:1!null b:2
- │    └── scan ab
- │         └── columns: a:1!null b:2
+ │    └── project
+ │         ├── columns: a:1!null b:2
+ │         └── scan ab
+ │              └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
  └── projections
-      └── (b:2, a:1) [as=r:3]
+      └── (b:2, a:1) [as=r:4]
 
 build
 SELECT min(y), (b, a) AS r
  FROM ab, xy GROUP BY (x, (a, b))
 ----
 project
- ├── columns: min:6 r:7
+ ├── columns: min:8 r:9
  ├── group-by
- │    ├── columns: a:1!null b:2 x:3 min:6
- │    ├── grouping columns: a:1!null b:2 x:3
+ │    ├── columns: a:1!null b:2 x:4 min:8
+ │    ├── grouping columns: a:1!null b:2 x:4
  │    ├── project
- │    │    ├── columns: a:1!null b:2 x:3 y:4
+ │    │    ├── columns: a:1!null b:2 x:4 y:5
  │    │    └── inner-join (cross)
- │    │         ├── columns: a:1!null b:2 x:3 y:4 rowid:5!null
+ │    │         ├── columns: a:1!null b:2 ab.crdb_internal_mvcc_timestamp:3 x:4 y:5 rowid:6!null xy.crdb_internal_mvcc_timestamp:7
  │    │         ├── scan ab
- │    │         │    └── columns: a:1!null b:2
+ │    │         │    └── columns: a:1!null b:2 ab.crdb_internal_mvcc_timestamp:3
  │    │         ├── scan xy
- │    │         │    └── columns: x:3 y:4 rowid:5!null
+ │    │         │    └── columns: x:4 y:5 rowid:6!null xy.crdb_internal_mvcc_timestamp:7
  │    │         └── filters (true)
  │    └── aggregations
- │         └── min [as=min:6]
- │              └── y:4
+ │         └── min [as=min:8]
+ │              └── y:5
  └── projections
-      └── (b:2, a:1) [as=r:7]
+      └── (b:2, a:1) [as=r:9]
 
 build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
-----
-sort
- ├── columns: v:2 count:5!null
- ├── ordering: +5
- └── group-by
-      ├── columns: v:2 count:5!null
-      ├── grouping columns: v:2
-      ├── project
-      │    ├── columns: k:1!null v:2
-      │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
-      └── aggregations
-           └── count [as=count:5]
-                └── k:1
-
-build
-SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
-----
-sort
- ├── columns: v:2 count:5!null
- ├── ordering: +5
- └── group-by
-      ├── columns: v:2 count_rows:5!null
-      ├── grouping columns: v:2
-      ├── project
-      │    ├── columns: v:2
-      │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
-      └── aggregations
-           └── count-rows [as=count_rows:5]
-
-build
-SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ----
 sort
  ├── columns: v:2 count:6!null
@@ -1921,100 +1898,133 @@ sort
       ├── columns: v:2 count:6!null
       ├── grouping columns: v:2
       ├── project
-      │    ├── columns: column5:5!null v:2
-      │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 s:4
-      │    └── projections
-      │         └── 1 [as=column5:5]
+      │    ├── columns: k:1!null v:2
+      │    └── scan kv
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
            └── count [as=count:6]
-                └── column5:5
+                └── k:1
+
+build
+SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
+----
+sort
+ ├── columns: v:2 count:6!null
+ ├── ordering: +6
+ └── group-by
+      ├── columns: v:2 count_rows:6!null
+      ├── grouping columns: v:2
+      ├── project
+      │    ├── columns: v:2
+      │    └── scan kv
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+      └── aggregations
+           └── count-rows [as=count_rows:6]
+
+build
+SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
+----
+sort
+ ├── columns: v:2 count:7!null
+ ├── ordering: +7
+ └── group-by
+      ├── columns: v:2 count:7!null
+      ├── grouping columns: v:2
+      ├── project
+      │    ├── columns: column6:6!null v:2
+      │    ├── scan kv
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
+      │    └── projections
+      │         └── 1 [as=column6:6]
+      └── aggregations
+           └── count [as=count:7]
+                └── column6:6
 
 build
 SELECT (k+v)/(v+w) AS r FROM kv GROUP BY k+v, v+w;
 ----
 project
- ├── columns: r:7
+ ├── columns: r:8
  ├── group-by
- │    ├── columns: column5:5 column6:6
- │    ├── grouping columns: column5:5 column6:6
+ │    ├── columns: column6:6 column7:7
+ │    ├── grouping columns: column6:6 column7:7
  │    └── project
- │         ├── columns: column5:5 column6:6
+ │         ├── columns: column6:6 column7:7
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── projections
- │              ├── k:1 + v:2 [as=column5:5]
- │              └── v:2 + w:3 [as=column6:6]
+ │              ├── k:1 + v:2 [as=column6:6]
+ │              └── v:2 + w:3 [as=column7:7]
  └── projections
-      └── column5:5 / column6:6 [as=r:7]
+      └── column6:6 / column7:7 [as=r:8]
 
 # Check that everything still works with differently qualified names
 build fully-qualify-names
 SELECT sum(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
 ----
 project
- ├── columns: sum:5 v:2
+ ├── columns: sum:6 v:2
  └── group-by
-      ├── columns: t.public.kv.v:2 sum:5 column6:6
-      ├── grouping columns: t.public.kv.v:2 column6:6
+      ├── columns: t.public.kv.v:2 sum:6 column7:7
+      ├── grouping columns: t.public.kv.v:2 column7:7
       ├── project
-      │    ├── columns: column6:6 t.public.kv.v:2 t.public.kv.w:3
+      │    ├── columns: column7:7 t.public.kv.v:2 t.public.kv.w:3
       │    ├── scan t.public.kv
-      │    │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4
+      │    │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4 t.public.kv.crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         └── t.public.kv.k:1 * t.public.kv.w:3 [as=column6:6]
+      │         └── t.public.kv.k:1 * t.public.kv.w:3 [as=column7:7]
       └── aggregations
-           └── sum [as=sum:5]
+           └── sum [as=sum:6]
                 └── t.public.kv.w:3
 
 build fully-qualify-names
 SELECT sum(t.kv.w), lower(s), t.kv.v + k * t.kv.w AS r, t.kv.v FROM t.kv GROUP BY v, lower(kv.s), kv.k * w
 ----
 project
- ├── columns: sum:5 lower:6 r:8 v:2
+ ├── columns: sum:6 lower:7 r:9 v:2
  ├── group-by
- │    ├── columns: t.public.kv.v:2 sum:5 column6:6 column7:7
- │    ├── grouping columns: t.public.kv.v:2 column6:6 column7:7
+ │    ├── columns: t.public.kv.v:2 sum:6 column7:7 column8:8
+ │    ├── grouping columns: t.public.kv.v:2 column7:7 column8:8
  │    ├── project
- │    │    ├── columns: column6:6 column7:7 t.public.kv.v:2 t.public.kv.w:3
+ │    │    ├── columns: column7:7 column8:8 t.public.kv.v:2 t.public.kv.w:3
  │    │    ├── scan t.public.kv
- │    │    │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4
+ │    │    │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.w:3 t.public.kv.s:4 t.public.kv.crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         ├── lower(t.public.kv.s:4) [as=column6:6]
- │    │         └── t.public.kv.k:1 * t.public.kv.w:3 [as=column7:7]
+ │    │         ├── lower(t.public.kv.s:4) [as=column7:7]
+ │    │         └── t.public.kv.k:1 * t.public.kv.w:3 [as=column8:8]
  │    └── aggregations
- │         └── sum [as=sum:5]
+ │         └── sum [as=sum:6]
  │              └── t.public.kv.w:3
  └── projections
-      └── t.public.kv.v:2 + column7:7 [as=r:8]
+      └── t.public.kv.v:2 + column8:8 [as=r:9]
 
 # Check all the different types of scalar expressions as group by columns
 build
 SELECT b1.b AND abc.c AND b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
 ----
 project
- ├── columns: r:10
+ ├── columns: r:13
  ├── group-by
- │    ├── columns: b2.b:3 column9:9
- │    ├── grouping columns: b2.b:3 column9:9
+ │    ├── columns: b2.b:4 column12:12
+ │    ├── grouping columns: b2.b:4 column12:12
  │    └── project
- │         ├── columns: column9:9 b2.b:3
+ │         ├── columns: column12:12 b2.b:4
  │         ├── inner-join (cross)
- │         │    ├── columns: b1.b:1 b1.rowid:2!null b2.b:3 b2.rowid:4!null a:5!null abc.b:6 c:7 d:8
+ │         │    ├── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3 b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
  │         │    ├── scan b1
- │         │    │    └── columns: b1.b:1 b1.rowid:2!null
+ │         │    │    └── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3
  │         │    ├── inner-join (cross)
- │         │    │    ├── columns: b2.b:3 b2.rowid:4!null a:5!null abc.b:6 c:7 d:8
+ │         │    │    ├── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
  │         │    │    ├── scan b2
- │         │    │    │    └── columns: b2.b:3 b2.rowid:4!null
+ │         │    │    │    └── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6
  │         │    │    ├── scan abc
- │         │    │    │    └── columns: a:5!null abc.b:6 c:7 d:8
+ │         │    │    │    └── columns: a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── projections
- │              └── b1.b:1 AND c:7 [as=column9:9]
+ │              └── b1.b:1 AND c:9 [as=column12:12]
  └── projections
-      └── column9:9 AND b2.b:3 [as=r:10]
+      └── column12:12 AND b2.b:4 [as=r:13]
 
 build
 SELECT b1.b AND abc.c AND abc.c FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
@@ -2025,28 +2035,28 @@ build
 SELECT b1.b OR abc.c OR b2.b AS r FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
 ----
 project
- ├── columns: r:10
+ ├── columns: r:13
  ├── group-by
- │    ├── columns: b2.b:3 column9:9
- │    ├── grouping columns: b2.b:3 column9:9
+ │    ├── columns: b2.b:4 column12:12
+ │    ├── grouping columns: b2.b:4 column12:12
  │    └── project
- │         ├── columns: column9:9 b2.b:3
+ │         ├── columns: column12:12 b2.b:4
  │         ├── inner-join (cross)
- │         │    ├── columns: b1.b:1 b1.rowid:2!null b2.b:3 b2.rowid:4!null a:5!null abc.b:6 c:7 d:8
+ │         │    ├── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3 b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
  │         │    ├── scan b1
- │         │    │    └── columns: b1.b:1 b1.rowid:2!null
+ │         │    │    └── columns: b1.b:1 b1.rowid:2!null b1.crdb_internal_mvcc_timestamp:3
  │         │    ├── inner-join (cross)
- │         │    │    ├── columns: b2.b:3 b2.rowid:4!null a:5!null abc.b:6 c:7 d:8
+ │         │    │    ├── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6 a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
  │         │    │    ├── scan b2
- │         │    │    │    └── columns: b2.b:3 b2.rowid:4!null
+ │         │    │    │    └── columns: b2.b:4 b2.rowid:5!null b2.crdb_internal_mvcc_timestamp:6
  │         │    │    ├── scan abc
- │         │    │    │    └── columns: a:5!null abc.b:6 c:7 d:8
+ │         │    │    │    └── columns: a:7!null abc.b:8 c:9 d:10 abc.crdb_internal_mvcc_timestamp:11
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── projections
- │              └── b1.b:1 OR c:7 [as=column9:9]
+ │              └── b1.b:1 OR c:9 [as=column12:12]
  └── projections
-      └── column9:9 OR b2.b:3 [as=r:10]
+      └── column12:12 OR b2.b:4 [as=r:13]
 
 build
 SELECT b1.b OR abc.c OR abc.c FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
@@ -2057,40 +2067,40 @@ build
 SELECT k % w % v AS r FROM kv GROUP BY k % w, v
 ----
 project
- ├── columns: r:6
+ ├── columns: r:7
  ├── group-by
- │    ├── columns: v:2 column5:5
- │    ├── grouping columns: v:2 column5:5
+ │    ├── columns: v:2 column6:6
+ │    ├── grouping columns: v:2 column6:6
  │    └── project
- │         ├── columns: column5:5 v:2
+ │         ├── columns: column6:6 v:2
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── projections
- │              └── k:1 % w:3 [as=column5:5]
+ │              └── k:1 % w:3 [as=column6:6]
  └── projections
-      └── column5:5 % v:2 [as=r:6]
+      └── column6:6 % v:2 [as=r:7]
 
 build
 SELECT concat(concat(s, a), a) FROM kv, abc GROUP BY concat(s, a), a
 ----
 project
- ├── columns: concat:10
+ ├── columns: concat:12
  ├── group-by
- │    ├── columns: a:5!null column9:9
- │    ├── grouping columns: a:5!null column9:9
+ │    ├── columns: a:6!null column11:11
+ │    ├── grouping columns: a:6!null column11:11
  │    └── project
- │         ├── columns: column9:9 a:5!null
+ │         ├── columns: column11:11 a:6!null
  │         ├── inner-join (cross)
- │         │    ├── columns: k:1!null v:2 w:3 s:4 a:5!null b:6 c:7 d:8
+ │         │    ├── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5 a:6!null b:7 c:8 d:9 abc.crdb_internal_mvcc_timestamp:10
  │         │    ├── scan kv
- │         │    │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    │    └── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5
  │         │    ├── scan abc
- │         │    │    └── columns: a:5!null b:6 c:7 d:8
+ │         │    │    └── columns: a:6!null b:7 c:8 d:9 abc.crdb_internal_mvcc_timestamp:10
  │         │    └── filters (true)
  │         └── projections
- │              └── concat(s:4, a:5) [as=column9:9]
+ │              └── concat(s:4, a:6) [as=column11:11]
  └── projections
-      └── concat(column9:9, a:5) [as=concat:10]
+      └── concat(column11:11, a:6) [as=concat:12]
 
 build
 SELECT concat(concat(s, a), s) FROM kv, abc GROUP BY concat(s, a), a
@@ -2101,18 +2111,18 @@ build
 SELECT k < w AND v != 5 AS r FROM kv GROUP BY k < w, v
 ----
 project
- ├── columns: r:6
+ ├── columns: r:7
  ├── group-by
- │    ├── columns: v:2 column5:5
- │    ├── grouping columns: v:2 column5:5
+ │    ├── columns: v:2 column6:6
+ │    ├── grouping columns: v:2 column6:6
  │    └── project
- │         ├── columns: column5:5 v:2
+ │         ├── columns: column6:6 v:2
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── projections
- │              └── k:1 < w:3 [as=column5:5]
+ │              └── k:1 < w:3 [as=column6:6]
  └── projections
-      └── column5:5 AND (v:2 != 5) [as=r:6]
+      └── column6:6 AND (v:2 != 5) [as=r:7]
 
 build
 SELECT k < w AND k < v FROM kv GROUP BY k < w, v
@@ -2127,23 +2137,23 @@ build
 SELECT a.bar @> b.baz AND b.baz @> b.baz AS r FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
 ----
 project
- ├── columns: r:8
+ ├── columns: r:10
  ├── group-by
- │    ├── columns: b.baz:5 column7:7
- │    ├── grouping columns: b.baz:5 column7:7
+ │    ├── columns: b.baz:6 column9:9
+ │    ├── grouping columns: b.baz:6 column9:9
  │    └── project
- │         ├── columns: column7:7 b.baz:5
+ │         ├── columns: column9:9 b.baz:6
  │         ├── inner-join (cross)
- │         │    ├── columns: a.bar:1 a.baz:2 a.rowid:3!null b.bar:4 b.baz:5 b.rowid:6!null
+ │         │    ├── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    ├── scan a
- │         │    │    └── columns: a.bar:1 a.baz:2 a.rowid:3!null
+ │         │    │    └── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
  │         │    ├── scan b
- │         │    │    └── columns: b.bar:4 b.baz:5 b.rowid:6!null
+ │         │    │    └── columns: b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    └── filters (true)
  │         └── projections
- │              └── a.bar:1 @> b.baz:5 [as=column7:7]
+ │              └── a.bar:1 @> b.baz:6 [as=column9:9]
  └── projections
-      └── column7:7 AND (b.baz:5 @> b.baz:5) [as=r:8]
+      └── column9:9 AND (b.baz:6 @> b.baz:6) [as=r:10]
 
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
@@ -2154,23 +2164,23 @@ build
 SELECT b.baz <@ a.bar AND b.baz <@ b.baz AS r FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
 ----
 project
- ├── columns: r:8
+ ├── columns: r:10
  ├── group-by
- │    ├── columns: b.baz:5 column7:7
- │    ├── grouping columns: b.baz:5 column7:7
+ │    ├── columns: b.baz:6 column9:9
+ │    ├── grouping columns: b.baz:6 column9:9
  │    └── project
- │         ├── columns: column7:7 b.baz:5
+ │         ├── columns: column9:9 b.baz:6
  │         ├── inner-join (cross)
- │         │    ├── columns: a.bar:1 a.baz:2 a.rowid:3!null b.bar:4 b.baz:5 b.rowid:6!null
+ │         │    ├── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4 b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    ├── scan a
- │         │    │    └── columns: a.bar:1 a.baz:2 a.rowid:3!null
+ │         │    │    └── columns: a.bar:1 a.baz:2 a.rowid:3!null a.crdb_internal_mvcc_timestamp:4
  │         │    ├── scan b
- │         │    │    └── columns: b.bar:4 b.baz:5 b.rowid:6!null
+ │         │    │    └── columns: b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    └── filters (true)
  │         └── projections
- │              └── a.bar:1 @> b.baz:5 [as=column7:7]
+ │              └── a.bar:1 @> b.baz:6 [as=column9:9]
  └── projections
-      └── column7:7 AND (b.baz:5 @> b.baz:5) [as=r:8]
+      └── column9:9 AND (b.baz:6 @> b.baz:6) [as=r:10]
 
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)
@@ -2181,24 +2191,24 @@ SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) AS r FROM times a, 
   GROUP BY date_trunc('second', a.t), date_trunc('minute', b.t)
 ----
 project
- ├── columns: r:5
+ ├── columns: r:7
  ├── group-by
- │    ├── columns: column3:3 column4:4
- │    ├── grouping columns: column3:3 column4:4
+ │    ├── columns: column5:5 column6:6
+ │    ├── grouping columns: column5:5 column6:6
  │    └── project
- │         ├── columns: column3:3 column4:4
+ │         ├── columns: column5:5 column6:6
  │         ├── inner-join (cross)
- │         │    ├── columns: a.t:1!null b.t:2!null
+ │         │    ├── columns: a.t:1!null a.crdb_internal_mvcc_timestamp:2 b.t:3!null b.crdb_internal_mvcc_timestamp:4
  │         │    ├── scan a
- │         │    │    └── columns: a.t:1!null
+ │         │    │    └── columns: a.t:1!null a.crdb_internal_mvcc_timestamp:2
  │         │    ├── scan b
- │         │    │    └── columns: b.t:2!null
+ │         │    │    └── columns: b.t:3!null b.crdb_internal_mvcc_timestamp:4
  │         │    └── filters (true)
  │         └── projections
- │              ├── date_trunc('second', a.t:1) [as=column3:3]
- │              └── date_trunc('minute', b.t:2) [as=column4:4]
+ │              ├── date_trunc('second', a.t:1) [as=column5:5]
+ │              └── date_trunc('minute', b.t:3) [as=column6:6]
  └── projections
-      └── column3:3 - column4:4 [as=r:5]
+      └── column5:5 - column6:6 [as=r:7]
 
 build
 SELECT date_trunc('second', a.t) - date_trunc('second', b.t) FROM times a, times b
@@ -2210,14 +2220,14 @@ build
 SELECT NOT b AS r FROM bools GROUP BY NOT b
 ----
 group-by
- ├── columns: r:3
- ├── grouping columns: column3:3
+ ├── columns: r:4
+ ├── grouping columns: column4:4
  └── project
-      ├── columns: column3:3
+      ├── columns: column4:4
       ├── scan bools
-      │    └── columns: b:1 rowid:2!null
+      │    └── columns: b:1 rowid:2!null crdb_internal_mvcc_timestamp:3
       └── projections
-           └── NOT b:1 [as=column3:3]
+           └── NOT b:1 [as=column4:4]
 
 build
 SELECT b FROM bools GROUP BY NOT b
@@ -2228,153 +2238,153 @@ build
 SELECT NOT b AS r FROM bools GROUP BY b
 ----
 project
- ├── columns: r:3
+ ├── columns: r:4
  ├── group-by
  │    ├── columns: b:1
  │    ├── grouping columns: b:1
  │    └── project
  │         ├── columns: b:1
  │         └── scan bools
- │              └── columns: b:1 rowid:2!null
+ │              └── columns: b:1 rowid:2!null crdb_internal_mvcc_timestamp:3
  └── projections
-      └── NOT b:1 [as=r:3]
+      └── NOT b:1 [as=r:4]
 
 build
 SELECT +k * (-w) AS r FROM kv GROUP BY +k, -w
 ----
 project
- ├── columns: r:6
+ ├── columns: r:7
  ├── group-by
- │    ├── columns: k:1!null column5:5
- │    ├── grouping columns: k:1!null column5:5
+ │    ├── columns: k:1!null column6:6
+ │    ├── grouping columns: k:1!null column6:6
  │    └── project
- │         ├── columns: column5:5 k:1!null
+ │         ├── columns: column6:6 k:1!null
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── projections
- │              └── -w:3 [as=column5:5]
+ │              └── -w:3 [as=column6:6]
  └── projections
-      └── k:1 * column5:5 [as=r:6]
+      └── k:1 * column6:6 [as=r:7]
 
 build
 SELECT k * (-w) FROM kv GROUP BY +k, -w
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":7
  ├── group-by
- │    ├── columns: k:1!null column5:5
- │    ├── grouping columns: k:1!null column5:5
+ │    ├── columns: k:1!null column6:6
+ │    ├── grouping columns: k:1!null column6:6
  │    └── project
- │         ├── columns: column5:5 k:1!null
+ │         ├── columns: column6:6 k:1!null
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │         └── projections
- │              └── -w:3 [as=column5:5]
+ │              └── -w:3 [as=column6:6]
  └── projections
-      └── k:1 * column5:5 [as="?column?":6]
+      └── k:1 * column6:6 [as="?column?":7]
 
 build
 SELECT +k * (-w) AS r FROM kv GROUP BY k, w
 ----
 project
- ├── columns: r:5
+ ├── columns: r:6
  ├── group-by
  │    ├── columns: k:1!null w:3
  │    ├── grouping columns: k:1!null w:3
  │    └── project
  │         ├── columns: k:1!null w:3
  │         └── scan kv
- │              └── columns: k:1!null v:2 w:3 s:4
+ │              └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── k:1 * (-w:3) [as=r:5]
+      └── k:1 * (-w:3) [as=r:6]
 
 build
 SELECT 1 + min(v*2) AS r FROM kv GROUP BY k+3
 ----
 project
- ├── columns: r:8
+ ├── columns: r:9
  ├── group-by
- │    ├── columns: min:6 column7:7!null
- │    ├── grouping columns: column7:7!null
+ │    ├── columns: min:7 column8:8!null
+ │    ├── grouping columns: column8:8!null
  │    ├── project
- │    │    ├── columns: column5:5 column7:7!null
+ │    │    ├── columns: column6:6 column8:8!null
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         ├── v:2 * 2 [as=column5:5]
- │    │         └── k:1 + 3 [as=column7:7]
+ │    │         ├── v:2 * 2 [as=column6:6]
+ │    │         └── k:1 + 3 [as=column8:8]
  │    └── aggregations
- │         └── min [as=min:6]
- │              └── column5:5
+ │         └── min [as=min:7]
+ │              └── column6:6
  └── projections
-      └── 1 + min:6 [as=r:8]
+      └── 1 + min:7 [as=r:9]
 
 build
 SELECT count(*) FROM kv GROUP BY k, k
 ----
 project
- ├── columns: count:5!null
+ ├── columns: count:6!null
  └── group-by
-      ├── columns: k:1!null count_rows:5!null
+      ├── columns: k:1!null count_rows:6!null
       ├── grouping columns: k:1!null
       ├── project
       │    ├── columns: k:1!null
       │    └── scan kv
-      │         └── columns: k:1!null v:2 w:3 s:4
+      │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       └── aggregations
-           └── count-rows [as=count_rows:5]
+           └── count-rows [as=count_rows:6]
 
 build
 SELECT count(upper(s)) FROM kv GROUP BY upper(s)
 ----
 project
- ├── columns: count:6!null
+ ├── columns: count:7!null
  └── group-by
-      ├── columns: column5:5 count:6!null
-      ├── grouping columns: column5:5
+      ├── columns: column6:6 count:7!null
+      ├── grouping columns: column6:6
       ├── project
-      │    ├── columns: column5:5
+      │    ├── columns: column6:6
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 s:4
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         └── upper(s:4) [as=column5:5]
+      │         └── upper(s:4) [as=column6:6]
       └── aggregations
-           └── count [as=count:6]
-                └── column5:5
+           └── count [as=count:7]
+                └── column6:6
 
 build
 SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 project
- ├── columns: sum:9!null
+ ├── columns: sum:11!null
  └── group-by
-      ├── columns: k:1!null v:2 w:3 s:4 sum:9!null
+      ├── columns: k:1!null v:2 w:3 s:4 sum:11!null
       ├── grouping columns: k:1!null v:2 w:3 s:4
       ├── project
-      │    ├── columns: k:1!null v:2 w:3 s:4 d:8!null
+      │    ├── columns: k:1!null v:2 w:3 s:4 d:9!null
       │    └── inner-join (cross)
-      │         ├── columns: k:1!null v:2 w:3 s:4 a:5!null b:6 c:7 d:8!null
+      │         ├── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5 a:6!null b:7 c:8 d:9!null abc.crdb_internal_mvcc_timestamp:10
       │         ├── scan kv
-      │         │    └── columns: k:1!null v:2 w:3 s:4
+      │         │    └── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5
       │         ├── scan abc
-      │         │    └── columns: a:5!null b:6 c:7 d:8
+      │         │    └── columns: a:6!null b:7 c:8 d:9 abc.crdb_internal_mvcc_timestamp:10
       │         └── filters
-      │              └── k:1 >= d:8
+      │              └── k:1 >= d:9
       └── aggregations
-           └── sum [as=sum:9]
-                └── d:8
+           └── sum [as=sum:11]
+                └── d:9
 
 build
 SELECT sum(DISTINCT abc.d) FROM abc
 ----
 scalar-group-by
- ├── columns: sum:5
+ ├── columns: sum:6
  ├── project
  │    ├── columns: d:4
  │    └── scan abc
- │         └── columns: a:1!null b:2 c:3 d:4
+ │         └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── agg-distinct [as=sum:5]
+      └── agg-distinct [as=sum:6]
            └── sum
                 └── d:4
 
@@ -2384,18 +2394,18 @@ build
 SELECT sum(abc.d) FILTER (WHERE abc.d > 0) FROM abc
 ----
 scalar-group-by
- ├── columns: sum:6
+ ├── columns: sum:7
  ├── project
- │    ├── columns: column5:5 d:4
+ │    ├── columns: column6:6 d:4
  │    ├── scan abc
- │    │    └── columns: a:1!null b:2 c:3 d:4
+ │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── d:4 > 0 [as=column5:5]
+ │         └── d:4 > 0 [as=column6:6]
  └── aggregations
-      └── agg-filter [as=sum:6]
+      └── agg-filter [as=sum:7]
            ├── sum
            │    └── d:4
-           └── column5:5
+           └── column6:6
 
 # Ensure aggregates with FILTER coexist properly with non-FILTER aggregates.
 build
@@ -2406,26 +2416,26 @@ SELECT
 FROM xyz
 ----
 scalar-group-by
- ├── columns: sum:5 avg:6 avg:7
+ ├── columns: sum:6 avg:7 avg:8
  ├── project
- │    ├── columns: column4:4 x:1!null z:3
+ │    ├── columns: column5:5 x:1!null z:3
  │    ├── scan xyz
- │    │    └── columns: x:1!null y:2 z:3
+ │    │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    └── projections
- │         └── y:2 > 0 [as=column4:4]
+ │         └── y:2 > 0 [as=column5:5]
  └── aggregations
-      ├── agg-filter [as=sum:5]
+      ├── agg-filter [as=sum:6]
       │    ├── sum
       │    │    └── x:1
-      │    └── column4:4
-      ├── agg-distinct [as=avg:6]
+      │    └── column5:5
+      ├── agg-distinct [as=avg:7]
       │    └── avg
       │         └── z:3
-      └── agg-filter [as=avg:7]
+      └── agg-filter [as=avg:8]
            ├── agg-distinct
            │    └── avg
            │         └── z:3
-           └── column4:4
+           └── column5:5
 
 # Ensure aggregates involving FILTER are deduplicated.
 build
@@ -2437,22 +2447,22 @@ SELECT
 FROM xyz
 ----
 scalar-group-by
- ├── columns: avg:4 avg:4 avg:6 avg:6
+ ├── columns: avg:5 avg:5 avg:7 avg:7
  ├── project
- │    ├── columns: column5:5 x:1!null
+ │    ├── columns: column6:6 x:1!null
  │    ├── scan xyz
- │    │    └── columns: x:1!null y:2 z:3
+ │    │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    └── projections
- │         └── y:2 > 0 [as=column5:5]
+ │         └── y:2 > 0 [as=column6:6]
  └── aggregations
-      ├── agg-distinct [as=avg:4]
+      ├── agg-distinct [as=avg:5]
       │    └── avg
       │         └── x:1
-      └── agg-filter [as=avg:6]
+      └── agg-filter [as=avg:7]
            ├── agg-distinct
            │    └── avg
            │         └── x:1
-           └── column5:5
+           └── column6:6
 
 build
 SELECT
@@ -2460,40 +2470,40 @@ SELECT
 FROM xyz
 ----
 scalar-group-by
- ├── columns: string_agg:7
+ ├── columns: string_agg:8
  ├── project
- │    ├── columns: column4:4!null column5:5!null column6:6
+ │    ├── columns: column5:5!null column6:6!null column7:7
  │    ├── scan xyz
- │    │    └── columns: x:1!null y:2 z:3
+ │    │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    └── projections
- │         ├── x:1::STRING [as=column4:4]
- │         ├── 'foo' [as=column5:5]
- │         └── y:2 > 0 [as=column6:6]
+ │         ├── x:1::STRING [as=column5:5]
+ │         ├── 'foo' [as=column6:6]
+ │         └── y:2 > 0 [as=column7:7]
  └── aggregations
-      └── agg-filter [as=string_agg:7]
+      └── agg-filter [as=string_agg:8]
            ├── string-agg
-           │    ├── column4:4
-           │    └── column5:5
-           └── column6:6
+           │    ├── column5:5
+           │    └── column6:6
+           └── column7:7
 
 build
 SELECT y, count(*) FILTER (WHERE x > 5) FROM xyz GROUP BY y
 ----
 group-by
- ├── columns: y:2 count:6!null
+ ├── columns: y:2 count:7!null
  ├── grouping columns: y:2
  ├── project
- │    ├── columns: column4:4!null column5:5!null y:2
+ │    ├── columns: column5:5!null column6:6!null y:2
  │    ├── scan xyz
- │    │    └── columns: x:1!null y:2 z:3
+ │    │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │    └── projections
- │         ├── true [as=column4:4]
- │         └── x:1 > 5 [as=column5:5]
+ │         ├── true [as=column5:5]
+ │         └── x:1 > 5 [as=column6:6]
  └── aggregations
-      └── agg-filter [as=count:6]
+      └── agg-filter [as=count:7]
            ├── count
-           │    └── column4:4
-           └── column5:5
+           │    └── column5:5
+           └── column6:6
 
 build
 SELECT y, count(*) FILTER (WHERE count(*) > 5) FROM xyz GROUP BY y
@@ -2506,98 +2516,98 @@ build
 SELECT max(k) AS mk FROM kv GROUP BY v ORDER BY mk
 ----
 sort
- ├── columns: mk:5!null
- ├── ordering: +5
+ ├── columns: mk:6!null
+ ├── ordering: +6
  └── project
-      ├── columns: max:5!null
+      ├── columns: max:6!null
       └── group-by
-           ├── columns: v:2 max:5!null
+           ├── columns: v:2 max:6!null
            ├── grouping columns: v:2
            ├── project
            │    ├── columns: k:1!null v:2
            │    └── scan kv
-           │         └── columns: k:1!null v:2 w:3 s:4
+           │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
            └── aggregations
-                └── max [as=max:5]
+                └── max [as=max:6]
                      └── k:1
 
 build
 SELECT max(k) AS mk FROM kv GROUP BY v ORDER BY max(k)
 ----
 sort
- ├── columns: mk:5!null
- ├── ordering: +5
+ ├── columns: mk:6!null
+ ├── ordering: +6
  └── project
-      ├── columns: max:5!null
+      ├── columns: max:6!null
       └── group-by
-           ├── columns: v:2 max:5!null
+           ├── columns: v:2 max:6!null
            ├── grouping columns: v:2
            ├── project
            │    ├── columns: k:1!null v:2
            │    └── scan kv
-           │         └── columns: k:1!null v:2 w:3 s:4
+           │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
            └── aggregations
-                └── max [as=max:5]
+                └── max [as=max:6]
                      └── k:1
 
 build
 SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v ORDER BY mk1
 ----
 sort
- ├── columns: mk1:5!null mk2:5!null
- ├── ordering: +5
+ ├── columns: mk1:6!null mk2:6!null
+ ├── ordering: +6
  └── project
-      ├── columns: max:5!null
+      ├── columns: max:6!null
       └── group-by
-           ├── columns: v:2 max:5!null
+           ├── columns: v:2 max:6!null
            ├── grouping columns: v:2
            ├── project
            │    ├── columns: k:1!null v:2
            │    └── scan kv
-           │         └── columns: k:1!null v:2 w:3 s:4
+           │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
            └── aggregations
-                └── max [as=max:5]
+                └── max [as=max:6]
                      └── k:1
 
 build
 SELECT max(k) AS mk1, max(k) AS mk2 FROM kv GROUP BY v ORDER BY mk2
 ----
 sort
- ├── columns: mk1:5!null mk2:5!null
- ├── ordering: +5
+ ├── columns: mk1:6!null mk2:6!null
+ ├── ordering: +6
  └── project
-      ├── columns: max:5!null
+      ├── columns: max:6!null
       └── group-by
-           ├── columns: v:2 max:5!null
+           ├── columns: v:2 max:6!null
            ├── grouping columns: v:2
            ├── project
            │    ├── columns: k:1!null v:2
            │    └── scan kv
-           │         └── columns: k:1!null v:2 w:3 s:4
+           │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
            └── aggregations
-                └── max [as=max:5]
+                └── max [as=max:6]
                      └── k:1
 
 build
 SELECT max(k) AS mk1, max(k)/5 AS mk2 FROM kv GROUP BY v ORDER BY mk2
 ----
 sort
- ├── columns: mk1:5!null mk2:6!null
- ├── ordering: +6
+ ├── columns: mk1:6!null mk2:7!null
+ ├── ordering: +7
  └── project
-      ├── columns: mk2:6!null max:5!null
+      ├── columns: mk2:7!null max:6!null
       ├── group-by
-      │    ├── columns: v:2 max:5!null
+      │    ├── columns: v:2 max:6!null
       │    ├── grouping columns: v:2
       │    ├── project
       │    │    ├── columns: k:1!null v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1!null v:2 w:3 s:4
+      │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── aggregations
-      │         └── max [as=max:5]
+      │         └── max [as=max:6]
       │              └── k:1
       └── projections
-           └── max:5 / 5 [as=mk2:6]
+           └── max:6 / 5 [as=mk2:7]
 
 # Grouping columns cannot be reused inside an aggregate input expression
 # because the aggregate input expressions and grouping expressions are
@@ -2606,43 +2616,43 @@ build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
 ----
 project
- ├── columns: r:6 s:9
+ ├── columns: r:7 s:10
  ├── group-by
- │    ├── columns: max:6 column7:7 column8:8
- │    ├── grouping columns: column7:7 column8:8
+ │    ├── columns: max:7 column8:8 column9:9
+ │    ├── grouping columns: column8:8 column9:9
  │    ├── project
- │    │    ├── columns: column5:5 column7:7 column8:8
+ │    │    ├── columns: column6:6 column8:8 column9:9
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 kv.s:4
+ │    │    │    └── columns: k:1!null v:2 w:3 kv.s:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         ├── (k:1 + v:2) / (k:1 - v:2) [as=column5:5]
- │    │         ├── k:1 + v:2 [as=column7:7]
- │    │         └── k:1 - v:2 [as=column8:8]
+ │    │         ├── (k:1 + v:2) / (k:1 - v:2) [as=column6:6]
+ │    │         ├── k:1 + v:2 [as=column8:8]
+ │    │         └── k:1 - v:2 [as=column9:9]
  │    └── aggregations
- │         └── max [as=max:6]
- │              └── column5:5
+ │         └── max [as=max:7]
+ │              └── column6:6
  └── projections
-      └── column7:7 * column8:8 [as=s:9]
+      └── column8:8 * column9:9 [as=s:10]
 
 build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, (k+v)/(k-v), (k+v)*(k-v)
 ----
 project
- ├── columns: r:6 s:8
+ ├── columns: r:7 s:9
  └── group-by
-      ├── columns: column5:5 max:6 column7:7 column8:8
-      ├── grouping columns: column5:5 column7:7 column8:8
+      ├── columns: column6:6 max:7 column8:8 column9:9
+      ├── grouping columns: column6:6 column8:8 column9:9
       ├── project
-      │    ├── columns: column5:5 column7:7 column8:8
+      │    ├── columns: column6:6 column8:8 column9:9
       │    ├── scan kv
-      │    │    └── columns: k:1!null v:2 w:3 s:4
+      │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         ├── (k:1 + v:2) / (k:1 - v:2) [as=column5:5]
-      │         ├── k:1 + v:2 [as=column7:7]
-      │         └── (k:1 + v:2) * (k:1 - v:2) [as=column8:8]
+      │         ├── (k:1 + v:2) / (k:1 - v:2) [as=column6:6]
+      │         ├── k:1 + v:2 [as=column8:8]
+      │         └── (k:1 + v:2) * (k:1 - v:2) [as=column9:9]
       └── aggregations
-           └── max [as=max:6]
-                └── column5:5
+           └── max [as=max:7]
+                └── column6:6
 
 # Tests for corr.
 
@@ -2650,13 +2660,13 @@ build
 SELECT corr(k, v) FROM kv
 ----
 scalar-group-by
- ├── columns: corr:5
+ ├── columns: corr:6
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── corr [as=corr:5]
+      └── corr [as=corr:6]
            ├── k:1
            └── v:2
 
@@ -2674,13 +2684,13 @@ build
 SELECT corr(DISTINCT k, v) FROM kv
 ----
 scalar-group-by
- ├── columns: corr:5
+ ├── columns: corr:6
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── agg-distinct [as=corr:5]
+      └── agg-distinct [as=corr:6]
            └── corr
                 ├── k:1
                 └── v:2
@@ -2689,18 +2699,18 @@ build
 SELECT max(s), corr(k, v), min(s) FROM kv
 ----
 scalar-group-by
- ├── columns: max:5 corr:6 min:7
+ ├── columns: max:6 corr:7 min:8
  ├── project
  │    ├── columns: k:1!null v:2 s:4
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      ├── max [as=max:5]
+      ├── max [as=max:6]
       │    └── s:4
-      ├── corr [as=corr:6]
+      ├── corr [as=corr:7]
       │    ├── k:1
       │    └── v:2
-      └── min [as=min:7]
+      └── min [as=min:8]
            └── s:4
 
 build
@@ -2721,17 +2731,17 @@ build
 SELECT string_agg(s, 'separator') FROM kv
 ----
 scalar-group-by
- ├── columns: string_agg:6
+ ├── columns: string_agg:7
  ├── project
- │    ├── columns: column5:5!null s:4
+ │    ├── columns: column6:6!null s:4
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── 'separator' [as=column5:5]
+ │         └── 'separator' [as=column6:6]
  └── aggregations
-      └── string-agg [as=string_agg:6]
+      └── string-agg [as=string_agg:7]
            ├── s:4
-           └── column5:5
+           └── column6:6
 
 build
 SELECT string_agg(s) FROM kv
@@ -2747,41 +2757,41 @@ build
 SELECT string_agg(DISTINCT s, 'separator') FROM kv
 ----
 scalar-group-by
- ├── columns: string_agg:6
+ ├── columns: string_agg:7
  ├── project
- │    ├── columns: column5:5!null s:4
+ │    ├── columns: column6:6!null s:4
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── 'separator' [as=column5:5]
+ │         └── 'separator' [as=column6:6]
  └── aggregations
-      └── agg-distinct [as=string_agg:6]
+      └── agg-distinct [as=string_agg:7]
            └── string-agg
                 ├── s:4
-                └── column5:5
+                └── column6:6
 
 build
 SELECT max(s), string_agg(s, 'sep1'), string_agg(s, 'sep2'), min(s) FROM kv
 ----
 scalar-group-by
- ├── columns: max:5 string_agg:7 string_agg:9 min:10
+ ├── columns: max:6 string_agg:8 string_agg:10 min:11
  ├── project
- │    ├── columns: column6:6!null column8:8!null s:4
+ │    ├── columns: column7:7!null column9:9!null s:4
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         ├── 'sep1' [as=column6:6]
- │         └── 'sep2' [as=column8:8]
+ │         ├── 'sep1' [as=column7:7]
+ │         └── 'sep2' [as=column9:9]
  └── aggregations
-      ├── max [as=max:5]
+      ├── max [as=max:6]
       │    └── s:4
-      ├── string-agg [as=string_agg:7]
+      ├── string-agg [as=string_agg:8]
       │    ├── s:4
-      │    └── column6:6
-      ├── string-agg [as=string_agg:9]
+      │    └── column7:7
+      ├── string-agg [as=string_agg:10]
       │    ├── s:4
-      │    └── column8:8
-      └── min [as=min:10]
+      │    └── column9:9
+      └── min [as=min:11]
            └── s:4
 
 # The separator must be constant, but it need not be a literal - any constant (as
@@ -2790,45 +2800,45 @@ build
 SELECT string_agg(s, 'abc' || 'xyz') FROM kv
 ----
 scalar-group-by
- ├── columns: string_agg:6
+ ├── columns: string_agg:7
  ├── project
- │    ├── columns: column5:5!null s:4
+ │    ├── columns: column6:6!null s:4
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── 'abc' || 'xyz' [as=column5:5]
+ │         └── 'abc' || 'xyz' [as=column6:6]
  └── aggregations
-      └── string-agg [as=string_agg:6]
+      └── string-agg [as=string_agg:7]
            ├── s:4
-           └── column5:5
+           └── column6:6
 
 build
 SELECT string_agg(s, NULL) FROM kv
 ----
 scalar-group-by
- ├── columns: string_agg:6
+ ├── columns: string_agg:7
  ├── project
- │    ├── columns: column5:5 s:4
+ │    ├── columns: column6:6 s:4
  │    ├── scan kv
- │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── projections
- │         └── NULL [as=column5:5]
+ │         └── NULL [as=column6:6]
  └── aggregations
-      └── string-agg [as=string_agg:6]
+      └── string-agg [as=string_agg:7]
            ├── s:4
-           └── column5:5
+           └── column6:6
 
 build
 SELECT string_agg(s, s) FROM kv
 ----
 scalar-group-by
- ├── columns: string_agg:5
+ ├── columns: string_agg:6
  ├── project
  │    ├── columns: s:4
  │    └── scan kv
- │         └── columns: k:1!null v:2 w:3 s:4
+ │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── string-agg [as=string_agg:5]
+      └── string-agg [as=string_agg:6]
            ├── s:4
            └── s:4
 
@@ -2837,56 +2847,59 @@ build
 SELECT 123 r FROM kv ORDER BY max(v)
 ----
 project
- ├── columns: r:6!null  [hidden: max:5]
- ├── ordering: +5
+ ├── columns: r:7!null  [hidden: max:6]
+ ├── ordering: +6
  ├── scalar-group-by
- │    ├── columns: max:5
+ │    ├── columns: max:6
  │    ├── project
  │    │    ├── columns: v:2
  │    │    └── scan kv
- │    │         └── columns: k:1!null v:2 w:3 s:4
+ │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         └── max [as=max:5]
+ │         └── max [as=max:6]
  │              └── v:2
  └── projections
-      └── 123 [as=r:6]
+      └── 123 [as=r:7]
 
 # Check that ordering columns are projected correctly.
 build
 SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x+y)
 ----
 scalar-group-by
- ├── columns: array_agg:5
- ├── internal-ordering: +4
+ ├── columns: array_agg:6
+ ├── internal-ordering: +5
  ├── sort
- │    ├── columns: y:2 column4:4
- │    ├── ordering: +4
+ │    ├── columns: y:2 column5:5
+ │    ├── ordering: +5
  │    └── project
- │         ├── columns: y:2 column4:4
+ │         ├── columns: y:2 column5:5
  │         └── project
- │              ├── columns: column4:4 x:1!null y:2 z:3
+ │              ├── columns: column5:5 x:1!null y:2 z:3
  │              ├── scan xyz
- │              │    └── columns: x:1!null y:2 z:3
+ │              │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
  │              └── projections
- │                   └── x:1 + y:2 [as=column4:4]
+ │                   └── x:1 + y:2 [as=column5:5]
  └── aggregations
-      └── array-agg [as=array_agg:5]
+      └── array-agg [as=array_agg:6]
            └── y:2
 
 build
 SELECT array_agg(y) FROM (SELECT * FROM xyz ORDER BY x DESC)
 ----
 scalar-group-by
- ├── columns: array_agg:4
+ ├── columns: array_agg:5
  ├── internal-ordering: -1
  ├── project
  │    ├── columns: x:1!null y:2
  │    ├── ordering: -1
- │    └── scan xyz,rev
+ │    └── project
  │         ├── columns: x:1!null y:2 z:3
- │         └── ordering: -1
+ │         ├── ordering: -1
+ │         └── scan xyz,rev
+ │              ├── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4
+ │              └── ordering: -1
  └── aggregations
-      └── array-agg [as=array_agg:4]
+      └── array-agg [as=array_agg:5]
            └── y:2
 
 # Regression test for #30166.
@@ -2924,25 +2937,25 @@ group-by
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- ├── cost: 1110.05
+ ├── cost: 1130.05
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1,+2)
  └── project
       ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
-      ├── cost: 1070.03
+      ├── cost: 1090.03
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
       ├── interesting orderings: (+1,+2)
       └── scan t.public.xyz
-           ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float)
+           ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float) t.public.xyz.crdb_internal_mvcc_timestamp:4(decimal)
            ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
-           ├── cost: 1060.02
+           ├── cost: 1080.02
            ├── key: (1)
-           ├── fd: (1)-->(2,3)
-           ├── prune: (1-3)
+           ├── fd: (1)-->(2-4)
+           ├── prune: (1-4)
            └── interesting orderings: (+1,+2) (+3,+2,+1)
 
 # Testing ordered aggregations.
@@ -2954,30 +2967,30 @@ build
 SELECT array_agg(col1 ORDER BY col1) FROM tab
 ----
 scalar-group-by
- ├── columns: array_agg:5
+ ├── columns: array_agg:6
  ├── window partition=() ordering=+1
- │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5
+ │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6
  │    ├── scan tab
- │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+ │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    └── windows
- │         └── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+ │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
  │              └── col1:1
  └── aggregations
-      └── const-agg [as=array_agg:5]
-           └── array_agg:5
+      └── const-agg [as=array_agg:6]
+           └── array_agg:6
 
 # Ignore aggregate orderings for non commutative aggregates.
 build
 SELECT count(col1 ORDER BY col2) FROM tab
 ----
 scalar-group-by
- ├── columns: count:5!null
+ ├── columns: count:6!null
  ├── project
  │    ├── columns: col1:1!null col2:2!null
  │    └── scan tab
- │         └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+ │         └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  └── aggregations
-      └── count [as=count:5]
+      └── count [as=count:6]
            └── col1:1
 
 # Multiple ordered aggregations.
@@ -2985,137 +2998,137 @@ build
 SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2) from tab
 ----
 scalar-group-by
- ├── columns: array_agg:5 array_agg:6
+ ├── columns: array_agg:6 array_agg:7
  ├── window partition=() ordering=+2
- │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5 array_agg:6
+ │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6 array_agg:7
  │    ├── window partition=() ordering=+1
- │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5
+ │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6
  │    │    ├── scan tab
- │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+ │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    │    └── windows
- │    │         └── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+ │    │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
  │    │              └── col1:1
  │    └── windows
- │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+ │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
  │              └── col1:1
  └── aggregations
-      ├── const-agg [as=array_agg:5]
-      │    └── array_agg:5
-      └── const-agg [as=array_agg:6]
-           └── array_agg:6
+      ├── const-agg [as=array_agg:6]
+      │    └── array_agg:6
+      └── const-agg [as=array_agg:7]
+           └── array_agg:7
 
 build
 SELECT concat_agg(col3 ORDER BY col1), array_agg(col1) FROM tab
 ----
 scalar-group-by
- ├── columns: concat_agg:5 array_agg:6
+ ├── columns: concat_agg:6 array_agg:7
  ├── window partition=()
- │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null concat_agg:5 array_agg:6
+ │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 concat_agg:6 array_agg:7
  │    ├── window partition=() ordering=+1
- │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null concat_agg:5
+ │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 concat_agg:6
  │    │    ├── scan tab
- │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+ │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    │    └── windows
- │    │         └── concat-agg [as=concat_agg:5, frame="range from unbounded to unbounded"]
+ │    │         └── concat-agg [as=concat_agg:6, frame="range from unbounded to unbounded"]
  │    │              └── col3:3
  │    └── windows
- │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+ │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
  │              └── col1:1
  └── aggregations
-      ├── const-agg [as=concat_agg:5]
-      │    └── concat_agg:5
-      └── const-agg [as=array_agg:6]
-           └── array_agg:6
+      ├── const-agg [as=concat_agg:6]
+      │    └── concat_agg:6
+      └── const-agg [as=array_agg:7]
+           └── array_agg:7
 
 build
 SELECT concat_agg(col3 ORDER BY col1), sum(col1 ORDER BY col2) FROM tab
 ----
 scalar-group-by
- ├── columns: concat_agg:5 sum:6
+ ├── columns: concat_agg:6 sum:7
  ├── window partition=()
- │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null concat_agg:5 sum:6
+ │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 concat_agg:6 sum:7
  │    ├── window partition=() ordering=+1
- │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null concat_agg:5
+ │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 concat_agg:6
  │    │    ├── scan tab
- │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+ │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    │    └── windows
- │    │         └── concat-agg [as=concat_agg:5, frame="range from unbounded to unbounded"]
+ │    │         └── concat-agg [as=concat_agg:6, frame="range from unbounded to unbounded"]
  │    │              └── col3:3
  │    └── windows
- │         └── sum [as=sum:6, frame="range from unbounded to unbounded"]
+ │         └── sum [as=sum:7, frame="range from unbounded to unbounded"]
  │              └── col1:1
  └── aggregations
-      ├── const-agg [as=concat_agg:5]
-      │    └── concat_agg:5
-      └── const-agg [as=sum:6]
-           └── sum:6
+      ├── const-agg [as=concat_agg:6]
+      │    └── concat_agg:6
+      └── const-agg [as=sum:7]
+           └── sum:7
 
 build
 SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY col2
 ----
 project
- ├── columns: array_agg:5
+ ├── columns: array_agg:6
  └── group-by
-      ├── columns: col2:2!null array_agg:5
+      ├── columns: col2:2!null array_agg:6
       ├── grouping columns: col2:2!null
       ├── window partition=(2) ordering=+1
-      │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5
+      │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6
       │    ├── scan tab
-      │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    └── windows
-      │         └── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+      │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
       │              └── col1:1
       └── aggregations
-           └── const-agg [as=array_agg:5]
-                └── array_agg:5
+           └── const-agg [as=array_agg:6]
+                └── array_agg:6
 
 build
 SELECT array_agg(col1 ORDER BY col1), array_agg(col3 ORDER BY col1) FROM tab GROUP BY col2
 ----
 project
- ├── columns: array_agg:5 array_agg:6
+ ├── columns: array_agg:6 array_agg:7
  └── group-by
-      ├── columns: col2:2!null array_agg:5 array_agg:6
+      ├── columns: col2:2!null array_agg:6 array_agg:7
       ├── grouping columns: col2:2!null
       ├── window partition=(2) ordering=+1
-      │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5 array_agg:6
+      │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6 array_agg:7
       │    ├── scan tab
-      │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    └── windows
-      │         ├── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+      │         ├── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
       │         │    └── col1:1
-      │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+      │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
       │              └── col3:3
       └── aggregations
-           ├── const-agg [as=array_agg:5]
-           │    └── array_agg:5
-           └── const-agg [as=array_agg:6]
-                └── array_agg:6
+           ├── const-agg [as=array_agg:6]
+           │    └── array_agg:6
+           └── const-agg [as=array_agg:7]
+                └── array_agg:7
 
 build
 SELECT array_agg(col1 ORDER BY col1), array_agg(col3 ORDER BY col1) FROM tab GROUP BY col2 HAVING col2 > 1
 ----
 project
- ├── columns: array_agg:5 array_agg:6
+ ├── columns: array_agg:6 array_agg:7
  └── select
-      ├── columns: col2:2!null array_agg:5 array_agg:6
+      ├── columns: col2:2!null array_agg:6 array_agg:7
       ├── group-by
-      │    ├── columns: col2:2!null array_agg:5 array_agg:6
+      │    ├── columns: col2:2!null array_agg:6 array_agg:7
       │    ├── grouping columns: col2:2!null
       │    ├── window partition=(2) ordering=+1
-      │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5 array_agg:6
+      │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6 array_agg:7
       │    │    ├── scan tab
-      │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    │    └── windows
-      │    │         ├── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+      │    │         ├── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
       │    │         │    └── col1:1
-      │    │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+      │    │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
       │    │              └── col3:3
       │    └── aggregations
-      │         ├── const-agg [as=array_agg:5]
-      │         │    └── array_agg:5
-      │         └── const-agg [as=array_agg:6]
-      │              └── array_agg:6
+      │         ├── const-agg [as=array_agg:6]
+      │         │    └── array_agg:6
+      │         └── const-agg [as=array_agg:7]
+      │              └── array_agg:7
       └── filters
            └── col2:2 > 1
 
@@ -3124,138 +3137,138 @@ build
 SELECT count(DISTINCT col1), count(*), array_agg(col1 ORDER BY col2) FROM tab
 ----
 project
- ├── columns: count:5 count:6 array_agg:7
+ ├── columns: count:6 count:7 array_agg:8
  └── project
-      ├── columns: count:5 count_rows:6 col1:1 col2:2 col3:3 rowid:4 array_agg:7
+      ├── columns: count:6 count_rows:7 col1:1 col2:2 col3:3 rowid:4 crdb_internal_mvcc_timestamp:5 array_agg:8
       ├── scalar-group-by
-      │    ├── columns: array_agg:7 count:8 count_rows:9
+      │    ├── columns: array_agg:8 count:9 count_rows:10
       │    ├── window partition=() ordering=+2
-      │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null count:5 count_rows:6 array_agg:7
+      │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 count:6 count_rows:7 array_agg:8
       │    │    ├── window partition=()
-      │    │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null count:5 count_rows:6
+      │    │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 count:6 count_rows:7
       │    │    │    ├── scan tab
-      │    │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    │    │    └── windows
-      │    │    │         ├── count [as=count:5, frame="range from unbounded to unbounded"]
+      │    │    │         ├── count [as=count:6, frame="range from unbounded to unbounded"]
       │    │    │         │    └── col1:1
-      │    │    │         └── count-rows [as=count_rows:6, frame="range from unbounded to unbounded"]
+      │    │    │         └── count-rows [as=count_rows:7, frame="range from unbounded to unbounded"]
       │    │    └── windows
-      │    │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
+      │    │         └── array-agg [as=array_agg:8, frame="range from unbounded to unbounded"]
       │    │              └── col1:1
       │    └── aggregations
-      │         ├── const-agg [as=count:8]
-      │         │    └── count:5
-      │         ├── const-agg [as=count_rows:9]
-      │         │    └── count_rows:6
-      │         └── const-agg [as=array_agg:7]
-      │              └── array_agg:7
+      │         ├── const-agg [as=count:9]
+      │         │    └── count:6
+      │         ├── const-agg [as=count_rows:10]
+      │         │    └── count_rows:7
+      │         └── const-agg [as=array_agg:8]
+      │              └── array_agg:8
       └── projections
-           ├── CASE WHEN count:8 IS NULL THEN 0 ELSE count:8 END [as=count:5]
-           └── CASE WHEN count_rows:9 IS NULL THEN 0 ELSE count_rows:9 END [as=count_rows:6]
+           ├── CASE WHEN count:9 IS NULL THEN 0 ELSE count:9 END [as=count:6]
+           └── CASE WHEN count_rows:10 IS NULL THEN 0 ELSE count_rows:10 END [as=count_rows:7]
 
 # Testing aggregations as window when group by has a projection.
 build
 SELECT array_agg(col1 ORDER BY col1) FROM tab GROUP BY upper(col3)
 ----
 project
- ├── columns: array_agg:5
+ ├── columns: array_agg:6
  └── group-by
-      ├── columns: array_agg:5 column6:6
-      ├── grouping columns: column6:6
-      ├── window partition=(6) ordering=+1
-      │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5 column6:6
+      ├── columns: array_agg:6 column7:7
+      ├── grouping columns: column7:7
+      ├── window partition=(7) ordering=+1
+      │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6 column7:7
       │    ├── project
-      │    │    ├── columns: column6:6 col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    ├── columns: column7:7 col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    │    ├── scan tab
-      │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    │    └── projections
-      │    │         └── upper(col3:3) [as=column6:6]
+      │    │         └── upper(col3:3) [as=column7:7]
       │    └── windows
-      │         └── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+      │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
       │              └── col1:1
       └── aggregations
-           └── const-agg [as=array_agg:5]
-                └── array_agg:5
+           └── const-agg [as=array_agg:6]
+                └── array_agg:6
 
 build
 SELECT array_agg(col1 ORDER BY col1), upper(col3) FROM tab GROUP BY upper(col3)
 ----
 group-by
- ├── columns: array_agg:5 upper:6
- ├── grouping columns: column6:6
- ├── window partition=(6) ordering=+1
- │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null array_agg:5 column6:6
+ ├── columns: array_agg:6 upper:7
+ ├── grouping columns: column7:7
+ ├── window partition=(7) ordering=+1
+ │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 array_agg:6 column7:7
  │    ├── project
- │    │    ├── columns: column6:6 col1:1!null col2:2!null col3:3 rowid:4!null
+ │    │    ├── columns: column7:7 col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    │    ├── scan tab
- │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+ │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── upper(col3:3) [as=column6:6]
+ │    │         └── upper(col3:3) [as=column7:7]
  │    └── windows
- │         └── array-agg [as=array_agg:5, frame="range from unbounded to unbounded"]
+ │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
  │              └── col1:1
  └── aggregations
-      └── const-agg [as=array_agg:5]
-           └── array_agg:5
+      └── const-agg [as=array_agg:6]
+           └── array_agg:6
 
 build
 SELECT array_agg(lower(col3)) FROM tab GROUP BY upper(col3)
 ----
 project
- ├── columns: array_agg:6
+ ├── columns: array_agg:7
  └── group-by
-      ├── columns: array_agg:6 column7:7
-      ├── grouping columns: column7:7
+      ├── columns: array_agg:7 column8:8
+      ├── grouping columns: column8:8
       ├── project
-      │    ├── columns: column5:5 column7:7
+      │    ├── columns: column6:6 column8:8
       │    ├── scan tab
-      │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null
+      │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         ├── lower(col3:3) [as=column5:5]
-      │         └── upper(col3:3) [as=column7:7]
+      │         ├── lower(col3:3) [as=column6:6]
+      │         └── upper(col3:3) [as=column8:8]
       └── aggregations
-           └── array-agg [as=array_agg:6]
-                └── column5:5
+           └── array-agg [as=array_agg:7]
+                └── column6:6
 
 build
 SELECT array_agg(v+w ORDER BY w) FROM kv
 ----
 scalar-group-by
- ├── columns: array_agg:6
+ ├── columns: array_agg:7
  ├── window partition=() ordering=+3
- │    ├── columns: k:1!null v:2 w:3 s:4 column5:5 array_agg:6
+ │    ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 column6:6 array_agg:7
  │    ├── project
- │    │    ├── columns: column5:5 k:1!null v:2 w:3 s:4
+ │    │    ├── columns: column6:6 k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── v:2 + w:3 [as=column5:5]
+ │    │         └── v:2 + w:3 [as=column6:6]
  │    └── windows
- │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
- │              └── column5:5
+ │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
+ │              └── column6:6
  └── aggregations
-      └── const-agg [as=array_agg:6]
-           └── array_agg:6
+      └── const-agg [as=array_agg:7]
+           └── array_agg:7
 
 build
 SELECT array_agg(v ORDER BY v+w) FROM kv
 ----
 scalar-group-by
- ├── columns: array_agg:6
- ├── window partition=() ordering=+5
- │    ├── columns: k:1!null v:2 w:3 s:4 column5:5 array_agg:6
+ ├── columns: array_agg:7
+ ├── window partition=() ordering=+6
+ │    ├── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5 column6:6 array_agg:7
  │    ├── project
- │    │    ├── columns: column5:5 k:1!null v:2 w:3 s:4
+ │    │    ├── columns: column6:6 k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    ├── scan kv
- │    │    │    └── columns: k:1!null v:2 w:3 s:4
+ │    │    │    └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── v:2 + w:3 [as=column5:5]
+ │    │         └── v:2 + w:3 [as=column6:6]
  │    └── windows
- │         └── array-agg [as=array_agg:6, frame="range from unbounded to unbounded"]
+ │         └── array-agg [as=array_agg:7, frame="range from unbounded to unbounded"]
  │              └── v:2
  └── aggregations
-      └── const-agg [as=array_agg:6]
-           └── array_agg:6
+      └── const-agg [as=array_agg:7]
+           └── array_agg:7
 
 build
 SELECT array_agg(a ORDER BY b) FROM (SELECT 1 AS a, 2 AS b)
@@ -3296,7 +3309,7 @@ project
       └── project
            ├── columns: k:1!null v:2
            └── scan kv
-                └── columns: k:1!null v:2 w:3 s:4
+                └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
 
 # This should be equivalent to the query above.
 build
@@ -3310,41 +3323,41 @@ project
       └── project
            ├── columns: k:1!null v:2
            └── scan kv
-                └── columns: k:1!null v:2 w:3 s:4
+                └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT count(*), k+v FROM kv GROUP BY k
 ----
 project
- ├── columns: count:5!null "?column?":6
+ ├── columns: count:6!null "?column?":7
  ├── group-by
- │    ├── columns: k:1!null v:2 count_rows:5!null
+ │    ├── columns: k:1!null v:2 count_rows:6!null
  │    ├── grouping columns: k:1!null v:2
  │    ├── project
  │    │    ├── columns: k:1!null v:2
  │    │    └── scan kv
- │    │         └── columns: k:1!null v:2 w:3 s:4
+ │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
  │    └── aggregations
- │         └── count-rows [as=count_rows:5]
+ │         └── count-rows [as=count_rows:6]
  └── projections
-      └── k:1 + v:2 [as="?column?":6]
+      └── k:1 + v:2 [as="?column?":7]
 
 build
 SELECT count(*) FROM kv GROUP BY k HAVING v=1
 ----
 project
- ├── columns: count:5!null
+ ├── columns: count:6!null
  └── select
-      ├── columns: k:1!null v:2!null count_rows:5!null
+      ├── columns: k:1!null v:2!null count_rows:6!null
       ├── group-by
-      │    ├── columns: k:1!null v:2 count_rows:5!null
+      │    ├── columns: k:1!null v:2 count_rows:6!null
       │    ├── grouping columns: k:1!null v:2
       │    ├── project
       │    │    ├── columns: k:1!null v:2
       │    │    └── scan kv
-      │    │         └── columns: k:1!null v:2 w:3 s:4
+      │    │         └── columns: k:1!null v:2 w:3 s:4 crdb_internal_mvcc_timestamp:5
       │    └── aggregations
-      │         └── count-rows [as=count_rows:5]
+      │         └── count-rows [as=count_rows:6]
       └── filters
            └── v:2 = 1
 
@@ -3352,20 +3365,20 @@ build
 SELECT k, v, count(*) FROM kv JOIN ab ON a=k GROUP BY k
 ----
 group-by
- ├── columns: k:1!null v:2 count:7!null
+ ├── columns: k:1!null v:2 count:9!null
  ├── grouping columns: k:1!null v:2
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── inner-join (hash)
- │         ├── columns: k:1!null v:2 w:3 s:4 a:5!null b:6
+ │         ├── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5 a:6!null b:7 ab.crdb_internal_mvcc_timestamp:8
  │         ├── scan kv
- │         │    └── columns: k:1!null v:2 w:3 s:4
+ │         │    └── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5
  │         ├── scan ab
- │         │    └── columns: a:5!null b:6
+ │         │    └── columns: a:6!null b:7 ab.crdb_internal_mvcc_timestamp:8
  │         └── filters
- │              └── a:5 = k:1
+ │              └── a:6 = k:1
  └── aggregations
-      └── count-rows [as=count_rows:7]
+      └── count-rows [as=count_rows:9]
 
 # Not allowed when grouping on a subset of the PK.
 build
@@ -3381,8 +3394,10 @@ project
  └── group-by
       ├── columns: a:1!null b:2!null x:3 y:4
       ├── grouping columns: a:1!null b:2!null x:3 y:4
-      └── scan abxy
-           └── columns: a:1!null b:2!null x:3 y:4
+      └── project
+           ├── columns: a:1!null b:2!null x:3 y:4
+           └── scan abxy
+                └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
 
 # The following two should be equivalent to the one above.
 build
@@ -3393,8 +3408,10 @@ project
  └── group-by
       ├── columns: a:1!null b:2!null x:3 y:4
       ├── grouping columns: a:1!null b:2!null x:3 y:4
-      └── scan abxy
-           └── columns: a:1!null b:2!null x:3 y:4
+      └── project
+           ├── columns: a:1!null b:2!null x:3 y:4
+           └── scan abxy
+                └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT x, y FROM abxy GROUP BY x, y, a, b
@@ -3404,8 +3421,10 @@ project
  └── group-by
       ├── columns: a:1!null b:2!null x:3 y:4
       ├── grouping columns: a:1!null b:2!null x:3 y:4
-      └── scan abxy
-           └── columns: a:1!null b:2!null x:3 y:4
+      └── project
+           ├── columns: a:1!null b:2!null x:3 y:4
+           └── scan abxy
+                └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
 
 build
 SELECT x, y FROM abxy NATURAL JOIN ab GROUP BY a, b
@@ -3418,14 +3437,14 @@ project
       └── project
            ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
            └── inner-join (hash)
-                ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:5!null ab.b:6!null
+                ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5 ab.a:6!null ab.b:7!null ab.crdb_internal_mvcc_timestamp:8
                 ├── scan abxy
-                │    └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
+                │    └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5
                 ├── scan ab
-                │    └── columns: ab.a:5!null ab.b:6
+                │    └── columns: ab.a:6!null ab.b:7 ab.crdb_internal_mvcc_timestamp:8
                 └── filters
-                     ├── abxy.a:1 = ab.a:5
-                     └── abxy.b:2 = ab.b:6
+                     ├── abxy.a:1 = ab.a:6
+                     └── abxy.b:2 = ab.b:7
 
 # Should be equivalent to the one above.
 build
@@ -3439,28 +3458,30 @@ project
       └── project
            ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
            └── inner-join (hash)
-                ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:5!null ab.b:6!null
+                ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5 ab.a:6!null ab.b:7!null ab.crdb_internal_mvcc_timestamp:8
                 ├── scan abxy
-                │    └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
+                │    └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5
                 ├── scan ab
-                │    └── columns: ab.a:5!null ab.b:6
+                │    └── columns: ab.a:6!null ab.b:7 ab.crdb_internal_mvcc_timestamp:8
                 └── filters
-                     ├── abxy.a:1 = ab.a:5
-                     └── abxy.b:2 = ab.b:6
+                     ├── abxy.a:1 = ab.a:6
+                     └── abxy.b:2 = ab.b:7
 
 build
 SELECT abxy.*, ab.* FROM abxy, ab GROUP BY abxy.a, abxy.b, ab.a
 ----
 group-by
- ├── columns: a:1!null b:2!null x:3 y:4 a:5!null b:6
- ├── grouping columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:5!null ab.b:6
- └── inner-join (cross)
-      ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:5!null ab.b:6
-      ├── scan abxy
-      │    └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
-      ├── scan ab
-      │    └── columns: ab.a:5!null ab.b:6
-      └── filters (true)
+ ├── columns: a:1!null b:2!null x:3 y:4 a:6!null b:7
+ ├── grouping columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:6!null ab.b:7
+ └── project
+      ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 ab.a:6!null ab.b:7
+      └── inner-join (cross)
+           ├── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5 ab.a:6!null ab.b:7 ab.crdb_internal_mvcc_timestamp:8
+           ├── scan abxy
+           │    └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5
+           ├── scan ab
+           │    └── columns: ab.a:6!null ab.b:7 ab.crdb_internal_mvcc_timestamp:8
+           └── filters (true)
 
 # Not allowed with UNION.
 build
@@ -3480,17 +3501,17 @@ project
       └── except
            ├── columns: abxy.a:1!null abxy.b:2 x:3
            ├── left columns: abxy.a:1!null abxy.b:2 x:3
-           ├── right columns: ab.a:5 ab.b:6 "?column?":7
+           ├── right columns: ab.a:6 ab.b:7 "?column?":9
            ├── project
            │    ├── columns: abxy.a:1!null abxy.b:2!null x:3
            │    └── scan abxy
-           │         └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4
+           │         └── columns: abxy.a:1!null abxy.b:2!null x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5
            └── project
-                ├── columns: "?column?":7!null ab.a:5!null ab.b:6
+                ├── columns: "?column?":9!null ab.a:6!null ab.b:7
                 ├── scan ab
-                │    └── columns: ab.a:5!null ab.b:6
+                │    └── columns: ab.a:6!null ab.b:7 ab.crdb_internal_mvcc_timestamp:8
                 └── projections
-                     └── 1 [as="?column?":7]
+                     └── 1 [as="?column?":9]
 
 # Allowed even with outer joins. It's a little subtle why this is correct: the
 # PK columns are also non-nullable so any "outer" rows are never in the same
@@ -3506,13 +3527,13 @@ project
       └── project
            ├── columns: k:1 v:2 w:3
            └── full-join (hash)
-                ├── columns: k:1 v:2 w:3 s:4 a:5 b:6
+                ├── columns: k:1 v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5 a:6 b:7 ab.crdb_internal_mvcc_timestamp:8
                 ├── scan kv
-                │    └── columns: k:1!null v:2 w:3 s:4
+                │    └── columns: k:1!null v:2 w:3 s:4 kv.crdb_internal_mvcc_timestamp:5
                 ├── scan ab
-                │    └── columns: a:5!null b:6
+                │    └── columns: a:6!null b:7 ab.crdb_internal_mvcc_timestamp:8
                 └── filters
-                     └── k:1 = a:5
+                     └── k:1 = a:6
 
 # Verify that we handle tables with no primary index (#44659).
 build
@@ -3525,30 +3546,30 @@ build
 SELECT x + 1 AS z FROM abxy GROUP BY z
 ----
 group-by
- ├── columns: z:5
- ├── grouping columns: z:5
+ ├── columns: z:6
+ ├── grouping columns: z:6
  └── project
-      ├── columns: z:5
+      ├── columns: z:6
       ├── scan abxy
-      │    └── columns: a:1!null b:2!null x:3 y:4
+      │    └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
       └── projections
-           └── x:3 + 1 [as=z:5]
+           └── x:3 + 1 [as=z:6]
 
 # The FROM column has precedence, we should be grouping by abxy.x, not by x%10.
 build
 SELECT (x % 10) AS x FROM abxy GROUP BY x
 ----
 project
- ├── columns: x:5
+ ├── columns: x:6
  ├── group-by
  │    ├── columns: abxy.x:3
  │    ├── grouping columns: abxy.x:3
  │    └── project
  │         ├── columns: abxy.x:3
  │         └── scan abxy
- │              └── columns: a:1!null b:2!null abxy.x:3 y:4
+ │              └── columns: a:1!null b:2!null abxy.x:3 y:4 crdb_internal_mvcc_timestamp:5
  └── projections
-      └── abxy.x:3 % 10 [as=x:5]
+      └── abxy.x:3 % 10 [as=x:6]
 
 # But aliases have precedence over columns from higher scopes. Here we are
 # grouping by v, not by the outer x.
@@ -3556,20 +3577,20 @@ build
 SELECT x, (SELECT v AS x FROM kv GROUP BY x) FROM abxy
 ----
 project
- ├── columns: x:3 x:9
+ ├── columns: x:3 x:11
  ├── scan abxy
- │    └── columns: a:1!null b:2!null abxy.x:3 y:4
+ │    └── columns: a:1!null b:2!null abxy.x:3 y:4 abxy.crdb_internal_mvcc_timestamp:5
  └── projections
-      └── subquery [as=x:9]
+      └── subquery [as=x:11]
            └── max1-row
-                ├── columns: v:6
+                ├── columns: v:7
                 └── group-by
-                     ├── columns: v:6
-                     ├── grouping columns: v:6
+                     ├── columns: v:7
+                     ├── grouping columns: v:7
                      └── project
-                          ├── columns: v:6
+                          ├── columns: v:7
                           └── scan kv
-                               └── columns: k:5!null v:6 w:7 s:8
+                               └── columns: k:6!null v:7 w:8 s:9 kv.crdb_internal_mvcc_timestamp:10
 
 build
 SELECT sum(x) AS u FROM abxy GROUP BY u
@@ -3581,14 +3602,14 @@ build
 SELECT x + 1 FROM abxy GROUP BY "?column?"
 ----
 group-by
- ├── columns: "?column?":5
- ├── grouping columns: "?column?":5
+ ├── columns: "?column?":6
+ ├── grouping columns: "?column?":6
  └── project
-      ├── columns: "?column?":5
+      ├── columns: "?column?":6
       ├── scan abxy
-      │    └── columns: a:1!null b:2!null x:3 y:4
+      │    └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
       └── projections
-           └── x:3 + 1 [as="?column?":5]
+           └── x:3 + 1 [as="?column?":6]
 
 build
 SELECT sum(x) FROM abxy GROUP BY sum
@@ -3613,14 +3634,14 @@ build
 SELECT (x + 1) AS u, (x + 1) AS u FROM abxy GROUP BY u
 ----
 group-by
- ├── columns: u:5 u:5
- ├── grouping columns: u:5
+ ├── columns: u:6 u:6
+ ├── grouping columns: u:6
  └── project
-      ├── columns: u:5
+      ├── columns: u:6
       ├── scan abxy
-      │    └── columns: a:1!null b:2!null x:3 y:4
+      │    └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
       └── projections
-           └── x:3 + 1 [as=u:5]
+           └── x:3 + 1 [as=u:6]
 
 build
 SELECT (x + 1) AS u, (x + 1) AS u, (y + 1) AS u FROM abxy GROUP BY u
@@ -3632,22 +3653,22 @@ build
 SELECT sum(x + 1) AS x, sum(y + 1) AS x FROM abxy GROUP BY x
 ----
 project
- ├── columns: x:6 x:8
+ ├── columns: x:7 x:9
  └── group-by
-      ├── columns: x:3 sum:6 sum:8
+      ├── columns: x:3 sum:7 sum:9
       ├── grouping columns: x:3
       ├── project
-      │    ├── columns: column5:5 column7:7 x:3
+      │    ├── columns: column6:6 column8:8 x:3
       │    ├── scan abxy
-      │    │    └── columns: a:1!null b:2!null x:3 y:4
+      │    │    └── columns: a:1!null b:2!null x:3 y:4 crdb_internal_mvcc_timestamp:5
       │    └── projections
-      │         ├── x:3 + 1 [as=column5:5]
-      │         └── y:4 + 1 [as=column7:7]
+      │         ├── x:3 + 1 [as=column6:6]
+      │         └── y:4 + 1 [as=column8:8]
       └── aggregations
-           ├── sum [as=sum:6]
-           │    └── column5:5
-           └── sum [as=sum:8]
-                └── column7:7
+           ├── sum [as=sum:7]
+           │    └── column6:6
+           └── sum [as=sum:9]
+                └── column8:8
 
 # Regression test for #44724.
 build
@@ -3668,31 +3689,31 @@ GROUP BY y
   HAVING EXISTS(SELECT 1 FROM abxy AS t2 WHERE sum(t.x) = 1)
 ----
 project
- ├── columns: sum:5
+ ├── columns: sum:6
  └── select
-      ├── columns: t.y:4 sum:5
+      ├── columns: t.y:4 sum:6
       ├── group-by
-      │    ├── columns: t.y:4 sum:5
+      │    ├── columns: t.y:4 sum:6
       │    ├── grouping columns: t.y:4
       │    ├── project
       │    │    ├── columns: t.x:3 t.y:4
       │    │    └── scan t
-      │    │         └── columns: t.a:1!null t.b:2!null t.x:3 t.y:4
+      │    │         └── columns: t.a:1!null t.b:2!null t.x:3 t.y:4 t.crdb_internal_mvcc_timestamp:5
       │    └── aggregations
-      │         └── sum [as=sum:5]
+      │         └── sum [as=sum:6]
       │              └── t.x:3
       └── filters
            └── exists
                 └── project
-                     ├── columns: "?column?":11!null
+                     ├── columns: "?column?":13!null
                      ├── select
-                     │    ├── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9
+                     │    ├── columns: t2.a:7!null t2.b:8!null t2.x:9 t2.y:10 t2.crdb_internal_mvcc_timestamp:11
                      │    ├── scan t2
-                     │    │    └── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9
+                     │    │    └── columns: t2.a:7!null t2.b:8!null t2.x:9 t2.y:10 t2.crdb_internal_mvcc_timestamp:11
                      │    └── filters
-                     │         └── sum:5 = 1
+                     │         └── sum:6 = 1
                      └── projections
-                          └── 1 [as="?column?":11]
+                          └── 1 [as="?column?":13]
 
 exec-ddl
 CREATE TABLE onek (
@@ -3725,30 +3746,30 @@ GROUP BY ten
          )
 ----
 select
- ├── columns: ten:5 sum:18
+ ├── columns: ten:5 sum:19
  ├── group-by
- │    ├── columns: a.ten:5 sum:18
+ │    ├── columns: a.ten:5 sum:19
  │    ├── grouping columns: a.ten:5
  │    ├── project
  │    │    ├── columns: a.four:4 a.ten:5
  │    │    └── scan a
- │    │         └── columns: a.unique1:1 a.unique2:2 a.two:3 a.four:4 a.ten:5 a.twenty:6 a.hundred:7 a.thousand:8 a.twothousand:9 a.fivethous:10 a.tenthous:11 a.odd:12 a.even:13 a.stringu1:14 a.stringu2:15 a.string4:16 a.rowid:17!null
+ │    │         └── columns: a.unique1:1 a.unique2:2 a.two:3 a.four:4 a.ten:5 a.twenty:6 a.hundred:7 a.thousand:8 a.twothousand:9 a.fivethous:10 a.tenthous:11 a.odd:12 a.even:13 a.stringu1:14 a.stringu2:15 a.string4:16 a.rowid:17!null a.crdb_internal_mvcc_timestamp:18
  │    └── aggregations
- │         └── agg-distinct [as=sum:18]
+ │         └── agg-distinct [as=sum:19]
  │              └── sum
  │                   └── a.four:4
  └── filters
       └── exists
            └── project
-                ├── columns: "?column?":37!null
+                ├── columns: "?column?":39!null
                 ├── select
-                │    ├── columns: b.unique1:19 b.unique2:20 b.two:21 b.four:22!null b.ten:23 b.twenty:24 b.hundred:25 b.thousand:26 b.twothousand:27 b.fivethous:28 b.tenthous:29 b.odd:30 b.even:31 b.stringu1:32 b.stringu2:33 b.string4:34 b.rowid:35!null
+                │    ├── columns: b.unique1:20 b.unique2:21 b.two:22 b.four:23!null b.ten:24 b.twenty:25 b.hundred:26 b.thousand:27 b.twothousand:28 b.fivethous:29 b.tenthous:30 b.odd:31 b.even:32 b.stringu1:33 b.stringu2:34 b.string4:35 b.rowid:36!null b.crdb_internal_mvcc_timestamp:37
                 │    ├── scan b
-                │    │    └── columns: b.unique1:19 b.unique2:20 b.two:21 b.four:22 b.ten:23 b.twenty:24 b.hundred:25 b.thousand:26 b.twothousand:27 b.fivethous:28 b.tenthous:29 b.odd:30 b.even:31 b.stringu1:32 b.stringu2:33 b.string4:34 b.rowid:35!null
+                │    │    └── columns: b.unique1:20 b.unique2:21 b.two:22 b.four:23 b.ten:24 b.twenty:25 b.hundred:26 b.thousand:27 b.twothousand:28 b.fivethous:29 b.tenthous:30 b.odd:31 b.even:32 b.stringu1:33 b.stringu2:34 b.string4:35 b.rowid:36!null b.crdb_internal_mvcc_timestamp:37
                 │    └── filters
-                │         └── sum:18 = b.four:22
+                │         └── sum:19 = b.four:23
                 └── projections
-                     └── 1 [as="?column?":37]
+                     └── 1 [as="?column?":39]
 
 build
   SELECT ten, sum(DISTINCT four)
@@ -3770,32 +3791,32 @@ SELECT (
   FROM abxy AS t1
 ----
 project
- ├── columns: a:15
+ ├── columns: a:18
  ├── scalar-group-by
- │    ├── columns: sum:14
+ │    ├── columns: sum:17
  │    ├── project
- │    │    ├── columns: x:13
+ │    │    ├── columns: x:16
  │    │    ├── scan t1
- │    │    │    └── columns: t1.a:1!null t1.b:2!null t1.x:3 t1.y:4
+ │    │    │    └── columns: t1.a:1!null t1.b:2!null t1.x:3 t1.y:4 t1.crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── t1.x:3 [as=x:13]
+ │    │         └── t1.x:3 [as=x:16]
  │    └── aggregations
- │         └── sum [as=sum:14]
- │              └── x:13
+ │         └── sum [as=sum:17]
+ │              └── x:16
  └── projections
-      └── subquery [as=a:15]
+      └── subquery [as=a:18]
            └── max1-row
-                ├── columns: t2.a:5!null
+                ├── columns: t2.a:6!null
                 └── project
-                     ├── columns: t2.a:5!null
+                     ├── columns: t2.a:6!null
                      └── inner-join (cross)
-                          ├── columns: t2.a:5!null t2.b:6!null t2.x:7 t2.y:8 t3.a:9!null t3.b:10!null t3.x:11!null t3.y:12
+                          ├── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9 t2.crdb_internal_mvcc_timestamp:10 t3.a:11!null t3.b:12!null t3.x:13!null t3.y:14 t3.crdb_internal_mvcc_timestamp:15
                           ├── scan t2
-                          │    └── columns: t2.a:5!null t2.b:6!null t2.x:7 t2.y:8
+                          │    └── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9 t2.crdb_internal_mvcc_timestamp:10
                           ├── scan t3
-                          │    └── columns: t3.a:9!null t3.b:10!null t3.x:11 t3.y:12
+                          │    └── columns: t3.a:11!null t3.b:12!null t3.x:13 t3.y:14 t3.crdb_internal_mvcc_timestamp:15
                           └── filters
-                               └── sum:14 = t3.x:11
+                               └── sum:17 = t3.x:13
 
 # Regression test for #45631.
 build
@@ -3805,7 +3826,7 @@ FROM
   ROWS FROM (unnest(ARRAY[1, 2]))
 ----
 project
- ├── columns: "?column?":7
+ ├── columns: "?column?":8
  ├── project-set
  │    ├── columns: unnest:1
  │    ├── values
@@ -3813,29 +3834,29 @@ project
  │    └── zip
  │         └── unnest(ARRAY[1,2])
  └── projections
-      └── subquery [as="?column?":7]
+      └── subquery [as="?column?":8]
            └── max1-row
-                ├── columns: "?column?":6
+                ├── columns: "?column?":7
                 └── project
-                     ├── columns: "?column?":6
+                     ├── columns: "?column?":7
                      ├── group-by
-                     │    ├── columns: max:4 unnest:5
-                     │    ├── grouping columns: unnest:5
+                     │    ├── columns: max:5 unnest:6
+                     │    ├── grouping columns: unnest:6
                      │    ├── project
-                     │    │    ├── columns: unnest:5 b:3
+                     │    │    ├── columns: unnest:6 b:3
                      │    │    ├── select
-                     │    │    │    ├── columns: a:2!null b:3
+                     │    │    │    ├── columns: a:2!null b:3 crdb_internal_mvcc_timestamp:4
                      │    │    │    ├── scan ab
-                     │    │    │    │    └── columns: a:2!null b:3
+                     │    │    │    │    └── columns: a:2!null b:3 crdb_internal_mvcc_timestamp:4
                      │    │    │    └── filters
                      │    │    │         └── a:2 = unnest:1
                      │    │    └── projections
-                     │    │         └── unnest:1 [as=unnest:5]
+                     │    │         └── unnest:1 [as=unnest:6]
                      │    └── aggregations
-                     │         └── max [as=max:4]
+                     │         └── max [as=max:5]
                      │              └── b:3
                      └── projections
-                          └── (max:4, unnest:1) [as="?column?":6]
+                          └── (max:5, unnest:1) [as="?column?":7]
 
 # Regression test for #46196. Don't eliminate the scalar group by, and
 # default to type string.
@@ -3860,85 +3881,85 @@ build
 SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY b) FROM abc;
 ----
 scalar-group-by
- ├── columns: percentile_disc:6
+ ├── columns: percentile_disc:7
  ├── window partition=() ordering=+2
- │    ├── columns: a:1!null b:2 c:3 d:4 column5:5!null percentile_disc:6
+ │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 column6:6!null percentile_disc:7
  │    ├── project
- │    │    ├── columns: column5:5!null a:1!null b:2 c:3 d:4
+ │    │    ├── columns: column6:6!null a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    ├── scan abc
- │    │    │    └── columns: a:1!null b:2 c:3 d:4
+ │    │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── 0.95 [as=column5:5]
+ │    │         └── 0.95 [as=column6:6]
  │    └── windows
- │         └── percentile-disc [as=percentile_disc:6, frame="range from unbounded to unbounded"]
- │              ├── column5:5
+ │         └── percentile-disc [as=percentile_disc:7, frame="range from unbounded to unbounded"]
+ │              ├── column6:6
  │              └── b:2
  └── aggregations
-      └── const-agg [as=percentile_disc:6]
-           └── percentile_disc:6
+      └── const-agg [as=percentile_disc:7]
+           └── percentile_disc:7
 
 build
 SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY b) FROM abc;
 ----
 scalar-group-by
- ├── columns: percentile_cont:6
+ ├── columns: percentile_cont:7
  ├── window partition=() ordering=+2
- │    ├── columns: a:1!null b:2 c:3 d:4 column5:5!null percentile_cont:6
+ │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 column6:6!null percentile_cont:7
  │    ├── project
- │    │    ├── columns: column5:5!null a:1!null b:2 c:3 d:4
+ │    │    ├── columns: column6:6!null a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    ├── scan abc
- │    │    │    └── columns: a:1!null b:2 c:3 d:4
+ │    │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── 0.95 [as=column5:5]
+ │    │         └── 0.95 [as=column6:6]
  │    └── windows
- │         └── percentile-cont [as=percentile_cont:6, frame="range from unbounded to unbounded"]
- │              ├── column5:5
+ │         └── percentile-cont [as=percentile_cont:7, frame="range from unbounded to unbounded"]
+ │              ├── column6:6
  │              └── b:2
  └── aggregations
-      └── const-agg [as=percentile_cont:6]
-           └── percentile_cont:6
+      └── const-agg [as=percentile_cont:7]
+           └── percentile_cont:7
 
 build
 SELECT percentile_disc(ARRAY[0.90, 0.95]::float[]) WITHIN GROUP (ORDER BY b) FROM abc;
 ----
 scalar-group-by
- ├── columns: percentile_disc:6
+ ├── columns: percentile_disc:7
  ├── window partition=() ordering=+2
- │    ├── columns: a:1!null b:2 c:3 d:4 column5:5!null percentile_disc:6
+ │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 column6:6!null percentile_disc:7
  │    ├── project
- │    │    ├── columns: column5:5!null a:1!null b:2 c:3 d:4
+ │    │    ├── columns: column6:6!null a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    ├── scan abc
- │    │    │    └── columns: a:1!null b:2 c:3 d:4
+ │    │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── ARRAY[0.90,0.95]::FLOAT8[] [as=column5:5]
+ │    │         └── ARRAY[0.90,0.95]::FLOAT8[] [as=column6:6]
  │    └── windows
- │         └── percentile-disc [as=percentile_disc:6, frame="range from unbounded to unbounded"]
- │              ├── column5:5
+ │         └── percentile-disc [as=percentile_disc:7, frame="range from unbounded to unbounded"]
+ │              ├── column6:6
  │              └── b:2
  └── aggregations
-      └── const-agg [as=percentile_disc:6]
-           └── percentile_disc:6
+      └── const-agg [as=percentile_disc:7]
+           └── percentile_disc:7
 
 build
 SELECT percentile_cont(ARRAY[0.90, 0.95]::float[]) WITHIN GROUP (ORDER BY b) FROM abc;
 ----
 scalar-group-by
- ├── columns: percentile_cont:6
+ ├── columns: percentile_cont:7
  ├── window partition=() ordering=+2
- │    ├── columns: a:1!null b:2 c:3 d:4 column5:5!null percentile_cont:6
+ │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 column6:6!null percentile_cont:7
  │    ├── project
- │    │    ├── columns: column5:5!null a:1!null b:2 c:3 d:4
+ │    │    ├── columns: column6:6!null a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    ├── scan abc
- │    │    │    └── columns: a:1!null b:2 c:3 d:4
+ │    │    │    └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
  │    │    └── projections
- │    │         └── ARRAY[0.90,0.95]::FLOAT8[] [as=column5:5]
+ │    │         └── ARRAY[0.90,0.95]::FLOAT8[] [as=column6:6]
  │    └── windows
- │         └── percentile-cont [as=percentile_cont:6, frame="range from unbounded to unbounded"]
- │              ├── column5:5
+ │         └── percentile-cont [as=percentile_cont:7, frame="range from unbounded to unbounded"]
+ │              ├── column6:6
  │              └── b:2
  └── aggregations
-      └── const-agg [as=percentile_cont:6]
-           └── percentile_cont:6
+      └── const-agg [as=percentile_cont:7]
+           └── percentile_cont:7
 
 # Regression test for #46914.
 exec-ddl
@@ -3951,16 +3972,16 @@ SELECT * FROM t0 GROUP BY t0.c0 HAVING min((CASE WHEN false THEN NULL END):::FLO
 project
  ├── columns: c0:1(int)
  └── select
-      ├── columns: c0:1(int) min:4(float!null)
+      ├── columns: c0:1(int) min:5(float!null)
       ├── group-by
-      │    ├── columns: c0:1(int) min:4(float)
+      │    ├── columns: c0:1(int) min:5(float)
       │    ├── grouping columns: c0:1(int)
       │    ├── project
-      │    │    ├── columns: column3:3(float) c0:1(int)
+      │    │    ├── columns: column4:4(float) c0:1(int)
       │    │    ├── scan t0
-      │    │    │    └── columns: c0:1(int) rowid:2(int!null)
+      │    │    │    └── columns: c0:1(int) rowid:2(int!null) crdb_internal_mvcc_timestamp:3(decimal)
       │    │    └── projections
-      │    │         └── case [as=column3:3, type=float]
+      │    │         └── case [as=column4:4, type=float]
       │    │              ├── true [type=bool]
       │    │              ├── when [type=float]
       │    │              │    ├── false [type=bool]
@@ -3968,9 +3989,9 @@ project
       │    │              │         └── null [type=unknown]
       │    │              └── null [type=float]
       │    └── aggregations
-      │         └── min [as=min:4, type=float]
-      │              └── variable: column3:3 [type=float]
+      │         └── min [as=min:5, type=float]
+      │              └── variable: column4:4 [type=float]
       └── filters
            └── ne [type=bool]
-                ├── variable: min:4 [type=float]
+                ├── variable: min:5 [type=float]
                 └── const: NaN [type=float]

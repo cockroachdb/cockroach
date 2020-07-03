@@ -6,37 +6,37 @@ opt
 SELECT k, i, s || 'foo' FROM a
 ----
 project
- ├── columns: k:1!null i:2 "?column?":5
+ ├── columns: k:1!null i:2 "?column?":6
  ├── immutable
  ├── stats: [rows=1000]
- ├── cost: 1090.03
+ ├── cost: 1100.03
  ├── key: (1)
- ├── fd: (1)-->(2,5)
+ ├── fd: (1)-->(2,6)
  ├── scan a
  │    ├── columns: k:1!null i:2 s:3
  │    ├── stats: [rows=1000]
- │    ├── cost: 1070.02
+ │    ├── cost: 1080.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
-      └── s:3 || 'foo' [as="?column?":5, outer=(3), immutable]
+      └── s:3 || 'foo' [as="?column?":6, outer=(3), immutable]
 
 opt
 SELECT k, k+2, i*d FROM a
 ----
 project
- ├── columns: k:1!null "?column?":5!null "?column?":6
+ ├── columns: k:1!null "?column?":6!null "?column?":7
  ├── immutable
  ├── stats: [rows=1000]
- ├── cost: 1100.03
+ ├── cost: 1110.03
  ├── key: (1)
- ├── fd: (1)-->(5,6)
+ ├── fd: (1)-->(6,7)
  ├── scan a
  │    ├── columns: k:1!null i:2 d:4!null
  │    ├── stats: [rows=1000]
- │    ├── cost: 1070.02
+ │    ├── cost: 1080.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections
-      ├── k:1 + 2 [as="?column?":5, outer=(1), immutable]
-      └── i:2 * d:4 [as="?column?":6, outer=(2,4), immutable]
+      ├── k:1 + 2 [as="?column?":6, outer=(1), immutable]
+      └── i:2 * d:4 [as="?column?":7, outer=(2,4), immutable]

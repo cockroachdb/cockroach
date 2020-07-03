@@ -1486,13 +1486,13 @@ EXPLAIN (VERBOSE)
 ·                          vectorized             true                                          ·                                          ·
 render                     ·                      ·                                             (pk)                                       ·
  │                         render 0               pk                                            ·                                          ·
- └── lookup-join           ·                      ·                                             ("project_const_col_@13", pk, col0, col3)  ·
+ └── lookup-join           ·                      ·                                             ("project_const_col_@14", pk, col0, col3)  ·
       │                    table                  tab4@tab4_col3_col4_key                       ·                                          ·
       │                    type                   semi                                          ·                                          ·
-      │                    equality               (col0, project_const_col_@13) = (col3, col4)  ·                                          ·
+      │                    equality               (col0, project_const_col_@14) = (col3, col4)  ·                                          ·
       │                    equality cols are key  ·                                             ·                                          ·
       │                    parallel               ·                                             ·                                          ·
-      └── render           ·                      ·                                             ("project_const_col_@13", pk, col0, col3)  ·
+      └── render           ·                      ·                                             ("project_const_col_@14", pk, col0, col3)  ·
            │               render 0               495.6                                         ·                                          ·
            │               render 1               pk                                            ·                                          ·
            │               render 2               col0                                          ·                                          ·

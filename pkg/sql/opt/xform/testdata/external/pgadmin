@@ -80,37 +80,37 @@ WHERE
     )
 ----
 project
- ├── columns: PID:3 User:5 Database:2 "Backend start":10 Client:37 Application:6 Query:19 "Query start":12 "Xact start":11
+ ├── columns: PID:3 User:5 Database:2 "Backend start":10 Client:39 Application:6 Query:19 "Query start":12 "Xact start":11
  ├── immutable
  ├── select
- │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":36!null
+ │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":38!null
  │    ├── key: (20)
- │    ├── fd: ()-->(36), (20)-->(2,3,5-12,19)
+ │    ├── fd: ()-->(38), (20)-->(2,3,5-12,19)
  │    ├── ensure-distinct-on
- │    │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":36
+ │    │    ├── columns: datname:2 pid:3 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":38
  │    │    ├── grouping columns: sa.rowid:20!null
  │    │    ├── error: "more than one row returned by a subquery used as an expression"
  │    │    ├── key: (20)
- │    │    ├── fd: (20)-->(2,3,5-12,19,36)
+ │    │    ├── fd: (20)-->(2,3,5-12,19,38)
  │    │    ├── left-join-apply
- │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":36
+ │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null "?column?":38
  │    │    │    ├── fd: (20)-->(2-12,19)
  │    │    │    ├── scan sa
  │    │    │    │    ├── columns: datname:2 pid:3 usesysid:4 username:5 application_name:6 client_addr:7 client_hostname:8 client_port:9 backend_start:10 xact_start:11 query_start:12 query:19 sa.rowid:20!null
  │    │    │    │    ├── key: (20)
  │    │    │    │    └── fd: (20)-->(2-12,19)
  │    │    │    ├── project
- │    │    │    │    ├── columns: "?column?":36
+ │    │    │    │    ├── columns: "?column?":38
  │    │    │    │    ├── outer: (4)
  │    │    │    │    ├── select
- │    │    │    │    │    ├── columns: oid:21 rolname:22!null rolsuper:23
- │    │    │    │    │    ├── fd: ()-->(22)
+ │    │    │    │    │    ├── columns: oid:22 rolname:23!null rolsuper:24
+ │    │    │    │    │    ├── fd: ()-->(23)
  │    │    │    │    │    ├── scan r
- │    │    │    │    │    │    └── columns: oid:21 rolname:22 rolsuper:23
+ │    │    │    │    │    │    └── columns: oid:22 rolname:23 rolsuper:24
  │    │    │    │    │    └── filters
- │    │    │    │    │         └── rolname:22 = 'opttester' [outer=(22), constraints=(/22: [/'opttester' - /'opttester']; tight), fd=()-->(22)]
+ │    │    │    │    │         └── rolname:23 = 'opttester' [outer=(23), constraints=(/23: [/'opttester' - /'opttester']; tight), fd=()-->(23)]
  │    │    │    │    └── projections
- │    │    │    │         └── rolsuper:23 OR (oid:21 = usesysid:4) [as="?column?":36, outer=(4,21,23)]
+ │    │    │    │         └── rolsuper:24 OR (oid:22 = usesysid:4) [as="?column?":38, outer=(4,22,24)]
  │    │    │    └── filters (true)
  │    │    └── aggregations
  │    │         ├── const-agg [as=datname:2, outer=(2)]
@@ -135,9 +135,9 @@ project
  │    │         │    └── query_start:12
  │    │         ├── const-agg [as=query:19, outer=(19)]
  │    │         │    └── query:19
- │    │         └── const-agg [as="?column?":36, outer=(36)]
- │    │              └── "?column?":36
+ │    │         └── const-agg [as="?column?":38, outer=(38)]
+ │    │              └── "?column?":38
  │    └── filters
- │         └── "?column?":36 [outer=(36), constraints=(/36: [/true - /true]; tight), fd=()-->(36)]
+ │         └── "?column?":38 [outer=(38), constraints=(/38: [/true - /true]; tight), fd=()-->(38)]
  └── projections
-      └── CASE WHEN (client_hostname:8 IS NOT NULL) AND (client_hostname:8 != '') THEN (client_hostname:8 || ':') || client_port:9::STRING WHEN (client_addr:7 IS NOT NULL) AND (client_addr:7::STRING != '') THEN (client_addr:7::STRING || ':') || client_port:9::STRING WHEN client_port:9 = -1 THEN 'local pipe' ELSE 'localhost:' || client_port:9::STRING END [as=Client:37, outer=(7-9), immutable]
+      └── CASE WHEN (client_hostname:8 IS NOT NULL) AND (client_hostname:8 != '') THEN (client_hostname:8 || ':') || client_port:9::STRING WHEN (client_addr:7 IS NOT NULL) AND (client_addr:7::STRING != '') THEN (client_addr:7::STRING || ':') || client_port:9::STRING WHEN client_port:9 = -1 THEN 'local pipe' ELSE 'localhost:' || client_port:9::STRING END [as=Client:39, outer=(7-9), immutable]

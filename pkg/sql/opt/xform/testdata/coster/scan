@@ -8,7 +8,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
- ├── cost: 1060.02
+ ├── cost: 1070.02
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -38,13 +38,13 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 642.134762
+ ├── cost: 644.991905
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── stats: [rows=4666.66667, distinct(1)=4666.66667, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.66667, null(1,2)=0]
- │    ├── cost: 641.924762
+ │    ├── cost: 644.781905
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -52,7 +52,7 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
  │    │    ├── stats: [rows=33333.3333, distinct(1)=33333.3333, null(1)=0]
- │    │    ├── cost: 308.581429
+ │    │    ├── cost: 311.438571
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 142.86
@@ -69,14 +69,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 52.4648066
+ ├── cost: 52.9067956
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
  │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=407.25, null(1,2)=0]
- │    ├── cost: 52.2548066
+ │    ├── cost: 52.6967956
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -85,7 +85,7 @@ limit
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
  │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
- │    │    ├── cost: 47.7448066
+ │    │    ├── cost: 48.1867956
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 22.10
@@ -106,7 +106,7 @@ select
  ├── cardinality: [0 - 1000]
  ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1030.02
+ ├── cost: 1040.02
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
@@ -114,7 +114,7 @@ select
  │    ├── flags: force-index=primary
  │    ├── cardinality: [0 - 1000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1020.01
+ │    ├── cost: 1030.01
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
@@ -127,7 +127,7 @@ select
  ├── cardinality: [0 - 2000]
  ├── immutable
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1030.02
+ ├── cost: 1040.02
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
@@ -135,7 +135,7 @@ select
  │    ├── flags: force-index=primary
  │    ├── cardinality: [0 - 2000]
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1020.01
+ │    ├── cost: 1030.01
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
