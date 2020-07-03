@@ -40,40 +40,22 @@ opt
 SELECT min(a) FROM abc
 ----
 scalar-group-by
- ├── columns: min:5
+ ├── columns: min:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan abc
  │    ├── columns: a:1!null
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [as=min:5, outer=(1)]
+      └── const-agg [as=min:6, outer=(1)]
            └── a:1
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
 SELECT min(DISTINCT a) FROM abc
-----
-scalar-group-by
- ├── columns: min:5
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(5)
- ├── scan abc
- │    ├── columns: a:1!null
- │    ├── limit: 1
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── aggregations
-      └── const-agg [as=min:5, outer=(1)]
-           └── a:1
-
-# Verify the rule does not fire when FILTER is used.
-opt
-SELECT min(a) FILTER (WHERE a > 'a') FROM abc
 ----
 scalar-group-by
  ├── columns: min:6
@@ -82,7 +64,6 @@ scalar-group-by
  ├── fd: ()-->(6)
  ├── scan abc
  │    ├── columns: a:1!null
- │    ├── constraint: /1: [/e'a\x00' - ]
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
@@ -90,28 +71,47 @@ scalar-group-by
       └── const-agg [as=min:6, outer=(1)]
            └── a:1
 
+# Verify the rule does not fire when FILTER is used.
+opt
+SELECT min(a) FILTER (WHERE a > 'a') FROM abc
+----
+scalar-group-by
+ ├── columns: min:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan abc
+ │    ├── columns: a:1!null
+ │    ├── constraint: /1: [/e'a\x00' - ]
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations
+      └── const-agg [as=min:7, outer=(1)]
+           └── a:1
+
 opt
 SELECT min(b) FROM abc
 ----
 scalar-group-by
- ├── columns: min:5
+ ├── columns: min:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan abc
  │    └── columns: b:2
  └── aggregations
-      └── min [as=min:5, outer=(2)]
+      └── min [as=min:6, outer=(2)]
            └── b:2
 
 opt
 SELECT min(y) FROM xyz where z=7
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@zyx
  │    ├── columns: y:2!null z:3!null
  │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
@@ -119,7 +119,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(2,3)
  └── aggregations
-      └── const-agg [as=min:4, outer=(2)]
+      └── const-agg [as=min:5, outer=(2)]
            └── y:2
 
 # ReplaceScalarMaxWithLimit has the same behavior with max() as
@@ -128,10 +128,10 @@ opt
 SELECT max(y) FROM xyz where z=7
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@zyx,rev
  │    ├── columns: y:2!null z:3!null
  │    ├── constraint: /3/2/1: (/7.0/NULL - /7.0]
@@ -139,7 +139,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(2,3)
  └── aggregations
-      └── const-agg [as=max:4, outer=(2)]
+      └── const-agg [as=max:5, outer=(2)]
            └── y:2
 
 # We expect ReplaceScalarMinWithLimit not to be preferred here.
@@ -149,10 +149,10 @@ opt
 SELECT min(y) FROM xyz@xy WHERE x>7
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── constraint: /1/2: [/8 - ]
@@ -160,7 +160,7 @@ scalar-group-by
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      └── min [as=min:4, outer=(2)]
+      └── min [as=min:5, outer=(2)]
            └── y:2
 
 # We expect ReplaceMaxWithLimit not to be preferred here.
@@ -170,10 +170,10 @@ opt
 SELECT max(y) FROM xyz@xy WHERE x>7
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── constraint: /1/2: [/8 - ]
@@ -181,51 +181,51 @@ scalar-group-by
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      └── max [as=max:4, outer=(2)]
+      └── max [as=max:5, outer=(2)]
            └── y:2
 
 opt
 SELECT max(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@xy,rev
  │    ├── columns: x:1!null
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [as=max:4, outer=(1)]
+      └── const-agg [as=max:5, outer=(1)]
            └── x:1
 
 opt
 SELECT min(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@xy
  │    ├── columns: x:1!null
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [as=min:4, outer=(1)]
+      └── const-agg [as=min:5, outer=(1)]
            └── x:1
 
 opt
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@xy
  │    ├── columns: x:1!null
  │    ├── constraint: /1/2
@@ -236,17 +236,17 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [as=min:4, outer=(1)]
+      └── const-agg [as=min:5, outer=(1)]
            └── x:1
 
 opt
 SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 scalar-group-by
- ├── columns: max:4
+ ├── columns: max:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@xy,rev
  │    ├── columns: x:1!null
  │    ├── constraint: /1/2
@@ -257,17 +257,17 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [as=max:4, outer=(1)]
+      └── const-agg [as=max:5, outer=(1)]
            └── x:1
 
 opt
 SELECT min(y) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4
+ ├── columns: min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@yy
  │    ├── columns: y:2!null
  │    ├── constraint: /2/1: (/NULL - ]
@@ -275,17 +275,17 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── aggregations
-      └── const-agg [as=min:4, outer=(2)]
+      └── const-agg [as=min:5, outer=(2)]
            └── y:2
 
 opt
 SELECT min(y), min(y) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4 min:4
+ ├── columns: min:5 min:5
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4)
+ ├── fd: ()-->(5)
  ├── scan xyz@yy
  │    ├── columns: y:2!null
  │    ├── constraint: /2/1: (/NULL - ]
@@ -293,7 +293,7 @@ scalar-group-by
  │    ├── key: ()
  │    └── fd: ()-->(2)
  └── aggregations
-      └── const-agg [as=min:4, outer=(2)]
+      └── const-agg [as=min:5, outer=(2)]
            └── y:2
 
 # ReplaceScalarMinWithLimit does not apply when there is
@@ -302,18 +302,18 @@ opt
 SELECT min(y) FROM xyz GROUP BY y
 ----
 project
- ├── columns: min:4
+ ├── columns: min:5
  └── group-by
-      ├── columns: y:2 min:4
+      ├── columns: y:2 min:5
       ├── grouping columns: y:2
       ├── internal-ordering: +2
       ├── key: (2)
-      ├── fd: (2)-->(4)
+      ├── fd: (2)-->(5)
       ├── scan xyz@yy
       │    ├── columns: y:2
       │    └── ordering: +2
       └── aggregations
-           └── min [as=min:4, outer=(2)]
+           └── min [as=min:5, outer=(2)]
                 └── y:2
 
 # ReplaceScalarMaxWithLimit does not apply when there is
@@ -322,18 +322,18 @@ opt
 SELECT max(y) FROM xyz GROUP BY y
 ----
 project
- ├── columns: max:4
+ ├── columns: max:5
  └── group-by
-      ├── columns: y:2 max:4
+      ├── columns: y:2 max:5
       ├── grouping columns: y:2
       ├── internal-ordering: +2
       ├── key: (2)
-      ├── fd: (2)-->(4)
+      ├── fd: (2)-->(5)
       ├── scan xyz@yy
       │    ├── columns: y:2
       │    └── ordering: +2
       └── aggregations
-           └── max [as=max:4, outer=(2)]
+           └── max [as=max:5, outer=(2)]
                 └── y:2
 
 # ReplaceScalarMinWithLimit does not apply when there is
@@ -342,20 +342,20 @@ opt
 SELECT min(y) FROM xyz GROUP BY x
 ----
 project
- ├── columns: min:4
+ ├── columns: min:5
  └── group-by
-      ├── columns: x:1!null min:4
+      ├── columns: x:1!null min:5
       ├── grouping columns: x:1!null
       ├── internal-ordering: +1
       ├── key: (1)
-      ├── fd: (1)-->(4)
+      ├── fd: (1)-->(5)
       ├── scan xyz@xy
       │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── ordering: +1
       └── aggregations
-           └── min [as=min:4, outer=(2)]
+           └── min [as=min:5, outer=(2)]
                 └── y:2
 
 # ReplaceScalarMinWithLimit does not apply on multiple aggregations
@@ -364,18 +364,18 @@ opt
 SELECT min(y), min(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: min:4 min:5
+ ├── columns: min:5 min:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4,5)
+ ├── fd: ()-->(5,6)
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      ├── min [as=min:4, outer=(2)]
+      ├── min [as=min:5, outer=(2)]
       │    └── y:2
-      └── min [as=min:5, outer=(1)]
+      └── min [as=min:6, outer=(1)]
            └── x:1
 
 
@@ -385,18 +385,18 @@ opt
 SELECT max(y), max(x) FROM xyz
 ----
 scalar-group-by
- ├── columns: max:4 max:5
+ ├── columns: max:5 max:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(4,5)
+ ├── fd: ()-->(5,6)
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations
-      ├── max [as=max:4, outer=(2)]
+      ├── max [as=max:5, outer=(2)]
       │    └── y:2
-      └── max [as=max:5, outer=(1)]
+      └── max [as=max:6, outer=(1)]
            └── x:1
 
 # ReplaceScalarMinWithLimit does not apply with
@@ -405,18 +405,18 @@ opt
 SELECT x,min(y) FROM xyz GROUP BY x,y
 ----
 group-by
- ├── columns: x:1!null min:4
+ ├── columns: x:1!null min:5
  ├── grouping columns: x:1!null
  ├── internal-ordering: +1
  ├── key: (1)
- ├── fd: (1)-->(4)
+ ├── fd: (1)-->(5)
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      └── min [as=min:4, outer=(2)]
+      └── min [as=min:5, outer=(2)]
            └── y:2
 
 # ReplaceScalarMaxWithLimit does not apply with
@@ -425,18 +425,18 @@ opt
 SELECT x,max(y) FROM xyz GROUP BY x,y
 ----
 group-by
- ├── columns: x:1!null max:4
+ ├── columns: x:1!null max:5
  ├── grouping columns: x:1!null
  ├── internal-ordering: +1
  ├── key: (1)
- ├── fd: (1)-->(4)
+ ├── fd: (1)-->(5)
  ├── scan xyz@xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
-      └── max [as=max:4, outer=(2)]
+      └── max [as=max:5, outer=(2)]
            └── y:2
 
 # ReplaceScalarMinWithLimit does not apply to non-scalar
@@ -445,22 +445,22 @@ opt
 SELECT min(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
- ├── columns: min:4!null count:5!null
+ ├── columns: min:5!null count:6!null
  └── group-by
-      ├── columns: x:1!null min:4!null count:5!null
+      ├── columns: x:1!null min:5!null count:6!null
       ├── grouping columns: x:1!null
       ├── internal-ordering: +1
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
+      ├── fd: (1)-->(5,6)
       ├── scan xyz@xy
       │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── ordering: +1
       └── aggregations
-           ├── min [as=min:4, outer=(1)]
+           ├── min [as=min:5, outer=(1)]
            │    └── x:1
-           └── count [as=count:5, outer=(2)]
+           └── count [as=count:6, outer=(2)]
                 └── y:2
 
 # ReplaceScalarMaxWithLimit does not apply to non-scalar
@@ -469,30 +469,30 @@ opt
 SELECT max(x), count(y) FROM xyz GROUP BY x,y
 ----
 project
- ├── columns: max:4!null count:5!null
+ ├── columns: max:5!null count:6!null
  └── group-by
-      ├── columns: x:1!null max:4!null count:5!null
+      ├── columns: x:1!null max:5!null count:6!null
       ├── grouping columns: x:1!null
       ├── internal-ordering: +1
       ├── key: (1)
-      ├── fd: (1)-->(4,5)
+      ├── fd: (1)-->(5,6)
       ├── scan xyz@xy
       │    ├── columns: x:1!null y:2
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── ordering: +1
       └── aggregations
-           ├── max [as=max:4, outer=(1)]
+           ├── max [as=max:5, outer=(1)]
            │    └── x:1
-           └── count [as=count:5, outer=(2)]
+           └── count [as=count:6, outer=(2)]
                 └── y:2
 
 memo
 SELECT min(a) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: min:5])
+memo (optimized, ~5KB, required=[presentation: min:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
- │    └── [presentation: min:5]
+ │    └── [presentation: min:6]
  │         ├── best: (scalar-group-by G4 G5 cols=())
  │         └── cost: 1.10
  ├── G2: (scan abc,cols=(1))
@@ -516,9 +516,9 @@ memo (optimized, ~5KB, required=[presentation: min:5])
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~6KB, required=[presentation: min:5])
+memo (optimized, ~6KB, required=[presentation: min:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
- │    └── [presentation: min:5]
+ │    └── [presentation: min:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.05
  ├── G2: (scan abc,cols=(2))
@@ -552,9 +552,9 @@ memo (optimized, ~6KB, required=[presentation: min:5])
 memo
 SELECT max(a) FROM abc
 ----
-memo (optimized, ~5KB, required=[presentation: max:5])
+memo (optimized, ~5KB, required=[presentation: max:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
- │    └── [presentation: max:5]
+ │    └── [presentation: max:6]
  │         ├── best: (scalar-group-by G4 G5 cols=())
  │         └── cost: 1.10
  ├── G2: (scan abc,cols=(1))
@@ -578,9 +578,9 @@ memo (optimized, ~5KB, required=[presentation: max:5])
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~6KB, required=[presentation: max:5])
+memo (optimized, ~6KB, required=[presentation: max:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
- │    └── [presentation: max:5]
+ │    └── [presentation: max:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.05
  ├── G2: (scan abc,cols=(2))
@@ -619,40 +619,22 @@ opt
 SELECT max(a) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5
+ ├── columns: max:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan abc,rev
  │    ├── columns: a:1!null
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [as=max:5, outer=(1)]
+      └── const-agg [as=max:6, outer=(1)]
            └── a:1
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
 SELECT max(DISTINCT a) FROM abc
-----
-scalar-group-by
- ├── columns: max:5
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(5)
- ├── scan abc,rev
- │    ├── columns: a:1!null
- │    ├── limit: 1(rev)
- │    ├── key: ()
- │    └── fd: ()-->(1)
- └── aggregations
-      └── const-agg [as=max:5, outer=(1)]
-           └── a:1
-
-# Verify the rule does not fire when FILTER is used.
-opt
-SELECT max(a) FILTER (WHERE a > 'a') FROM abc
 ----
 scalar-group-by
  ├── columns: max:6
@@ -661,7 +643,6 @@ scalar-group-by
  ├── fd: ()-->(6)
  ├── scan abc,rev
  │    ├── columns: a:1!null
- │    ├── constraint: /1: [/e'a\x00' - ]
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
@@ -669,26 +650,45 @@ scalar-group-by
       └── const-agg [as=max:6, outer=(1)]
            └── a:1
 
+# Verify the rule does not fire when FILTER is used.
+opt
+SELECT max(a) FILTER (WHERE a > 'a') FROM abc
+----
+scalar-group-by
+ ├── columns: max:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── scan abc,rev
+ │    ├── columns: a:1!null
+ │    ├── constraint: /1: [/e'a\x00' - ]
+ │    ├── limit: 1(rev)
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── aggregations
+      └── const-agg [as=max:7, outer=(1)]
+           └── a:1
+
 opt
 SELECT max(b) FROM abc
 ----
 scalar-group-by
- ├── columns: max:5
+ ├── columns: max:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan abc
  │    └── columns: b:2
  └── aggregations
-      └── max [as=max:5, outer=(2)]
+      └── max [as=max:6, outer=(2)]
            └── b:2
 
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~6KB, required=[presentation: max:5])
+memo (optimized, ~6KB, required=[presentation: max:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
- │    └── [presentation: max:5]
+ │    └── [presentation: max:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.05
  ├── G2: (scan abc,cols=(2))
@@ -728,10 +728,10 @@ opt expect=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
 project
- ├── columns: min:5!null
+ ├── columns: min:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@w
  │    ├── columns: k:1!null w:4!null
  │    ├── constraint: /4/1: [/5 - /5]
@@ -739,17 +739,17 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(1,4)
  └── projections
-      └── k:1 [as=min:5, outer=(1)]
+      └── k:1 [as=min:6, outer=(1)]
 
 # Basic max case.
 opt expect=ReplaceMaxWithLimit
 SELECT max(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 project
- ├── columns: max:5
+ ├── columns: max:6
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@vw,rev
  │    ├── columns: v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
@@ -757,23 +757,23 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(3,4)
  └── projections
-      └── w:4 [as=max:5, outer=(4)]
+      └── w:4 [as=max:6, outer=(4)]
 
 # Add const_agg function, as well as min function.
 opt expect=ReplaceMinWithLimit
 SELECT v + 1, min(w), v FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
 project
- ├── columns: "?column?":6!null min:5!null v:3!null
+ ├── columns: "?column?":7!null min:6!null v:3!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(3,5,6)
+ ├── fd: ()-->(3,6,7)
  ├── project
- │    ├── columns: min:5!null v:3!null
+ │    ├── columns: min:6!null v:3!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(3,5)
+ │    ├── fd: ()-->(3,6)
  │    ├── scan kuvw@vw
  │    │    ├── columns: v:3!null w:4!null
  │    │    ├── constraint: /3/4/1: (/5/NULL - /5]
@@ -781,25 +781,25 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    └── projections
- │         └── w:4 [as=min:5, outer=(4)]
+ │         └── w:4 [as=min:6, outer=(4)]
  └── projections
-      └── v:3 + 1 [as="?column?":6, outer=(3), immutable]
+      └── v:3 + 1 [as="?column?":7, outer=(3), immutable]
 
 # Add const_agg function, as well as max function.
 opt expect=ReplaceMaxWithLimit
 SELECT v + 1, max(w), v FROM kuvw WHERE v = 5 GROUP BY v
 ----
 project
- ├── columns: "?column?":6!null max:5 v:3!null
+ ├── columns: "?column?":7!null max:6 v:3!null
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(3,5,6)
+ ├── fd: ()-->(3,6,7)
  ├── project
- │    ├── columns: max:5 v:3!null
+ │    ├── columns: max:6 v:3!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(3,5)
+ │    ├── fd: ()-->(3,6)
  │    ├── scan kuvw@vw,rev
  │    │    ├── columns: v:3!null w:4
  │    │    ├── constraint: /3/4/1: [/5 - /5]
@@ -807,19 +807,19 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    └── projections
- │         └── w:4 [as=max:5, outer=(4)]
+ │         └── w:4 [as=max:6, outer=(4)]
  └── projections
-      └── v:3 + 1 [as="?column?":6, outer=(3), immutable]
+      └── v:3 + 1 [as="?column?":7, outer=(3), immutable]
 
 # Use multiple grouping columns with min function.
 opt expect=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: min:5!null
+ ├── columns: min:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@vw
  │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
@@ -827,17 +827,17 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── k:1 [as=min:5, outer=(1)]
+      └── k:1 [as=min:6, outer=(1)]
 
 # Use multiple grouping columns with max function.
 opt expect=ReplaceMaxWithLimit
 SELECT max(k) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: max:5!null
+ ├── columns: max:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@vw,rev
  │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
@@ -845,17 +845,17 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── k:1 [as=max:5, outer=(1)]
+      └── k:1 [as=max:6, outer=(1)]
 
 # Use multiple grouping columns with min function, and project them.
 opt expect=ReplaceMinWithLimit
 SELECT v, min(k), w FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: v:3!null min:5!null w:4!null
+ ├── columns: v:3!null min:6!null w:4!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(3-5)
+ ├── fd: ()-->(3,4,6)
  ├── scan kuvw@vw
  │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
@@ -863,17 +863,17 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── k:1 [as=min:5, outer=(1)]
+      └── k:1 [as=min:6, outer=(1)]
 
 # Use multiple grouping columns with max function, and project them.
 opt expect=ReplaceMaxWithLimit
 SELECT v, max(k), w FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: v:3!null max:5!null w:4!null
+ ├── columns: v:3!null max:6!null w:4!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(3-5)
+ ├── fd: ()-->(3,4,6)
  ├── scan kuvw@vw,rev
  │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: [/5/10 - /5/10]
@@ -881,17 +881,17 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(1,3,4)
  └── projections
-      └── k:1 [as=max:5, outer=(1)]
+      └── k:1 [as=max:6, outer=(1)]
 
 # Multiple grouping columns, but different min column; use different index.
 opt expect=ReplaceMinWithLimit
 SELECT min(u) FROM kuvw WHERE v = 5 AND w = 10 AND u > 0 GROUP BY v, w
 ----
 project
- ├── columns: min:5!null
+ ├── columns: min:6!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@wvu
  │    ├── columns: u:2!null v:3!null w:4!null
  │    ├── constraint: /4/3/2/1: [/10/5/1 - /10/5]
@@ -899,17 +899,17 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(2-4)
  └── projections
-      └── u:2 [as=min:5, outer=(2)]
+      └── u:2 [as=min:6, outer=(2)]
 
 # Multiple grouping columns, but different max column; use different index.
 opt expect=ReplaceMaxWithLimit
 SELECT max(u) FROM kuvw WHERE v = 5 AND w = 10 GROUP BY v, w
 ----
 project
- ├── columns: max:5
+ ├── columns: max:6
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@wvu,rev
  │    ├── columns: u:2 v:3!null w:4!null
  │    ├── constraint: /4/3/2/1: [/10/5 - /10/5]
@@ -917,20 +917,20 @@ project
  │    ├── key: ()
  │    └── fd: ()-->(2-4)
  └── projections
-      └── u:2 [as=max:5, outer=(2)]
+      └── u:2 [as=max:6, outer=(2)]
 
 # One of grouping columns is not constant, with min function.
 opt expect-not=ReplaceMinWithLimit
 SELECT min(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
- ├── columns: min:5!null
+ ├── columns: min:6!null
  └── group-by
-      ├── columns: w:4 min:5!null
+      ├── columns: w:4 min:6!null
       ├── grouping columns: w:4
       ├── internal-ordering: +4 opt(3)
       ├── key: (4)
-      ├── fd: (4)-->(5)
+      ├── fd: (4)-->(6)
       ├── scan kuvw@vw
       │    ├── columns: k:1!null v:3!null w:4
       │    ├── constraint: /3/4/1: [/5 - /5]
@@ -938,7 +938,7 @@ project
       │    ├── fd: ()-->(3), (1)-->(4)
       │    └── ordering: +4 opt(3) [actual: +4]
       └── aggregations
-           └── min [as=min:5, outer=(1)]
+           └── min [as=min:6, outer=(1)]
                 └── k:1
 
 # One of grouping columns is not constant, with max function.
@@ -946,13 +946,13 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(k) FROM kuvw WHERE v = 5 GROUP BY v, w
 ----
 project
- ├── columns: max:5!null
+ ├── columns: max:6!null
  └── group-by
-      ├── columns: w:4 max:5!null
+      ├── columns: w:4 max:6!null
       ├── grouping columns: w:4
       ├── internal-ordering: +4 opt(3)
       ├── key: (4)
-      ├── fd: (4)-->(5)
+      ├── fd: (4)-->(6)
       ├── scan kuvw@vw
       │    ├── columns: k:1!null v:3!null w:4
       │    ├── constraint: /3/4/1: [/5 - /5]
@@ -960,7 +960,7 @@ project
       │    ├── fd: ()-->(3), (1)-->(4)
       │    └── ordering: +4 opt(3) [actual: +4]
       └── aggregations
-           └── max [as=max:5, outer=(1)]
+           └── max [as=max:6, outer=(1)]
                 └── k:1
 
 # We expect ReplaceMinWithLimit not to be preferred here.
@@ -970,13 +970,13 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w) FROM kuvw WHERE v > 5 AND w IS NOT NULL GROUP BY v
 ----
 project
- ├── columns: min:5!null
+ ├── columns: min:6!null
  └── group-by
-      ├── columns: v:3!null min:5!null
+      ├── columns: v:3!null min:6!null
       ├── grouping columns: v:3!null
       ├── internal-ordering: +3
       ├── key: (3)
-      ├── fd: (3)-->(5)
+      ├── fd: (3)-->(6)
       ├── select
       │    ├── columns: v:3!null w:4!null
       │    ├── ordering: +3
@@ -987,7 +987,7 @@ project
       │    └── filters
       │         └── w:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
       └── aggregations
-           └── min [as=min:5, outer=(4)]
+           └── min [as=min:6, outer=(4)]
                 └── w:4
 
 # We expect ReplaceMaxWithLimit not to be preferred here.
@@ -997,19 +997,19 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w) FROM kuvw WHERE v > 5 GROUP BY v
 ----
 project
- ├── columns: max:5
+ ├── columns: max:6
  └── group-by
-      ├── columns: v:3!null max:5
+      ├── columns: v:3!null max:6
       ├── grouping columns: v:3!null
       ├── internal-ordering: +3
       ├── key: (3)
-      ├── fd: (3)-->(5)
+      ├── fd: (3)-->(6)
       ├── scan kuvw@vw
       │    ├── columns: v:3!null w:4
       │    ├── constraint: /3/4/1: [/6 - ]
       │    └── ordering: +3
       └── aggregations
-           └── max [as=max:5, outer=(4)]
+           └── max [as=max:6, outer=(4)]
                 └── w:4
 
 # ReplaceMinWithLimit does not apply on multiple aggregations
@@ -1018,19 +1018,19 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w), min(k) FROM kuvw WHERE v = 5 AND w IS NOT NULL GROUP BY v
 ----
 group-by
- ├── columns: min:5!null min:6!null
+ ├── columns: min:6!null min:7!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5,6)
+ ├── fd: ()-->(6,7)
  ├── scan kuvw@vw
  │    ├── columns: k:1!null v:3!null w:4!null
  │    ├── constraint: /3/4/1: (/5/NULL - /5]
  │    ├── key: (1)
  │    └── fd: ()-->(3), (1)-->(4)
  └── aggregations
-      ├── min [as=min:5, outer=(4)]
+      ├── min [as=min:6, outer=(4)]
       │    └── w:4
-      └── min [as=min:6, outer=(1)]
+      └── min [as=min:7, outer=(1)]
            └── k:1
 
 # ReplaceMaxWithLimit does not apply on multiple aggregations
@@ -1039,19 +1039,19 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), max(k) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: max:5 max:6!null
+ ├── columns: max:6 max:7!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5,6)
+ ├── fd: ()-->(6,7)
  ├── scan kuvw@vw
  │    ├── columns: k:1!null v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    ├── key: (1)
  │    └── fd: ()-->(3), (1)-->(4)
  └── aggregations
-      ├── max [as=max:5, outer=(4)]
+      ├── max [as=max:6, outer=(4)]
       │    └── w:4
-      └── max [as=max:6, outer=(1)]
+      └── max [as=max:7, outer=(1)]
            └── k:1
 
 # ReplaceMinWithLimit does not apply when other aggregates are present.
@@ -1059,19 +1059,19 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(k), max(k) FROM kuvw WHERE w = 5 GROUP BY w
 ----
 group-by
- ├── columns: min:5!null max:6!null
+ ├── columns: min:6!null max:7!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5,6)
+ ├── fd: ()-->(6,7)
  ├── scan kuvw@wvu
  │    ├── columns: k:1!null w:4!null
  │    ├── constraint: /4/3/2/1: [/5 - /5]
  │    ├── key: (1)
  │    └── fd: ()-->(4)
  └── aggregations
-      ├── min [as=min:5, outer=(1)]
+      ├── min [as=min:6, outer=(1)]
       │    └── k:1
-      └── max [as=max:6, outer=(1)]
+      └── max [as=max:7, outer=(1)]
            └── k:1
 
 # ReplaceMaxWithLimit does not apply when other aggregates are present.
@@ -1079,18 +1079,18 @@ opt expect-not=ReplaceMaxWithLimit
 SELECT max(w), count(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: max:5 count:6!null
+ ├── columns: max:6 count:7!null
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5,6)
+ ├── fd: ()-->(6,7)
  ├── scan kuvw@vw
  │    ├── columns: v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    └── fd: ()-->(3)
  └── aggregations
-      ├── max [as=max:5, outer=(4)]
+      ├── max [as=max:6, outer=(4)]
       │    └── w:4
-      └── count [as=count:6, outer=(4)]
+      └── count [as=count:7, outer=(4)]
            └── w:4
 
 # min/max functions are not symmetric because of NULL ordering (NULL values
@@ -1100,16 +1100,16 @@ opt expect-not=ReplaceMinWithLimit
 SELECT min(w) FROM kuvw WHERE v = 5 GROUP BY v
 ----
 group-by
- ├── columns: min:5
+ ├── columns: min:6
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan kuvw@vw
  │    ├── columns: v:3!null w:4
  │    ├── constraint: /3/4/1: [/5 - /5]
  │    └── fd: ()-->(3)
  └── aggregations
-      └── min [as=min:5, outer=(4)]
+      └── min [as=min:6, outer=(4)]
            └── w:4
 
 # --------------------------------------------------
@@ -1120,9 +1120,9 @@ group-by
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w) GROUP BY u,v
 ----
-memo (optimized, ~6KB, required=[presentation: array_agg:5])
+memo (optimized, ~7KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
  │         └── cost: 1120.05
  ├── G2: (group-by G4 G5 cols=(2,3),ordering=+4 opt(2,3)) (group-by G4 G5 cols=(2,3),ordering=+2,+3,+4) (group-by G4 G5 cols=(2,3),ordering=+4,+3,+2) (group-by G4 G5 cols=(2,3),ordering=+3,+4)
@@ -1154,9 +1154,9 @@ memo (optimized, ~6KB, required=[presentation: array_agg:5])
 memo
 SELECT sum(w) FROM kuvw GROUP BY u,v,w
 ----
-memo (optimized, ~6KB, required=[presentation: sum:5])
+memo (optimized, ~6KB, required=[presentation: sum:6])
  ├── G1: (project G2 G3 sum)
- │    └── [presentation: sum:5]
+ │    └── [presentation: sum:6]
  │         ├── best: (project G2 G3 sum)
  │         └── cost: 1130.05
  ├── G2: (group-by G4 G5 cols=(2-4)) (group-by G4 G5 cols=(2-4),ordering=+2,+3,+4) (group-by G4 G5 cols=(2-4),ordering=+4,+3,+2) (group-by G4 G5 cols=(2-4),ordering=+3,+4)
@@ -1185,9 +1185,9 @@ memo (optimized, ~6KB, required=[presentation: sum:5])
 memo
 SELECT sum(w) FROM kuvw GROUP BY v
 ----
-memo (optimized, ~6KB, required=[presentation: sum:5])
+memo (optimized, ~6KB, required=[presentation: sum:6])
  ├── G1: (project G2 G3 sum)
- │    └── [presentation: sum:5]
+ │    └── [presentation: sum:6]
  │         ├── best: (project G2 G3 sum)
  │         └── cost: 1082.05
  ├── G2: (group-by G4 G5 cols=(3)) (group-by G4 G5 cols=(3),ordering=+3)
@@ -1210,9 +1210,9 @@ memo (optimized, ~6KB, required=[presentation: sum:5])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY u,w) GROUP BY v
 ----
-memo (optimized, ~6KB, required=[presentation: array_agg:5])
+memo (optimized, ~7KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
  │         └── cost: 1102.05
  ├── G2: (group-by G4 G5 cols=(3),ordering=+2,+4 opt(3)) (group-by G4 G5 cols=(3),ordering=+2,+3,+4)
@@ -1241,9 +1241,9 @@ memo (optimized, ~6KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(k) FROM (SELECT * FROM kuvw WHERE u=v ORDER BY u) GROUP BY w
 ----
-memo (optimized, ~10KB, required=[presentation: array_agg:5])
+memo (optimized, ~12KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
  │         └── cost: 1079.63
  ├── G2: (group-by G4 G5 cols=(4),ordering=+(2|3) opt(4)) (group-by G4 G5 cols=(4),ordering=+(2|3)) (group-by G4 G5 cols=(4),ordering=+4,+(2|3)) (group-by G4 G5 cols=(4),ordering=+(2|3),+4)
@@ -1335,9 +1335,9 @@ memo (optimized, ~10KB, required=[presentation: array_agg:5])
 memo
 SELECT sum(k) FROM (SELECT * FROM kuvw WHERE u=v) GROUP BY u,w
 ----
-memo (optimized, ~10KB, required=[presentation: sum:5])
+memo (optimized, ~12KB, required=[presentation: sum:6])
  ├── G1: (project G2 G3 sum)
- │    └── [presentation: sum:5]
+ │    └── [presentation: sum:6]
  │         ├── best: (project G2 G3 sum)
  │         └── cost: 1079.69
  ├── G2: (group-by G4 G5 cols=(2,4)) (group-by G4 G5 cols=(2,4),ordering=+(2|3)) (group-by G4 G5 cols=(2,4),ordering=+4)
@@ -1397,9 +1397,9 @@ memo (optimized, ~10KB, required=[presentation: sum:5])
 memo
 SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w DESC) GROUP BY u,v
 ----
-memo (optimized, ~5KB, required=[presentation: array_agg:5])
+memo (optimized, ~7KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
- │    └── [presentation: array_agg:5]
+ │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
  │         └── cost: 1229.71
  ├── G2: (group-by G4 G5 cols=(2,3),ordering=-4 opt(2,3))
@@ -1720,9 +1720,9 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT (SELECT w FROM kuvw WHERE v=1 AND x=u) FROM xyz ORDER BY x+1, x
 ----
-memo (optimized, ~25KB, required=[presentation: w:8] [ordering: +9,+1])
+memo (optimized, ~25KB, required=[presentation: w:10] [ordering: +11,+1])
  ├── G1: (project G2 G3 x)
- │    ├── [presentation: w:8] [ordering: +9,+1]
+ │    ├── [presentation: w:10] [ordering: +11,+1]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1352.04
  │    └── []
@@ -1733,12 +1733,12 @@ memo (optimized, ~25KB, required=[presentation: w:8] [ordering: +9,+1])
  │         ├── best: (ensure-distinct-on G4="[ordering: +1]" G5 cols=(1),ordering=+1)
  │         └── cost: 1091.73
  ├── G3: (projections G6 G7)
- ├── G4: (left-join G8 G9 G10) (right-join G9 G8 G10) (merge-join G8 G9 G11 left-join,+1,+5) (lookup-join G12 G11 kuvw@uvw,keyCols=[1 10],outCols=(1,5-7)) (lookup-join G13 G10 kuvw@vw,keyCols=[11],outCols=(1,5-7)) (merge-join G9 G8 G11 right-join,+5,+1)
+ ├── G4: (left-join G8 G9 G10) (right-join G9 G8 G10) (merge-join G8 G9 G11 left-join,+1,+6) (lookup-join G12 G11 kuvw@uvw,keyCols=[1 12],outCols=(1,6-8)) (lookup-join G13 G10 kuvw@vw,keyCols=[13],outCols=(1,6-8)) (merge-join G9 G8 G11 right-join,+6,+1)
  │    ├── [ordering: +1]
- │    │    ├── best: (merge-join G8="[ordering: +1]" G9="[ordering: +5 opt(6)]" G11 left-join,+1,+5)
+ │    │    ├── best: (merge-join G8="[ordering: +1]" G9="[ordering: +6 opt(7)]" G11 left-join,+1,+6)
  │    │    └── cost: 1061.71
  │    └── []
- │         ├── best: (merge-join G8="[ordering: +1]" G9="[ordering: +5 opt(6)]" G11 left-join,+1,+5)
+ │         ├── best: (merge-join G8="[ordering: +1]" G9="[ordering: +6 opt(7)]" G11 left-join,+1,+6)
  │         └── cost: 1061.71
  ├── G5: (aggregations G14)
  ├── G6: (variable kuvw.w)
@@ -1750,12 +1750,12 @@ memo (optimized, ~25KB, required=[presentation: w:8] [ordering: +9,+1])
  │    └── []
  │         ├── best: (scan xyz@xy,cols=(1))
  │         └── cost: 1030.02
- ├── G9: (select G17 G18) (scan kuvw@vw,cols=(5-7),constrained)
- │    ├── [ordering: +5 opt(6)]
+ ├── G9: (select G17 G18) (scan kuvw@vw,cols=(6-8),constrained)
+ │    ├── [ordering: +6 opt(7)]
  │    │    ├── best: (sort G9)
  │    │    └── cost: 11.58
  │    └── []
- │         ├── best: (scan kuvw@vw,cols=(5-7),constrained)
+ │         ├── best: (scan kuvw@vw,cols=(6-8),constrained)
  │         └── cost: 10.71
  ├── G10: (filters G19)
  ├── G11: (filters)
@@ -1776,12 +1776,12 @@ memo (optimized, ~25KB, required=[presentation: w:8] [ordering: +9,+1])
  ├── G14: (const-agg G6)
  ├── G15: (variable x)
  ├── G16: (const 1)
- ├── G17: (scan kuvw,cols=(5-7)) (scan kuvw@uvw,cols=(5-7)) (scan kuvw@wvu,cols=(5-7)) (scan kuvw@vw,cols=(5-7)) (scan kuvw@w,cols=(5-7))
- │    ├── [ordering: +5 opt(6)]
- │    │    ├── best: (scan kuvw@uvw,cols=(5-7))
+ ├── G17: (scan kuvw,cols=(6-8)) (scan kuvw@uvw,cols=(6-8)) (scan kuvw@wvu,cols=(6-8)) (scan kuvw@vw,cols=(6-8)) (scan kuvw@w,cols=(6-8))
+ │    ├── [ordering: +6 opt(7)]
+ │    │    ├── best: (scan kuvw@uvw,cols=(6-8))
  │    │    └── cost: 1070.02
  │    └── []
- │         ├── best: (scan kuvw,cols=(5-7))
+ │         ├── best: (scan kuvw,cols=(6-8))
  │         └── cost: 1070.02
  ├── G18: (filters G21)
  ├── G19: (eq G15 G22)
@@ -1799,54 +1799,54 @@ memo (optimized, ~19KB, required=[])
  │    └── []
  │         ├── best: (insert G2 G3 xyz)
  │         └── cost: 2150.50
- ├── G2: (upsert-distinct-on G4 G5 cols=(6)) (upsert-distinct-on G4 G5 cols=(6),ordering=+6 opt(8,9))
+ ├── G2: (upsert-distinct-on G4 G5 cols=(7)) (upsert-distinct-on G4 G5 cols=(7),ordering=+7 opt(10,11))
  │    └── []
- │         ├── best: (upsert-distinct-on G4="[ordering: +6 opt(8,9)]" G5 cols=(6),ordering=+6 opt(8,9))
+ │         ├── best: (upsert-distinct-on G4="[ordering: +7 opt(10,11)]" G5 cols=(7),ordering=+7 opt(10,11))
  │         └── cost: 2150.49
  ├── G3: (f-k-checks)
  ├── G4: (select G6 G7)
- │    ├── [ordering: +6 opt(8,9)]
- │    │    ├── best: (select G6="[ordering: +6 opt(8,9)]" G7)
+ │    ├── [ordering: +7 opt(10,11)]
+ │    │    ├── best: (select G6="[ordering: +7 opt(10,11)]" G7)
  │    │    └── cost: 2150.07
  │    └── []
  │         ├── best: (select G6 G7)
  │         └── cost: 2150.07
  ├── G5: (aggregations G8 G9)
- ├── G6: (left-join G10 G11 G12) (right-join G11 G10 G12) (merge-join G10 G11 G13 left-join,+6,+9) (lookup-join G10 G13 xyz,keyCols=[6],outCols=(6-9)) (lookup-join G10 G13 xyz@xy,keyCols=[6],outCols=(6-9)) (merge-join G11 G10 G13 right-join,+9,+6)
- │    ├── [ordering: +6 opt(8,9)]
- │    │    ├── best: (merge-join G10="[ordering: +6 opt(8)]" G11="[ordering: +9]" G13 left-join,+6,+9)
+ ├── G6: (left-join G10 G11 G12) (right-join G11 G10 G12) (merge-join G10 G11 G13 left-join,+7,+11) (lookup-join G10 G13 xyz,keyCols=[7],outCols=(7,8,10,11)) (lookup-join G10 G13 xyz@xy,keyCols=[7],outCols=(7,8,10,11)) (merge-join G11 G10 G13 right-join,+11,+7)
+ │    ├── [ordering: +7 opt(10,11)]
+ │    │    ├── best: (merge-join G10="[ordering: +7 opt(10)]" G11="[ordering: +11]" G13 left-join,+7,+11)
  │    │    └── cost: 2140.06
  │    └── []
- │         ├── best: (merge-join G10="[ordering: +6 opt(8)]" G11="[ordering: +9]" G13 left-join,+6,+9)
+ │         ├── best: (merge-join G10="[ordering: +7 opt(10)]" G11="[ordering: +11]" G13 left-join,+7,+11)
  │         └── cost: 2140.06
  ├── G7: (filters G14)
  ├── G8: (first-agg G15)
  ├── G9: (first-agg G16)
  ├── G10: (project G17 G18 v w)
- │    ├── [ordering: +6 opt(8)]
- │    │    ├── best: (project G17="[ordering: +6]" G18 v w)
+ │    ├── [ordering: +7 opt(10)]
+ │    │    ├── best: (project G17="[ordering: +7]" G18 v w)
  │    │    └── cost: 1080.03
  │    └── []
  │         ├── best: (project G17 G18 v w)
  │         └── cost: 1080.03
- ├── G11: (scan xyz,cols=(9)) (scan xyz@xy,cols=(9)) (scan xyz@zyx,cols=(9)) (scan xyz@yy,cols=(9))
- │    ├── [ordering: +9]
- │    │    ├── best: (scan xyz@xy,cols=(9))
+ ├── G11: (scan xyz,cols=(11)) (scan xyz@xy,cols=(11)) (scan xyz@zyx,cols=(11)) (scan xyz@yy,cols=(11))
+ │    ├── [ordering: +11]
+ │    │    ├── best: (scan xyz@xy,cols=(11))
  │    │    └── cost: 1030.02
  │    └── []
- │         ├── best: (scan xyz@xy,cols=(9))
+ │         ├── best: (scan xyz@xy,cols=(11))
  │         └── cost: 1030.02
  ├── G12: (filters G19)
  ├── G13: (filters)
  ├── G14: (is G20 G21)
  ├── G15: (variable w)
  ├── G16: (variable "?column?")
- ├── G17: (scan kuvw,cols=(6,7)) (scan kuvw@uvw,cols=(6,7)) (scan kuvw@wvu,cols=(6,7)) (scan kuvw@vw,cols=(6,7)) (scan kuvw@w,cols=(6,7))
- │    ├── [ordering: +6]
- │    │    ├── best: (scan kuvw@vw,cols=(6,7))
+ ├── G17: (scan kuvw,cols=(7,8)) (scan kuvw@uvw,cols=(7,8)) (scan kuvw@wvu,cols=(7,8)) (scan kuvw@vw,cols=(7,8)) (scan kuvw@w,cols=(7,8))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (scan kuvw@vw,cols=(7,8))
  │    │    └── cost: 1060.02
  │    └── []
- │         ├── best: (scan kuvw,cols=(6,7))
+ │         ├── best: (scan kuvw,cols=(7,8))
  │         └── cost: 1060.02
  ├── G18: (projections G22)
  ├── G19: (eq G23 G20)
@@ -1859,7 +1859,7 @@ memo (optimized, ~19KB, required=[])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~20KB, required=[])
+memo (optimized, ~22KB, required=[])
  ├── G1: (upsert G2 G3 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 xyz)
@@ -1869,20 +1869,20 @@ memo (optimized, ~20KB, required=[])
  │         ├── best: (project G4 G5 v w ?column? x y z)
  │         └── cost: 2230.09
  ├── G3: (f-k-checks)
- ├── G4: (left-join G6 G7 G8) (right-join G7 G6 G8) (lookup-join G6 G9 xyz,keyCols=[6],outCols=(6-11)) (lookup-join G10 G9 xyz,keyCols=[9],outCols=(6-11)) (merge-join G7 G6 G9 right-join,+9,+6)
+ ├── G4: (left-join G6 G7 G8) (right-join G7 G6 G8) (lookup-join G6 G9 xyz,keyCols=[7],outCols=(7,8,10-13)) (lookup-join G10 G9 xyz,keyCols=[11],outCols=(7,8,10-13)) (merge-join G7 G6 G9 right-join,+11,+7)
  │    └── []
- │         ├── best: (merge-join G7="[ordering: +9]" G6="[ordering: +6 opt(8)]" G9 right-join,+9,+6)
+ │         ├── best: (merge-join G7="[ordering: +11]" G6="[ordering: +7 opt(10)]" G9 right-join,+11,+7)
  │         └── cost: 2210.08
  ├── G5: (projections G11)
- ├── G6: (ensure-upsert-distinct-on G12 G13 cols=(6)) (ensure-upsert-distinct-on G12 G13 cols=(6),ordering=+6 opt(8))
- │    ├── [ordering: +6 opt(8)]
- │    │    ├── best: (ensure-upsert-distinct-on G12="[ordering: +6 opt(8)]" G13 cols=(6))
+ ├── G6: (ensure-upsert-distinct-on G12 G13 cols=(7)) (ensure-upsert-distinct-on G12 G13 cols=(7),ordering=+7 opt(10))
+ │    ├── [ordering: +7 opt(10)]
+ │    │    ├── best: (ensure-upsert-distinct-on G12="[ordering: +7 opt(10)]" G13 cols=(7))
  │    │    └── cost: 1120.05
  │    └── []
- │         ├── best: (ensure-upsert-distinct-on G12="[ordering: +6 opt(8)]" G13 cols=(6),ordering=+6 opt(8))
+ │         ├── best: (ensure-upsert-distinct-on G12="[ordering: +7 opt(10)]" G13 cols=(7),ordering=+7 opt(10))
  │         └── cost: 1120.05
  ├── G7: (scan xyz) (scan xyz@zyx)
- │    ├── [ordering: +9]
+ │    ├── [ordering: +11]
  │    │    ├── best: (scan xyz)
  │    │    └── cost: 1060.02
  │    └── []
@@ -1890,14 +1890,14 @@ memo (optimized, ~20KB, required=[])
  │         └── cost: 1060.02
  ├── G8: (filters G14)
  ├── G9: (filters)
- ├── G10: (lookup-join G6 G9 xyz@xy,keyCols=[6],outCols=(6-10))
+ ├── G10: (lookup-join G6 G9 xyz@xy,keyCols=[7],outCols=(7,8,10-12))
  │    └── []
- │         ├── best: (lookup-join G6 G9 xyz@xy,keyCols=[6],outCols=(6-10))
+ │         ├── best: (lookup-join G6 G9 xyz@xy,keyCols=[7],outCols=(7,8,10-12))
  │         └── cost: 7160.06
  ├── G11: (case G15 G16 G17)
  ├── G12: (project G18 G19 v w)
- │    ├── [ordering: +6 opt(8)]
- │    │    ├── best: (project G18="[ordering: +6]" G19 v w)
+ │    ├── [ordering: +7 opt(10)]
+ │    │    ├── best: (project G18="[ordering: +7]" G19 v w)
  │    │    └── cost: 1080.03
  │    └── []
  │         ├── best: (project G18 G19 v w)
@@ -1907,12 +1907,12 @@ memo (optimized, ~20KB, required=[])
  ├── G15: (true)
  ├── G16: (scalar-list G24)
  ├── G17: (const 2.0)
- ├── G18: (scan kuvw,cols=(6,7)) (scan kuvw@uvw,cols=(6,7)) (scan kuvw@wvu,cols=(6,7)) (scan kuvw@vw,cols=(6,7)) (scan kuvw@w,cols=(6,7))
- │    ├── [ordering: +6]
- │    │    ├── best: (scan kuvw@vw,cols=(6,7))
+ ├── G18: (scan kuvw,cols=(7,8)) (scan kuvw@uvw,cols=(7,8)) (scan kuvw@wvu,cols=(7,8)) (scan kuvw@vw,cols=(7,8)) (scan kuvw@w,cols=(7,8))
+ │    ├── [ordering: +7]
+ │    │    ├── best: (scan kuvw@vw,cols=(7,8))
  │    │    └── cost: 1060.02
  │    └── []
- │         ├── best: (scan kuvw,cols=(6,7))
+ │         ├── best: (scan kuvw,cols=(7,8))
  │         └── cost: 1060.02
  ├── G19: (projections G25)
  ├── G20: (first-agg G26)

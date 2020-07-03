@@ -181,10 +181,10 @@ limit
  │    └── columns: s:4
  └── subquery
       └── scan a@s_idx
-           ├── columns: k:6!null
+           ├── columns: k:7!null
            ├── limit: 1
            ├── key: ()
-           └── fd: ()-->(6)
+           └── fd: ()-->(7)
 
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
@@ -306,7 +306,7 @@ opt
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30 ORDER BY b DESC LIMIT 5
 ----
 explain
- ├── columns: tree:5 field:6 description:7
+ ├── columns: tree:6 field:7 description:8
  └── limit
       ├── columns: a:1!null b:2 c:3 d:4
       ├── internal-ordering: -2
@@ -346,7 +346,7 @@ Initial expression
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
   explain
-   ├── columns: tree:5 field:6 description:7
+   ├── columns: tree:6 field:7 description:8
    └── sort
         ├── columns: a:1!null b:2 c:3 d:4
         ├── cardinality: [0 - 5]
@@ -366,25 +366,30 @@ Initial expression
              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │    ├── ordering: -2
              │    ├── limit hint: 5.00
-             │    └── select
+             │    └── project
              │         ├── columns: a:1!null b:2 c:3 d:4
              │         ├── cardinality: [0 - 11]
              │         ├── key: (1)
              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-             │         ├── scan abcd
-             │         │    ├── columns: a:1!null b:2 c:3 d:4
-             │         │    ├── flags: force-index=b
-             │         │    ├── key: (1)
-             │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
-             │         └── filters
-             │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+             │         └── select
+             │              ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+             │              ├── cardinality: [0 - 11]
+             │              ├── key: (1)
+             │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+             │              ├── scan abcd
+             │              │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+             │              │    ├── flags: force-index=b
+             │              │    ├── key: (1)
+             │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+             │              └── filters
+             │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
              └── 5
 ================================================================================
 SimplifySelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:5 field:6 description:7
+    ├── columns: tree:6 field:7 description:8
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -404,27 +409,32 @@ SimplifySelectFilters
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    ├── limit hint: 5.00
-              │    └── select
+              │    └── project
               │         ├── columns: a:1!null b:2 c:3 d:4
   -           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         ├── scan abcd
-              │         │    ├── columns: a:1!null b:2 c:3 d:4
-              │         │    ├── flags: force-index=b
-              │         │    ├── key: (1)
-              │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         └── filters
-  -           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
-  +           │              ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
-  +           │              └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+              │         └── select
+              │              ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+  -           │              ├── cardinality: [0 - 11]
+              │              ├── key: (1)
+              │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              ├── scan abcd
+              │              │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+              │              │    ├── flags: force-index=b
+              │              │    ├── key: (1)
+              │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              └── filters
+  -           │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +           │                   ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
+  +           │                   └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
               └── 5
 ================================================================================
 ConsolidateSelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:5 field:6 description:7
+    ├── columns: tree:6 field:7 description:8
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -444,19 +454,122 @@ ConsolidateSelectFilters
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    ├── limit hint: 5.00
-              │    └── select
+              │    └── project
               │         ├── columns: a:1!null b:2 c:3 d:4
   +           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         ├── scan abcd
-              │         │    ├── columns: a:1!null b:2 c:3 d:4
-              │         │    ├── flags: force-index=b
-              │         │    ├── key: (1)
-              │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         └── filters
-  -           │              ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
-  -           │              └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+              │         └── select
+              │              ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+  +           │              ├── cardinality: [0 - 11]
+              │              ├── key: (1)
+              │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              ├── scan abcd
+              │              │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+              │              │    ├── flags: force-index=b
+              │              │    ├── key: (1)
+              │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              └── filters
+  -           │                   ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
+  -           │                   └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+  +           │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+              └── 5
+================================================================================
+PruneSelectCols
+  Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+================================================================================
+   explain
+    ├── columns: tree:6 field:7 description:8
+    └── sort
+         ├── columns: a:1!null b:2 c:3 d:4
+         ├── cardinality: [0 - 5]
+         ├── key: (1)
+         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+         ├── ordering: -2
+         └── limit
+              ├── columns: a:1!null b:2 c:3 d:4
+              ├── internal-ordering: -2
+              ├── cardinality: [0 - 5]
+              ├── key: (1)
+              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              ├── sort
+              │    ├── columns: a:1!null b:2 c:3 d:4
+              │    ├── cardinality: [0 - 11]
+              │    ├── key: (1)
+              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │    ├── ordering: -2
+              │    ├── limit hint: 5.00
+              │    └── project
+              │         ├── columns: a:1!null b:2 c:3 d:4
+              │         ├── cardinality: [0 - 11]
+              │         ├── key: (1)
+              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │         └── select
+  -           │              ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+  +           │              ├── columns: a:1!null b:2 c:3 d:4
+              │              ├── cardinality: [0 - 11]
+              │              ├── key: (1)
+  -           │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+  +           │              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │              ├── scan abcd
+  -           │              │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5
+  +           │              │    ├── columns: a:1!null b:2 c:3 d:4
+              │              │    ├── flags: force-index=b
+              │              │    ├── key: (1)
+  -           │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+  +           │              │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+              │              └── filters
+              │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+              └── 5
+================================================================================
+EliminateProject
+  Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+================================================================================
+   explain
+    ├── columns: tree:6 field:7 description:8
+    └── sort
+         ├── columns: a:1!null b:2 c:3 d:4
+         ├── cardinality: [0 - 5]
+         ├── key: (1)
+         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+         ├── ordering: -2
+         └── limit
+              ├── columns: a:1!null b:2 c:3 d:4
+              ├── internal-ordering: -2
+              ├── cardinality: [0 - 5]
+              ├── key: (1)
+              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              ├── sort
+              │    ├── columns: a:1!null b:2 c:3 d:4
+              │    ├── cardinality: [0 - 11]
+              │    ├── key: (1)
+              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │    ├── ordering: -2
+              │    ├── limit hint: 5.00
+  -           │    └── project
+  +           │    └── select
+              │         ├── columns: a:1!null b:2 c:3 d:4
+              │         ├── cardinality: [0 - 11]
+              │         ├── key: (1)
+              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  -           │         └── select
+  -           │              ├── columns: a:1!null b:2 c:3 d:4
+  -           │              ├── cardinality: [0 - 11]
+  -           │              ├── key: (1)
+  -           │              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  -           │              ├── scan abcd
+  -           │              │    ├── columns: a:1!null b:2 c:3 d:4
+  -           │              │    ├── flags: force-index=b
+  -           │              │    ├── key: (1)
+  -           │              │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+  -           │              └── filters
+  -           │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +           │         ├── scan abcd
+  +           │         │    ├── columns: a:1!null b:2 c:3 d:4
+  +           │         │    ├── flags: force-index=b
+  +           │         │    ├── key: (1)
+  +           │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+  +           │         └── filters
   +           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
               └── 5
 ================================================================================
@@ -464,7 +577,7 @@ GenerateIndexScans
   Cost: 5134.91
 ================================================================================
    explain
-    ├── columns: tree:5 field:6 description:7
+    ├── columns: tree:6 field:7 description:8
   - └── sort
   + └── limit
          ├── columns: a:1!null b:2 c:3 d:4
@@ -536,7 +649,7 @@ Final best expression
   Cost: 5134.91
 ================================================================================
   explain
-   ├── columns: tree:5 field:6 description:7
+   ├── columns: tree:6 field:7 description:8
    └── limit
         ├── columns: a:1!null b:2 c:3 d:4
         ├── internal-ordering: -2
@@ -667,30 +780,30 @@ limit
  │    └── union
  │         ├── columns: val:2!null data1:6!null
  │         ├── left columns: val:2!null data1:6!null
- │         ├── right columns: val:26 data1:30
+ │         ├── right columns: val:29 data1:33
  │         ├── cardinality: [0 - 30]
  │         ├── key: (2,6)
  │         ├── union
  │         │    ├── columns: val:2!null data1:6!null
- │         │    ├── left columns: val:10 data1:14
- │         │    ├── right columns: val:18 data1:22
+ │         │    ├── left columns: val:11 data1:15
+ │         │    ├── right columns: val:20 data1:24
  │         │    ├── cardinality: [0 - 20]
  │         │    ├── key: (2,6)
  │         │    ├── scan index_tab@b
- │         │    │    ├── columns: val:10!null data1:14!null
- │         │    │    ├── constraint: /10/14/15/9: [/1 - /1]
+ │         │    │    ├── columns: val:11!null data1:15!null
+ │         │    │    ├── constraint: /11/15/16/10: [/1 - /1]
  │         │    │    ├── limit: 10
- │         │    │    └── fd: ()-->(10)
+ │         │    │    └── fd: ()-->(11)
  │         │    └── scan index_tab@b
- │         │         ├── columns: val:18!null data1:22!null
- │         │         ├── constraint: /18/22/23/17: [/2 - /2]
+ │         │         ├── columns: val:20!null data1:24!null
+ │         │         ├── constraint: /20/24/25/19: [/2 - /2]
  │         │         ├── limit: 10
- │         │         └── fd: ()-->(18)
+ │         │         └── fd: ()-->(20)
  │         └── scan index_tab@b
- │              ├── columns: val:26!null data1:30!null
- │              ├── constraint: /26/30/31/25: [/3 - /3]
+ │              ├── columns: val:29!null data1:33!null
+ │              ├── constraint: /29/33/34/28: [/3 - /3]
  │              ├── limit: 10
- │              └── fd: ()-->(26)
+ │              └── fd: ()-->(29)
  └── 10
 
 # Case with single-key spans.
@@ -698,10 +811,10 @@ opt expect=SplitScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region = 'US_EAST' OR region = 'US_WEST'
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── limit
  │    ├── columns: region:3!null data1:6!null
  │    ├── internal-ordering: -6
@@ -716,25 +829,25 @@ scalar-group-by
  │    │    ├── limit hint: 1.00
  │    │    └── union
  │    │         ├── columns: region:3!null data1:6!null
- │    │         ├── left columns: region:12 data1:15
- │    │         ├── right columns: region:20 data1:23
+ │    │         ├── left columns: region:13 data1:16
+ │    │         ├── right columns: region:22 data1:25
  │    │         ├── cardinality: [0 - 2]
  │    │         ├── key: (3,6)
  │    │         ├── scan index_tab@c,rev
- │    │         │    ├── columns: region:12!null data1:15!null
- │    │         │    ├── constraint: /12/15/16/10: [/'US_EAST' - /'US_EAST']
+ │    │         │    ├── columns: region:13!null data1:16!null
+ │    │         │    ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST']
  │    │         │    ├── limit: 1(rev)
  │    │         │    ├── key: ()
- │    │         │    └── fd: ()-->(12,15)
+ │    │         │    └── fd: ()-->(13,16)
  │    │         └── scan index_tab@c,rev
- │    │              ├── columns: region:20!null data1:23!null
- │    │              ├── constraint: /20/23/24/18: [/'US_WEST' - /'US_WEST']
+ │    │              ├── columns: region:22!null data1:25!null
+ │    │              ├── constraint: /22/25/26/20: [/'US_WEST' - /'US_WEST']
  │    │              ├── limit: 1(rev)
  │    │              ├── key: ()
- │    │              └── fd: ()-->(20,23)
+ │    │              └── fd: ()-->(22,25)
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:9, outer=(6)]
+      └── const-agg [as=max:10, outer=(6)]
            └── data1:6
 
 # Case with multi-column keys in single-key spans.
@@ -744,10 +857,10 @@ FROM index_tab
 WHERE (latitude, longitude) = (1, 2) OR (latitude, longitude) = (4, 5)
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── limit
  │    ├── columns: latitude:4!null longitude:5!null data1:6!null
  │    ├── internal-ordering: -6
@@ -762,25 +875,25 @@ scalar-group-by
  │    │    ├── limit hint: 1.00
  │    │    └── union
  │    │         ├── columns: latitude:4!null longitude:5!null data1:6!null
- │    │         ├── left columns: latitude:13 longitude:14 data1:15
- │    │         ├── right columns: latitude:21 longitude:22 data1:23
+ │    │         ├── left columns: latitude:14 longitude:15 data1:16
+ │    │         ├── right columns: latitude:23 longitude:24 data1:25
  │    │         ├── cardinality: [0 - 2]
  │    │         ├── key: (4-6)
  │    │         ├── scan index_tab@d,rev
- │    │         │    ├── columns: latitude:13!null longitude:14!null data1:15!null
- │    │         │    ├── constraint: /13/14/15/16/10: [/1/2 - /1/2]
+ │    │         │    ├── columns: latitude:14!null longitude:15!null data1:16!null
+ │    │         │    ├── constraint: /14/15/16/17/11: [/1/2 - /1/2]
  │    │         │    ├── limit: 1(rev)
  │    │         │    ├── key: ()
- │    │         │    └── fd: ()-->(13-15)
+ │    │         │    └── fd: ()-->(14-16)
  │    │         └── scan index_tab@d,rev
- │    │              ├── columns: latitude:21!null longitude:22!null data1:23!null
- │    │              ├── constraint: /21/22/23/24/18: [/4/5 - /4/5]
+ │    │              ├── columns: latitude:23!null longitude:24!null data1:25!null
+ │    │              ├── constraint: /23/24/25/26/20: [/4/5 - /4/5]
  │    │              ├── limit: 1(rev)
  │    │              ├── key: ()
- │    │              └── fd: ()-->(21-23)
+ │    │              └── fd: ()-->(23-25)
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:9, outer=(6)]
+      └── const-agg [as=max:10, outer=(6)]
            └── data1:6
 
 # Case with countable multi-key spans.
@@ -788,10 +901,10 @@ opt expect=SplitScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 4
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── limit
  │    ├── columns: val:2!null data1:6!null
  │    ├── internal-ordering: -6
@@ -807,36 +920,36 @@ scalar-group-by
  │    │    └── union
  │    │         ├── columns: val:2!null data1:6!null
  │    │         ├── left columns: val:2!null data1:6!null
- │    │         ├── right columns: val:27 data1:31
+ │    │         ├── right columns: val:30 data1:34
  │    │         ├── cardinality: [0 - 3]
  │    │         ├── key: (2,6)
  │    │         ├── union
  │    │         │    ├── columns: val:2!null data1:6!null
- │    │         │    ├── left columns: val:11 data1:15
- │    │         │    ├── right columns: val:19 data1:23
+ │    │         │    ├── left columns: val:12 data1:16
+ │    │         │    ├── right columns: val:21 data1:25
  │    │         │    ├── cardinality: [0 - 2]
  │    │         │    ├── key: (2,6)
  │    │         │    ├── scan index_tab@b,rev
- │    │         │    │    ├── columns: val:11!null data1:15!null
- │    │         │    │    ├── constraint: /11/15/16/10: [/1 - /1]
+ │    │         │    │    ├── columns: val:12!null data1:16!null
+ │    │         │    │    ├── constraint: /12/16/17/11: [/1 - /1]
  │    │         │    │    ├── limit: 1(rev)
  │    │         │    │    ├── key: ()
- │    │         │    │    └── fd: ()-->(11,15)
+ │    │         │    │    └── fd: ()-->(12,16)
  │    │         │    └── scan index_tab@b,rev
- │    │         │         ├── columns: val:19!null data1:23!null
- │    │         │         ├── constraint: /19/23/24/18: [/2 - /2]
+ │    │         │         ├── columns: val:21!null data1:25!null
+ │    │         │         ├── constraint: /21/25/26/20: [/2 - /2]
  │    │         │         ├── limit: 1(rev)
  │    │         │         ├── key: ()
- │    │         │         └── fd: ()-->(19,23)
+ │    │         │         └── fd: ()-->(21,25)
  │    │         └── scan index_tab@b,rev
- │    │              ├── columns: val:27!null data1:31!null
- │    │              ├── constraint: /27/31/32/26: [/3 - /3]
+ │    │              ├── columns: val:30!null data1:34!null
+ │    │              ├── constraint: /30/34/35/29: [/3 - /3]
  │    │              ├── limit: 1(rev)
  │    │              ├── key: ()
- │    │              └── fd: ()-->(27,31)
+ │    │              └── fd: ()-->(30,34)
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:9, outer=(6)]
+      └── const-agg [as=max:10, outer=(6)]
            └── data1:6
 
 # Case with limit ordering on more than one column.
@@ -860,20 +973,20 @@ limit
  │    ├── limit hint: 10.00
  │    └── union
  │         ├── columns: region:3!null data1:6!null data2:7!null
- │         ├── left columns: region:11 data1:14 data2:15
- │         ├── right columns: region:19 data1:22 data2:23
+ │         ├── left columns: region:12 data1:15 data2:16
+ │         ├── right columns: region:21 data1:24 data2:25
  │         ├── cardinality: [0 - 20]
  │         ├── key: (3,6,7)
  │         ├── scan index_tab@c
- │         │    ├── columns: region:11!null data1:14!null data2:15!null
- │         │    ├── constraint: /11/14/15/9: [/'US_EAST' - /'US_EAST']
+ │         │    ├── columns: region:12!null data1:15!null data2:16!null
+ │         │    ├── constraint: /12/15/16/10: [/'US_EAST' - /'US_EAST']
  │         │    ├── limit: 10
- │         │    └── fd: ()-->(11)
+ │         │    └── fd: ()-->(12)
  │         └── scan index_tab@c
- │              ├── columns: region:19!null data1:22!null data2:23!null
- │              ├── constraint: /19/22/23/17: [/'US_WEST' - /'US_WEST']
+ │              ├── columns: region:21!null data1:24!null data2:25!null
+ │              ├── constraint: /21/24/25/19: [/'US_WEST' - /'US_WEST']
  │              ├── limit: 10
- │              └── fd: ()-->(19)
+ │              └── fd: ()-->(21)
  └── 10
 
 # Case with index join.
@@ -903,22 +1016,22 @@ index-join index_tab
       │    ├── limit hint: 10.00
       │    └── union
       │         ├── columns: id:1!null region:3!null data1:6!null data2:7!null
-      │         ├── left columns: id:9 region:11 data1:14 data2:15
-      │         ├── right columns: id:17 region:19 data1:22 data2:23
+      │         ├── left columns: id:10 region:12 data1:15 data2:16
+      │         ├── right columns: id:19 region:21 data1:24 data2:25
       │         ├── cardinality: [0 - 20]
       │         ├── key: (1,3,6,7)
       │         ├── scan index_tab@c
-      │         │    ├── columns: id:9!null region:11!null data1:14!null data2:15!null
-      │         │    ├── constraint: /11/14/15/9: [/'US_EAST' - /'US_EAST']
+      │         │    ├── columns: id:10!null region:12!null data1:15!null data2:16!null
+      │         │    ├── constraint: /12/15/16/10: [/'US_EAST' - /'US_EAST']
       │         │    ├── limit: 10
-      │         │    ├── key: (9)
-      │         │    └── fd: ()-->(11), (9)-->(14,15)
+      │         │    ├── key: (10)
+      │         │    └── fd: ()-->(12), (10)-->(15,16)
       │         └── scan index_tab@c
-      │              ├── columns: id:17!null region:19!null data1:22!null data2:23!null
-      │              ├── constraint: /19/22/23/17: [/'US_WEST' - /'US_WEST']
+      │              ├── columns: id:19!null region:21!null data1:24!null data2:25!null
+      │              ├── constraint: /21/24/25/19: [/'US_WEST' - /'US_WEST']
       │              ├── limit: 10
-      │              ├── key: (17)
-      │              └── fd: ()-->(19), (17)-->(22,23)
+      │              ├── key: (19)
+      │              └── fd: ()-->(21), (19)-->(24,25)
       └── 10
 
 # Case where check constraints are used.
@@ -941,33 +1054,33 @@ limit
  │    └── union
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
  │         ├── left columns: p:1!null q:2!null r:3!null s:4!null
- │         ├── right columns: p:13 q:14 r:15 s:16
+ │         ├── right columns: p:16 q:17 r:18 s:19
  │         ├── cardinality: [0 - 15]
  │         ├── key: (1-4)
  │         ├── union
  │         │    ├── columns: p:1!null q:2!null r:3!null s:4!null
- │         │    ├── left columns: p:5 q:6 r:7 s:8
- │         │    ├── right columns: p:9 q:10 r:11 s:12
+ │         │    ├── left columns: p:6 q:7 r:8 s:9
+ │         │    ├── right columns: p:11 q:12 r:13 s:14
  │         │    ├── cardinality: [0 - 10]
  │         │    ├── key: (1-4)
  │         │    ├── scan pqrs
- │         │    │    ├── columns: p:5!null q:6!null r:7!null s:8!null
- │         │    │    ├── constraint: /5/6: [/1 - /1]
+ │         │    │    ├── columns: p:6!null q:7!null r:8!null s:9!null
+ │         │    │    ├── constraint: /6/7: [/1 - /1]
  │         │    │    ├── limit: 5
- │         │    │    ├── key: (6)
- │         │    │    └── fd: ()-->(5), (6)-->(7,8)
+ │         │    │    ├── key: (7)
+ │         │    │    └── fd: ()-->(6), (7)-->(8,9)
  │         │    └── scan pqrs
- │         │         ├── columns: p:9!null q:10!null r:11!null s:12!null
- │         │         ├── constraint: /9/10: [/5 - /5]
+ │         │         ├── columns: p:11!null q:12!null r:13!null s:14!null
+ │         │         ├── constraint: /11/12: [/5 - /5]
  │         │         ├── limit: 5
- │         │         ├── key: (10)
- │         │         └── fd: ()-->(9), (10)-->(11,12)
+ │         │         ├── key: (12)
+ │         │         └── fd: ()-->(11), (12)-->(13,14)
  │         └── scan pqrs
- │              ├── columns: p:13!null q:14!null r:15!null s:16!null
- │              ├── constraint: /13/14: [/10 - /10]
+ │              ├── columns: p:16!null q:17!null r:18!null s:19!null
+ │              ├── constraint: /16/17: [/10 - /10]
  │              ├── limit: 5
- │              ├── key: (14)
- │              └── fd: ()-->(13), (14)-->(15,16)
+ │              ├── key: (17)
+ │              └── fd: ()-->(16), (17)-->(18,19)
  └── 5
 
 # Case where multiple check constraints are combined into one constraint
@@ -990,22 +1103,22 @@ limit
  │    ├── limit hint: 10.00
  │    └── union
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
- │         ├── left columns: p:5 q:6 r:7 s:8
- │         ├── right columns: p:9 q:10 r:11 s:12
+ │         ├── left columns: p:6 q:7 r:8 s:9
+ │         ├── right columns: p:11 q:12 r:13 s:14
  │         ├── cardinality: [0 - 20]
  │         ├── key: (1-4)
  │         ├── scan pqrs@secondary
- │         │    ├── columns: p:5!null q:6!null r:7!null s:8!null
- │         │    ├── constraint: /7/8/5/6: [/1 - /1]
+ │         │    ├── columns: p:6!null q:7!null r:8!null s:9!null
+ │         │    ├── constraint: /8/9/6/7: [/1 - /1]
  │         │    ├── limit: 10
- │         │    ├── key: (5,6)
- │         │    └── fd: ()-->(7), (5,6)-->(8)
+ │         │    ├── key: (6,7)
+ │         │    └── fd: ()-->(8), (6,7)-->(9)
  │         └── scan pqrs@secondary
- │              ├── columns: p:9!null q:10!null r:11!null s:12!null
- │              ├── constraint: /11/12/9/10: [/2 - /2]
+ │              ├── columns: p:11!null q:12!null r:13!null s:14!null
+ │              ├── constraint: /13/14/11/12: [/2 - /2]
  │              ├── limit: 10
- │              ├── key: (9,10)
- │              └── fd: ()-->(11), (9,10)-->(12)
+ │              ├── key: (11,12)
+ │              └── fd: ()-->(13), (11,12)-->(14)
  └── 10
 
 # Check constraints are not used because the scan is already constrained (the
@@ -1028,22 +1141,22 @@ limit
  │    ├── limit hint: 5.00
  │    └── union
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
- │         ├── left columns: p:5 q:6 r:7 s:8
- │         ├── right columns: p:9 q:10 r:11 s:12
+ │         ├── left columns: p:6 q:7 r:8 s:9
+ │         ├── right columns: p:11 q:12 r:13 s:14
  │         ├── cardinality: [0 - 10]
  │         ├── key: (1-4)
  │         ├── scan pqrs
- │         │    ├── columns: p:5!null q:6!null r:7!null s:8!null
- │         │    ├── constraint: /5/6: [/1 - /1]
+ │         │    ├── columns: p:6!null q:7!null r:8!null s:9!null
+ │         │    ├── constraint: /6/7: [/1 - /1]
  │         │    ├── limit: 5
- │         │    ├── key: (6)
- │         │    └── fd: ()-->(5), (6)-->(7,8)
+ │         │    ├── key: (7)
+ │         │    └── fd: ()-->(6), (7)-->(8,9)
  │         └── scan pqrs
- │              ├── columns: p:9!null q:10!null r:11!null s:12!null
- │              ├── constraint: /9/10: [/5 - /5]
+ │              ├── columns: p:11!null q:12!null r:13!null s:14!null
+ │              ├── constraint: /11/12: [/5 - /5]
  │              ├── limit: 5
- │              ├── key: (10)
- │              └── fd: ()-->(9), (10)-->(11,12)
+ │              ├── key: (12)
+ │              └── fd: ()-->(11), (12)-->(13,14)
  └── 5
 
 # No-op case because the scan has an inverted index.
@@ -1081,15 +1194,15 @@ opt expect-not=SplitScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region > 'US_EAST' AND region < 'US_WEST'
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── scan index_tab@c
  │    ├── columns: region:3!null data1:6!null
  │    └── constraint: /3/6/7/1: [/e'US_EAST\x00' - /'US_WEST')
  └── aggregations
-      └── max [as=max:9, outer=(6)]
+      └── max [as=max:10, outer=(6)]
            └── data1:6
 
 # No-op case because the number of keys exceeds maxScanCount.
@@ -1097,15 +1210,15 @@ opt expect-not=SplitScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 20
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── scan index_tab@b
  │    ├── columns: val:2!null data1:6!null
  │    └── constraint: /2/6/7/1: [/1 - /19]
  └── aggregations
-      └── max [as=max:9, outer=(6)]
+      └── max [as=max:10, outer=(6)]
            └── data1:6
 
 # No-op case because the same number of rows would be scanned by the split-up
@@ -1114,10 +1227,10 @@ opt expect-not=SplitScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE id > 0 AND id < 4
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── scan index_tab@a
  │    ├── columns: id:1!null data1:6!null
  │    ├── constraint: /1/6/7: [/1 - /3]
@@ -1125,7 +1238,7 @@ scalar-group-by
  │    ├── key: (1)
  │    └── fd: (1)-->(6)
  └── aggregations
-      └── max [as=max:9, outer=(6)]
+      └── max [as=max:10, outer=(6)]
            └── data1:6
 
 # No-op case because the scan is already limited.
@@ -1135,10 +1248,10 @@ FROM (SELECT region, data1 FROM index_tab LIMIT 10)
 WHERE region='ASIA' OR region='AUSTRALIA'
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── select
  │    ├── columns: region:3!null data1:6!null
  │    ├── cardinality: [0 - 10]
@@ -1148,7 +1261,7 @@ scalar-group-by
  │    └── filters
  │         └── (region:3 = 'ASIA') OR (region:3 = 'AUSTRALIA') [outer=(3), constraints=(/3: [/'ASIA' - /'ASIA'] [/'AUSTRALIA' - /'AUSTRALIA']; tight)]
  └── aggregations
-      └── max [as=max:9, outer=(6)]
+      └── max [as=max:10, outer=(6)]
            └── data1:6
 
 # No-op case because the limit is negative.
@@ -1180,13 +1293,13 @@ opt expect-not=SplitScanIntoUnionScans
 SELECT max(data1) FROM index_tab@b
 ----
 scalar-group-by
- ├── columns: max:9
+ ├── columns: max:10
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(9)
+ ├── fd: ()-->(10)
  ├── scan index_tab@b
  │    ├── columns: data1:6!null
  │    └── flags: force-index=b
  └── aggregations
-      └── max [as=max:9, outer=(6)]
+      └── max [as=max:10, outer=(6)]
            └── data1:6

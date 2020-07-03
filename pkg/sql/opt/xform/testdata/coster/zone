@@ -363,15 +363,15 @@ opt format=show-all locality=(region=us,dc=west)
 SELECT * FROM abc INNER LOOKUP JOIN xy ON b=y WHERE b=1
 ----
 inner-join (lookup xy@y2)
- ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:4(int!null) y:5(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:5(int!null) y:6(int!null)
  ├── flags: force lookup join (into right side)
- ├── key columns: [2] = [5]
- ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
+ ├── key columns: [2] = [6]
+ ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(6)=1, null(6)=0]
  ├── cost: 412.59
- ├── key: (1,4)
- ├── fd: ()-->(2,5), (1)-->(3), (2,3)~~>(1), (2)==(5), (5)==(2)
- ├── prune: (1,3,4)
- ├── interesting orderings: (+1) (+2,+3,+1) (+4) (+5,+4)
+ ├── key: (1,5)
+ ├── fd: ()-->(2,6), (1)-->(3), (2,3)~~>(1), (2)==(6), (6)==(2)
+ ├── prune: (1,3,5)
+ ├── interesting orderings: (+1) (+2,+3,+1) (+5) (+6,+5)
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
@@ -382,8 +382,8 @@ inner-join (lookup xy@y2)
  │    ├── prune: (1,3)
  │    └── interesting orderings: (+1) (+2,+3,+1)
  └── filters
-      └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-           ├── variable: t.public.xy.y:5 [type=int]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           ├── variable: t.public.xy.y:6 [type=int]
            └── const: 1 [type=int]
 
 # Switch the data center for the target lookup join index.
@@ -401,15 +401,15 @@ opt format=show-all locality=(region=us,dc=west)
 SELECT * FROM abc INNER LOOKUP JOIN xy ON b=y WHERE b=1
 ----
 inner-join (lookup xy@y1)
- ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:4(int!null) y:5(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:5(int!null) y:6(int!null)
  ├── flags: force lookup join (into right side)
- ├── key columns: [2] = [5]
- ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
+ ├── key columns: [2] = [6]
+ ├── stats: [rows=100, distinct(2)=1, null(2)=0, distinct(6)=1, null(6)=0]
  ├── cost: 412.59
- ├── key: (1,4)
- ├── fd: ()-->(2,5), (1)-->(3), (2,3)~~>(1), (2)==(5), (5)==(2)
- ├── prune: (1,3,4)
- ├── interesting orderings: (+1) (+2,+3,+1) (+4) (+5,+4)
+ ├── key: (1,5)
+ ├── fd: ()-->(2,6), (1)-->(3), (2,3)~~>(1), (2)==(6), (6)==(2)
+ ├── prune: (1,3,5)
+ ├── interesting orderings: (+1) (+2,+3,+1) (+5) (+6,+5)
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
@@ -420,8 +420,8 @@ inner-join (lookup xy@y1)
  │    ├── prune: (1,3)
  │    └── interesting orderings: (+1) (+2,+3,+1)
  └── filters
-      └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
-           ├── variable: t.public.xy.y:5 [type=int]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           ├── variable: t.public.xy.y:6 [type=int]
            └── const: 1 [type=int]
 
 # --------------------------------------------------

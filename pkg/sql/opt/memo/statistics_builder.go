@@ -2264,6 +2264,7 @@ func (sb *statisticsBuilder) buildWithScan(withScan *WithScanExpr, relProps *pro
 func (sb *statisticsBuilder) colStatWithScan(
 	colSet opt.ColSet, withScan *WithScanExpr,
 ) *props.ColumnStatistic {
+
 	s := &withScan.Relational().Stats
 	withProps := withScan.BindingProps
 	inColSet := opt.TranslateColSet(colSet, withScan.OutCols, withScan.InCols)

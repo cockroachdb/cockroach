@@ -10,30 +10,30 @@ norm expect=EliminateAggDistinct
 SELECT min(DISTINCT i), max(DISTINCT i), bool_and(DISTINCT i>f), bool_or(DISTINCT i>f), corr(DISTINCT k, i) FROM a
 ----
 scalar-group-by
- ├── columns: min:7 max:8 bool_and:10 bool_or:11 corr:12
+ ├── columns: min:8 max:9 bool_and:11 bool_or:12 corr:13
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(7,8,10-12)
+ ├── fd: ()-->(8,9,11-13)
  ├── project
- │    ├── columns: column9:9 k:1!null i:2
+ │    ├── columns: column10:10 k:1!null i:2
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,9)
+ │    ├── fd: (1)-->(2,10)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3)
  │    └── projections
- │         └── i:2 > f:3 [as=column9:9, outer=(2,3)]
+ │         └── i:2 > f:3 [as=column10:10, outer=(2,3)]
  └── aggregations
-      ├── min [as=min:7, outer=(2)]
+      ├── min [as=min:8, outer=(2)]
       │    └── i:2
-      ├── max [as=max:8, outer=(2)]
+      ├── max [as=max:9, outer=(2)]
       │    └── i:2
-      ├── bool-and [as=bool_and:10, outer=(9)]
-      │    └── column9:9
-      ├── bool-or [as=bool_or:11, outer=(9)]
-      │    └── column9:9
-      └── corr [as=corr:12, outer=(1,2)]
+      ├── bool-and [as=bool_and:11, outer=(10)]
+      │    └── column10:10
+      ├── bool-or [as=bool_or:12, outer=(10)]
+      │    └── column10:10
+      └── corr [as=corr:13, outer=(1,2)]
            ├── k:1
            └── i:2
 
@@ -48,46 +48,46 @@ SELECT
 FROM a
 ----
 scalar-group-by
- ├── columns: min:8 max:9 bool_and:12 bool_or:14 corr:16
+ ├── columns: min:9 max:10 bool_and:13 bool_or:15 corr:17
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(8,9,12,14,16)
+ ├── fd: ()-->(9,10,13,15,17)
  ├── project
- │    ├── columns: column7:7 column10:10 column11:11 column13:13 column15:15 k:1!null i:2
+ │    ├── columns: column8:8 column11:11 column12:12 column14:14 column16:16 k:1!null i:2
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,7,10,11,13,15), (2)-->(7)
+ │    ├── fd: (1)-->(2,8,11,12,14,16), (2)-->(8)
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 f:3
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2,3)
  │    └── projections
- │         ├── i:2 > 5 [as=column7:7, outer=(2)]
- │         ├── i:2 > f:3 [as=column10:10, outer=(2,3)]
- │         ├── f:3 > 0.0 [as=column11:11, outer=(3)]
- │         ├── f:3 > 1.0 [as=column13:13, outer=(3)]
- │         └── (k:1 > 5) AND (i:2 > 5) [as=column15:15, outer=(1,2)]
+ │         ├── i:2 > 5 [as=column8:8, outer=(2)]
+ │         ├── i:2 > f:3 [as=column11:11, outer=(2,3)]
+ │         ├── f:3 > 0.0 [as=column12:12, outer=(3)]
+ │         ├── f:3 > 1.0 [as=column14:14, outer=(3)]
+ │         └── (k:1 > 5) AND (i:2 > 5) [as=column16:16, outer=(1,2)]
  └── aggregations
-      ├── agg-filter [as=min:8, outer=(2,7)]
+      ├── agg-filter [as=min:9, outer=(2,8)]
       │    ├── min
       │    │    └── i:2
-      │    └── column7:7
-      ├── agg-filter [as=max:9, outer=(2,7)]
+      │    └── column8:8
+      ├── agg-filter [as=max:10, outer=(2,8)]
       │    ├── max
       │    │    └── i:2
-      │    └── column7:7
-      ├── agg-filter [as=bool_and:12, outer=(10,11)]
+      │    └── column8:8
+      ├── agg-filter [as=bool_and:13, outer=(11,12)]
       │    ├── bool-and
-      │    │    └── column10:10
-      │    └── column11:11
-      ├── agg-filter [as=bool_or:14, outer=(10,13)]
+      │    │    └── column11:11
+      │    └── column12:12
+      ├── agg-filter [as=bool_or:15, outer=(11,14)]
       │    ├── bool-or
-      │    │    └── column10:10
-      │    └── column13:13
-      └── agg-filter [as=corr:16, outer=(1,2,15)]
+      │    │    └── column11:11
+      │    └── column14:14
+      └── agg-filter [as=corr:17, outer=(1,2,16)]
            ├── corr
            │    ├── k:1
            │    └── i:2
-           └── column15:15
+           └── column16:16
 
 # The rule should not apply to these aggregations.
 norm expect-not=EliminateAggDistinct
@@ -104,47 +104,47 @@ SELECT
 FROM a
 ----
 scalar-group-by
- ├── columns: count:7!null sum:9 sum_int:10 avg:11 stddev:12 variance:13 xor_agg:15 array_agg:16 json_agg:17
+ ├── columns: count:8!null sum:10 sum_int:11 avg:12 stddev:13 variance:14 xor_agg:16 array_agg:17 json_agg:18
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(7,9-13,15-17)
+ ├── fd: ()-->(8,10-14,16-18)
  ├── project
- │    ├── columns: column8:8 column14:14 i:2 f:3 j:5
+ │    ├── columns: column9:9 column15:15 i:2 f:3 j:5
  │    ├── immutable
- │    ├── fd: (2)-->(8)
+ │    ├── fd: (2)-->(9)
  │    ├── scan a
  │    │    └── columns: i:2 f:3 s:4 j:5
  │    └── projections
- │         ├── i:2 > 5 [as=column8:8, outer=(2)]
- │         └── s:4::BYTES [as=column14:14, outer=(4), immutable]
+ │         ├── i:2 > 5 [as=column9:9, outer=(2)]
+ │         └── s:4::BYTES [as=column15:15, outer=(4), immutable]
  └── aggregations
-      ├── agg-distinct [as=count:7, outer=(2)]
+      ├── agg-distinct [as=count:8, outer=(2)]
       │    └── count
       │         └── i:2
-      ├── agg-filter [as=sum:9, outer=(2,8)]
+      ├── agg-filter [as=sum:10, outer=(2,9)]
       │    ├── agg-distinct
       │    │    └── sum
       │    │         └── i:2
-      │    └── column8:8
-      ├── agg-distinct [as=sum_int:10, outer=(2)]
+      │    └── column9:9
+      ├── agg-distinct [as=sum_int:11, outer=(2)]
       │    └── sum-int
       │         └── i:2
-      ├── agg-distinct [as=avg:11, outer=(2)]
+      ├── agg-distinct [as=avg:12, outer=(2)]
       │    └── avg
       │         └── i:2
-      ├── agg-distinct [as=stddev:12, outer=(3)]
+      ├── agg-distinct [as=stddev:13, outer=(3)]
       │    └── std-dev
       │         └── f:3
-      ├── agg-distinct [as=variance:13, outer=(3)]
+      ├── agg-distinct [as=variance:14, outer=(3)]
       │    └── variance
       │         └── f:3
-      ├── agg-distinct [as=xor_agg:15, outer=(14)]
+      ├── agg-distinct [as=xor_agg:16, outer=(15)]
       │    └── xor-agg
-      │         └── column14:14
-      ├── agg-distinct [as=array_agg:16, outer=(2)]
+      │         └── column15:15
+      ├── agg-distinct [as=array_agg:17, outer=(2)]
       │    └── array-agg
       │         └── i:2
-      └── agg-distinct [as=json_agg:17, outer=(5)]
+      └── agg-distinct [as=json_agg:18, outer=(5)]
            └── json-agg
                 └── j:5

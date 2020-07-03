@@ -26,27 +26,27 @@ project
  ├── fd: ()-->(9,11)
  └── update district
       ├── columns: d_id:1!null d_w_id:2!null d_tax:9 d_next_o_id:11
-      ├── fetch columns: d_id:12 d_w_id:13 d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 d_ytd:21 d_next_o_id:22
+      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
       ├── update-mapping:
-      │    └── d_next_o_id_new:23 => d_next_o_id:11
+      │    └── d_next_o_id_new:25 => d_next_o_id:11
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1,2,9,11)
       └── project
-           ├── columns: d_next_o_id_new:23 d_id:12!null d_w_id:13!null d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 d_ytd:21 d_next_o_id:22
+           ├── columns: d_next_o_id_new:25 d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(12-23)
+           ├── fd: ()-->(13-23,25)
            ├── scan district
-           │    ├── columns: d_id:12!null d_w_id:13!null d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 d_ytd:21 d_next_o_id:22
-           │    ├── constraint: /13/12: [/10/5 - /10/5]
+           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
+           │    ├── constraint: /14/13: [/10/5 - /10/5]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
-           │    └── fd: ()-->(12-22)
+           │    └── fd: ()-->(13-23)
            └── projections
-                └── d_next_o_id:22 + 1 [as=d_next_o_id_new:23, outer=(22), immutable]
+                └── d_next_o_id:23 + 1 [as=d_next_o_id_new:25, outer=(23), immutable]
 
 opt format=hide-qual
 SELECT w_tax FROM warehouse WHERE w_id = 10
@@ -138,41 +138,41 @@ VALUES (100, 5, 10, 50, '2019-08-26 16:50:41', 10, 1)
 insert "order"
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:9 => o_id:1
- │    ├── column2:10 => o_d_id:2
- │    ├── column3:11 => o_w_id:3
- │    ├── column4:12 => o_c_id:4
- │    ├── column5:13 => o_entry_d:5
- │    ├── column16:16 => o_carrier_id:6
- │    ├── column6:14 => o_ol_cnt:7
- │    └── column7:15 => o_all_local:8
+ │    ├── column1:10 => o_id:1
+ │    ├── column2:11 => o_d_id:2
+ │    ├── column3:12 => o_w_id:3
+ │    ├── column4:13 => o_c_id:4
+ │    ├── column5:14 => o_entry_d:5
+ │    ├── column17:17 => o_carrier_id:6
+ │    ├── column6:15 => o_ol_cnt:7
+ │    └── column7:16 => o_all_local:8
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:9!null column2:10!null column3:11!null column4:12!null column5:13!null column6:14!null column7:15!null column16:16
+ │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column7:16!null column17:17
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(9-16)
+ │    ├── fd: ()-->(10-17)
  │    └── (100, 5, 10, 50, '2019-08-26 16:50:41+00:00', 10, 1, NULL)
  └── f-k-checks
       └── f-k-checks-item: order(o_w_id,o_d_id,o_c_id) -> customer(c_w_id,c_d_id,c_id)
            └── anti-join (lookup customer)
-                ├── columns: column3:17!null column2:18!null column4:19!null
-                ├── key columns: [17 18 19] = [22 21 20]
+                ├── columns: column3:18!null column2:19!null column4:20!null
+                ├── key columns: [18 19 20] = [23 22 21]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(17-19)
+                ├── fd: ()-->(18-20)
                 ├── with-scan &1
-                │    ├── columns: column3:17!null column2:18!null column4:19!null
+                │    ├── columns: column3:18!null column2:19!null column4:20!null
                 │    ├── mapping:
-                │    │    ├──  column3:11 => column3:17
-                │    │    ├──  column2:10 => column2:18
-                │    │    └──  column4:12 => column4:19
+                │    │    ├──  column3:12 => column3:18
+                │    │    ├──  column2:11 => column2:19
+                │    │    └──  column4:13 => column4:20
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(17-19)
+                │    └── fd: ()-->(18-20)
                 └── filters (true)
 
 opt format=hide-qual
@@ -181,36 +181,36 @@ INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES (2000, 100, 10)
 insert new_order
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:4 => no_o_id:1
- │    ├── column2:5 => no_d_id:2
- │    └── column3:6 => no_w_id:3
+ │    ├── column1:5 => no_o_id:1
+ │    ├── column2:6 => no_d_id:2
+ │    └── column3:7 => no_w_id:3
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:4!null column2:5!null column3:6!null
+ │    ├── columns: column1:5!null column2:6!null column3:7!null
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(4-6)
+ │    ├── fd: ()-->(5-7)
  │    └── (2000, 100, 10)
  └── f-k-checks
       └── f-k-checks-item: new_order(no_w_id,no_d_id,no_o_id) -> order(o_w_id,o_d_id,o_id)
            └── anti-join (lookup order)
-                ├── columns: column3:7!null column2:8!null column1:9!null
-                ├── key columns: [7 8 9] = [12 11 10]
+                ├── columns: column3:8!null column2:9!null column1:10!null
+                ├── key columns: [8 9 10] = [13 12 11]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(7-9)
+                ├── fd: ()-->(8-10)
                 ├── with-scan &1
-                │    ├── columns: column3:7!null column2:8!null column1:9!null
+                │    ├── columns: column3:8!null column2:9!null column1:10!null
                 │    ├── mapping:
-                │    │    ├──  column3:6 => column3:7
-                │    │    ├──  column2:5 => column2:8
-                │    │    └──  column1:4 => column1:9
+                │    │    ├──  column3:7 => column3:8
+                │    │    ├──  column2:6 => column2:9
+                │    │    └──  column1:5 => column1:10
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(7-9)
+                │    └── fd: ()-->(8-10)
                 └── filters (true)
 
 opt format=hide-qual
@@ -302,23 +302,23 @@ WHERE
 ----
 update stock
  ├── columns: <none>
- ├── fetch columns: s_i_id:18 s_w_id:19 s_quantity:20 s_dist_01:21 s_dist_02:22 s_dist_03:23 s_dist_04:24 s_dist_05:25 s_dist_06:26 s_dist_07:27 s_dist_08:28 s_dist_09:29 s_dist_10:30 s_ytd:31 s_order_cnt:32 s_remote_cnt:33 s_data:34
+ ├── fetch columns: s_i_id:19 s_w_id:20 s_quantity:21 s_dist_01:22 s_dist_02:23 s_dist_03:24 s_dist_04:25 s_dist_05:26 s_dist_06:27 s_dist_07:28 s_dist_08:29 s_dist_09:30 s_dist_10:31 s_ytd:32 s_order_cnt:33 s_remote_cnt:34 s_data:35
  ├── update-mapping:
- │    ├── s_quantity_new:35 => s_quantity:3
- │    ├── s_ytd_new:36 => s_ytd:14
- │    ├── s_order_cnt_new:37 => s_order_cnt:15
- │    └── s_remote_cnt_new:38 => s_remote_cnt:16
+ │    ├── s_quantity_new:37 => s_quantity:3
+ │    ├── s_ytd_new:38 => s_ytd:14
+ │    ├── s_order_cnt_new:39 => s_order_cnt:15
+ │    └── s_remote_cnt_new:40 => s_remote_cnt:16
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: s_quantity_new:35 s_ytd_new:36 s_order_cnt_new:37 s_remote_cnt_new:38 s_i_id:18!null s_w_id:19!null s_quantity:20 s_dist_01:21 s_dist_02:22 s_dist_03:23 s_dist_04:24 s_dist_05:25 s_dist_06:26 s_dist_07:27 s_dist_08:28 s_dist_09:29 s_dist_10:30 s_ytd:31 s_order_cnt:32 s_remote_cnt:33 s_data:34
+      ├── columns: s_quantity_new:37 s_ytd_new:38 s_order_cnt_new:39 s_remote_cnt_new:40 s_i_id:19!null s_w_id:20!null s_quantity:21 s_dist_01:22 s_dist_02:23 s_dist_03:24 s_dist_04:25 s_dist_05:26 s_dist_06:27 s_dist_07:28 s_dist_08:29 s_dist_09:30 s_dist_10:31 s_ytd:32 s_order_cnt:33 s_remote_cnt:34 s_data:35
       ├── cardinality: [0 - 13]
       ├── volatile
-      ├── key: (18)
-      ├── fd: ()-->(19), (18)-->(20-38)
+      ├── key: (19)
+      ├── fd: ()-->(20), (19)-->(21-35,37-40)
       ├── scan stock
-      │    ├── columns: s_i_id:18!null s_w_id:19!null s_quantity:20 s_dist_01:21 s_dist_02:22 s_dist_03:23 s_dist_04:24 s_dist_05:25 s_dist_06:26 s_dist_07:27 s_dist_08:28 s_dist_09:29 s_dist_10:30 s_ytd:31 s_order_cnt:32 s_remote_cnt:33 s_data:34
-      │    ├── constraint: /19/18
+      │    ├── columns: s_i_id:19!null s_w_id:20!null s_quantity:21 s_dist_01:22 s_dist_02:23 s_dist_03:24 s_dist_04:25 s_dist_05:26 s_dist_06:27 s_dist_07:28 s_dist_08:29 s_dist_09:30 s_dist_10:31 s_ytd:32 s_order_cnt:33 s_remote_cnt:34 s_data:35
+      │    ├── constraint: /20/19
       │    │    ├── [/0/6823 - /0/6823]
       │    │    ├── [/0/7853 - /0/7853]
       │    │    ├── [/0/8497 - /0/8497]
@@ -333,13 +333,13 @@ update stock
       │    │    ├── [/0/89641 - /0/89641]
       │    │    └── [/0/89905 - /0/89905]
       │    ├── cardinality: [0 - 13]
-      │    ├── key: (18)
-      │    └── fd: ()-->(19), (18)-->(20-34)
+      │    ├── key: (19)
+      │    └── fd: ()-->(20), (19)-->(21-35)
       └── projections
-           ├── CASE (s_i_id:18, s_w_id:19) WHEN (6823, 0) THEN 26 WHEN (7853, 0) THEN 10 WHEN (8497, 0) THEN 62 WHEN (10904, 0) THEN 54 WHEN (16152, 0) THEN 80 WHEN (41382, 0) THEN 18 WHEN (55952, 0) THEN 56 WHEN (64817, 0) THEN 26 WHEN (66335, 0) THEN 30 WHEN (76567, 0) THEN 71 WHEN (81680, 0) THEN 51 WHEN (89641, 0) THEN 51 WHEN (89905, 0) THEN 77 ELSE crdb_internal.force_error('', 'unknown case') END [as=s_quantity_new:35, outer=(18,19), volatile]
-           ├── CASE (s_i_id:18, s_w_id:19) WHEN (6823, 0) THEN 6 WHEN (7853, 0) THEN 9 WHEN (8497, 0) THEN 13 WHEN (10904, 0) THEN 1 WHEN (16152, 0) THEN 2 WHEN (41382, 0) THEN 3 WHEN (55952, 0) THEN 10 WHEN (64817, 0) THEN 31 WHEN (66335, 0) THEN 9 WHEN (76567, 0) THEN 7 WHEN (81680, 0) THEN 4 WHEN (89641, 0) THEN 13 WHEN (89905, 0) THEN 20 ELSE CAST(NULL AS INT8) END [as=s_ytd_new:36, outer=(18,19)]
-           ├── CASE (s_i_id:18, s_w_id:19) WHEN (6823, 0) THEN 1 WHEN (7853, 0) THEN 1 WHEN (8497, 0) THEN 2 WHEN (10904, 0) THEN 1 WHEN (16152, 0) THEN 1 WHEN (41382, 0) THEN 1 WHEN (55952, 0) THEN 1 WHEN (64817, 0) THEN 4 WHEN (66335, 0) THEN 2 WHEN (76567, 0) THEN 1 WHEN (81680, 0) THEN 1 WHEN (89641, 0) THEN 2 WHEN (89905, 0) THEN 4 ELSE CAST(NULL AS INT8) END [as=s_order_cnt_new:37, outer=(18,19)]
-           └── CASE (s_i_id:18, s_w_id:19) WHEN (6823, 0) THEN 0 WHEN (7853, 0) THEN 0 WHEN (8497, 0) THEN 0 WHEN (10904, 0) THEN 0 WHEN (16152, 0) THEN 0 WHEN (41382, 0) THEN 0 WHEN (55952, 0) THEN 0 WHEN (64817, 0) THEN 0 WHEN (66335, 0) THEN 0 WHEN (76567, 0) THEN 0 WHEN (81680, 0) THEN 0 WHEN (89641, 0) THEN 0 WHEN (89905, 0) THEN 0 ELSE CAST(NULL AS INT8) END [as=s_remote_cnt_new:38, outer=(18,19)]
+           ├── CASE (s_i_id:19, s_w_id:20) WHEN (6823, 0) THEN 26 WHEN (7853, 0) THEN 10 WHEN (8497, 0) THEN 62 WHEN (10904, 0) THEN 54 WHEN (16152, 0) THEN 80 WHEN (41382, 0) THEN 18 WHEN (55952, 0) THEN 56 WHEN (64817, 0) THEN 26 WHEN (66335, 0) THEN 30 WHEN (76567, 0) THEN 71 WHEN (81680, 0) THEN 51 WHEN (89641, 0) THEN 51 WHEN (89905, 0) THEN 77 ELSE crdb_internal.force_error('', 'unknown case') END [as=s_quantity_new:37, outer=(19,20), volatile]
+           ├── CASE (s_i_id:19, s_w_id:20) WHEN (6823, 0) THEN 6 WHEN (7853, 0) THEN 9 WHEN (8497, 0) THEN 13 WHEN (10904, 0) THEN 1 WHEN (16152, 0) THEN 2 WHEN (41382, 0) THEN 3 WHEN (55952, 0) THEN 10 WHEN (64817, 0) THEN 31 WHEN (66335, 0) THEN 9 WHEN (76567, 0) THEN 7 WHEN (81680, 0) THEN 4 WHEN (89641, 0) THEN 13 WHEN (89905, 0) THEN 20 ELSE CAST(NULL AS INT8) END [as=s_ytd_new:38, outer=(19,20)]
+           ├── CASE (s_i_id:19, s_w_id:20) WHEN (6823, 0) THEN 1 WHEN (7853, 0) THEN 1 WHEN (8497, 0) THEN 2 WHEN (10904, 0) THEN 1 WHEN (16152, 0) THEN 1 WHEN (41382, 0) THEN 1 WHEN (55952, 0) THEN 1 WHEN (64817, 0) THEN 4 WHEN (66335, 0) THEN 2 WHEN (76567, 0) THEN 1 WHEN (81680, 0) THEN 1 WHEN (89641, 0) THEN 2 WHEN (89905, 0) THEN 4 ELSE CAST(NULL AS INT8) END [as=s_order_cnt_new:39, outer=(19,20)]
+           └── CASE (s_i_id:19, s_w_id:20) WHEN (6823, 0) THEN 0 WHEN (7853, 0) THEN 0 WHEN (8497, 0) THEN 0 WHEN (10904, 0) THEN 0 WHEN (16152, 0) THEN 0 WHEN (41382, 0) THEN 0 WHEN (55952, 0) THEN 0 WHEN (64817, 0) THEN 0 WHEN (66335, 0) THEN 0 WHEN (76567, 0) THEN 0 WHEN (81680, 0) THEN 0 WHEN (89641, 0) THEN 0 WHEN (89905, 0) THEN 0 ELSE CAST(NULL AS INT8) END [as=s_remote_cnt_new:40, outer=(19,20)]
 
 opt format=hide-qual
 INSERT INTO order_line
@@ -355,26 +355,26 @@ VALUES
 insert order_line
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:11 => ol_o_id:1
- │    ├── column2:12 => ol_d_id:2
- │    ├── column3:13 => ol_w_id:3
- │    ├── column4:14 => ol_number:4
- │    ├── column5:15 => ol_i_id:5
- │    ├── column6:16 => ol_supply_w_id:6
- │    ├── column20:20 => ol_delivery_d:7
- │    ├── column7:17 => ol_quantity:8
- │    ├── ol_amount:21 => order_line.ol_amount:9
- │    └── column9:19 => ol_dist_info:10
+ │    ├── column1:12 => ol_o_id:1
+ │    ├── column2:13 => ol_d_id:2
+ │    ├── column3:14 => ol_w_id:3
+ │    ├── column4:15 => ol_number:4
+ │    ├── column5:16 => ol_i_id:5
+ │    ├── column6:17 => ol_supply_w_id:6
+ │    ├── column21:21 => ol_delivery_d:7
+ │    ├── column7:18 => ol_quantity:8
+ │    ├── ol_amount:22 => order_line.ol_amount:9
+ │    └── column9:20 => ol_dist_info:10
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: ol_amount:21 column20:20 column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null column7:17!null column9:19!null
+ │    ├── columns: ol_amount:22 column21:21 column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column9:20!null
  │    ├── cardinality: [6 - 6]
  │    ├── immutable
- │    ├── fd: ()-->(20)
+ │    ├── fd: ()-->(21)
  │    ├── values
- │    │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null column7:17!null column8:18!null column9:19!null
+ │    │    ├── columns: column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column8:19!null column9:20!null
  │    │    ├── cardinality: [6 - 6]
  │    │    ├── (3045, 2, 10, 3, 648, 0, 9, 394.470000, 'YhgLRrwsmd68P2bElAgrnp8u')
  │    │    ├── (3045, 2, 10, 5, 25393, 0, 10, 830.600000, 'dLXe0YhgLRrwsmd68P2bElAg')
@@ -383,34 +383,34 @@ insert order_line
  │    │    ├── (3045, 2, 10, 4, 56624, 0, 6, 273.360000, 'RsaCXoEzmssaF9m9cdLXe0Yh')
  │    │    └── (3045, 2, 10, 6, 92966, 0, 4, 366.760000, 'saCXoEzmssaF9m9cdLXe0Yhg')
  │    └── projections
- │         ├── crdb_internal.round_decimal_values(column8:18, 2) [as=ol_amount:21, outer=(18), immutable]
- │         └── CAST(NULL AS TIMESTAMP) [as=column20:20]
+ │         ├── crdb_internal.round_decimal_values(column8:19, 2) [as=ol_amount:22, outer=(19), immutable]
+ │         └── CAST(NULL AS TIMESTAMP) [as=column21:21]
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
       │    └── anti-join (lookup order)
-      │         ├── columns: column3:22!null column2:23!null column1:24!null
-      │         ├── key columns: [22 23 24] = [27 26 25]
+      │         ├── columns: column3:23!null column2:24!null column1:25!null
+      │         ├── key columns: [23 24 25] = [28 27 26]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 6]
       │         ├── with-scan &1
-      │         │    ├── columns: column3:22!null column2:23!null column1:24!null
+      │         │    ├── columns: column3:23!null column2:24!null column1:25!null
       │         │    ├── mapping:
-      │         │    │    ├──  column3:13 => column3:22
-      │         │    │    ├──  column2:12 => column2:23
-      │         │    │    └──  column1:11 => column1:24
+      │         │    │    ├──  column3:14 => column3:23
+      │         │    │    ├──  column2:13 => column2:24
+      │         │    │    └──  column1:12 => column1:25
       │         │    └── cardinality: [6 - 6]
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
            └── anti-join (lookup stock@stock_item_fk_idx)
-                ├── columns: column6:33!null column5:34!null
-                ├── key columns: [34 33] = [35 36]
+                ├── columns: column6:35!null column5:36!null
+                ├── key columns: [36 35] = [37 38]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 6]
                 ├── with-scan &1
-                │    ├── columns: column6:33!null column5:34!null
+                │    ├── columns: column6:35!null column5:36!null
                 │    ├── mapping:
-                │    │    ├──  column6:16 => column6:33
-                │    │    └──  column5:15 => column5:34
+                │    │    ├──  column6:17 => column6:35
+                │    │    └──  column5:16 => column5:36
                 │    └── cardinality: [6 - 6]
                 └── filters (true)
 
@@ -435,27 +435,27 @@ project
  ├── fd: ()-->(2-7)
  └── update warehouse
       ├── columns: w_id:1!null w_name:2 w_street_1:3 w_street_2:4 w_city:5 w_state:6 w_zip:7
-      ├── fetch columns: w_id:10 w_name:11 w_street_1:12 w_street_2:13 w_city:14 w_state:15 w_zip:16 w_tax:17 warehouse.w_ytd:18
+      ├── fetch columns: w_id:11 w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
       ├── update-mapping:
-      │    └── w_ytd:20 => warehouse.w_ytd:9
+      │    └── w_ytd:22 => warehouse.w_ytd:9
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-7)
       └── project
-           ├── columns: w_ytd:20 w_id:10!null w_name:11 w_street_1:12 w_street_2:13 w_city:14 w_state:15 w_zip:16 w_tax:17 warehouse.w_ytd:18
+           ├── columns: w_ytd:22 w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(10-18,20)
+           ├── fd: ()-->(11-19,22)
            ├── scan warehouse
-           │    ├── columns: w_id:10!null w_name:11 w_street_1:12 w_street_2:13 w_city:14 w_state:15 w_zip:16 w_tax:17 warehouse.w_ytd:18
-           │    ├── constraint: /10: [/10 - /10]
+           │    ├── columns: w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
+           │    ├── constraint: /11: [/10 - /10]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
-           │    └── fd: ()-->(10-18)
+           │    └── fd: ()-->(11-19)
            └── projections
-                └── crdb_internal.round_decimal_values(warehouse.w_ytd:18 + 3860.61, 2) [as=w_ytd:20, outer=(18), immutable]
+                └── crdb_internal.round_decimal_values(warehouse.w_ytd:19 + 3860.61, 2) [as=w_ytd:22, outer=(19), immutable]
 
 opt format=hide-qual
 UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
@@ -469,27 +469,27 @@ project
  ├── fd: ()-->(3-8)
  └── update district
       ├── columns: d_id:1!null d_w_id:2!null d_name:3 d_street_1:4 d_street_2:5 d_city:6 d_state:7 d_zip:8
-      ├── fetch columns: d_id:12 d_w_id:13 d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 district.d_ytd:21 d_next_o_id:22
+      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
       ├── update-mapping:
-      │    └── d_ytd:24 => district.d_ytd:10
+      │    └── d_ytd:26 => district.d_ytd:10
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-8)
       └── project
-           ├── columns: d_ytd:24 d_id:12!null d_w_id:13!null d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 district.d_ytd:21 d_next_o_id:22
+           ├── columns: d_ytd:26 d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
-           ├── fd: ()-->(12-22,24)
+           ├── fd: ()-->(13-23,26)
            ├── scan district
-           │    ├── columns: d_id:12!null d_w_id:13!null d_name:14 d_street_1:15 d_street_2:16 d_city:17 d_state:18 d_zip:19 d_tax:20 district.d_ytd:21 d_next_o_id:22
-           │    ├── constraint: /13/12: [/10/5 - /10/5]
+           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
+           │    ├── constraint: /14/13: [/10/5 - /10/5]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
-           │    └── fd: ()-->(12-22)
+           │    └── fd: ()-->(13-23)
            └── projections
-                └── crdb_internal.round_decimal_values(district.d_ytd:21 + 3860.61, 2) [as=d_ytd:24, outer=(21), immutable]
+                └── crdb_internal.round_decimal_values(district.d_ytd:22 + 3860.61, 2) [as=d_ytd:26, outer=(22), immutable]
 
 opt format=hide-qual
 SELECT c_id
@@ -551,42 +551,42 @@ RETURNING
   CASE c_credit WHEN 'BC' THEN "left"(c_data, 200) ELSE '' END
 ----
 project
- ├── columns: c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 case:49
+ ├── columns: c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 case:51
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(4-17,49)
+ ├── fd: ()-->(4-17,51)
  ├── update customer
  │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 customer.c_balance:17 c_data:21
- │    ├── fetch columns: c_id:22 c_d_id:23 c_w_id:24 c_first:25 c_middle:26 c_last:27 c_street_1:28 c_street_2:29 c_city:30 c_state:31 c_zip:32 c_phone:33 c_since:34 c_credit:35 c_credit_lim:36 c_discount:37 customer.c_balance:38 customer.c_ytd_payment:39 c_payment_cnt:40 c_delivery_cnt:41 c_data:42
+ │    ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │    ├── update-mapping:
- │    │    ├── c_balance:47 => customer.c_balance:17
- │    │    ├── c_ytd_payment:48 => customer.c_ytd_payment:18
- │    │    ├── c_payment_cnt_new:45 => c_payment_cnt:19
- │    │    └── c_data_new:46 => c_data:21
+ │    │    ├── c_balance:49 => customer.c_balance:17
+ │    │    ├── c_ytd_payment:50 => customer.c_ytd_payment:18
+ │    │    ├── c_payment_cnt_new:47 => c_payment_cnt:19
+ │    │    └── c_data_new:48 => c_data:21
  │    ├── cardinality: [0 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1-17,21)
  │    └── project
- │         ├── columns: c_balance:47 c_ytd_payment:48 c_payment_cnt_new:45 c_data_new:46 c_id:22!null c_d_id:23!null c_w_id:24!null c_first:25 c_middle:26 c_last:27 c_street_1:28 c_street_2:29 c_city:30 c_state:31 c_zip:32 c_phone:33 c_since:34 c_credit:35 c_credit_lim:36 c_discount:37 customer.c_balance:38 customer.c_ytd_payment:39 c_payment_cnt:40 c_delivery_cnt:41 c_data:42
+ │         ├── columns: c_balance:49 c_ytd_payment:50 c_payment_cnt_new:47 c_data_new:48 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(22-42,45-48)
+ │         ├── fd: ()-->(23-43,47-50)
  │         ├── scan customer
- │         │    ├── columns: c_id:22!null c_d_id:23!null c_w_id:24!null c_first:25 c_middle:26 c_last:27 c_street_1:28 c_street_2:29 c_city:30 c_state:31 c_zip:32 c_phone:33 c_since:34 c_credit:35 c_credit_lim:36 c_discount:37 customer.c_balance:38 customer.c_ytd_payment:39 c_payment_cnt:40 c_delivery_cnt:41 c_data:42
- │         │    ├── constraint: /24/23/22: [/10/5/1343 - /10/5/1343]
+ │         │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+ │         │    ├── constraint: /25/24/23: [/10/5/1343 - /10/5/1343]
  │         │    ├── cardinality: [0 - 1]
  │         │    ├── key: ()
- │         │    └── fd: ()-->(22-42)
+ │         │    └── fd: ()-->(23-43)
  │         └── projections
- │              ├── crdb_internal.round_decimal_values(customer.c_balance:38 - 3860.61, 2) [as=c_balance:47, outer=(38), immutable]
- │              ├── crdb_internal.round_decimal_values(customer.c_ytd_payment:39 + 3860.61, 2) [as=c_ytd_payment:48, outer=(39), immutable]
- │              ├── c_payment_cnt:40 + 1 [as=c_payment_cnt_new:45, outer=(40), immutable]
- │              └── CASE c_credit:35 WHEN 'BC' THEN left((((((c_id:22::STRING || c_d_id:23::STRING) || c_w_id:24::STRING) || '5') || '10') || '3860.61') || c_data:42, 500) ELSE c_data:42 END [as=c_data_new:46, outer=(22-24,35,42), immutable]
+ │              ├── crdb_internal.round_decimal_values(customer.c_balance:39 - 3860.61, 2) [as=c_balance:49, outer=(39), immutable]
+ │              ├── crdb_internal.round_decimal_values(customer.c_ytd_payment:40 + 3860.61, 2) [as=c_ytd_payment:50, outer=(40), immutable]
+ │              ├── c_payment_cnt:41 + 1 [as=c_payment_cnt_new:47, outer=(41), immutable]
+ │              └── CASE c_credit:36 WHEN 'BC' THEN left((((((c_id:23::STRING || c_d_id:24::STRING) || c_w_id:25::STRING) || '5') || '10') || '3860.61') || c_data:43, 500) ELSE c_data:43 END [as=c_data_new:48, outer=(23-25,36,43), immutable]
  └── projections
-      └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:49, outer=(14,21), immutable]
+      └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:51, outer=(14,21), immutable]
 
 opt format=hide-qual
 INSERT INTO history
@@ -597,60 +597,60 @@ VALUES
 insert history
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column18:18 => rowid:1
- │    ├── column1:10 => h_c_id:2
- │    ├── column2:11 => h_c_d_id:3
- │    ├── column3:12 => h_c_w_id:4
- │    ├── column4:13 => h_d_id:5
- │    ├── column5:14 => h_w_id:6
- │    ├── column7:16 => h_date:7
- │    ├── h_amount:19 => history.h_amount:8
- │    └── column8:17 => h_data:9
+ │    ├── column19:19 => rowid:1
+ │    ├── column1:11 => h_c_id:2
+ │    ├── column2:12 => h_c_d_id:3
+ │    ├── column3:13 => h_c_w_id:4
+ │    ├── column4:14 => h_d_id:5
+ │    ├── column5:15 => h_w_id:6
+ │    ├── column7:17 => h_date:7
+ │    ├── h_amount:20 => history.h_amount:8
+ │    └── column8:18 => h_data:9
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column7:16!null column8:17!null column18:18 h_amount:19!null
+ │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column7:17!null column8:18!null column19:19 h_amount:20!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile
  │    ├── key: ()
- │    ├── fd: ()-->(10-14,16-19)
+ │    ├── fd: ()-->(11-15,17-20)
  │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41+00:00', '8    Kdcgphy3', gen_random_uuid(), 3860.61)
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
       │    └── anti-join (lookup customer)
-      │         ├── columns: column3:20!null column2:21!null column1:22!null
-      │         ├── key columns: [20 21 22] = [25 24 23]
+      │         ├── columns: column3:21!null column2:22!null column1:23!null
+      │         ├── key columns: [21 22 23] = [26 25 24]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         ├── fd: ()-->(20-22)
+      │         ├── fd: ()-->(21-23)
       │         ├── with-scan &1
-      │         │    ├── columns: column3:20!null column2:21!null column1:22!null
+      │         │    ├── columns: column3:21!null column2:22!null column1:23!null
       │         │    ├── mapping:
-      │         │    │    ├──  column3:12 => column3:20
-      │         │    │    ├──  column2:11 => column2:21
-      │         │    │    └──  column1:10 => column1:22
+      │         │    │    ├──  column3:13 => column3:21
+      │         │    │    ├──  column2:12 => column2:22
+      │         │    │    └──  column1:11 => column1:23
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(20-22)
+      │         │    └── fd: ()-->(21-23)
       │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
            └── anti-join (lookup district)
-                ├── columns: column5:44!null column4:45!null
-                ├── key columns: [44 45] = [47 46]
+                ├── columns: column5:46!null column4:47!null
+                ├── key columns: [46 47] = [49 48]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(44,45)
+                ├── fd: ()-->(46,47)
                 ├── with-scan &1
-                │    ├── columns: column5:44!null column4:45!null
+                │    ├── columns: column5:46!null column4:47!null
                 │    ├── mapping:
-                │    │    ├──  column5:14 => column5:44
-                │    │    └──  column4:13 => column4:45
+                │    │    ├──  column5:15 => column5:46
+                │    │    └──  column4:14 => column4:47
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(44,45)
+                │    └── fd: ()-->(46,47)
                 └── filters (true)
 
 # --------------------------------------------------
@@ -778,16 +778,16 @@ FROM order_line
 WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
 ----
 scalar-group-by
- ├── columns: sum:11
+ ├── columns: sum:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(11)
+ ├── fd: ()-->(12)
  ├── scan order_line
  │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_amount:9
  │    ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
  │    └── fd: ()-->(1-3)
  └── aggregations
-      └── sum [as=sum:11, outer=(9)]
+      └── sum [as=sum:12, outer=(9)]
            └── ol_amount:9
 
 opt format=hide-qual
@@ -817,21 +817,21 @@ project
  ├── fd: (2)-->(4)
  └── update "order"
       ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null o_c_id:4
-      ├── fetch columns: o_id:9 o_d_id:10 o_w_id:11 o_c_id:12 o_entry_d:13 o_carrier_id:14 o_ol_cnt:15 o_all_local:16
+      ├── fetch columns: o_id:10 o_d_id:11 o_w_id:12 o_c_id:13 o_entry_d:14 o_carrier_id:15 o_ol_cnt:16 o_all_local:17
       ├── update-mapping:
-      │    └── o_carrier_id_new:17 => o_carrier_id:6
+      │    └── o_carrier_id_new:19 => o_carrier_id:6
       ├── cardinality: [0 - 10]
       ├── volatile, mutations
       ├── key: (2)
       ├── fd: ()-->(1,3), (2)-->(4)
       └── project
-           ├── columns: o_carrier_id_new:17!null o_id:9!null o_d_id:10!null o_w_id:11!null o_c_id:12 o_entry_d:13 o_carrier_id:14 o_ol_cnt:15 o_all_local:16
+           ├── columns: o_carrier_id_new:19!null o_id:10!null o_d_id:11!null o_w_id:12!null o_c_id:13 o_entry_d:14 o_carrier_id:15 o_ol_cnt:16 o_all_local:17
            ├── cardinality: [0 - 10]
-           ├── key: (10)
-           ├── fd: ()-->(9,11,17), (10)-->(12-16)
+           ├── key: (11)
+           ├── fd: ()-->(10,12,19), (11)-->(13-17)
            ├── scan "order"
-           │    ├── columns: o_id:9!null o_d_id:10!null o_w_id:11!null o_c_id:12 o_entry_d:13 o_carrier_id:14 o_ol_cnt:15 o_all_local:16
-           │    ├── constraint: /11/10/-9
+           │    ├── columns: o_id:10!null o_d_id:11!null o_w_id:12!null o_c_id:13 o_entry_d:14 o_carrier_id:15 o_ol_cnt:16 o_all_local:17
+           │    ├── constraint: /12/11/-10
            │    │    ├── [/10/1/2167 - /10/1/2167]
            │    │    ├── [/10/2/2167 - /10/2/2167]
            │    │    ├── [/10/3/2167 - /10/3/2167]
@@ -843,10 +843,10 @@ project
            │    │    ├── [/10/9/2167 - /10/9/2167]
            │    │    └── [/10/10/2167 - /10/10/2167]
            │    ├── cardinality: [0 - 10]
-           │    ├── key: (10)
-           │    └── fd: ()-->(9,11), (10)-->(12-16)
+           │    ├── key: (11)
+           │    └── fd: ()-->(10,12), (11)-->(13-17)
            └── projections
-                └── 10 [as=o_carrier_id_new:17]
+                └── 10 [as=o_carrier_id_new:19]
 
 opt format=hide-qual
 UPDATE customer
@@ -878,21 +878,21 @@ WHERE c_w_id = 10 AND (c_d_id, c_id) IN (
 ----
 update customer
  ├── columns: <none>
- ├── fetch columns: c_id:22 c_d_id:23 c_w_id:24 c_first:25 c_middle:26 c_last:27 c_street_1:28 c_street_2:29 c_city:30 c_state:31 c_zip:32 c_phone:33 c_since:34 c_credit:35 c_credit_lim:36 c_discount:37 customer.c_balance:38 c_ytd_payment:39 c_payment_cnt:40 c_delivery_cnt:41 c_data:42
+ ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  ├── update-mapping:
- │    ├── c_balance:45 => customer.c_balance:17
- │    └── c_delivery_cnt_new:43 => c_delivery_cnt:20
+ │    ├── c_balance:47 => customer.c_balance:17
+ │    └── c_delivery_cnt_new:45 => c_delivery_cnt:20
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: c_balance:45 c_delivery_cnt_new:43 c_id:22!null c_d_id:23!null c_w_id:24!null c_first:25 c_middle:26 c_last:27 c_street_1:28 c_street_2:29 c_city:30 c_state:31 c_zip:32 c_phone:33 c_since:34 c_credit:35 c_credit_lim:36 c_discount:37 customer.c_balance:38 c_ytd_payment:39 c_payment_cnt:40 c_delivery_cnt:41 c_data:42
+      ├── columns: c_balance:47 c_delivery_cnt_new:45 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
       ├── cardinality: [0 - 10]
       ├── immutable
-      ├── key: (22,23)
-      ├── fd: ()-->(24), (22,23)-->(25-42,45), (41)-->(43)
+      ├── key: (23,24)
+      ├── fd: ()-->(25), (23,24)-->(26-43,47), (42)-->(45)
       ├── scan customer
-      │    ├── columns: c_id:22!null c_d_id:23!null c_w_id:24!null c_first:25 c_middle:26 c_last:27 c_street_1:28 c_street_2:29 c_city:30 c_state:31 c_zip:32 c_phone:33 c_since:34 c_credit:35 c_credit_lim:36 c_discount:37 customer.c_balance:38 c_ytd_payment:39 c_payment_cnt:40 c_delivery_cnt:41 c_data:42
-      │    ├── constraint: /24/23/22
+      │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+      │    ├── constraint: /25/24/23
       │    │    ├── [/10/1/1405 - /10/1/1405]
       │    │    ├── [/10/2/137 - /10/2/137]
       │    │    ├── [/10/3/309 - /10/3/309]
@@ -904,11 +904,11 @@ update customer
       │    │    ├── [/10/9/1412 - /10/9/1412]
       │    │    └── [/10/10/417 - /10/10/417]
       │    ├── cardinality: [0 - 10]
-      │    ├── key: (22,23)
-      │    └── fd: ()-->(24), (22,23)-->(25-42)
+      │    ├── key: (23,24)
+      │    └── fd: ()-->(25), (23,24)-->(26-43)
       └── projections
-           ├── crdb_internal.round_decimal_values(customer.c_balance:38 + CASE c_d_id:23 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance:45, outer=(23,38), immutable]
-           └── c_delivery_cnt:41 + 1 [as=c_delivery_cnt_new:43, outer=(41), immutable]
+           ├── crdb_internal.round_decimal_values(customer.c_balance:39 + CASE c_d_id:24 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance:47, outer=(24,39), immutable]
+           └── c_delivery_cnt:42 + 1 [as=c_delivery_cnt_new:45, outer=(42), immutable]
 
 opt format=hide-qual
 DELETE FROM new_order
@@ -927,12 +927,12 @@ WHERE no_w_id = 10 AND (no_d_id, no_o_id) IN (
 ----
 delete new_order
  ├── columns: <none>
- ├── fetch columns: no_o_id:4 no_d_id:5 no_w_id:6
+ ├── fetch columns: no_o_id:5 no_d_id:6 no_w_id:7
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── scan new_order
-      ├── columns: no_o_id:4!null no_d_id:5!null no_w_id:6!null
-      ├── constraint: /6/5/4
+      ├── columns: no_o_id:5!null no_d_id:6!null no_w_id:7!null
+      ├── constraint: /7/6/5
       │    ├── [/10/1/2167 - /10/1/2167]
       │    ├── [/10/2/2167 - /10/2/2167]
       │    ├── [/10/3/2167 - /10/3/2167]
@@ -944,8 +944,8 @@ delete new_order
       │    ├── [/10/9/2167 - /10/9/2167]
       │    └── [/10/10/2167 - /10/10/2167]
       ├── cardinality: [0 - 10]
-      ├── key: (5)
-      └── fd: ()-->(4,6)
+      ├── key: (6)
+      └── fd: ()-->(5,7)
 
 opt format=hide-qual
 UPDATE order_line
@@ -965,18 +965,18 @@ WHERE ol_w_id = 10 AND (ol_d_id, ol_o_id) IN (
 ----
 update order_line
  ├── columns: <none>
- ├── fetch columns: ol_o_id:11 ol_d_id:12 ol_w_id:13 ol_number:14 ol_i_id:15 ol_supply_w_id:16 ol_delivery_d:17 ol_quantity:18 ol_amount:19 ol_dist_info:20
+ ├── fetch columns: ol_o_id:12 ol_d_id:13 ol_w_id:14 ol_number:15 ol_i_id:16 ol_supply_w_id:17 ol_delivery_d:18 ol_quantity:19 ol_amount:20 ol_dist_info:21
  ├── update-mapping:
- │    └── ol_delivery_d_new:21 => ol_delivery_d:7
+ │    └── ol_delivery_d_new:23 => ol_delivery_d:7
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: ol_delivery_d_new:21!null ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null ol_number:14!null ol_i_id:15!null ol_supply_w_id:16 ol_delivery_d:17 ol_quantity:18 ol_amount:19 ol_dist_info:20
-      ├── key: (12,14)
-      ├── fd: ()-->(11,13,21), (12,14)-->(15-20)
+      ├── columns: ol_delivery_d_new:23!null ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_i_id:16!null ol_supply_w_id:17 ol_delivery_d:18 ol_quantity:19 ol_amount:20 ol_dist_info:21
+      ├── key: (13,15)
+      ├── fd: ()-->(12,14,23), (13,15)-->(16-21)
       ├── scan order_line
-      │    ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null ol_number:14!null ol_i_id:15!null ol_supply_w_id:16 ol_delivery_d:17 ol_quantity:18 ol_amount:19 ol_dist_info:20
-      │    ├── constraint: /13/12/-11/14
+      │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_i_id:16!null ol_supply_w_id:17 ol_delivery_d:18 ol_quantity:19 ol_amount:20 ol_dist_info:21
+      │    ├── constraint: /14/13/-12/15
       │    │    ├── [/10/1/2167 - /10/1/2167]
       │    │    ├── [/10/2/2167 - /10/2/2167]
       │    │    ├── [/10/3/2167 - /10/3/2167]
@@ -987,10 +987,10 @@ update order_line
       │    │    ├── [/10/8/2167 - /10/8/2167]
       │    │    ├── [/10/9/2167 - /10/9/2167]
       │    │    └── [/10/10/2167 - /10/10/2167]
-      │    ├── key: (12,14)
-      │    └── fd: ()-->(11,13), (12,14)-->(15-20)
+      │    ├── key: (13,15)
+      │    └── fd: ()-->(12,14), (13,15)-->(16-21)
       └── projections
-           └── '2019-08-26 16:50:41+00:00' [as=ol_delivery_d_new:21]
+           └── '2019-08-26 16:50:41+00:00' [as=ol_delivery_d_new:23]
 
 # --------------------------------------------------
 # 2.8 The Stock-Level Transaction
@@ -1028,28 +1028,28 @@ WHERE ol_w_id = 10
     AND s_quantity < 15
 ----
 scalar-group-by
- ├── columns: count:28!null
+ ├── columns: count:30!null
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(28)
+ ├── fd: ()-->(30)
  ├── distinct-on
- │    ├── columns: s_i_id:11!null
- │    ├── grouping columns: s_i_id:11!null
- │    ├── key: (11)
+ │    ├── columns: s_i_id:12!null
+ │    ├── grouping columns: s_i_id:12!null
+ │    ├── key: (12)
  │    └── inner-join (lookup stock)
- │         ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null s_i_id:11!null s_w_id:12!null s_quantity:13!null
- │         ├── key columns: [3 5] = [12 11]
+ │         ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null s_i_id:12!null s_w_id:13!null s_quantity:14!null
+ │         ├── key columns: [3 5] = [13 12]
  │         ├── lookup columns are key
- │         ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
+ │         ├── fd: ()-->(2,3,13), (12)-->(14), (5)==(12), (12)==(5), (3)==(13), (13)==(3)
  │         ├── scan order_line
  │         │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null
  │         │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
  │         │    └── fd: ()-->(2,3)
  │         └── filters
- │              ├── s_w_id:12 = 10 [outer=(12), constraints=(/12: [/10 - /10]; tight), fd=()-->(12)]
- │              └── s_quantity:13 < 15 [outer=(13), constraints=(/13: (/NULL - /14]; tight)]
+ │              ├── s_w_id:13 = 10 [outer=(13), constraints=(/13: [/10 - /10]; tight), fd=()-->(13)]
+ │              └── s_quantity:14 < 15 [outer=(14), constraints=(/14: (/NULL - /14]; tight)]
  └── aggregations
-      └── count-rows [as=count:28]
+      └── count-rows [as=count:30]
 
 # --------------------------------------------------
 # Consistency Queries
@@ -1070,34 +1070,34 @@ ON (w_id = d_w_id)
 WHERE w_ytd != sum_d_ytd
 ----
 scalar-group-by
- ├── columns: count:22!null
+ ├── columns: count:24!null
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(22)
+ ├── fd: ()-->(24)
  ├── inner-join (lookup warehouse)
- │    ├── columns: w_id:1!null w_ytd:9!null d_w_id:11!null sum:21!null
- │    ├── key columns: [11] = [1]
+ │    ├── columns: w_id:1!null w_ytd:9!null d_w_id:12!null sum:23!null
+ │    ├── key columns: [12] = [1]
  │    ├── lookup columns are key
  │    ├── immutable
- │    ├── key: (11)
- │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
+ │    ├── key: (12)
+ │    ├── fd: (1)-->(9), (12)-->(23), (1)==(12), (12)==(1)
  │    ├── group-by
- │    │    ├── columns: d_w_id:11!null sum:21
- │    │    ├── grouping columns: d_w_id:11!null
- │    │    ├── internal-ordering: +11
- │    │    ├── key: (11)
- │    │    ├── fd: (11)-->(21)
+ │    │    ├── columns: d_w_id:12!null sum:23
+ │    │    ├── grouping columns: d_w_id:12!null
+ │    │    ├── internal-ordering: +12
+ │    │    ├── key: (12)
+ │    │    ├── fd: (12)-->(23)
  │    │    ├── scan district
- │    │    │    ├── columns: d_w_id:11!null d_ytd:19
- │    │    │    └── ordering: +11
+ │    │    │    ├── columns: d_w_id:12!null d_ytd:20
+ │    │    │    └── ordering: +12
  │    │    └── aggregations
- │    │         └── sum [as=sum:21, outer=(19)]
- │    │              └── d_ytd:19
+ │    │         └── sum [as=sum:23, outer=(20)]
+ │    │              └── d_ytd:20
  │    └── filters
- │         └── w_ytd:9 != sum:21 [outer=(9,21), immutable, constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │         └── w_ytd:9 != sum:23 [outer=(9,23), immutable, constraints=(/9: (/NULL - ]; /23: (/NULL - ])]
  └── aggregations
-      └── count-rows [as=count_rows:22]
+      └── count-rows [as=count_rows:24]
 
 opt format=hide-qual
 SELECT d_next_o_id
@@ -1117,17 +1117,17 @@ GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
 ----
 group-by
- ├── columns: max:4!null  [hidden: no_d_id:2!null no_w_id:3!null]
+ ├── columns: max:5!null  [hidden: no_d_id:2!null no_w_id:3!null]
  ├── grouping columns: no_d_id:2!null no_w_id:3!null
  ├── key: (2,3)
- ├── fd: (2,3)-->(4)
+ ├── fd: (2,3)-->(5)
  ├── ordering: +3,+2
  ├── scan new_order
  │    ├── columns: no_o_id:1!null no_d_id:2!null no_w_id:3!null
  │    ├── key: (1-3)
  │    └── ordering: +3,+2
  └── aggregations
-      └── max [as=max:4, outer=(1)]
+      └── max [as=max:5, outer=(1)]
            └── no_o_id:1
 
 opt format=hide-qual
@@ -1137,17 +1137,17 @@ GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
 ----
 group-by
- ├── columns: max:9!null  [hidden: o_d_id:2!null o_w_id:3!null]
+ ├── columns: max:10!null  [hidden: o_d_id:2!null o_w_id:3!null]
  ├── grouping columns: o_d_id:2!null o_w_id:3!null
  ├── key: (2,3)
- ├── fd: (2,3)-->(9)
+ ├── fd: (2,3)-->(10)
  ├── ordering: +3,+2
  ├── scan "order"@order_idx
  │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null
  │    ├── key: (1-3)
  │    └── ordering: +3,+2
  └── aggregations
-      └── max [as=max:9, outer=(1)]
+      └── max [as=max:10, outer=(1)]
            └── o_id:1
 
 opt format=hide-qual
@@ -1161,36 +1161,36 @@ FROM
 WHERE nod != -1
 ----
 scalar-group-by
- ├── columns: count:8!null
+ ├── columns: count:9!null
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── key: ()
- ├── fd: ()-->(8)
+ ├── fd: ()-->(9)
  ├── select
- │    ├── columns: no_d_id:2!null no_w_id:3!null max:4!null min:5!null count_rows:6!null
+ │    ├── columns: no_d_id:2!null no_w_id:3!null max:5!null min:6!null count_rows:7!null
  │    ├── immutable
  │    ├── key: (2,3)
- │    ├── fd: (2,3)-->(4-6)
+ │    ├── fd: (2,3)-->(5-7)
  │    ├── group-by
- │    │    ├── columns: no_d_id:2!null no_w_id:3!null max:4!null min:5!null count_rows:6!null
+ │    │    ├── columns: no_d_id:2!null no_w_id:3!null max:5!null min:6!null count_rows:7!null
  │    │    ├── grouping columns: no_d_id:2!null no_w_id:3!null
  │    │    ├── internal-ordering: +3,+2
  │    │    ├── key: (2,3)
- │    │    ├── fd: (2,3)-->(4-6)
+ │    │    ├── fd: (2,3)-->(5-7)
  │    │    ├── scan new_order
  │    │    │    ├── columns: no_o_id:1!null no_d_id:2!null no_w_id:3!null
  │    │    │    ├── key: (1-3)
  │    │    │    └── ordering: +3,+2
  │    │    └── aggregations
- │    │         ├── max [as=max:4, outer=(1)]
+ │    │         ├── max [as=max:5, outer=(1)]
  │    │         │    └── no_o_id:1
- │    │         ├── min [as=min:5, outer=(1)]
+ │    │         ├── min [as=min:6, outer=(1)]
  │    │         │    └── no_o_id:1
- │    │         └── count-rows [as=count_rows:6]
+ │    │         └── count-rows [as=count_rows:7]
  │    └── filters
- │         └── ((max:4 - min:5) - count_rows:6) != -1 [outer=(4-6), immutable]
+ │         └── ((max:5 - min:6) - count_rows:7) != -1 [outer=(5-7), immutable]
  └── aggregations
-      └── count-rows [as=count_rows:8]
+      └── count-rows [as=count_rows:9]
 
 opt format=hide-qual
 SELECT sum(o_ol_cnt)
@@ -1199,16 +1199,16 @@ GROUP BY o_w_id, o_d_id
 ORDER BY o_w_id, o_d_id
 ----
 group-by
- ├── columns: sum:9  [hidden: o_d_id:2!null o_w_id:3!null]
+ ├── columns: sum:10  [hidden: o_d_id:2!null o_w_id:3!null]
  ├── grouping columns: o_d_id:2!null o_w_id:3!null
  ├── key: (2,3)
- ├── fd: (2,3)-->(9)
+ ├── fd: (2,3)-->(10)
  ├── ordering: +3,+2
  ├── scan "order"
  │    ├── columns: o_d_id:2!null o_w_id:3!null o_ol_cnt:7
  │    └── ordering: +3,+2
  └── aggregations
-      └── sum [as=sum:9, outer=(7)]
+      └── sum [as=sum:10, outer=(7)]
            └── o_ol_cnt:7
 
 opt format=hide-qual
@@ -1218,16 +1218,16 @@ GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
 ----
 group-by
- ├── columns: count:11!null  [hidden: ol_d_id:2!null ol_w_id:3!null]
+ ├── columns: count:12!null  [hidden: ol_d_id:2!null ol_w_id:3!null]
  ├── grouping columns: ol_d_id:2!null ol_w_id:3!null
  ├── key: (2,3)
- ├── fd: (2,3)-->(11)
+ ├── fd: (2,3)-->(12)
  ├── ordering: +3,+2
  ├── scan order_line
  │    ├── columns: ol_d_id:2!null ol_w_id:3!null
  │    └── ordering: +3,+2
  └── aggregations
-      └── count-rows [as=count_rows:11]
+      └── count-rows [as=count_rows:12]
 
 opt format=hide-qual
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
@@ -1237,23 +1237,23 @@ EXCEPT ALL
 except-all
  ├── columns: no_w_id:3!null no_d_id:2!null no_o_id:1!null
  ├── left columns: no_w_id:3!null no_d_id:2!null no_o_id:1!null
- ├── right columns: o_w_id:6 o_d_id:5 o_id:4
+ ├── right columns: o_w_id:7 o_d_id:6 o_id:5
  ├── scan new_order
  │    ├── columns: no_o_id:1!null no_d_id:2!null no_w_id:3!null
  │    └── key: (1-3)
  └── project
-      ├── columns: o_id:4!null o_d_id:5!null o_w_id:6!null
-      ├── key: (4-6)
+      ├── columns: o_id:5!null o_d_id:6!null o_w_id:7!null
+      ├── key: (5-7)
       └── select
-           ├── columns: o_id:4!null o_d_id:5!null o_w_id:6!null o_carrier_id:9
-           ├── key: (4-6)
-           ├── fd: ()-->(9)
+           ├── columns: o_id:5!null o_d_id:6!null o_w_id:7!null o_carrier_id:10
+           ├── key: (5-7)
+           ├── fd: ()-->(10)
            ├── scan "order"@order_idx
-           │    ├── columns: o_id:4!null o_d_id:5!null o_w_id:6!null o_carrier_id:9
-           │    ├── key: (4-6)
-           │    └── fd: (4-6)-->(9)
+           │    ├── columns: o_id:5!null o_d_id:6!null o_w_id:7!null o_carrier_id:10
+           │    ├── key: (5-7)
+           │    └── fd: (5-7)-->(10)
            └── filters
-                └── o_carrier_id:9 IS NULL [outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
+                └── o_carrier_id:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
 
 opt format=hide-qual
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
@@ -1263,7 +1263,7 @@ EXCEPT ALL
 except-all
  ├── columns: o_w_id:3!null o_d_id:2!null o_id:1!null
  ├── left columns: o_w_id:3!null o_d_id:2!null o_id:1!null
- ├── right columns: no_w_id:11 no_d_id:10 no_o_id:9
+ ├── right columns: no_w_id:12 no_d_id:11 no_o_id:10
  ├── project
  │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null
  │    ├── key: (1-3)
@@ -1278,8 +1278,8 @@ except-all
  │         └── filters
  │              └── o_carrier_id:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  └── scan new_order
-      ├── columns: no_o_id:9!null no_d_id:10!null no_w_id:11!null
-      └── key: (9-11)
+      ├── columns: no_o_id:10!null no_d_id:11!null no_w_id:12!null
+      └── key: (10-12)
 
 opt format=hide-qual
 (
@@ -1298,20 +1298,20 @@ EXCEPT ALL
 except-all
  ├── columns: o_w_id:3!null o_d_id:2!null o_id:1!null o_ol_cnt:7
  ├── left columns: o_w_id:3!null o_d_id:2!null o_id:1!null o_ol_cnt:7
- ├── right columns: ol_w_id:11 ol_d_id:10 ol_o_id:9 count_rows:19
+ ├── right columns: ol_w_id:12 ol_d_id:11 ol_o_id:10 count_rows:21
  ├── scan "order"
  │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null o_ol_cnt:7
  │    ├── key: (1-3)
  │    └── fd: (1-3)-->(7)
  └── group-by
-      ├── columns: ol_o_id:9!null ol_d_id:10!null ol_w_id:11!null count_rows:19!null
-      ├── grouping columns: ol_o_id:9!null ol_d_id:10!null ol_w_id:11!null
-      ├── key: (9-11)
-      ├── fd: (9-11)-->(19)
+      ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null count_rows:21!null
+      ├── grouping columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null
+      ├── key: (10-12)
+      ├── fd: (10-12)-->(21)
       ├── scan order_line@order_line_stock_fk_idx
-      │    └── columns: ol_o_id:9!null ol_d_id:10!null ol_w_id:11!null
+      │    └── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null
       └── aggregations
-           └── count-rows [as=count_rows:19]
+           └── count-rows [as=count_rows:21]
 
 opt format=hide-qual
 (
@@ -1328,22 +1328,22 @@ EXCEPT ALL
 )
 ----
 except-all
- ├── columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count:11
- ├── left columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count_rows:11
- ├── right columns: o_w_id:14 o_d_id:13 o_id:12 o_ol_cnt:18
+ ├── columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count:12
+ ├── left columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count_rows:12
+ ├── right columns: o_w_id:15 o_d_id:14 o_id:13 o_ol_cnt:19
  ├── group-by
- │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null count_rows:11!null
+ │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null count_rows:12!null
  │    ├── grouping columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null
  │    ├── key: (1-3)
- │    ├── fd: (1-3)-->(11)
+ │    ├── fd: (1-3)-->(12)
  │    ├── scan order_line@order_line_stock_fk_idx
  │    │    └── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null
  │    └── aggregations
- │         └── count-rows [as=count_rows:11]
+ │         └── count-rows [as=count_rows:12]
  └── scan "order"
-      ├── columns: o_id:12!null o_d_id:13!null o_w_id:14!null o_ol_cnt:18
-      ├── key: (12-14)
-      └── fd: (12-14)-->(18)
+      ├── columns: o_id:13!null o_d_id:14!null o_w_id:15!null o_ol_cnt:19
+      ├── key: (13-15)
+      └── fd: (13-15)-->(19)
 
 opt format=hide-qual
 SELECT count(*)
@@ -1363,14 +1363,14 @@ ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
 WHERE ol_o_id IS NULL OR o_id IS NULL
 ----
 scalar-group-by
- ├── columns: count:19!null
+ ├── columns: count:21!null
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(19)
+ ├── fd: ()-->(21)
  ├── select
- │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:9 ol_d_id:10 ol_w_id:11
+ │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:10 ol_d_id:11 ol_w_id:12
  │    ├── full-join (hash)
- │    │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:9 ol_d_id:10 ol_w_id:11
+ │    │    ├── columns: o_id:1 o_d_id:2 o_w_id:3 ol_o_id:10 ol_d_id:11 ol_w_id:12
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  │    │    ├── project
  │    │    │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null
@@ -1386,19 +1386,19 @@ scalar-group-by
  │    │    │         └── filters
  │    │    │              └── o_carrier_id:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  │    │    ├── project
- │    │    │    ├── columns: ol_o_id:9!null ol_d_id:10!null ol_w_id:11!null
+ │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null
  │    │    │    └── select
- │    │    │         ├── columns: ol_o_id:9!null ol_d_id:10!null ol_w_id:11!null ol_delivery_d:15
- │    │    │         ├── fd: ()-->(15)
+ │    │    │         ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_delivery_d:16
+ │    │    │         ├── fd: ()-->(16)
  │    │    │         ├── scan order_line
- │    │    │         │    └── columns: ol_o_id:9!null ol_d_id:10!null ol_w_id:11!null ol_delivery_d:15
+ │    │    │         │    └── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_delivery_d:16
  │    │    │         └── filters
- │    │    │              └── ol_delivery_d:15 IS NULL [outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
+ │    │    │              └── ol_delivery_d:16 IS NULL [outer=(16), constraints=(/16: [/NULL - /NULL]; tight), fd=()-->(16)]
  │    │    └── filters
- │    │         ├── ol_w_id:11 = o_w_id:3 [outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3)]
- │    │         ├── ol_d_id:10 = o_d_id:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
- │    │         └── ol_o_id:9 = o_id:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │         ├── ol_w_id:12 = o_w_id:3 [outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ]), fd=(3)==(12), (12)==(3)]
+ │    │         ├── ol_d_id:11 = o_d_id:2 [outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ]), fd=(2)==(11), (11)==(2)]
+ │    │         └── ol_o_id:10 = o_id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │    └── filters
- │         └── (ol_o_id:9 IS NULL) OR (o_id:1 IS NULL) [outer=(1,9)]
+ │         └── (ol_o_id:10 IS NULL) OR (o_id:1 IS NULL) [outer=(1,10)]
  └── aggregations
-      └── count-rows [as=count_rows:19]
+      └── count-rows [as=count_rows:21]
