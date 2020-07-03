@@ -193,7 +193,7 @@ func NewHashAggregator(
 
 	aggFnsAlloc, err := newAggregateFuncsAlloc(allocator, aggTyps, aggFns, hashAggregatorAllocSize, true /* isHashAgg */)
 
-	return &hashAggregator{
+	hashAgg := &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 
@@ -212,7 +212,9 @@ func NewHashAggregator(
 
 		aggFnsAlloc: aggFnsAlloc,
 		hashAlloc:   hashAggFuncsAlloc{allocator: allocator},
-	}, err
+	}
+	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
+	return hashAgg, err
 }
 
 func (op *hashAggregator) Init() {
