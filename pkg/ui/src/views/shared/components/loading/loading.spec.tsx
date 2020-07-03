@@ -11,11 +11,15 @@
 import _ from "lodash";
 import React from "react";
 import { assert } from "chai";
+import classNames from "classnames/bind";
 
 import "src/enzymeInit";
 import Loading from "src/views/shared/components/loading";
 import { ReactWrapper, mount } from "enzyme";
+import { InlineAlert } from "oss/src/components/inlineAlert/inlineAlert";
+import styles from "src/components/inlineAlert/inlineAlert.module.styl";
 
+const cn = classNames.bind(styles);
 const LOADING_CLASS_NAME = "loading-class-name";
 const RENDER_CLASS_NAME = "render-class-name";
 const ERROR_CLASS_NAME = "loading-error";
@@ -75,10 +79,7 @@ describe("<Loading>", () => {
           loading: false,
           error: Error("some error message"),
         });
-        assertExpectedState(wrapper, {
-          onlyVisibleClass: ERROR_CLASS_NAME,
-          errorCount: 1,
-        });
+        assert.isTrue(wrapper.find(InlineAlert).exists());
       });
     });
 
@@ -88,10 +89,7 @@ describe("<Loading>", () => {
           loading: true,
           error: Error("some error message"),
         });
-        assertExpectedState(wrapper, {
-          onlyVisibleClass: ERROR_CLASS_NAME,
-          errorCount: 1,
-        });
+        assert.isTrue(wrapper.find(InlineAlert).exists());
       });
     });
   });
@@ -107,10 +105,9 @@ describe("<Loading>", () => {
             Error("error3"),
           ],
         });
-        assertExpectedState(wrapper, {
-          onlyVisibleClass: ERROR_CLASS_NAME,
-          errorCount: 3,
-        });
+        const alertWrapper = wrapper.find(InlineAlert);
+        assert.isTrue(alertWrapper.exists());
+        assert.equal(alertWrapper.find(`.${cn("message")} p`).length, 3);
       });
     });
 
@@ -127,10 +124,9 @@ describe("<Loading>", () => {
             null,
           ],
         });
-        assertExpectedState(wrapper, {
-          onlyVisibleClass: ERROR_CLASS_NAME,
-          errorCount: 3,
-        });
+        const alertWrapper = wrapper.find(InlineAlert);
+        assert.isTrue(alertWrapper.exists());
+        assert.equal(alertWrapper.find(`.${cn("message")} p`).length, 3);
       });
     });
 
@@ -145,9 +141,7 @@ describe("<Loading>", () => {
           ],
           renderClassName: "no-errors-so-should-render-me",
         });
-        assertExpectedState(wrapper, {
-          onlyVisibleClass: "no-errors-so-should-render-me",
-        });
+        assert.isFalse(wrapper.find(InlineAlert).exists());
       });
     });
   });

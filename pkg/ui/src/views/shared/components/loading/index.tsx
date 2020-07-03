@@ -8,11 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode } from "react";
+import React from "react";
+import { chain } from "lodash";
 import { RequestError } from "src/util/api";
 import spinner from "assets/spinner.gif";
 import { adminUIAccess } from "src/util/docs";
 import "./index.styl";
+import { InlineAlert, InlineAlertProps, InlineAlertIntent } from "src/components/inlineAlert/inlineAlert";
+import { Anchor } from "src/components";
 
 interface LoadingProps {
   loading: boolean;
@@ -43,22 +46,8 @@ function getValidErrorsList (errors?: Error | Error[] | null): Error[] | null {
   return null;
 }
 
-/**
- * getDetails produces a hint for the given error object.
- */
-function getDetails (error: Error): ReactNode {
-  if (error instanceof RequestError) {
-     if (error.status === 403) {
-       return (
-         <p>
-           Insufficient privileges to view this resource. <a href={adminUIAccess} target="_blank">
-             Learn more
-           </a>
-         </p>
-       );
-     }
-  }
-  return <p>no details available</p>;
+function isRestrictedPermissionsError(error: Error) {
+  return error instanceof RequestError && error.status === 403;
 }
 
 /**
@@ -77,18 +66,54 @@ export default function Loading(props: LoadingProps) {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (errors) {
-    const errorCountMessage = (errors.length > 1) ? "Multiple errors occurred" : "An error was encountered";
-    return (
-      <div className="loading-error">
-        <p>{errorCountMessage} while loading this data:</p>
-        <ul>
-          {errors.map((error, idx) => (
-            <li key={idx}><b>{error.message}</b>
-            {getDetails(error)}</li>
-          ))}
-        </ul>
-      </div>
-    );
+    // - map Error to InlineAlert props. RestrictedPermissions handled as "info" message;
+    // - group errors by intend to show separate alerts per intent.
+    return chain(errors)
+      .map<Omit<InlineAlertProps, "title">>(error => {
+        const isRestrictedPermissionError = isRestrictedPermissionsError(error);
+
+        if (isRestrictedPermissionError) {
+          return {
+            intent: "info",
+            message: (
+              <span>
+                You do not have permissions to view this information. <Anchor href={adminUIAccess}>Learn more</Anchor>
+              </span>
+            ),
+          };
+        } else {
+          return {
+            intent: "error",
+            message: <span>{error.message}: no details available</span>,
+          };
+        }
+      })
+      .groupBy(alert => alert.intent)
+      .map((alerts, intent: InlineAlertIntent) => {
+        if (alerts.length === 1) {
+          return (
+            <InlineAlert
+              intent={intent}
+              title={alerts[0].message}
+            />
+          );
+        } else {
+          return (
+            <InlineAlert
+              intent={intent}
+              title={
+                <p>Multiple errors occurred while loading this data:</p>
+              }
+              message={
+                <div>
+                  { alerts.map((alert, idx) => (<p key={idx}>{alert.message}</p>)) }
+                </div>
+              }
+            />
+          );
+        }
+      })
+      .value();
   }
   if (props.loading) {
     return <div className={className} style={image} />;
