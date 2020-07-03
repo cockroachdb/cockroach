@@ -104,6 +104,13 @@ project
  └── projections
       └── 1 [as="?column?":8]
 
+# SemiJoin case.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT v FROM fks WHERE EXISTS (SELECT * FROM a WHERE x = r1)
+----
+scan fks
+ └── columns: v:2
+
 # No-op case because the cross join may duplicate left rows.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON True
@@ -112,7 +119,6 @@ project
  ├── columns: "?column?":8!null
  ├── fd: ()-->(8)
  ├── left-join (cross)
- │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── scan b
  │    ├── scan a
  │    └── filters (true)
@@ -881,7 +887,6 @@ project
  │    ├── left-join (cross)
  │    │    ├── columns: column1:2 "?column?":3!null rownum:5!null
  │    │    ├── cardinality: [2 - 8]
- │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── fd: (5)-->(3)
  │    │    ├── ordinality
  │    │    │    ├── columns: "?column?":3!null rownum:5!null
