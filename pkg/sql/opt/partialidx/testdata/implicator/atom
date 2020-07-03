@@ -194,6 +194,47 @@ predtest vars=(int, int)
 ----
 false
 
+# IS (NOT) NULL
+
+predtest vars=(int)
+@1 IS NULL
+=>
+@1 IS NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 IS NOT NULL
+=>
+@1 IS NOT NULL
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 < 5
+=>
+@1 IS NOT NULL
+----
+true
+└── remaining filters: @1 < 5
+
+predtest vars=(string)
+@1 = 'foo'
+=>
+@1 IS NOT NULL
+----
+true
+└── remaining filters: @1 = 'foo'
+
+predtest vars=(int)
+@1 IS NULL
+=>
+@1 IS NOT NULL
+----
+false
+
 # Functions
 
 predtest vars=(string)

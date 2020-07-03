@@ -1193,6 +1193,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			tableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.Desc)
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+			tableDesc.OfflineReason = ""
 
 			if !tbl.IsNew {
 				// NB: This is not using AllNonDropIndexes or directly mutating the
