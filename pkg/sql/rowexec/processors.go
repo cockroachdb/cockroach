@@ -321,7 +321,7 @@ func NewProcessor(
 		if NewChangeAggregatorProcessor == nil {
 			return nil, errors.New("ChangeAggregator processor unimplemented")
 		}
-		return NewChangeAggregatorProcessor(flowCtx, processorID, *core.ChangeAggregator, outputs[0])
+		return NewChangeAggregatorProcessor(flowCtx, processorID, *core.ChangeAggregator, post, outputs[0])
 	}
 	if core.ChangeFrontier != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -330,7 +330,7 @@ func NewProcessor(
 		if NewChangeFrontierProcessor == nil {
 			return nil, errors.New("ChangeFrontier processor unimplemented")
 		}
-		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
+		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], post, outputs[0])
 	}
 	if core.InvertedFilterer != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -351,7 +351,7 @@ var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDat
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewChangeFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

@@ -158,7 +158,7 @@ func distChangefeedFlow(
 	}
 
 	p := sql.MakePhysicalPlan(gatewayNodeID)
-	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
