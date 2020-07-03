@@ -983,7 +983,6 @@ limit
  │    ├── limit hint: 10.00
  │    └── left-join (hash)
  │         ├── columns: a:1!null b:2 u:3 v:4
- │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │         ├── key: (1,3)
  │         ├── fd: (1)-->(2), (3)-->(4)
  │         ├── scan ab

@@ -771,7 +771,6 @@ project
  │    ├── fd: (13)-->(11)
  │    ├── left-join (cross)
  │    │    ├── columns: expr:6!null true:10 rownum:13!null
- │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── immutable
  │    │    ├── fd: (13)-->(6)
  │    │    ├── ordinality
