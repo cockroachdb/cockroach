@@ -16,12 +16,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,6 +46,8 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	t.Run("basic", func(t *testing.T) {
+		// Set a small chunk size to test splitting into chunks.
+		defer stmtdiagnostics.TestingSetBundleChunkSize(1 + rand.Intn(100))()
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
 			t, fmt.Sprint(rows),
