@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { shallow } from "enzyme";
+import { shallow, mount } from "enzyme";
 import { noop } from "lodash";
 import { assert } from "chai";
 import Long from "long";
@@ -56,17 +56,16 @@ describe("NonTableSummary", () => {
         name: "Forbidden",
         message: "Insufficient privileges to view this resource",
       };
-      const wrapper = shallow(<NonTableSummary
+
+      const wrapper = mount(<NonTableSummary
         nonTableStats={null}
         nonTableStatsValid={true}
         refreshNonTableStats={noop as typeof refreshNonTableStats}
         lastError={error} />);
 
-      const loadingWrapper = wrapper.find(Loading).dive();
+      const loadingWrapper = wrapper.find(Loading);
       assert.isTrue(loadingWrapper.exists());
-
-      const errorText = loadingWrapper.find("li > b").at(0).text();
-      assert.equal(errorText, error.message);
+      assert.equal(loadingWrapper.text(), error.message);
     });
   });
 });
