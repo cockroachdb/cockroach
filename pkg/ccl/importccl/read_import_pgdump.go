@@ -299,83 +299,160 @@ func readPostgresCreateTable(
 		if err != nil {
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
-		switch stmt := stmt.(type) {
-		case *tree.CreateTable:
-			name, err := getTableName(&stmt.Table)
-			if err != nil {
-				return nil, err
-			}
-			if match != "" && match != name {
-				createTbl[name] = nil
-			} else {
-				createTbl[name] = stmt
-			}
-		case *tree.CreateIndex:
-			name, err := getTableName(&stmt.Table)
-			if err != nil {
-				return nil, err
-			}
-			create := createTbl[name]
-			if create == nil {
-				break
-			}
-			var idx tree.TableDef = &tree.IndexTableDef{
-				Name:        stmt.Name,
-				Columns:     stmt.Columns,
-				Storing:     stmt.Storing,
-				Inverted:    stmt.Inverted,
-				Interleave:  stmt.Interleave,
-				PartitionBy: stmt.PartitionBy,
-			}
-			if stmt.Unique {
-				idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
-			}
-			create.Defs = append(create.Defs, idx)
-		case *tree.AlterTable:
-			name, err := getTableName2(stmt.Table)
-			if err != nil {
-				return nil, err
-			}
-			create := createTbl[name]
-			if create == nil {
-				break
-			}
-			for _, cmd := range stmt.Cmds {
-				switch cmd := cmd.(type) {
-				case *tree.AlterTableAddConstraint:
-					switch con := cmd.ConstraintDef.(type) {
-					case *tree.ForeignKeyConstraintTableDef:
-						if !fks.skip {
-							tableFKs[name] = append(tableFKs[name], con)
-						}
-					default:
-						create.Defs = append(create.Defs, cmd.ConstraintDef)
+		if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, stmt); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func readPostgresStmt(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	match string,
+	fks fkHandler,
+	createTbl map[string]*tree.CreateTable,
+	createSeq map[string]*tree.CreateSequence,
+	tableFKs map[string][]*tree.ForeignKeyConstraintTableDef,
+	stmt interface{},
+) error {
+	switch stmt := stmt.(type) {
+	case *tree.CreateTable:
+		name, err := getTableName(&stmt.Table)
+		if err != nil {
+			return err
+		}
+		if match != "" && match != name {
+			createTbl[name] = nil
+		} else {
+			createTbl[name] = stmt
+		}
+	case *tree.CreateIndex:
+		name, err := getTableName(&stmt.Table)
+		if err != nil {
+			return err
+		}
+		create := createTbl[name]
+		if create == nil {
+			break
+		}
+		var idx tree.TableDef = &tree.IndexTableDef{
+			Name:        stmt.Name,
+			Columns:     stmt.Columns,
+			Storing:     stmt.Storing,
+			Inverted:    stmt.Inverted,
+			Interleave:  stmt.Interleave,
+			PartitionBy: stmt.PartitionBy,
+		}
+		if stmt.Unique {
+			idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
+		}
+		create.Defs = append(create.Defs, idx)
+	case *tree.AlterTable:
+		name, err := getTableName2(stmt.Table)
+		if err != nil {
+			return err
+		}
+		create := createTbl[name]
+		if create == nil {
+			break
+		}
+		for _, cmd := range stmt.Cmds {
+			switch cmd := cmd.(type) {
+			case *tree.AlterTableAddConstraint:
+				switch con := cmd.ConstraintDef.(type) {
+				case *tree.ForeignKeyConstraintTableDef:
+					if !fks.skip {
+						tableFKs[name] = append(tableFKs[name], con)
 					}
-				case *tree.AlterTableSetDefault:
-					for i, def := range create.Defs {
-						def, ok := def.(*tree.ColumnTableDef)
-						if !ok || def.Name != cmd.Column {
-							continue
-						}
-						def.DefaultExpr.Expr = cmd.Default
-						create.Defs[i] = def
-					}
-				case *tree.AlterTableValidateConstraint:
-					// ignore
 				default:
-					return nil, errors.Errorf("unsupported statement: %s", stmt)
+					create.Defs = append(create.Defs, cmd.ConstraintDef)
 				}
+			case *tree.AlterTableSetDefault:
+				for i, def := range create.Defs {
+					def, ok := def.(*tree.ColumnTableDef)
+					if !ok || def.Name != cmd.Column {
+						continue
+					}
+					def.DefaultExpr.Expr = cmd.Default
+					create.Defs[i] = def
+				}
+			case *tree.AlterTableAddColumn:
+				if cmd.IfNotExists {
+					return errors.Errorf("unsupported statement: %s", stmt)
+				}
+				create.Defs = append(create.Defs, cmd.ColumnDef)
+			case *tree.AlterTableValidateConstraint:
+				// ignore
+			default:
+				return errors.Errorf("unsupported statement: %s", stmt)
 			}
-		case *tree.CreateSequence:
-			name, err := getTableName(&stmt.Name)
-			if err != nil {
-				return nil, err
-			}
-			if match == "" || match == name {
-				createSeq[name] = stmt
+		}
+	case *tree.CreateSequence:
+		name, err := getTableName(&stmt.Name)
+		if err != nil {
+			return err
+		}
+		if match == "" || match == name {
+			createSeq[name] = stmt
+		}
+	// Some SELECT statements mutate schema. Search for those here. If it is not exactly a SELECT that mutates
+	// schema, ignore it.
+	case *tree.Select:
+		switch sel := stmt.Select.(type) {
+		case *tree.SelectClause:
+			for _, selExpr := range sel.Exprs {
+				switch expr := selExpr.Expr.(type) {
+				case *tree.FuncExpr:
+					// Look for function calls that mutate schema (this is actually a thing).
+					semaCtx := tree.MakeSemaContext()
+					if _, err := expr.TypeCheck(ctx, &semaCtx, nil /* desired */); err != nil {
+						return err
+					}
+					ov := expr.ResolvedOverload()
+					// Search for a SQLFn, which returns a SQL string to execute.
+					fn := ov.SQLFn
+					if fn == nil {
+						// This is some other function type, which we don't care about.
+						continue
+					}
+					// Attempt to convert all func exprs to datums.
+					datums := make(tree.Datums, len(expr.Exprs))
+					for i, ex := range expr.Exprs {
+						d, ok := ex.(tree.Datum)
+						if !ok {
+							// We got something that wasn't a datum so we can't call the
+							// overload. Since this is a SQLFn and the user would have
+							// expected us to execute it, we have to error.
+							return errors.Errorf("unsupported statement: %s", stmt)
+						}
+						datums[i] = d
+					}
+					// Now that we have all of the datums, we can execute the overload.
+					fnSQL, err := fn(evalCtx, datums)
+					if err != nil {
+						return err
+					}
+					// We have some sql. Parse and process it.
+					fnStmts, err := parser.Parse(fnSQL)
+					if err != nil {
+						return err
+					}
+					for _, fnStmt := range fnStmts {
+						switch ast := fnStmt.AST.(type) {
+						case *tree.AlterTable:
+							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, ast); err != nil {
+								return err
+							}
+						default:
+							// We only support ALTER statements returned from a SQLFn.
+							return errors.Errorf("unsupported statement: %s", stmt)
+						}
+					}
+				}
 			}
 		}
 	}
+	return nil
 }
 
 func getTableName(tn *tree.TableName) (string, error) {
