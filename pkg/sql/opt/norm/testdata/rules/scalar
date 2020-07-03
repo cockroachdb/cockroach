@@ -1486,7 +1486,6 @@ project
  │    │    ├── ordering: +7 opt(8) [actual: +7]
  │    │    └── left-join (hash)
  │    │         ├── columns: b.k:1!null b.i:2 a.k:7 a.i:8
- │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │         ├── key: (1,7)
  │    │         ├── fd: (1)-->(2), (7)-->(8)
  │    │         ├── scan b
@@ -1839,7 +1838,6 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k = a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1852,7 +1850,6 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k >= a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1865,7 +1862,6 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k <= a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1920,7 +1916,6 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k != a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1933,7 +1928,6 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
@@ -1946,7 +1940,6 @@ SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
 ----
 full-join (cross)
  ├── columns: k:1
- ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)

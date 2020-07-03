@@ -881,7 +881,7 @@ func (c *CustomFuncs) MakeAggCols(aggOp opt.Operator, cols opt.ColSet) memo.Aggr
 // than once.
 func (c *CustomFuncs) JoinDoesNotDuplicateLeftRows(join memo.RelExpr) bool {
 	mult := memo.GetJoinMultiplicity(join)
-	return mult.JoinDoesNotDuplicateLeftRows()
+	return mult.JoinDoesNotDuplicateLeftRows(join.Op())
 }
 
 // JoinDoesNotDuplicateRightRows returns true if the given InnerJoin, LeftJoin
@@ -889,14 +889,14 @@ func (c *CustomFuncs) JoinDoesNotDuplicateLeftRows(join memo.RelExpr) bool {
 // more than once.
 func (c *CustomFuncs) JoinDoesNotDuplicateRightRows(join memo.RelExpr) bool {
 	mult := memo.GetJoinMultiplicity(join)
-	return mult.JoinDoesNotDuplicateRightRows()
+	return mult.JoinDoesNotDuplicateRightRows(join.Op())
 }
 
 // JoinPreservesLeftRows returns true if the given InnerJoin, LeftJoin or
 // FullJoin is guaranteed to output every row from its left input at least once.
 func (c *CustomFuncs) JoinPreservesLeftRows(join memo.RelExpr) bool {
 	mult := memo.GetJoinMultiplicity(join)
-	return mult.JoinPreservesLeftRows()
+	return mult.JoinPreservesLeftRows(join.Op())
 }
 
 // JoinPreservesRightRows returns true if the given InnerJoin, LeftJoin or
@@ -904,7 +904,7 @@ func (c *CustomFuncs) JoinPreservesLeftRows(join memo.RelExpr) bool {
 // once.
 func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
 	mult := memo.GetJoinMultiplicity(join)
-	return mult.JoinPreservesRightRows()
+	return mult.JoinPreservesRightRows(join.Op())
 }
 
 // NoJoinHints returns true if no hints were specified for this join.

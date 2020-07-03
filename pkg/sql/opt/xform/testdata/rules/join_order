@@ -484,7 +484,6 @@ project
  │    │    │    │    │    ├── fd: (1)-->(6)
  │    │    │    │    │    ├── left-join (cross)
  │    │    │    │    │    │    ├── columns: a1.id:1!null bool:6
- │    │    │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    │    │    │    │    ├── scan a1
  │    │    │    │    │    │    │    ├── columns: a1.id:1!null
  │    │    │    │    │    │    │    └── key: (1)
