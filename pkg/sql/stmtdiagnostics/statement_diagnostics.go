@@ -33,10 +33,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var stmtDiagnosticsPollingInterval = settings.RegisterDurationSetting(
+var pollingInterval = settings.RegisterDurationSetting(
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second)
+
+var bundleChunkSize = settings.RegisterValidatedByteSizeSetting(
+	"sql.stmt_diagnostics.bundle_chunk_size",
+	"chunk size for statement diagnostic bundles",
+	1024*1024,
+	func(val int64) error {
+		if val < 16 {
+			return errors.Errorf("chunk size must be at least 16 bytes")
+		}
+		return nil
+	},
+)
 
 // Registry maintains a view on the statement fingerprints
 // on which data is to be collected (i.e. system.statement_diagnostics_requests)
@@ -103,7 +115,7 @@ func (r *Registry) poll(ctx context.Context) {
 		deadline            time.Time
 		pollIntervalChanged = make(chan struct{}, 1)
 		maybeResetTimer     = func() {
-			if interval := stmtDiagnosticsPollingInterval.Get(&r.st.SV); interval <= 0 {
+			if interval := pollingInterval.Get(&r.st.SV); interval <= 0 {
 				// Setting the interval to a non-positive value stops the polling.
 				timer.Stop()
 			} else {
@@ -124,7 +136,7 @@ func (r *Registry) poll(ctx context.Context) {
 			lastPoll = timeutil.Now()
 		}
 	)
-	stmtDiagnosticsPollingInterval.SetOnChange(&r.st.SV, func() {
+	pollingInterval.SetOnChange(&r.st.SV, func() {
 		select {
 		case pollIntervalChanged <- struct{}{}:
 		default:
@@ -394,27 +406,30 @@ func (r *Registry) insertStatementDiagnostics(
 			errorVal = tree.NewDString(collectionErr.Error())
 		}
 
-		bundleChunksVal := tree.DNull
-		if len(bundle) != 0 {
-			// Insert the bundle into system.statement_bundle_chunks.
-			// TODO(radu): split in chunks.
+		bundleChunksVal := tree.NewDArray(types.Int)
+		for len(bundle) > 0 {
+			chunkSize := int(bundleChunkSize.Get(&r.st.SV))
+			chunk := bundle
+			if len(chunk) > chunkSize {
+				chunk = chunk[:chunkSize]
+			}
+			bundle = bundle[len(chunk):]
+
+			// Insert the chunk into system.statement_bundle_chunks.
 			row, err := r.ie.QueryRowEx(
 				ctx, "stmt-bundle-chunks-insert", txn,
 				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
 				"statement diagnostics bundle",
-				tree.NewDBytes(tree.DBytes(bundle)),
+				tree.NewDBytes(tree.DBytes(chunk)),
 			)
 			if err != nil {
 				return err
 			}
 			chunkID := row[0].(*tree.DInt)
-
-			array := tree.NewDArray(types.Int)
-			if err := array.Append(chunkID); err != nil {
+			if err := bundleChunksVal.Append(chunkID); err != nil {
 				return err
 			}
-			bundleChunksVal = array
 		}
 
 		collectionTime := timeutil.Now()
