@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 var (
@@ -192,90 +190,4 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 		)
 	}
 	b.length += endIdx - startIdx
-}
-
-// GetDatumToPhysicalFn returns a function for converting a datum of the given
-// ColumnType to the corresponding Go type. Note that the signature of the
-// return function doesn't contain an error since we assume that the conversion
-// must succeed. If for some reason it fails, a panic will be emitted and will
-// be caught by the panic-catcher mechanism of the vectorized engine and will
-// be propagated as an error accordingly.
-func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
-	switch ct.Family() {
-	case types.BoolFamily:
-		return func(datum tree.Datum) interface{} {
-			return bool(*datum.(*tree.DBool))
-		}
-	case types.BytesFamily:
-		return func(datum tree.Datum) interface{} {
-			return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DBytes)))
-		}
-	case types.IntFamily:
-		switch ct.Width() {
-		case 16:
-			return func(datum tree.Datum) interface{} {
-				return int16(*datum.(*tree.DInt))
-			}
-		case 32:
-			return func(datum tree.Datum) interface{} {
-				return int32(*datum.(*tree.DInt))
-			}
-		case 0, 64:
-			return func(datum tree.Datum) interface{} {
-				return int64(*datum.(*tree.DInt))
-			}
-		}
-		colexecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
-		// This code is unreachable, but the compiler cannot infer that.
-		return nil
-	case types.DateFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DDate).UnixEpochDaysWithOrig()
-		}
-	case types.FloatFamily:
-		return func(datum tree.Datum) interface{} {
-			return float64(*datum.(*tree.DFloat))
-		}
-	case types.OidFamily:
-		return func(datum tree.Datum) interface{} {
-			return int64(datum.(*tree.DOid).DInt)
-		}
-	case types.StringFamily:
-		return func(datum tree.Datum) interface{} {
-			// Handle other STRING-related OID types, like oid.T_name.
-			wrapper, ok := datum.(*tree.DOidWrapper)
-			if ok {
-				datum = wrapper.Wrapped
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
-		}
-	case types.DecimalFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DDecimal).Decimal
-		}
-	case types.UuidFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DUuid).UUID.GetBytesMut()
-		}
-	case types.TimestampFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DTimestamp).Time
-		}
-	case types.TimestampTZFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DTimestampTZ).Time
-		}
-	case types.IntervalFamily:
-		return func(datum tree.Datum) interface{} {
-			return datum.(*tree.DInterval).Duration
-		}
-
-	// Types backed by tree.Datums. Note that we don't need to convert datum to
-	// anything because we actually use it as is (with a wrapper around it) for
-	// all unoptimized types.
-	default:
-		return func(datum tree.Datum) interface{} {
-			return datum
-		}
-	}
 }

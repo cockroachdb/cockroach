@@ -125,6 +125,10 @@ func genRowsToVec(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
+	return tmpl.Execute(wr, getRowsToVecTmplInfos())
+}
+
+func getRowsToVecTmplInfos() []rowsToVecTmplInfo {
 	var tmplInfos []rowsToVecTmplInfo
 	for typeFamily := types.Family(0); typeFamily < types.AnyFamily; typeFamily++ {
 		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
@@ -176,8 +180,7 @@ func genRowsToVec(inputFileContents string, wr io.Writer) error {
 			PreludeTmpl:         rowsToVecPreludeTmpls[familyWidthPair{typeconv.DatumVecCanonicalTypeFamily, anyWidth}],
 		}},
 	})
-
-	return tmpl.Execute(wr, tmplInfos)
+	return tmplInfos
 }
 
 func init() {
