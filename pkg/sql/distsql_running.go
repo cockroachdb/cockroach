@@ -372,7 +372,6 @@ func (dsp *DistSQLPlanner) Run(
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
 	recv.outputTypes = plan.ResultTypes
-	recv.resultToStreamColMap = plan.PlanToStreamColMap
 
 	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
 
@@ -451,10 +450,6 @@ type DistSQLReceiver struct {
 
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []*types.T
-
-	// resultToStreamColMap maps result columns to columns in the rowexec results
-	// stream.
-	resultToStreamColMap []int
 
 	// noColsRequired indicates that the caller is only interested in the
 	// existence of a single row. Used by subqueries in EXISTS mode.
@@ -732,16 +727,16 @@ func (r *DistSQLReceiver) Push(
 		r.status = execinfra.ConsumerClosed
 	} else {
 		if r.row == nil {
-			r.row = make(tree.Datums, len(r.resultToStreamColMap))
+			r.row = make(tree.Datums, len(row))
 		}
-		for i, resIdx := range r.resultToStreamColMap {
-			err := row[resIdx].EnsureDecoded(r.outputTypes[resIdx], &r.alloc)
+		for i, encDatum := range row {
+			err := encDatum.EnsureDecoded(r.outputTypes[i], &r.alloc)
 			if err != nil {
 				r.resultWriter.SetError(err)
 				r.status = execinfra.ConsumerClosed
 				return r.status
 			}
-			r.row[i] = row[resIdx].Datum
+			r.row[i] = encDatum.Datum
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
