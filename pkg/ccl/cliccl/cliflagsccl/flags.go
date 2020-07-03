@@ -38,8 +38,7 @@ Valid fields:
 </PRE>
 example:
 <PRE>
-  --enterprise-encryption=path=cockroach-data,key=/keys/aes-128.key,old-key=plain
-</PRE>
+  --enterprise-encryption=path=cockroach-data,key=/keys/aes-128.key,old-key=plain</PRE>
 `,
 	}
 )

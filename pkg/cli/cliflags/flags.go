@@ -106,7 +106,7 @@ strings specifying machine capabilities. Machine capabilities might include
 specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
 <PRE>
 
-  --attrs=x16c:gpu`,
+  --attrs=x16c:gpu</PRE>`,
 	}
 
 	Locality = FlagInfo{
@@ -123,8 +123,7 @@ Including more tiers is better than including fewer. For example:
 
   --locality=country=us,region=us-west,datacenter=us-west-1b,rack=12
   --locality=country=ca,region=ca-east,datacenter=ca-east-2,rack=4
-
-  --locality=planet=earth,province=manitoba,colo=secondary,power=3`,
+  --locality=planet=earth,province=manitoba,colo=secondary,power=3</PRE>`,
 	}
 
 	Background = FlagInfo{
@@ -142,9 +141,8 @@ accept requests.`,
 Maximum memory capacity available to store temporary data for SQL clients,
 including prepared queries and intermediate data rows during query execution.
 Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
-percentage of physical memory (e.g. .25).
-If left unspecified, defaults to 25% of physical memory.
-`,
+percentage of physical memory (e.g. .25). If left unspecified, defaults to 25% of
+physical memory.`,
 	}
 
 	SQLAuditLogDirName = FlagInfo{
@@ -159,11 +157,12 @@ If non-empty, create a SQL audit log in this drectory.
 		Description: `
 Maximum storage capacity available to store temporary disk-based data for SQL
 queries that exceed the memory budget (e.g. join, sorts, etc are sometimes able
-to spill intermediate results to disk).
-Accepts numbers interpreted as bytes, size suffixes (e.g. 32GB and 32GiB) or a
-percentage of disk size (e.g. 10%).
-If left unspecified, defaults to 32GiB.
+to spill intermediate results to disk). Accepts numbers interpreted as bytes,
+size suffixes (e.g. 32GB and 32GiB) or a percentage of disk size (e.g. 10%). If
+left unspecified, defaults to 32GiB.
+<PRE>
 
+</PRE>
 The location of the temporary files is within the first store dir (see --store).
 If expressed as a percentage, --max-disk-temp-storage is interpreted relative to
 the size of the storage device on which the first store is placed. The temp
@@ -171,10 +170,13 @@ space usage is never counted towards any store usage (although it does share the
 device with the first store) so, when configuring this, make sure that the size
 of this temp storage plus the size of the first store don't exceed the capacity
 of the storage device.
-If the first store is an in-memory one (i.e. type=mem), then this temporary "disk"
-data is also kept in-memory. A percentage value is interpreted as a percentage
-of the available internal memory. If not specified, the default shifts to 100MiB
-when the first store is in-memory.
+<PRE>
+
+</PRE>
+If the first store is an in-memory one (i.e. type=mem), then this temporary
+"disk" data is also kept in-memory. A percentage value is interpreted as a
+percentage of the available internal memory. If not specified, the default
+shifts to 100MiB when the first store is in-memory.
 `,
 	}
 
@@ -309,25 +311,30 @@ tsv for non-interactive sessions and table for interactive sessions.`,
 	ClusterName = FlagInfo{
 		Name: "cluster-name",
 		Description: `
-Sets a name to verify the identity of a remote node or cluster. The
-value must match between this node and the remote node(s) specified
-via --join.
+Sets a name to verify the identity of a remote node or cluster. The value must
+match between this node and the remote node(s) specified via --join.
+<PRE>
 
-This can be used as an additional verification when either the node or
-cluster, or both, have not yet been initialized and do not yet know
-their cluster ID.
+</PRE>
+This can be used as an additional verification when either the node or cluster,
+or both, have not yet been initialized and do not yet know their cluster ID.
+<PRE>
 
-To introduce a cluster name into an already-initialized cluster, pair
-this flag with --disable-cluster-name-verification.`,
+</PRE>
+To introduce a cluster name into an already-initialized cluster, pair this flag
+with --disable-cluster-name-verification.
+`,
 	}
 
 	DisableClusterNameVerification = FlagInfo{
 		Name: "disable-cluster-name-verification",
 		Description: `
-Tell the server to ignore cluster name mismatches. This is meant for
-use when opting an existing cluster into starting to use cluster name
-verification, or when changing the cluster name.
+Tell the server to ignore cluster name mismatches. This is meant for use when
+opting an existing cluster into starting to use cluster name verification, or
+when changing the cluster name.
+<PRE>
 
+</PRE>
 The cluster should be restarted once with --cluster-name and
 --disable-cluster-name-verification combined, and once all nodes have
 been updated to know the new cluster name, the cluster can be
@@ -370,9 +377,7 @@ Or can be specified as a comma separated list in single flag,
 or both forms can be used together, for example:
 <PRE>
 
-  --join=localhost:1234,localhost:2345 --join=localhost:3456
-
-</PRE>`,
+  --join=localhost:1234,localhost:2345 --join=localhost:3456</PRE>`,
 	}
 
 	JoinPreferSRVRecords = FlagInfo{
@@ -540,10 +545,9 @@ communication for some locality. This should be specified as a commma
 separated list of locality@address. Addresses can also include ports.
 For example:
 <PRE>
-"region=us-west@127.0.0.1,datacenter=us-west-1b@127.0.0.1"
-"region=us-west@127.0.0.1:26257,datacenter=us-west-1b@127.0.0.1:26258"
-</PRE>
-`,
+
+  "region=us-west@127.0.0.1,datacenter=us-west-1b@127.0.0.1"
+  "region=us-west@127.0.0.1:26257,datacenter=us-west-1b@127.0.0.1:26258"</PRE>`,
 	}
 
 	ListenHTTPAddrAlias = FlagInfo{
@@ -587,11 +591,12 @@ Note: for compatibility with PostgreSQL clients and drivers,
 the generated socket name has the form "/path/to/.s.PGSQL.NNNN",
 where NNNN is the port number configured via --listen-addr.
 
-PostgreSQL clients only take a port number and directory as input
-and construct the socket name programmatically.
+PostgreSQL clients only take a port number and directory as input and construct
+the socket name programmatically. To use, for example:
+<PRE>
 
-To use, for example: psql -h /path/to -p NNNN ...
-`,
+	psql -h /path/to -p NNNN ...
+</PRE>`,
 	}
 
 	ClientInsecure = FlagInfo{
@@ -694,15 +699,12 @@ fields.
 	ClockDevice = FlagInfo{
 		Name: "clock-device",
 		Description: `
-Override HLC to use PTP hardware clock user space API when querying for current time.
-The value corresponds to the clock device to be used. This is currently only tested
-and supported on Linux.
+Override HLC to use PTP hardware clock user space API when querying for current
+time. The value corresponds to the clock device to be used. This is currently
+only tested and supported on Linux.
 <PRE>
 
-  --clock-device=/dev/ptp0
-
-</PRE>
-`,
+  --clock-device=/dev/ptp0</PRE>`,
 	}
 
 	MaxOffset = FlagInfo{
@@ -815,9 +817,7 @@ The size can be given in various ways:
   --size=0.02TiB         -> 21474836480 bytes
   --size=20%             -> 20% of available space
   --size=0.2             -> 20% of available space
-  --size=.2              -> 20% of available space
-
-</PRE>`,
+  --size=.2              -> 20% of available space</PRE>`,
 	}
 
 	TempDir = FlagInfo{
@@ -845,14 +845,22 @@ The local file path under which remotely-initiated operations that can specify
 node-local I/O paths, such as BACKUP, RESTORE or IMPORT, can access files.
 Following symlinks _is_ allowed, meaning that other paths can be added by
 symlinking to them from within this path.
+<PRE>
 
+</PRE>
 Note: operations in a distributed cluster can run across many nodes, so reading
 or writing to any given node's local file system in a distributed cluster is not
 usually useful unless that filesystem is actually backed by something like NFS.
+<PRE>
 
-If left empty, defaults to the "extern" subdirectory of the first store directory.
+</PRE>
+If left empty, defaults to the "extern" subdirectory of the first store
+directory.
+<PRE>
 
-The value "disabled" will disable all local file I/O. `,
+</PRE>
+The value "disabled" will disable all local file I/O.
+`,
 	}
 
 	URL = FlagInfo{
@@ -935,19 +943,20 @@ Specifies when to return after having marked the targets as decommissioning.
 Takes any of the following values:
 <PRE>
 
-  - all:  waits until all target nodes' replica counts have dropped to zero.
-    This is the default.
-  - none: marks the targets as decommissioning, but does not wait for the process to complete.
-    Use when polling manually from an external system.
-
+- all: waits until all target nodes' replica counts have dropped to zero.
+  This is the default.
+- none: marks the targets as decommissioning, but does not wait for the
+  process to complete. Use when polling manually from an external system.
 </PRE>`,
 	}
 
 	Timeout = FlagInfo{
 		Name: "timeout",
 		Description: `
-		If nonzero, return with an error if the operation does not conclude within the specified timeout.
-		The timeout is specified with a suffix of 's' for seconds, 'm' for minutes, and 'h' for hours.`,
+If nonzero, return with an error if the operation does not conclude within the
+specified timeout. The timeout is specified with a suffix of 's' for seconds,
+'m' for minutes, and 'h' for hours.
+`,
 	}
 
 	NodeRanges = FlagInfo{
@@ -1012,11 +1021,11 @@ The line length where sqlfmt will try to wrap.`,
 	DemoNodeSQLMemSize = FlagInfo{
 		Name: "max-sql-memory",
 		Description: `
-Maximum memory capacity available for each node to store temporary data for SQL clients,
-including prepared queries and intermediate data rows during query execution.
-Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
-percentage of physical memory (e.g. .25).
-If left unspecified, defaults to 128MiB.
+Maximum memory capacity available for each node to store temporary data for SQL
+clients, including prepared queries and intermediate data rows during query
+execution. Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and
+1GiB) or a percentage of physical memory (e.g. .25). If left unspecified,
+defaults to 128MiB.
 `,
 	}
 	DemoNodeCacheSize = FlagInfo{
@@ -1043,9 +1052,10 @@ list sets the locality for the i'th demo cockroach node. For example:
 
 --demo-locality=region=us-east1,az=1:region=us-east1,az=2:region=us-east1,az=3
 
-Assigns node1's region to us-east1 and availability zone to 1, node 2's
-region to us-east1 and availability zone to 2, and node 3's region
-to us-east1 and availability zone to 3.
+</PRE>
+Assigns node1's region to us-east1 and availability zone to 1, node 2's region
+to us-east1 and availability zone to 2, and node 3's region to us-east1 and
+availability zone to 3.
 `,
 	}
 
@@ -1053,11 +1063,14 @@ to us-east1 and availability zone to 3.
 		Name: "geo-partitioned-replicas",
 		Description: `
 When used with the Movr dataset, create a 9 node cluster and automatically apply
-the geo-partitioned replicas topology across 3 virtual regions named us-east1, us-west1, and
-europe-west1. This command will fail with an error if an enterprise license could not
-be acquired, or if the Movr dataset is not used. More information about the geo-partitioned 
-replicas topology can be found at this URL: 
+the geo-partitioned replicas topology across 3 virtual regions named us-east1,
+us-west1, and europe-west1. This command will fail with an error if an
+enterprise license could not be acquired, or if the Movr dataset is not used.
+More information about the geo-partitioned replicas topology can be found at:
+<PRE>
+
 https://www.cockroachlabs.com/docs/v19.1/topology-geo-partitioned-replicas.html
+</PRE>
 		`,
 	}
 
