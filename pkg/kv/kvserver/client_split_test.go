@@ -1932,6 +1932,10 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 // and the uninitialized replica reacting to messages.
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Skipping as part of test-infra-team flaky test cleanup.
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/50809")
+
 	mtc := &multiTestContext{}
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableMergeQueue = true

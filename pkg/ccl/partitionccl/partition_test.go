@@ -1174,6 +1174,9 @@ func setupPartitioningTestCluster(
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Skipping as part of test-infra-team flaky test cleanup.
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/49909")
+
 	// This test configures many sub-tests and is too slow to run under nightly
 	// race stress.
 	if testutils.NightlyStress() && util.RaceEnabled {
