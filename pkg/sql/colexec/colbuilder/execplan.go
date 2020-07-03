@@ -414,8 +414,6 @@ func (r opResult) createAndWrapRowSource(
 	factory coldata.ColumnFactory,
 ) error {
 	if processorConstructor == nil {
-		// TODO(yuzefovich): update unit tests to remove panic-catcher when
-		// fallback to rowexec is not allowed.
 		return errors.New("processorConstructor is nil")
 	}
 	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
