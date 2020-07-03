@@ -9,7 +9,11 @@ CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX y(y), UNIQUE INDEX z(z)
 rulestats
 SELECT * FROM abc JOIN xyz ON a=x
 ----
-Normalization rules applied 0 times.
+Normalization rules applied 3 times.
+Top normalization rules:
+  EliminateProject   applied 1 times.
+  PruneJoinLeftCols  applied 1 times.
+  PruneJoinRightCols applied 1 times.
 Exploration rules applied 8 times, added 5 expressions.
 Top exploration rules:
   CommuteJoin         applied 2 times, added 1 expressions.

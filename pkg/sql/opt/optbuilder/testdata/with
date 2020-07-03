@@ -11,27 +11,27 @@ WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM x NATURAL JOIN t
 ----
 with &1 (t)
- ├── columns: a:3!null b:4
+ ├── columns: a:4!null b:5
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null y.rowid:2!null
+ │         ├── columns: y.a:1!null y.rowid:2!null y.mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 y.rowid:2!null
+ │         │    └── columns: y.a:1 y.rowid:2!null y.mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── project
-      ├── columns: x.a:3!null b:4
+      ├── columns: x.a:4!null b:5
       └── inner-join (hash)
-           ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+           ├── columns: x.a:4!null b:5 x.rowid:6!null x.mvcc_timestamp:7 a:8!null
            ├── scan x
-           │    └── columns: x.a:3 b:4 x.rowid:5!null
+           │    └── columns: x.a:4 b:5 x.rowid:6!null x.mvcc_timestamp:7
            ├── with-scan &1 (t)
-           │    ├── columns: a:6!null
+           │    ├── columns: a:8!null
            │    └── mapping:
-           │         └──  y.a:1 => a:6
+           │         └──  y.a:1 => a:8
            └── filters
-                └── x.a:3 = a:6
+                └── x.a:4 = a:8
 
 build
 EXPLAIN
@@ -39,29 +39,29 @@ EXPLAIN
     SELECT * FROM x NATURAL JOIN t
 ----
 explain
- ├── columns: tree:7 field:8 description:9
+ ├── columns: tree:9 field:10 description:11
  └── with &1 (t)
-      ├── columns: a:3!null b:4
+      ├── columns: a:4!null b:5
       ├── project
       │    ├── columns: y.a:1!null
       │    └── select
-      │         ├── columns: y.a:1!null y.rowid:2!null
+      │         ├── columns: y.a:1!null y.rowid:2!null y.mvcc_timestamp:3
       │         ├── scan y
-      │         │    └── columns: y.a:1 y.rowid:2!null
+      │         │    └── columns: y.a:1 y.rowid:2!null y.mvcc_timestamp:3
       │         └── filters
       │              └── y.a:1 < 3
       └── project
-           ├── columns: x.a:3!null b:4
+           ├── columns: x.a:4!null b:5
            └── inner-join (hash)
-                ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+                ├── columns: x.a:4!null b:5 x.rowid:6!null x.mvcc_timestamp:7 a:8!null
                 ├── scan x
-                │    └── columns: x.a:3 b:4 x.rowid:5!null
+                │    └── columns: x.a:4 b:5 x.rowid:6!null x.mvcc_timestamp:7
                 ├── with-scan &1 (t)
-                │    ├── columns: a:6!null
+                │    ├── columns: a:8!null
                 │    └── mapping:
-                │         └──  y.a:1 => a:6
+                │         └──  y.a:1 => a:8
                 └── filters
-                     └── x.a:3 = a:6
+                     └── x.a:4 = a:8
 
 build
 WITH
@@ -91,7 +91,7 @@ CREATE VIEW v1 AS
 ----
 create-view t.public.v1
  ├── WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
- ├── columns: "?column?":7
+ ├── columns: "?column?":9
  └── dependencies
       ├── y [columns: a]
       └── x [columns: a]
@@ -104,52 +104,52 @@ CREATE TABLE t1 AS
 create-table
  ├── CREATE TABLE t1 AS WITH t AS (SELECT a FROM t.public.y WHERE a < 3) SELECT 1 FROM t.public.x NATURAL JOIN t
  └── project
-      ├── columns: rowid:8 "?column?":7!null
+      ├── columns: rowid:10 "?column?":9!null
       ├── with &1 (t)
-      │    ├── columns: "?column?":7!null
+      │    ├── columns: "?column?":9!null
       │    ├── project
       │    │    ├── columns: y.a:1!null
       │    │    └── select
-      │    │         ├── columns: y.a:1!null y.rowid:2!null
+      │    │         ├── columns: y.a:1!null y.rowid:2!null y.mvcc_timestamp:3
       │    │         ├── scan y
-      │    │         │    └── columns: y.a:1 y.rowid:2!null
+      │    │         │    └── columns: y.a:1 y.rowid:2!null y.mvcc_timestamp:3
       │    │         └── filters
       │    │              └── y.a:1 < 3
       │    └── project
-      │         ├── columns: "?column?":7!null
+      │         ├── columns: "?column?":9!null
       │         ├── inner-join (hash)
-      │         │    ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+      │         │    ├── columns: x.a:4!null b:5 x.rowid:6!null x.mvcc_timestamp:7 a:8!null
       │         │    ├── scan x
-      │         │    │    └── columns: x.a:3 b:4 x.rowid:5!null
+      │         │    │    └── columns: x.a:4 b:5 x.rowid:6!null x.mvcc_timestamp:7
       │         │    ├── with-scan &1 (t)
-      │         │    │    ├── columns: a:6!null
+      │         │    │    ├── columns: a:8!null
       │         │    │    └── mapping:
-      │         │    │         └──  y.a:1 => a:6
+      │         │    │         └──  y.a:1 => a:8
       │         │    └── filters
-      │         │         └── x.a:3 = a:6
+      │         │         └── x.a:4 = a:8
       │         └── projections
-      │              └── 1 [as="?column?":7]
+      │              └── 1 [as="?column?":9]
       └── projections
-           └── unique_rowid() [as=rowid:8]
+           └── unique_rowid() [as=rowid:10]
 
 build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM t
 ----
 with &1 (t)
- ├── columns: a:3!null
+ ├── columns: a:4!null
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null rowid:2!null
+ │         ├── columns: y.a:1!null rowid:2!null mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 rowid:2!null
+ │         │    └── columns: y.a:1 rowid:2!null mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── with-scan &1 (t)
-      ├── columns: a:3!null
+      ├── columns: a:4!null
       └── mapping:
-           └──  y.a:1 => a:3
+           └──  y.a:1 => a:4
 
 # Chaining multiple CTEs.
 build
@@ -159,29 +159,29 @@ WITH
 SELECT * FROM t2
 ----
 with &1 (t1)
- ├── columns: a:4!null
+ ├── columns: a:5!null
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null rowid:2!null
+ │         ├── columns: y.a:1!null rowid:2!null mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 rowid:2!null
+ │         │    └── columns: y.a:1 rowid:2!null mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── with &2 (t2)
-      ├── columns: a:4!null
+      ├── columns: a:5!null
       ├── select
-      │    ├── columns: a:3!null
+      │    ├── columns: a:4!null
       │    ├── with-scan &1 (t1)
-      │    │    ├── columns: a:3!null
+      │    │    ├── columns: a:4!null
       │    │    └── mapping:
-      │    │         └──  y.a:1 => a:3
+      │    │         └──  y.a:1 => a:4
       │    └── filters
-      │         └── a:3 > 1
+      │         └── a:4 > 1
       └── with-scan &2 (t2)
-           ├── columns: a:4!null
+           ├── columns: a:5!null
            └── mapping:
-                └──  a:3 => a:4
+                └──  a:4 => a:5
 
 build
 WITH
@@ -191,39 +191,39 @@ WITH
 SELECT * FROM t3
 ----
 with &1 (t1)
- ├── columns: a:5!null
+ ├── columns: a:6!null
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null rowid:2!null
+ │         ├── columns: y.a:1!null rowid:2!null mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 rowid:2!null
+ │         │    └── columns: y.a:1 rowid:2!null mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── with &2 (t2)
-      ├── columns: a:5!null
+      ├── columns: a:6!null
       ├── select
-      │    ├── columns: a:3!null
+      │    ├── columns: a:4!null
       │    ├── with-scan &1 (t1)
-      │    │    ├── columns: a:3!null
+      │    │    ├── columns: a:4!null
       │    │    └── mapping:
-      │    │         └──  y.a:1 => a:3
+      │    │         └──  y.a:1 => a:4
       │    └── filters
-      │         └── a:3 > 1
+      │         └── a:4 > 1
       └── with &3 (t3)
-           ├── columns: a:5!null
+           ├── columns: a:6!null
            ├── select
-           │    ├── columns: a:4!null
+           │    ├── columns: a:5!null
            │    ├── with-scan &2 (t2)
-           │    │    ├── columns: a:4!null
+           │    │    ├── columns: a:5!null
            │    │    └── mapping:
-           │    │         └──  a:3 => a:4
+           │    │         └──  a:4 => a:5
            │    └── filters
-           │         └── a:4 = 2
+           │         └── a:5 = 2
            └── with-scan &3 (t3)
-                ├── columns: a:5!null
+                ├── columns: a:6!null
                 └── mapping:
-                     └──  a:4 => a:5
+                     └──  a:5 => a:6
 
 build
 WITH
@@ -234,59 +234,59 @@ WITH
 SELECT * FROM t3 NATURAL JOIN t4
 ----
 with &1 (t1)
- ├── columns: a:7!null
+ ├── columns: a:9!null
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null rowid:2!null
+ │         ├── columns: y.a:1!null rowid:2!null mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 rowid:2!null
+ │         │    └── columns: y.a:1 rowid:2!null mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── with &2 (t2)
-      ├── columns: a:7!null
+      ├── columns: a:9!null
       ├── project
-      │    ├── columns: y.a:3!null
+      │    ├── columns: y.a:4!null
       │    └── select
-      │         ├── columns: y.a:3!null rowid:4!null
+      │         ├── columns: y.a:4!null rowid:5!null mvcc_timestamp:6
       │         ├── scan y
-      │         │    └── columns: y.a:3 rowid:4!null
+      │         │    └── columns: y.a:4 rowid:5!null mvcc_timestamp:6
       │         └── filters
-      │              └── y.a:3 > 1
+      │              └── y.a:4 > 1
       └── with &3 (t3)
-           ├── columns: a:7!null
+           ├── columns: a:9!null
            ├── select
-           │    ├── columns: a:5!null
+           │    ├── columns: a:7!null
            │    ├── with-scan &1 (t1)
-           │    │    ├── columns: a:5!null
+           │    │    ├── columns: a:7!null
            │    │    └── mapping:
-           │    │         └──  y.a:1 => a:5
+           │    │         └──  y.a:1 => a:7
            │    └── filters
-           │         └── a:5 < 4
+           │         └── a:7 < 4
            └── with &4 (t4)
-                ├── columns: a:7!null
+                ├── columns: a:9!null
                 ├── select
-                │    ├── columns: a:6!null
+                │    ├── columns: a:8!null
                 │    ├── with-scan &2 (t2)
-                │    │    ├── columns: a:6!null
+                │    │    ├── columns: a:8!null
                 │    │    └── mapping:
-                │    │         └──  y.a:3 => a:6
+                │    │         └──  y.a:4 => a:8
                 │    └── filters
-                │         └── a:6 > 3
+                │         └── a:8 > 3
                 └── project
-                     ├── columns: a:7!null
+                     ├── columns: a:9!null
                      └── inner-join (hash)
-                          ├── columns: a:7!null a:8!null
+                          ├── columns: a:9!null a:10!null
                           ├── with-scan &3 (t3)
-                          │    ├── columns: a:7!null
+                          │    ├── columns: a:9!null
                           │    └── mapping:
-                          │         └──  a:5 => a:7
+                          │         └──  a:7 => a:9
                           ├── with-scan &4 (t4)
-                          │    ├── columns: a:8!null
+                          │    ├── columns: a:10!null
                           │    └── mapping:
-                          │         └──  a:6 => a:8
+                          │         └──  a:8 => a:10
                           └── filters
-                               └── a:7 = a:8
+                               └── a:9 = a:10
 
 # Make sure they scope properly.
 build
@@ -364,41 +364,41 @@ WITH
 SELECT * FROM t2 NATURAL JOIN x
 ----
 with &1 (t1)
- ├── columns: a:9!null b:10!null
+ ├── columns: a:11!null b:12!null
  ├── project
  │    ├── columns: x.a:1 x.b:2
  │    └── scan x
- │         └── columns: x.a:1 x.b:2 rowid:3!null
+ │         └── columns: x.a:1 x.b:2 rowid:3!null mvcc_timestamp:4
  └── with &2 (t2)
-      ├── columns: a:9!null b:10!null
+      ├── columns: a:11!null b:12!null
       ├── project
-      │    ├── columns: x.a:4!null x.b:5!null
+      │    ├── columns: x.a:5!null x.b:6!null
       │    └── inner-join (hash)
-      │         ├── columns: x.a:4!null x.b:5!null rowid:6!null a:7!null b:8!null
+      │         ├── columns: x.a:5!null x.b:6!null rowid:7!null mvcc_timestamp:8 a:9!null b:10!null
       │         ├── scan x
-      │         │    └── columns: x.a:4 x.b:5 rowid:6!null
+      │         │    └── columns: x.a:5 x.b:6 rowid:7!null mvcc_timestamp:8
       │         ├── with-scan &1 (t1)
-      │         │    ├── columns: a:7 b:8
+      │         │    ├── columns: a:9 b:10
       │         │    └── mapping:
-      │         │         ├──  x.a:1 => a:7
-      │         │         └──  x.b:2 => b:8
+      │         │         ├──  x.a:1 => a:9
+      │         │         └──  x.b:2 => b:10
       │         └── filters
-      │              ├── x.a:4 = a:7
-      │              └── x.b:5 = b:8
+      │              ├── x.a:5 = a:9
+      │              └── x.b:6 = b:10
       └── project
-           ├── columns: a:9!null b:10!null
+           ├── columns: a:11!null b:12!null
            └── inner-join (hash)
-                ├── columns: a:9!null b:10!null x.a:11!null x.b:12!null rowid:13!null
+                ├── columns: a:11!null b:12!null x.a:13!null x.b:14!null rowid:15!null mvcc_timestamp:16
                 ├── with-scan &2 (t2)
-                │    ├── columns: a:9!null b:10!null
+                │    ├── columns: a:11!null b:12!null
                 │    └── mapping:
-                │         ├──  x.a:4 => a:9
-                │         └──  x.b:5 => b:10
+                │         ├──  x.a:5 => a:11
+                │         └──  x.b:6 => b:12
                 ├── scan x
-                │    └── columns: x.a:11 x.b:12 rowid:13!null
+                │    └── columns: x.a:13 x.b:14 rowid:15!null mvcc_timestamp:16
                 └── filters
-                     ├── a:9 = x.a:11
-                     └── b:10 = x.b:12
+                     ├── a:11 = x.a:13
+                     └── b:12 = x.b:14
 
 build
 WITH t AS (SELECT a FROM y WHERE a < 3)
@@ -411,15 +411,15 @@ WITH t(x) AS (SELECT a FROM x)
   SELECT x FROM (SELECT x FROM t)
 ----
 with &1 (t)
- ├── columns: x:4
+ ├── columns: x:5
  ├── project
  │    ├── columns: a:1
  │    └── scan x
- │         └── columns: a:1 b:2 rowid:3!null
+ │         └── columns: a:1 b:2 rowid:3!null mvcc_timestamp:4
  └── with-scan &1 (t)
-      ├── columns: x:4
+      ├── columns: x:5
       └── mapping:
-           └──  a:1 => x:4
+           └──  a:1 => x:5
 
 build
 WITH t(a, b) AS (SELECT true a, false b)
@@ -464,48 +464,48 @@ WITH t AS (SELECT a FROM x)
     SELECT * FROM y WHERE a IN (SELECT * FROM t)
 ----
 with &1 (t)
- ├── columns: a:4
+ ├── columns: a:5
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 x.rowid:3!null
+ │         └── columns: x.a:1 b:2 x.rowid:3!null x.mvcc_timestamp:4
  └── project
-      ├── columns: y.a:4
+      ├── columns: y.a:5
       └── select
-           ├── columns: y.a:4 y.rowid:5!null
+           ├── columns: y.a:5 y.rowid:6!null y.mvcc_timestamp:7
            ├── scan y
-           │    └── columns: y.a:4 y.rowid:5!null
+           │    └── columns: y.a:5 y.rowid:6!null y.mvcc_timestamp:7
            └── filters
                 └── any: eq
                      ├── with-scan &1 (t)
-                     │    ├── columns: a:6
+                     │    ├── columns: a:8
                      │    └── mapping:
-                     │         └──  x.a:1 => a:6
-                     └── y.a:4
+                     │         └──  x.a:1 => a:8
+                     └── y.a:5
 
 build
 WITH t(x) AS (SELECT a FROM x)
     SELECT * FROM y WHERE a IN (SELECT x FROM t)
 ----
 with &1 (t)
- ├── columns: a:4
+ ├── columns: a:5
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 x.rowid:3!null
+ │         └── columns: x.a:1 b:2 x.rowid:3!null x.mvcc_timestamp:4
  └── project
-      ├── columns: y.a:4
+      ├── columns: y.a:5
       └── select
-           ├── columns: y.a:4 y.rowid:5!null
+           ├── columns: y.a:5 y.rowid:6!null y.mvcc_timestamp:7
            ├── scan y
-           │    └── columns: y.a:4 y.rowid:5!null
+           │    └── columns: y.a:5 y.rowid:6!null y.mvcc_timestamp:7
            └── filters
                 └── any: eq
                      ├── with-scan &1 (t)
-                     │    ├── columns: x:6
+                     │    ├── columns: x:8
                      │    └── mapping:
-                     │         └──  x.a:1 => x:6
-                     └── y.a:4
+                     │         └──  x.a:1 => x:8
+                     └── y.a:5
 
 # Using a subquery inside a CTE
 build
@@ -515,25 +515,25 @@ SELECT * FROM x WHERE a IN
 with &1 (t)
  ├── columns: a:1 b:2
  ├── project
- │    ├── columns: y.a:4!null
+ │    ├── columns: y.a:5!null
  │    └── select
- │         ├── columns: y.a:4!null y.rowid:5!null
+ │         ├── columns: y.a:5!null y.rowid:6!null y.mvcc_timestamp:7
  │         ├── scan y
- │         │    └── columns: y.a:4 y.rowid:5!null
+ │         │    └── columns: y.a:5 y.rowid:6!null y.mvcc_timestamp:7
  │         └── filters
- │              └── y.a:4 < 3
+ │              └── y.a:5 < 3
  └── project
       ├── columns: x.a:1 b:2
       └── select
-           ├── columns: x.a:1 b:2 x.rowid:3!null
+           ├── columns: x.a:1 b:2 x.rowid:3!null x.mvcc_timestamp:4
            ├── scan x
-           │    └── columns: x.a:1 b:2 x.rowid:3!null
+           │    └── columns: x.a:1 b:2 x.rowid:3!null x.mvcc_timestamp:4
            └── filters
                 └── any: eq
                      ├── with-scan &1 (t)
-                     │    ├── columns: a:6!null
+                     │    ├── columns: a:8!null
                      │    └── mapping:
-                     │         └──  y.a:4 => a:6
+                     │         └──  y.a:5 => a:8
                      └── x.a:1
 
 # Using a correlated subquery inside a CTE
@@ -547,15 +547,15 @@ build
 WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
 ----
 with &1 (t)
- ├── columns: b:4 b:4
+ ├── columns: b:5 b:5
  ├── project
  │    ├── columns: a:1
  │    └── scan x
- │         └── columns: a:1 x.b:2 rowid:3!null
+ │         └── columns: a:1 x.b:2 rowid:3!null mvcc_timestamp:4
  └── with-scan &1 (t)
-      ├── columns: b:4
+      ├── columns: b:5
       └── mapping:
-           └──  a:1 => b:4
+           └──  a:1 => b:5
 
 build
 WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
@@ -605,141 +605,141 @@ WITH one AS (SELECT a AS u FROM x),
   SELECT * FROM one JOIN two ON u = v
 ----
 with &1 (one)
- ├── columns: u:8!null v:9!null
+ ├── columns: u:10!null v:11!null
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 x.rowid:3!null
+ │         └── columns: x.a:1 b:2 x.rowid:3!null x.mvcc_timestamp:4
  └── with &2 (two)
-      ├── columns: u:8!null v:9!null
+      ├── columns: u:10!null v:11!null
       ├── union-all
-      │    ├── columns: a:7
-      │    ├── left columns: y.a:4
-      │    ├── right columns: u:6
+      │    ├── columns: a:9
+      │    ├── left columns: y.a:5
+      │    ├── right columns: u:8
       │    ├── project
-      │    │    ├── columns: y.a:4
+      │    │    ├── columns: y.a:5
       │    │    └── scan y
-      │    │         └── columns: y.a:4 y.rowid:5!null
+      │    │         └── columns: y.a:5 y.rowid:6!null y.mvcc_timestamp:7
       │    └── with-scan &1 (one)
-      │         ├── columns: u:6
+      │         ├── columns: u:8
       │         └── mapping:
-      │              └──  x.a:1 => u:6
+      │              └──  x.a:1 => u:8
       └── inner-join (hash)
-           ├── columns: u:8!null v:9!null
+           ├── columns: u:10!null v:11!null
            ├── with-scan &1 (one)
-           │    ├── columns: u:8
+           │    ├── columns: u:10
            │    └── mapping:
-           │         └──  x.a:1 => u:8
+           │         └──  x.a:1 => u:10
            ├── with-scan &2 (two)
-           │    ├── columns: v:9
+           │    ├── columns: v:11
            │    └── mapping:
-           │         └──  a:7 => v:9
+           │         └──  a:9 => v:11
            └── filters
-                └── u:8 = v:9
+                └── u:10 = v:11
 
 build
 WITH foo AS (SELECT x.a FROM x ORDER by x.a) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: a:4
+ ├── columns: a:5
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 rowid:3!null
+ │         └── columns: x.a:1 b:2 rowid:3!null mvcc_timestamp:4
  └── with-scan &1 (foo)
-      ├── columns: a:4
+      ├── columns: a:5
       └── mapping:
-           └──  x.a:1 => a:4
+           └──  x.a:1 => a:5
 
 # Mutations.
 build
 WITH t AS (SELECT a FROM x) INSERT INTO x SELECT a + 20 FROM t RETURNING *
 ----
 with &1 (t)
- ├── columns: a:4 b:5
+ ├── columns: a:5 b:6
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 rowid:3!null
+ │         └── columns: x.a:1 b:2 rowid:3!null mvcc_timestamp:4
  └── project
-      ├── columns: x.a:4 b:5
+      ├── columns: x.a:5 b:6
       └── insert x
-           ├── columns: x.a:4 b:5 rowid:6!null
+           ├── columns: x.a:5 b:6 rowid:7!null
            ├── insert-mapping:
-           │    ├── "?column?":8 => x.a:4
-           │    ├── column9:9 => b:5
-           │    └── column10:10 => rowid:6
+           │    ├── "?column?":10 => x.a:5
+           │    ├── column11:11 => b:6
+           │    └── column12:12 => rowid:7
            └── project
-                ├── columns: column9:9 column10:10 "?column?":8
+                ├── columns: column11:11 column12:12 "?column?":10
                 ├── project
-                │    ├── columns: "?column?":8
+                │    ├── columns: "?column?":10
                 │    ├── with-scan &1 (t)
-                │    │    ├── columns: a:7
+                │    │    ├── columns: a:9
                 │    │    └── mapping:
-                │    │         └──  x.a:1 => a:7
+                │    │         └──  x.a:1 => a:9
                 │    └── projections
-                │         └── a:7 + 20 [as="?column?":8]
+                │         └── a:9 + 20 [as="?column?":10]
                 └── projections
-                     ├── NULL::INT8 [as=column9:9]
-                     └── unique_rowid() [as=column10:10]
+                     ├── NULL::INT8 [as=column11:11]
+                     └── unique_rowid() [as=column12:12]
 
 build
 WITH t AS (SELECT a FROM x) UPDATE x SET a = (SELECT * FROM t) RETURNING *
 ----
 with &1 (t)
- ├── columns: a:4 b:5
+ ├── columns: a:5 b:6
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 rowid:3!null
+ │         └── columns: x.a:1 b:2 rowid:3!null mvcc_timestamp:4
  └── project
-      ├── columns: x.a:4 b:5
+      ├── columns: x.a:5 b:6
       └── update x
-           ├── columns: x.a:4 b:5 rowid:6!null
-           ├── fetch columns: x.a:7 b:8 rowid:9
+           ├── columns: x.a:5 b:6 rowid:7!null
+           ├── fetch columns: x.a:9 b:10 rowid:11
            ├── update-mapping:
-           │    └── a_new:11 => x.a:4
+           │    └── a_new:14 => x.a:5
            └── project
-                ├── columns: a_new:11 x.a:7 b:8 rowid:9!null
+                ├── columns: a_new:14 x.a:9 b:10 rowid:11!null mvcc_timestamp:12
                 ├── scan x
-                │    └── columns: x.a:7 b:8 rowid:9!null
+                │    └── columns: x.a:9 b:10 rowid:11!null mvcc_timestamp:12
                 └── projections
-                     └── subquery [as=a_new:11]
+                     └── subquery [as=a_new:14]
                           └── max1-row
-                               ├── columns: a:10
+                               ├── columns: a:13
                                └── with-scan &1 (t)
-                                    ├── columns: a:10
+                                    ├── columns: a:13
                                     └── mapping:
-                                         └──  x.a:1 => a:10
+                                         └──  x.a:1 => a:13
 
 build
 WITH t AS (SELECT a FROM x) DELETE FROM x WHERE a = (SELECT * FROM t) RETURNING *
 ----
 with &1 (t)
- ├── columns: a:4!null b:5
+ ├── columns: a:5!null b:6
  ├── project
  │    ├── columns: x.a:1
  │    └── scan x
- │         └── columns: x.a:1 b:2 rowid:3!null
+ │         └── columns: x.a:1 b:2 rowid:3!null mvcc_timestamp:4
  └── project
-      ├── columns: x.a:4!null b:5
+      ├── columns: x.a:5!null b:6
       └── delete x
-           ├── columns: x.a:4!null b:5 rowid:6!null
-           ├── fetch columns: x.a:7 b:8 rowid:9
+           ├── columns: x.a:5!null b:6 rowid:7!null
+           ├── fetch columns: x.a:9 b:10 rowid:11
            └── select
-                ├── columns: x.a:7!null b:8 rowid:9!null
+                ├── columns: x.a:9!null b:10 rowid:11!null mvcc_timestamp:12
                 ├── scan x
-                │    └── columns: x.a:7 b:8 rowid:9!null
+                │    └── columns: x.a:9 b:10 rowid:11!null mvcc_timestamp:12
                 └── filters
                      └── eq
-                          ├── x.a:7
+                          ├── x.a:9
                           └── subquery
                                └── max1-row
-                                    ├── columns: a:10
+                                    ├── columns: a:13
                                     └── with-scan &1 (t)
-                                         ├── columns: a:10
+                                         ├── columns: a:13
                                          └── mapping:
-                                              └──  x.a:1 => a:10
+                                              └──  x.a:1 => a:13
 
 # Correlated WITH is not allowed.
 
@@ -774,37 +774,37 @@ with &1 (t)
  ├── project
  │    ├── columns: xy.x:1!null
  │    └── limit
- │         ├── columns: xy.x:1!null v:6
- │         ├── internal-ordering: -6
+ │         ├── columns: xy.x:1!null v:7
+ │         ├── internal-ordering: -7
  │         ├── sort
- │         │    ├── columns: xy.x:1!null v:6
- │         │    ├── ordering: -6
+ │         │    ├── columns: xy.x:1!null v:7
+ │         │    ├── ordering: -7
  │         │    ├── limit hint: 5.00
  │         │    └── project
- │         │         ├── columns: xy.x:1!null v:6
+ │         │         ├── columns: xy.x:1!null v:7
  │         │         └── inner-join (hash)
- │         │              ├── columns: xy.x:1!null y:2 z:3 xy.rowid:4!null u:5!null v:6 uv.rowid:7!null
+ │         │              ├── columns: xy.x:1!null y:2 z:3 xy.rowid:4!null xy.mvcc_timestamp:5 u:6!null v:7 uv.rowid:8!null uv.mvcc_timestamp:9
  │         │              ├── scan xy
- │         │              │    └── columns: xy.x:1 y:2 z:3 xy.rowid:4!null
+ │         │              │    └── columns: xy.x:1 y:2 z:3 xy.rowid:4!null xy.mvcc_timestamp:5
  │         │              ├── scan uv
- │         │              │    └── columns: u:5 v:6 uv.rowid:7!null
+ │         │              │    └── columns: u:6 v:7 uv.rowid:8!null uv.mvcc_timestamp:9
  │         │              └── filters
- │         │                   └── xy.x:1 = u:5
+ │         │                   └── xy.x:1 = u:6
  │         └── 5
  └── delete xy
       ├── columns: <none>
-      ├── fetch columns: xy.x:12 y:13 z:14 xy.rowid:15
+      ├── fetch columns: xy.x:15 y:16 z:17 xy.rowid:18
       └── select
-           ├── columns: xy.x:12 y:13 z:14 xy.rowid:15!null
+           ├── columns: xy.x:15 y:16 z:17 xy.rowid:18!null xy.mvcc_timestamp:19
            ├── scan xy
-           │    └── columns: xy.x:12 y:13 z:14 xy.rowid:15!null
+           │    └── columns: xy.x:15 y:16 z:17 xy.rowid:18!null xy.mvcc_timestamp:19
            └── filters
                 └── any: eq
                      ├── with-scan &1 (t)
-                     │    ├── columns: x:16!null
+                     │    ├── columns: x:20!null
                      │    └── mapping:
-                     │         └──  xy.x:1 => x:16
-                     └── xy.x:12
+                     │         └──  xy.x:1 => x:20
+                     └── xy.x:15
 
 # Check hidden column handling: level, node_type should not be output.
 build
@@ -891,51 +891,51 @@ FROM included_parts
 GROUP BY sub_part
 ----
 with &2 (included_parts)
- ├── columns: sub_part:15 total_quantity:18
+ ├── columns: sub_part:17 total_quantity:20
  ├── recursive-c-t-e
- │    ├── columns: sub_part:5 part:6 quantity:7
+ │    ├── columns: sub_part:6 part:7 quantity:8
  │    ├── working table binding: &1
  │    ├── initial columns: parts.sub_part:2 parts.part:1 parts.quantity:3
- │    ├── recursive columns: p.sub_part:12 p.part:11 p.quantity:13
+ │    ├── recursive columns: p.sub_part:13 p.part:12 p.quantity:14
  │    ├── project
  │    │    ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3
  │    │    └── select
- │    │         ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3 parts.rowid:4!null
+ │    │         ├── columns: parts.part:1!null parts.sub_part:2 parts.quantity:3 parts.rowid:4!null parts.mvcc_timestamp:5
  │    │         ├── scan parts
- │    │         │    └── columns: parts.part:1 parts.sub_part:2 parts.quantity:3 parts.rowid:4!null
+ │    │         │    └── columns: parts.part:1 parts.sub_part:2 parts.quantity:3 parts.rowid:4!null parts.mvcc_timestamp:5
  │    │         └── filters
  │    │              └── parts.part:1 = 'our_product'
  │    └── project
- │         ├── columns: p.part:11!null p.sub_part:12 p.quantity:13
+ │         ├── columns: p.part:12!null p.sub_part:13 p.quantity:14
  │         └── select
- │              ├── columns: sub_part:8!null part:9 quantity:10 p.part:11!null p.sub_part:12 p.quantity:13 p.rowid:14!null
+ │              ├── columns: sub_part:9!null part:10 quantity:11 p.part:12!null p.sub_part:13 p.quantity:14 p.rowid:15!null p.mvcc_timestamp:16
  │              ├── inner-join (cross)
- │              │    ├── columns: sub_part:8 part:9 quantity:10 p.part:11 p.sub_part:12 p.quantity:13 p.rowid:14!null
+ │              │    ├── columns: sub_part:9 part:10 quantity:11 p.part:12 p.sub_part:13 p.quantity:14 p.rowid:15!null p.mvcc_timestamp:16
  │              │    ├── with-scan &1 (included_parts)
- │              │    │    ├── columns: sub_part:8 part:9 quantity:10
+ │              │    │    ├── columns: sub_part:9 part:10 quantity:11
  │              │    │    └── mapping:
- │              │    │         ├──  sub_part:5 => sub_part:8
- │              │    │         ├──  part:6 => part:9
- │              │    │         └──  quantity:7 => quantity:10
+ │              │    │         ├──  sub_part:6 => sub_part:9
+ │              │    │         ├──  part:7 => part:10
+ │              │    │         └──  quantity:8 => quantity:11
  │              │    ├── scan p
- │              │    │    └── columns: p.part:11 p.sub_part:12 p.quantity:13 p.rowid:14!null
+ │              │    │    └── columns: p.part:12 p.sub_part:13 p.quantity:14 p.rowid:15!null p.mvcc_timestamp:16
  │              │    └── filters (true)
  │              └── filters
- │                   └── p.part:11 = sub_part:8
+ │                   └── p.part:12 = sub_part:9
  └── group-by
-      ├── columns: sub_part:15 sum:18
-      ├── grouping columns: sub_part:15
+      ├── columns: sub_part:17 sum:20
+      ├── grouping columns: sub_part:17
       ├── project
-      │    ├── columns: sub_part:15 quantity:17
+      │    ├── columns: sub_part:17 quantity:19
       │    └── with-scan &2 (included_parts)
-      │         ├── columns: sub_part:15 part:16 quantity:17
+      │         ├── columns: sub_part:17 part:18 quantity:19
       │         └── mapping:
-      │              ├──  sub_part:5 => sub_part:15
-      │              ├──  part:6 => part:16
-      │              └──  quantity:7 => quantity:17
+      │              ├──  sub_part:6 => sub_part:17
+      │              ├──  part:7 => part:18
+      │              └──  quantity:8 => quantity:19
       └── aggregations
-           └── sum [as=sum:18]
-                └── quantity:17
+           └── sum [as=sum:20]
+                └── quantity:19
 
 
 exec-ddl
@@ -958,53 +958,53 @@ WITH RECURSIVE search_graph(id, link, data, depth, path, cycle) AS (
 SELECT * FROM search_graph
 ----
 with &2 (search_graph)
- ├── columns: id:25 link:26 data:27 depth:28 path:29 cycle:30
+ ├── columns: id:27 link:28 data:29 depth:30 path:31 cycle:32
  ├── recursive-c-t-e
- │    ├── columns: id:7 link:8 data:9 depth:10 path:11 cycle:12
+ │    ├── columns: id:8 link:9 data:10 depth:11 path:12 cycle:13
  │    ├── working table binding: &1
- │    ├── initial columns: g.id:1 g.link:2 g.data:3 "?column?":4 array:5 bool:6
- │    ├── recursive columns: g.id:13 g.link:14 g.data:15 "?column?":22 "?column?":23 "?column?":24
+ │    ├── initial columns: g.id:1 g.link:2 g.data:3 "?column?":5 array:6 bool:7
+ │    ├── recursive columns: g.id:14 g.link:15 g.data:16 "?column?":24 "?column?":25 "?column?":26
  │    ├── project
- │    │    ├── columns: "?column?":4!null array:5!null bool:6!null g.id:1!null g.link:2 g.data:3
+ │    │    ├── columns: "?column?":5!null array:6!null bool:7!null g.id:1!null g.link:2 g.data:3
  │    │    ├── scan g
- │    │    │    └── columns: g.id:1!null g.link:2 g.data:3
+ │    │    │    └── columns: g.id:1!null g.link:2 g.data:3 mvcc_timestamp:4
  │    │    └── projections
- │    │         ├── 1 [as="?column?":4]
- │    │         ├── ARRAY[g.id:1] [as=array:5]
- │    │         └── false [as=bool:6]
+ │    │         ├── 1 [as="?column?":5]
+ │    │         ├── ARRAY[g.id:1] [as=array:6]
+ │    │         └── false [as=bool:7]
  │    └── project
- │         ├── columns: "?column?":22 "?column?":23 "?column?":24 g.id:13!null g.link:14 g.data:15
+ │         ├── columns: "?column?":24 "?column?":25 "?column?":26 g.id:14!null g.link:15 g.data:16
  │         ├── select
- │         │    ├── columns: g.id:13!null g.link:14 g.data:15 id:16 link:17!null data:18 depth:19 path:20 cycle:21!null
+ │         │    ├── columns: g.id:14!null g.link:15 g.data:16 mvcc_timestamp:17 id:18 link:19!null data:20 depth:21 path:22 cycle:23!null
  │         │    ├── inner-join (cross)
- │         │    │    ├── columns: g.id:13!null g.link:14 g.data:15 id:16 link:17 data:18 depth:19 path:20 cycle:21
+ │         │    │    ├── columns: g.id:14!null g.link:15 g.data:16 mvcc_timestamp:17 id:18 link:19 data:20 depth:21 path:22 cycle:23
  │         │    │    ├── scan g
- │         │    │    │    └── columns: g.id:13!null g.link:14 g.data:15
+ │         │    │    │    └── columns: g.id:14!null g.link:15 g.data:16 mvcc_timestamp:17
  │         │    │    ├── with-scan &1 (search_graph)
- │         │    │    │    ├── columns: id:16 link:17 data:18 depth:19 path:20 cycle:21
+ │         │    │    │    ├── columns: id:18 link:19 data:20 depth:21 path:22 cycle:23
  │         │    │    │    └── mapping:
- │         │    │    │         ├──  id:7 => id:16
- │         │    │    │         ├──  link:8 => link:17
- │         │    │    │         ├──  data:9 => data:18
- │         │    │    │         ├──  depth:10 => depth:19
- │         │    │    │         ├──  path:11 => path:20
- │         │    │    │         └──  cycle:12 => cycle:21
+ │         │    │    │         ├──  id:8 => id:18
+ │         │    │    │         ├──  link:9 => link:19
+ │         │    │    │         ├──  data:10 => data:20
+ │         │    │    │         ├──  depth:11 => depth:21
+ │         │    │    │         ├──  path:12 => path:22
+ │         │    │    │         └──  cycle:13 => cycle:23
  │         │    │    └── filters (true)
  │         │    └── filters
- │         │         └── (g.id:13 = link:17) AND (NOT cycle:21)
+ │         │         └── (g.id:14 = link:19) AND (NOT cycle:23)
  │         └── projections
- │              ├── depth:19 + 1 [as="?column?":22]
- │              ├── path:20 || g.id:13 [as="?column?":23]
- │              └── g.id:13 = ANY path:20 [as="?column?":24]
+ │              ├── depth:21 + 1 [as="?column?":24]
+ │              ├── path:22 || g.id:14 [as="?column?":25]
+ │              └── g.id:14 = ANY path:22 [as="?column?":26]
  └── with-scan &2 (search_graph)
-      ├── columns: id:25 link:26 data:27 depth:28 path:29 cycle:30
+      ├── columns: id:27 link:28 data:29 depth:30 path:31 cycle:32
       └── mapping:
-           ├──  id:7 => id:25
-           ├──  link:8 => link:26
-           ├──  data:9 => data:27
-           ├──  depth:10 => depth:28
-           ├──  path:11 => path:29
-           └──  cycle:12 => cycle:30
+           ├──  id:8 => id:27
+           ├──  link:9 => link:28
+           ├──  data:10 => data:29
+           ├──  depth:11 => depth:30
+           ├──  path:12 => path:31
+           └──  cycle:13 => cycle:32
 
 # Test where initial query has duplicate columns.
 build
@@ -1341,27 +1341,27 @@ build
 EXPLAIN WITH foo AS (INSERT INTO y VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 explain
- ├── columns: tree:6 field:7 description:8
+ ├── columns: tree:7 field:8 description:9
  └── with &1 (foo)
-      ├── columns: a:5!null
+      ├── columns: a:6!null
       ├── project
       │    ├── columns: y.a:1!null
       │    └── insert y
       │         ├── columns: y.a:1!null rowid:2!null
       │         ├── insert-mapping:
-      │         │    ├── column1:3 => y.a:1
-      │         │    └── column4:4 => rowid:2
+      │         │    ├── column1:4 => y.a:1
+      │         │    └── column5:5 => rowid:2
       │         └── project
-      │              ├── columns: column4:4 column1:3!null
+      │              ├── columns: column5:5 column1:4!null
       │              ├── values
-      │              │    ├── columns: column1:3!null
+      │              │    ├── columns: column1:4!null
       │              │    └── (1,)
       │              └── projections
-      │                   └── unique_rowid() [as=column4:4]
+      │                   └── unique_rowid() [as=column5:5]
       └── with-scan &1 (foo)
-           ├── columns: a:5!null
+           ├── columns: a:6!null
            └── mapping:
-                └──  y.a:1 => a:5
+                └──  y.a:1 => a:6
 
 exec-ddl
 CREATE TABLE a(x INT);
@@ -1373,27 +1373,27 @@ INSERT INTO a(x)
 ----
 with &1 (b)
  ├── values
- │    ├── columns: column1:3!null
+ │    ├── columns: column1:4!null
  │    ├── (1,)
  │    ├── (2,)
  │    └── (3,)
  └── insert a
       ├── columns: <none>
       ├── insert-mapping:
-      │    ├── w:5 => x:1
-      │    └── column6:6 => rowid:2
+      │    ├── w:6 => x:1
+      │    └── column7:7 => rowid:2
       └── project
-           ├── columns: column6:6 w:5!null
+           ├── columns: column7:7 w:6!null
            ├── project
-           │    ├── columns: w:5!null
+           │    ├── columns: w:6!null
            │    ├── with-scan &1 (b)
-           │    │    ├── columns: z:4!null
+           │    │    ├── columns: z:5!null
            │    │    └── mapping:
-           │    │         └──  column1:3 => z:4
+           │    │         └──  column1:4 => z:5
            │    └── projections
-           │         └── z:4 + 1 [as=w:5]
+           │         └── z:5 + 1 [as=w:6]
            └── projections
-                └── unique_rowid() [as=column6:6]
+                └── unique_rowid() [as=column7:7]
 
 build
 SELECT
@@ -1451,53 +1451,53 @@ WITH t AS MATERIALIZED (SELECT a FROM y WHERE a < 3)
   SELECT * FROM x NATURAL JOIN t
 ----
 with &1 (t)
- ├── columns: a:3!null b:4
+ ├── columns: a:4!null b:5
  ├── materialized
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null y.rowid:2!null
+ │         ├── columns: y.a:1!null y.rowid:2!null y.mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 y.rowid:2!null
+ │         │    └── columns: y.a:1 y.rowid:2!null y.mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── project
-      ├── columns: x.a:3!null b:4
+      ├── columns: x.a:4!null b:5
       └── inner-join (hash)
-           ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+           ├── columns: x.a:4!null b:5 x.rowid:6!null x.mvcc_timestamp:7 a:8!null
            ├── scan x
-           │    └── columns: x.a:3 b:4 x.rowid:5!null
+           │    └── columns: x.a:4 b:5 x.rowid:6!null x.mvcc_timestamp:7
            ├── with-scan &1 (t)
-           │    ├── columns: a:6!null
+           │    ├── columns: a:8!null
            │    └── mapping:
-           │         └──  y.a:1 => a:6
+           │         └──  y.a:1 => a:8
            └── filters
-                └── x.a:3 = a:6
+                └── x.a:4 = a:8
 
 build
 WITH t AS NOT MATERIALIZED (SELECT a FROM y WHERE a < 3)
   SELECT * FROM x NATURAL JOIN t
 ----
 with &1 (t)
- ├── columns: a:3!null b:4
+ ├── columns: a:4!null b:5
  ├── not-materialized
  ├── project
  │    ├── columns: y.a:1!null
  │    └── select
- │         ├── columns: y.a:1!null y.rowid:2!null
+ │         ├── columns: y.a:1!null y.rowid:2!null y.mvcc_timestamp:3
  │         ├── scan y
- │         │    └── columns: y.a:1 y.rowid:2!null
+ │         │    └── columns: y.a:1 y.rowid:2!null y.mvcc_timestamp:3
  │         └── filters
  │              └── y.a:1 < 3
  └── project
-      ├── columns: x.a:3!null b:4
+      ├── columns: x.a:4!null b:5
       └── inner-join (hash)
-           ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+           ├── columns: x.a:4!null b:5 x.rowid:6!null x.mvcc_timestamp:7 a:8!null
            ├── scan x
-           │    └── columns: x.a:3 b:4 x.rowid:5!null
+           │    └── columns: x.a:4 b:5 x.rowid:6!null x.mvcc_timestamp:7
            ├── with-scan &1 (t)
-           │    ├── columns: a:6!null
+           │    ├── columns: a:8!null
            │    └── mapping:
-           │         └──  y.a:1 => a:6
+           │         └──  y.a:1 => a:8
            └── filters
-                └── x.a:3 = a:6
+                └── x.a:4 = a:8

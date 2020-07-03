@@ -589,42 +589,42 @@ build
 SELECT (1, 2) IN (SELECT a, b FROM abc) AS r
 ----
 project
- ├── columns: r:5
+ ├── columns: r:6
  ├── values
  │    └── ()
  └── projections
-      └── any: eq [as=r:5]
+      └── any: eq [as=r:6]
            ├── project
-           │    ├── columns: column4:4
+           │    ├── columns: column5:5
            │    ├── project
            │    │    ├── columns: a:1!null b:2
            │    │    └── scan abc
-           │    │         └── columns: a:1!null b:2 c:3
+           │    │         └── columns: a:1!null b:2 c:3 mvcc_timestamp:4
            │    └── projections
-           │         └── (a:1, b:2) [as=column4:4]
+           │         └── (a:1, b:2) [as=column5:5]
            └── (1, 2)
 
 build
 SELECT (1, 2) IN (SELECT a, b FROM abc WHERE false) AS r
 ----
 project
- ├── columns: r:5
+ ├── columns: r:6
  ├── values
  │    └── ()
  └── projections
-      └── any: eq [as=r:5]
+      └── any: eq [as=r:6]
            ├── project
-           │    ├── columns: column4:4
+           │    ├── columns: column5:5
            │    ├── project
            │    │    ├── columns: a:1!null b:2
            │    │    └── select
-           │    │         ├── columns: a:1!null b:2 c:3
+           │    │         ├── columns: a:1!null b:2 c:3 mvcc_timestamp:4
            │    │         ├── scan abc
-           │    │         │    └── columns: a:1!null b:2 c:3
+           │    │         │    └── columns: a:1!null b:2 c:3 mvcc_timestamp:4
            │    │         └── filters
            │    │              └── false
            │    └── projections
-           │         └── (a:1, b:2) [as=column4:4]
+           │         └── (a:1, b:2) [as=column5:5]
            └── (1, 2)
 
 build
@@ -636,31 +636,31 @@ build
 SELECT (SELECT a FROM abc)
 ----
 project
- ├── columns: a:4
+ ├── columns: a:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:4]
+      └── subquery [as=a:5]
            └── max1-row
                 ├── columns: abc.a:1!null
                 └── project
                      ├── columns: abc.a:1!null
                      └── scan abc
-                          └── columns: abc.a:1!null b:2 c:3
+                          └── columns: abc.a:1!null b:2 c:3 mvcc_timestamp:4
 
 build
 SELECT EXISTS (SELECT a FROM abc)
 ----
 project
- ├── columns: exists:4
+ ├── columns: exists:5
  ├── values
  │    └── ()
  └── projections
-      └── exists [as=exists:4]
+      └── exists [as=exists:5]
            └── project
                 ├── columns: a:1!null
                 └── scan abc
-                     └── columns: a:1!null b:2 c:3
+                     └── columns: a:1!null b:2 c:3 mvcc_timestamp:4
 
 build
 SELECT true = EXISTS (SELECT 1)
@@ -684,19 +684,19 @@ build
 SELECT (SELECT a FROM abc WHERE false)
 ----
 project
- ├── columns: a:4
+ ├── columns: a:5
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:4]
+      └── subquery [as=a:5]
            └── max1-row
                 ├── columns: abc.a:1!null
                 └── project
                      ├── columns: abc.a:1!null
                      └── select
-                          ├── columns: abc.a:1!null b:2 c:3
+                          ├── columns: abc.a:1!null b:2 c:3 mvcc_timestamp:4
                           ├── scan abc
-                          │    └── columns: abc.a:1!null b:2 c:3
+                          │    └── columns: abc.a:1!null b:2 c:3 mvcc_timestamp:4
                           └── filters
                                └── false
 
@@ -729,12 +729,14 @@ values
 build
 SELECT * FROM abc WHERE a = 7
 ----
-select
+project
  ├── columns: a:1!null b:2 c:3
- ├── scan abc
- │    └── columns: a:1!null b:2 c:3
- └── filters
-      └── a:1 = 7
+ └── select
+      ├── columns: a:1!null b:2 c:3 mvcc_timestamp:4
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 mvcc_timestamp:4
+      └── filters
+           └── a:1 = 7
 
 exec-ddl
 CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
@@ -743,69 +745,75 @@ CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
 build
 SELECT * FROM xyz
 ----
-scan xyz
- └── columns: x:1!null y:2 z:3
+project
+ ├── columns: x:1!null y:2 z:3
+ └── scan xyz
+      └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
 
 build
 SELECT 1 IN (SELECT x FROM xyz ORDER BY x DESC) AS r
 ----
 project
- ├── columns: r:4
+ ├── columns: r:5
  ├── values
  │    └── ()
  └── projections
-      └── any: eq [as=r:4]
+      └── any: eq [as=r:5]
            ├── project
            │    ├── columns: x:1!null
            │    └── scan xyz
-           │         └── columns: x:1!null y:2 z:3
+           │         └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
            └── 1
 
 build
 SELECT * FROM xyz WHERE x = (SELECT min(x) FROM xyz)
 ----
-select
+project
  ├── columns: x:1!null y:2 z:3
- ├── scan xyz
- │    └── columns: x:1!null y:2 z:3
- └── filters
-      └── eq
-           ├── x:1
-           └── subquery
-                └── max1-row
-                     ├── columns: min:7
-                     └── scalar-group-by
-                          ├── columns: min:7
-                          ├── project
-                          │    ├── columns: x:4!null
-                          │    └── scan xyz
-                          │         └── columns: x:4!null y:5 z:6
-                          └── aggregations
-                               └── min [as=min:7]
-                                    └── x:4
+ └── select
+      ├── columns: x:1!null y:2 z:3 mvcc_timestamp:4
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
+      └── filters
+           └── eq
+                ├── x:1
+                └── subquery
+                     └── max1-row
+                          ├── columns: min:9
+                          └── scalar-group-by
+                               ├── columns: min:9
+                               ├── project
+                               │    ├── columns: x:5!null
+                               │    └── scan xyz
+                               │         └── columns: x:5!null y:6 z:7 mvcc_timestamp:8
+                               └── aggregations
+                                    └── min [as=min:9]
+                                         └── x:5
 
 build
 SELECT * FROM xyz WHERE x = (SELECT max(x) FROM xyz)
 ----
-select
+project
  ├── columns: x:1!null y:2 z:3
- ├── scan xyz
- │    └── columns: x:1!null y:2 z:3
- └── filters
-      └── eq
-           ├── x:1
-           └── subquery
-                └── max1-row
-                     ├── columns: max:7
-                     └── scalar-group-by
-                          ├── columns: max:7
-                          ├── project
-                          │    ├── columns: x:4!null
-                          │    └── scan xyz
-                          │         └── columns: x:4!null y:5 z:6
-                          └── aggregations
-                               └── max [as=max:7]
-                                    └── x:4
+ └── select
+      ├── columns: x:1!null y:2 z:3 mvcc_timestamp:4
+      ├── scan xyz
+      │    └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
+      └── filters
+           └── eq
+                ├── x:1
+                └── subquery
+                     └── max1-row
+                          ├── columns: max:9
+                          └── scalar-group-by
+                               ├── columns: max:9
+                               ├── project
+                               │    ├── columns: x:5!null
+                               │    └── scan xyz
+                               │         └── columns: x:5!null y:6 z:7 mvcc_timestamp:8
+                               └── aggregations
+                                    └── max [as=max:9]
+                                         └── x:5
 
 # Drop previous table with same name, but different schema.
 exec-ddl
@@ -819,64 +827,66 @@ CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
 build
 SELECT * FROM kv WHERE k = (SELECT k FROM kv WHERE (k, v) = (1, 'one'))
 ----
-select
+project
  ├── columns: k:1!null v:2
- ├── scan kv
- │    └── columns: k:1!null v:2
- └── filters
-      └── eq
-           ├── k:1
-           └── subquery
-                └── max1-row
-                     ├── columns: k:3!null
-                     └── project
-                          ├── columns: k:3!null
-                          └── select
-                               ├── columns: k:3!null v:4
-                               ├── scan kv
-                               │    └── columns: k:3!null v:4
-                               └── filters
-                                    └── (k:3, v:4) = (1, 'one')
+ └── select
+      ├── columns: k:1!null v:2 mvcc_timestamp:3
+      ├── scan kv
+      │    └── columns: k:1!null v:2 mvcc_timestamp:3
+      └── filters
+           └── eq
+                ├── k:1
+                └── subquery
+                     └── max1-row
+                          ├── columns: k:4!null
+                          └── project
+                               ├── columns: k:4!null
+                               └── select
+                                    ├── columns: k:4!null v:5 mvcc_timestamp:6
+                                    ├── scan kv
+                                    │    └── columns: k:4!null v:5 mvcc_timestamp:6
+                                    └── filters
+                                         └── (k:4, v:5) = (1, 'one')
 
 build
 SELECT EXISTS(SELECT 1 r FROM kv AS x WHERE x.k = 1)
 ----
 project
- ├── columns: exists:4
+ ├── columns: exists:5
  ├── values
  │    └── ()
  └── projections
-      └── exists [as=exists:4]
+      └── exists [as=exists:5]
            └── project
-                ├── columns: r:3!null
+                ├── columns: r:4!null
                 ├── select
-                │    ├── columns: k:1!null v:2
+                │    ├── columns: k:1!null v:2 mvcc_timestamp:3
                 │    ├── scan x
-                │    │    └── columns: k:1!null v:2
+                │    │    └── columns: k:1!null v:2 mvcc_timestamp:3
                 │    └── filters
                 │         └── k:1 = 1
                 └── projections
-                     └── 1 [as=r:3]
+                     └── 1 [as=r:4]
 
 build
 SELECT EXISTS(SELECT 1 r FROM kv WHERE k = 2)
 ----
 project
- ├── columns: exists:4
+ ├── columns: exists:5
  ├── values
  │    └── ()
  └── projections
-      └── exists [as=exists:4]
+      └── exists [as=exists:5]
            └── project
-                ├── columns: r:3!null
+                ├── columns: r:4!null
                 ├── select
-                │    ├── columns: k:1!null v:2
+                │    ├── columns: k:1!null v:2 mvcc_timestamp:3
                 │    ├── scan kv
-                │    │    └── columns: k:1!null v:2
+                │    │    └── columns: k:1!null v:2 mvcc_timestamp:3
                 │    └── filters
                 │         └── k:1 = 2
                 └── projections
-                     └── 1 [as=r:3]
+                     └── 1 [as=r:4]
 
 
 # Tests for subquery in the FROM part of a SELECT
@@ -933,8 +943,10 @@ SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
 ----
 select
  ├── columns: x:1!null y:2 z:3
- ├── scan foo
- │    └── columns: x:1!null y:2 z:3
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3
+ │    └── scan xyz
+ │         └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
  └── filters
       └── x:1 < 7
 
@@ -943,30 +955,36 @@ SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
 ----
 select
  ├── columns: foo1:1!null y:2 z:3
- ├── scan foo
- │    └── columns: foo1:1!null y:2 z:3
+ ├── project
+ │    ├── columns: x:1!null y:2 z:3
+ │    └── scan xyz
+ │         └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
  └── filters
-      └── foo1:1 < 7
+      └── x:1 < 7
 
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE foo1 < 7
 ----
 select
  ├── columns: foo1:1!null moo2:2 moo3:3
- ├── scan foo
- │    └── columns: foo1:1!null moo2:2 moo3:3
+ ├── project
+ │    ├── columns: moo1:1!null moo2:2 moo3:3
+ │    └── scan moo
+ │         └── columns: moo1:1!null moo2:2 moo3:3 mvcc_timestamp:4
  └── filters
-      └── foo1:1 < 7
+      └── moo1:1 < 7
 
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
 ----
 select
  ├── columns: foo1:1!null moo2:2 moo3:3
- ├── scan foo
- │    └── columns: foo1:1!null moo2:2 moo3:3
+ ├── project
+ │    ├── columns: moo1:1!null moo2:2 moo3:3
+ │    └── scan moo
+ │         └── columns: moo1:1!null moo2:2 moo3:3 mvcc_timestamp:4
  └── filters
-      └── foo1:1 < 7
+      └── moo1:1 < 7
 
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7 ORDER BY moo2 DESC
@@ -975,11 +993,13 @@ sort
  ├── columns: foo1:1!null moo2:2 moo3:3
  ├── ordering: -2
  └── select
-      ├── columns: foo1:1!null moo2:2 moo3:3
-      ├── scan foo
-      │    └── columns: foo1:1!null moo2:2 moo3:3
+      ├── columns: moo1:1!null moo2:2 moo3:3
+      ├── project
+      │    ├── columns: moo1:1!null moo2:2 moo3:3
+      │    └── scan moo
+      │         └── columns: moo1:1!null moo2:2 moo3:3 mvcc_timestamp:4
       └── filters
-           └── foo1:1 < 7
+           └── moo1:1 < 7
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
@@ -1044,19 +1064,19 @@ SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz WHERE x = 7)
 project
  ├── columns: x:1!null
  └── select
-      ├── columns: x:1!null y:2 z:3
+      ├── columns: x:1!null y:2 z:3 mvcc_timestamp:4
       ├── scan xyz
-      │    └── columns: x:1!null y:2 z:3
+      │    └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
       └── filters
            └── any: eq
                 ├── project
-                │    ├── columns: x:4!null
+                │    ├── columns: x:5!null
                 │    └── select
-                │         ├── columns: x:4!null y:5 z:6
+                │         ├── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                 │         ├── scan xyz
-                │         │    └── columns: x:4!null y:5 z:6
+                │         │    └── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                 │         └── filters
-                │              └── x:4 = 7
+                │              └── x:5 = 7
                 └── x:1
 
 build
@@ -1067,22 +1087,22 @@ limit
  ├── project
  │    ├── columns: x:1!null
  │    └── select
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 mvcc_timestamp:4
  │         ├── scan xyz
- │         │    └── columns: x:1!null y:2 z:3
+ │         │    └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
  │         └── filters
  │              └── x:1 = 7
  └── subquery
       └── max1-row
-           ├── columns: x:4!null
+           ├── columns: x:5!null
            └── project
-                ├── columns: x:4!null
+                ├── columns: x:5!null
                 └── select
-                     ├── columns: x:4!null y:5 z:6
+                     ├── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                      ├── scan xyz
-                     │    └── columns: x:4!null y:5 z:6
+                     │    └── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                      └── filters
-                          └── x:4 = 1
+                          └── x:5 = 1
 
 build
 SELECT x FROM xyz ORDER BY x OFFSET (SELECT x FROM xyz WHERE x = 1)
@@ -1095,19 +1115,19 @@ offset
  │    ├── columns: x:1!null
  │    ├── ordering: +1
  │    └── scan xyz
- │         ├── columns: x:1!null y:2 z:3
+ │         ├── columns: x:1!null y:2 z:3 mvcc_timestamp:4
  │         └── ordering: +1
  └── subquery
       └── max1-row
-           ├── columns: x:4!null
+           ├── columns: x:5!null
            └── project
-                ├── columns: x:4!null
+                ├── columns: x:5!null
                 └── select
-                     ├── columns: x:4!null y:5 z:6
+                     ├── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                      ├── scan xyz
-                     │    └── columns: x:4!null y:5 z:6
+                     │    └── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                      └── filters
-                          └── x:4 = 1
+                          └── x:5 = 1
 
 # check that residual filters are not expanded twice
 build
@@ -1116,15 +1136,15 @@ SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 project
  ├── columns: x:1!null
  └── select
-      ├── columns: x:1!null y:2 z:3
+      ├── columns: x:1!null y:2 z:3 mvcc_timestamp:4
       ├── scan xyz
-      │    └── columns: x:1!null y:2 z:3
+      │    └── columns: x:1!null y:2 z:3 mvcc_timestamp:4
       └── filters
            └── any: eq
                 ├── project
-                │    ├── columns: x:4!null
+                │    ├── columns: x:5!null
                 │    └── scan xyz
-                │         └── columns: x:4!null y:5 z:6
+                │         └── columns: x:5!null y:6 z:7 mvcc_timestamp:8
                 └── x:1
 
 # This test checks that the double sub-query plan expansion caused by a
@@ -1140,22 +1160,22 @@ SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col
 project
  ├── columns: col0:1!null
  └── select
-      ├── columns: col0:1!null col1:2 col3:3 col4:4!null rowid:5!null
+      ├── columns: col0:1!null col1:2 col3:3 col4:4!null rowid:5!null mvcc_timestamp:6
       ├── scan tab4
-      │    └── columns: col0:1 col1:2 col3:3 col4:4 rowid:5!null
+      │    └── columns: col0:1 col1:2 col3:3 col4:4 rowid:5!null mvcc_timestamp:6
       └── filters
            └── or
                 ├── (col0:1 <= 0) AND (col4:4 <= 5.38)
                 └── and
                      ├── any: eq
                      │    ├── project
-                     │    │    ├── columns: col1:7!null
+                     │    │    ├── columns: col1:8!null
                      │    │    └── select
-                     │    │         ├── columns: col0:6 col1:7!null col3:8 col4:9 rowid:10!null
+                     │    │         ├── columns: col0:7 col1:8!null col3:9 col4:10 rowid:11!null mvcc_timestamp:12
                      │    │         ├── scan tab4
-                     │    │         │    └── columns: col0:6 col1:7 col3:8 col4:9 rowid:10!null
+                     │    │         │    └── columns: col0:7 col1:8 col3:9 col4:10 rowid:11!null mvcc_timestamp:12
                      │    │         └── filters
-                     │    │              └── col1:7 > 8.27
+                     │    │              └── col1:8 > 8.27
                      │    └── col4:4
                      └── (col3:3 <= 5) AND ((col3:3 >= 7) AND (col3:3 <= 9))
 
@@ -1192,11 +1212,11 @@ build
 SELECT (SELECT 1 a), (SELECT a FROM abc), (SELECT 1 a), (SELECT a FROM abc)
 ----
 project
- ├── columns: a:9 a:10 a:9 a:10
+ ├── columns: a:11 a:12 a:11 a:12
  ├── values
  │    └── ()
  └── projections
-      ├── subquery [as=a:9]
+      ├── subquery [as=a:11]
       │    └── max1-row
       │         ├── columns: a:1!null
       │         └── project
@@ -1205,13 +1225,13 @@ project
       │              │    └── ()
       │              └── projections
       │                   └── 1 [as=a:1]
-      └── subquery [as=a:10]
+      └── subquery [as=a:12]
            └── max1-row
                 ├── columns: abc.a:2!null
                 └── project
                      ├── columns: abc.a:2!null
                      └── scan abc
-                          └── columns: abc.a:2!null b:3 c:4
+                          └── columns: abc.a:2!null b:3 c:4 mvcc_timestamp:5
 
 # Multiple nested subqueries in same column list.
 build
@@ -1254,19 +1274,19 @@ build
 SELECT (SELECT akv.k) FROM kv akv
 ----
 project
- ├── columns: k:4
+ ├── columns: k:5
  ├── scan akv
- │    └── columns: akv.k:1!null v:2
+ │    └── columns: akv.k:1!null v:2 mvcc_timestamp:3
  └── projections
-      └── subquery [as=k:4]
+      └── subquery [as=k:5]
            └── max1-row
-                ├── columns: k:3
+                ├── columns: k:4
                 └── project
-                     ├── columns: k:3
+                     ├── columns: k:4
                      ├── values
                      │    └── ()
                      └── projections
-                          └── akv.k:1 [as=k:3]
+                          └── akv.k:1 [as=k:4]
 
 exec-ddl
 CREATE TABLE db1.kv (k INT PRIMARY KEY, v INT)
@@ -1276,24 +1296,24 @@ build fully-qualify-names
 SELECT (SELECT t.kv.k) FROM db1.kv, kv
 ----
 project
- ├── columns: k:6
+ ├── columns: k:8
  ├── inner-join (cross)
- │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 t.public.kv.k:3!null t.public.kv.v:4
+ │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.mvcc_timestamp:3 t.public.kv.k:4!null t.public.kv.v:5 t.public.kv.mvcc_timestamp:6
  │    ├── scan db1.public.kv
- │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2
+ │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.mvcc_timestamp:3
  │    ├── scan t.public.kv
- │    │    └── columns: t.public.kv.k:3!null t.public.kv.v:4
+ │    │    └── columns: t.public.kv.k:4!null t.public.kv.v:5 t.public.kv.mvcc_timestamp:6
  │    └── filters (true)
  └── projections
-      └── subquery [as=k:6]
+      └── subquery [as=k:8]
            └── max1-row
-                ├── columns: k:5
+                ├── columns: k:7
                 └── project
-                     ├── columns: k:5
+                     ├── columns: k:7
                      ├── values
                      │    └── ()
                      └── projections
-                          └── t.public.kv.k:3 [as=k:5]
+                          └── t.public.kv.k:4 [as=k:7]
 
 # Ambiguity in parent scope.
 build fully-qualify-names
@@ -1311,24 +1331,24 @@ build fully-qualify-names
 SELECT (SELECT kv1.k) FROM db1.kv AS kv1, kv
 ----
 project
- ├── columns: k:6
+ ├── columns: k:8
  ├── inner-join (cross)
- │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 t.public.kv.k:3!null t.public.kv.v:4
+ │    ├── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.mvcc_timestamp:3 t.public.kv.k:4!null t.public.kv.v:5 t.public.kv.mvcc_timestamp:6
  │    ├── scan db1.public.kv
- │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2
+ │    │    └── columns: db1.public.kv.k:1!null db1.public.kv.v:2 db1.public.kv.mvcc_timestamp:3
  │    ├── scan t.public.kv
- │    │    └── columns: t.public.kv.k:3!null t.public.kv.v:4
+ │    │    └── columns: t.public.kv.k:4!null t.public.kv.v:5 t.public.kv.mvcc_timestamp:6
  │    └── filters (true)
  └── projections
-      └── subquery [as=k:6]
+      └── subquery [as=k:8]
            └── max1-row
-                ├── columns: k:5
+                ├── columns: k:7
                 └── project
-                     ├── columns: k:5
+                     ├── columns: k:7
                      ├── values
                      │    └── ()
                      └── projections
-                          └── db1.public.kv.k:1 [as=k:5]
+                          └── db1.public.kv.k:1 [as=k:7]
 
 # Check that the inner kv is chosen when there are matching names in both
 # scopes.
@@ -1336,60 +1356,62 @@ build fully-qualify-names
 SELECT (SELECT kv.k FROM db1.kv) FROM kv
 ----
 project
- ├── columns: k:5
+ ├── columns: k:7
  ├── scan t.public.kv
- │    └── columns: t.public.kv.k:1!null t.public.kv.v:2
+ │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.mvcc_timestamp:3
  └── projections
-      └── subquery [as=k:5]
+      └── subquery [as=k:7]
            └── max1-row
-                ├── columns: db1.public.kv.k:3!null
+                ├── columns: db1.public.kv.k:4!null
                 └── project
-                     ├── columns: db1.public.kv.k:3!null
+                     ├── columns: db1.public.kv.k:4!null
                      └── scan db1.public.kv
-                          └── columns: db1.public.kv.k:3!null db1.public.kv.v:4
+                          └── columns: db1.public.kv.k:4!null db1.public.kv.v:5 db1.public.kv.mvcc_timestamp:6
 
 # 2 nested scopes, mixed scope references.
 build fully-qualify-names
 SELECT (SELECT (SELECT t.kv.k + k AS r) FROM db1.kv) FROM kv
 ----
 project
- ├── columns: r:7
+ ├── columns: r:9
  ├── scan t.public.kv
- │    └── columns: t.public.kv.k:1!null t.public.kv.v:2
+ │    └── columns: t.public.kv.k:1!null t.public.kv.v:2 t.public.kv.mvcc_timestamp:3
  └── projections
-      └── subquery [as=r:7]
+      └── subquery [as=r:9]
            └── max1-row
-                ├── columns: r:6
+                ├── columns: r:8
                 └── project
-                     ├── columns: r:6
+                     ├── columns: r:8
                      ├── scan db1.public.kv
-                     │    └── columns: db1.public.kv.k:3!null db1.public.kv.v:4
+                     │    └── columns: db1.public.kv.k:4!null db1.public.kv.v:5 db1.public.kv.mvcc_timestamp:6
                      └── projections
-                          └── subquery [as=r:6]
+                          └── subquery [as=r:8]
                                └── max1-row
-                                    ├── columns: r:5
+                                    ├── columns: r:7
                                     └── project
-                                         ├── columns: r:5
+                                         ├── columns: r:7
                                          ├── values
                                          │    └── ()
                                          └── projections
-                                              └── t.public.kv.k:1 + db1.public.kv.k:3 [as=r:5]
+                                              └── t.public.kv.k:1 + db1.public.kv.k:4 [as=r:7]
 
 build
 SELECT (SELECT k FROM kv ORDER BY v)
 ----
 project
- ├── columns: k:3
+ ├── columns: k:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=k:3]
+      └── subquery [as=k:4]
            └── max1-row
                 ├── columns: kv.k:1!null
                 └── project
                      ├── columns: kv.k:1!null
-                     └── scan kv
-                          └── columns: kv.k:1!null v:2
+                     └── project
+                          ├── columns: kv.k:1!null v:2
+                          └── scan kv
+                               └── columns: kv.k:1!null v:2 mvcc_timestamp:3
 
 exec-ddl
 CREATE TABLE t1 (a INT, b INT)
@@ -1407,181 +1429,100 @@ build
 SELECT (SELECT (SELECT DISTINCT t3.a FROM t1) FROM t2) FROM t3
 ----
 project
- ├── columns: a:12
+ ├── columns: a:15
  ├── scan t3
- │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  └── projections
-      └── subquery [as=a:12]
+      └── subquery [as=a:15]
            └── max1-row
-                ├── columns: a:11
+                ├── columns: a:14
                 └── project
-                     ├── columns: a:11
+                     ├── columns: a:14
                      ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      └── projections
-                          └── subquery [as=a:11]
+                          └── subquery [as=a:14]
                                └── max1-row
-                                    ├── columns: a:10
+                                    ├── columns: a:13
                                     └── distinct-on
-                                         ├── columns: a:10
-                                         ├── grouping columns: a:10
+                                         ├── columns: a:13
+                                         ├── grouping columns: a:13
                                          └── project
-                                              ├── columns: a:10
+                                              ├── columns: a:13
                                               ├── scan t1
-                                              │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
+                                              │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
                                               └── projections
-                                                   └── t3.a:1 [as=a:10]
+                                                   └── t3.a:1 [as=a:13]
 
 build
 SELECT (SELECT (SELECT count(*) FROM t1 GROUP BY t3.a) FROM t2) FROM t3
 ----
 project
- ├── columns: count:13
+ ├── columns: count:16
  ├── scan t3
- │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  └── projections
-      └── subquery [as=count:13]
+      └── subquery [as=count:16]
            └── max1-row
-                ├── columns: count:12
+                ├── columns: count:15
                 └── project
-                     ├── columns: count:12
+                     ├── columns: count:15
                      ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      └── projections
-                          └── subquery [as=count:12]
+                          └── subquery [as=count:15]
                                └── max1-row
-                                    ├── columns: count_rows:10!null
+                                    ├── columns: count_rows:13!null
                                     └── project
-                                         ├── columns: count_rows:10!null
+                                         ├── columns: count_rows:13!null
                                          └── group-by
-                                              ├── columns: count_rows:10!null a:11
-                                              ├── grouping columns: a:11
+                                              ├── columns: count_rows:13!null a:14
+                                              ├── grouping columns: a:14
                                               ├── project
-                                              │    ├── columns: a:11
+                                              │    ├── columns: a:14
                                               │    ├── scan t1
-                                              │    │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
+                                              │    │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
                                               │    └── projections
-                                              │         └── t3.a:1 [as=a:11]
+                                              │         └── t3.a:1 [as=a:14]
                                               └── aggregations
-                                                   └── count-rows [as=count_rows:10]
+                                                   └── count-rows [as=count_rows:13]
 
 build
 SELECT (SELECT (SELECT t2.a + t3.a AS x FROM t1 GROUP BY t2.a + t3.a) AS y FROM t2) AS z FROM t3
 ----
 project
- ├── columns: z:12
+ ├── columns: z:15
  ├── scan t3
- │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  └── projections
-      └── subquery [as=z:12]
+      └── subquery [as=z:15]
            └── max1-row
-                ├── columns: y:11
+                ├── columns: y:14
                 └── project
-                     ├── columns: y:11
+                     ├── columns: y:14
                      ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      └── projections
-                          └── subquery [as=y:11]
+                          └── subquery [as=y:14]
                                └── max1-row
-                                    ├── columns: column10:10
+                                    ├── columns: column13:13
                                     └── group-by
-                                         ├── columns: column10:10
-                                         ├── grouping columns: column10:10
+                                         ├── columns: column13:13
+                                         ├── grouping columns: column13:13
                                          └── project
-                                              ├── columns: column10:10
+                                              ├── columns: column13:13
                                               ├── scan t1
-                                              │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
+                                              │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
                                               └── projections
-                                                   └── t2.a:4 + t3.a:1 [as=column10:10]
+                                                   └── t2.a:5 + t3.a:1 [as=column13:13]
 
 build
 SELECT (SELECT (SELECT t2.a + t3.a AS r FROM t1 GROUP BY t2.a, t3.a HAVING t2.a > t3.a) FROM t2) FROM t3
 ----
 project
- ├── columns: r:14
- ├── scan t3
- │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
- └── projections
-      └── subquery [as=r:14]
-           └── max1-row
-                ├── columns: r:13
-                └── project
-                     ├── columns: r:13
-                     ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
-                     └── projections
-                          └── subquery [as=r:13]
-                               └── max1-row
-                                    ├── columns: r:12!null
-                                    └── project
-                                         ├── columns: r:12!null
-                                         ├── select
-                                         │    ├── columns: a:10!null a:11!null
-                                         │    ├── group-by
-                                         │    │    ├── columns: a:10 a:11
-                                         │    │    ├── grouping columns: a:10 a:11
-                                         │    │    └── project
-                                         │    │         ├── columns: a:10 a:11
-                                         │    │         ├── scan t1
-                                         │    │         │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
-                                         │    │         └── projections
-                                         │    │              ├── t2.a:4 [as=a:10]
-                                         │    │              └── t3.a:1 [as=a:11]
-                                         │    └── filters
-                                         │         └── a:10 > a:11
-                                         └── projections
-                                              └── a:10 + a:11 [as=r:12]
-
-build
-SELECT (SELECT ARRAY[count(*), t1.a, t2.a] FROM t1 GROUP BY t1.a, t2.a HAVING t2.a > 5) FROM t2
-----
-project
- ├── columns: array:10
- ├── scan t2
- │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null
- └── projections
-      └── subquery [as=array:10]
-           └── max1-row
-                ├── columns: array:9
-                └── project
-                     ├── columns: array:9
-                     ├── select
-                     │    ├── columns: t1.a:4 count_rows:7!null a:8!null
-                     │    ├── group-by
-                     │    │    ├── columns: t1.a:4 count_rows:7!null a:8
-                     │    │    ├── grouping columns: t1.a:4 a:8
-                     │    │    ├── project
-                     │    │    │    ├── columns: a:8 t1.a:4
-                     │    │    │    ├── scan t1
-                     │    │    │    │    └── columns: t1.a:4 t1.b:5 t1.rowid:6!null
-                     │    │    │    └── projections
-                     │    │    │         └── t2.a:1 [as=a:8]
-                     │    │    └── aggregations
-                     │    │         └── count-rows [as=count_rows:7]
-                     │    └── filters
-                     │         └── a:8 > 5
-                     └── projections
-                          └── ARRAY[count_rows:7, t1.a:4, a:8] [as=array:9]
-
-build
-SELECT (SELECT (SELECT max(t3.a) / min(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2) FROM t3
-----
-project
  ├── columns: r:17
- ├── scalar-group-by
- │    ├── columns: max:11 min:13
- │    ├── project
- │    │    ├── columns: a:10 a:12
- │    │    ├── scan t3
- │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
- │    │    └── projections
- │    │         ├── t3.a:1 [as=a:10]
- │    │         └── t3.a:1 [as=a:12]
- │    └── aggregations
- │         ├── max [as=max:11]
- │         │    └── a:10
- │         └── min [as=min:13]
- │              └── a:12
+ ├── scan t3
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  └── projections
       └── subquery [as=r:17]
            └── max1-row
@@ -1589,24 +1530,105 @@ project
                 └── project
                      ├── columns: r:16
                      ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      └── projections
                           └── subquery [as=r:16]
                                └── max1-row
-                                    ├── columns: r:15
+                                    ├── columns: r:15!null
                                     └── project
-                                         ├── columns: r:15
-                                         ├── group-by
-                                         │    ├── columns: a:14
-                                         │    ├── grouping columns: a:14
-                                         │    └── project
-                                         │         ├── columns: a:14
-                                         │         ├── scan t1
-                                         │         │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
-                                         │         └── projections
-                                         │              └── t2.a:4 [as=a:14]
+                                         ├── columns: r:15!null
+                                         ├── select
+                                         │    ├── columns: a:13!null a:14!null
+                                         │    ├── group-by
+                                         │    │    ├── columns: a:13 a:14
+                                         │    │    ├── grouping columns: a:13 a:14
+                                         │    │    └── project
+                                         │    │         ├── columns: a:13 a:14
+                                         │    │         ├── scan t1
+                                         │    │         │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
+                                         │    │         └── projections
+                                         │    │              ├── t2.a:5 [as=a:13]
+                                         │    │              └── t3.a:1 [as=a:14]
+                                         │    └── filters
+                                         │         └── a:13 > a:14
                                          └── projections
-                                              └── max:11 / min:13 [as=r:15]
+                                              └── a:13 + a:14 [as=r:15]
+
+build
+SELECT (SELECT ARRAY[count(*), t1.a, t2.a] FROM t1 GROUP BY t1.a, t2.a HAVING t2.a > 5) FROM t2
+----
+project
+ ├── columns: array:12
+ ├── scan t2
+ │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.mvcc_timestamp:4
+ └── projections
+      └── subquery [as=array:12]
+           └── max1-row
+                ├── columns: array:11
+                └── project
+                     ├── columns: array:11
+                     ├── select
+                     │    ├── columns: t1.a:5 count_rows:9!null a:10!null
+                     │    ├── group-by
+                     │    │    ├── columns: t1.a:5 count_rows:9!null a:10
+                     │    │    ├── grouping columns: t1.a:5 a:10
+                     │    │    ├── project
+                     │    │    │    ├── columns: a:10 t1.a:5
+                     │    │    │    ├── scan t1
+                     │    │    │    │    └── columns: t1.a:5 t1.b:6 t1.rowid:7!null t1.mvcc_timestamp:8
+                     │    │    │    └── projections
+                     │    │    │         └── t2.a:1 [as=a:10]
+                     │    │    └── aggregations
+                     │    │         └── count-rows [as=count_rows:9]
+                     │    └── filters
+                     │         └── a:10 > 5
+                     └── projections
+                          └── ARRAY[count_rows:9, t1.a:5, a:10] [as=array:11]
+
+build
+SELECT (SELECT (SELECT max(t3.a) / min(t3.a) AS r FROM t1 GROUP BY t2.a) FROM t2) FROM t3
+----
+project
+ ├── columns: r:20
+ ├── scalar-group-by
+ │    ├── columns: max:14 min:16
+ │    ├── project
+ │    │    ├── columns: a:13 a:15
+ │    │    ├── scan t3
+ │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
+ │    │    └── projections
+ │    │         ├── t3.a:1 [as=a:13]
+ │    │         └── t3.a:1 [as=a:15]
+ │    └── aggregations
+ │         ├── max [as=max:14]
+ │         │    └── a:13
+ │         └── min [as=min:16]
+ │              └── a:15
+ └── projections
+      └── subquery [as=r:20]
+           └── max1-row
+                ├── columns: r:19
+                └── project
+                     ├── columns: r:19
+                     ├── scan t2
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
+                     └── projections
+                          └── subquery [as=r:19]
+                               └── max1-row
+                                    ├── columns: r:18
+                                    └── project
+                                         ├── columns: r:18
+                                         ├── group-by
+                                         │    ├── columns: a:17
+                                         │    ├── grouping columns: a:17
+                                         │    └── project
+                                         │         ├── columns: a:17
+                                         │         ├── scan t1
+                                         │         │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
+                                         │         └── projections
+                                         │              └── t2.a:5 [as=a:17]
+                                         └── projections
+                                              └── max:14 / min:16 [as=r:18]
 
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
@@ -1619,36 +1641,38 @@ SELECT *
 FROM a
 WHERE 'bar'=(SELECT max(s) FROM a GROUP BY i ORDER BY i LIMIT 1)
 ----
-select
+project
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── scan a
- │    └── columns: k:1!null i:2 f:3 s:4 j:5
- └── filters
-      └── eq
-           ├── 'bar'
-           └── subquery
-                └── max1-row
-                     ├── columns: max:11
-                     └── project
-                          ├── columns: max:11
-                          └── limit
-                               ├── columns: i:7 max:11
-                               ├── internal-ordering: +7
-                               ├── sort
-                               │    ├── columns: i:7 max:11
-                               │    ├── ordering: +7
-                               │    ├── limit hint: 1.00
-                               │    └── group-by
-                               │         ├── columns: i:7 max:11
-                               │         ├── grouping columns: i:7
-                               │         ├── project
-                               │         │    ├── columns: i:7 s:9
-                               │         │    └── scan a
-                               │         │         └── columns: k:6!null i:7 f:8 s:9 j:10
-                               │         └── aggregations
-                               │              └── max [as=max:11]
-                               │                   └── s:9
-                               └── 1
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
+      ├── scan a
+      │    └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
+      └── filters
+           └── eq
+                ├── 'bar'
+                └── subquery
+                     └── max1-row
+                          ├── columns: max:13
+                          └── project
+                               ├── columns: max:13
+                               └── limit
+                                    ├── columns: i:8 max:13
+                                    ├── internal-ordering: +8
+                                    ├── sort
+                                    │    ├── columns: i:8 max:13
+                                    │    ├── ordering: +8
+                                    │    ├── limit hint: 1.00
+                                    │    └── group-by
+                                    │         ├── columns: i:8 max:13
+                                    │         ├── grouping columns: i:8
+                                    │         ├── project
+                                    │         │    ├── columns: i:8 s:10
+                                    │         │    └── scan a
+                                    │         │         └── columns: k:7!null i:8 f:9 s:10 j:11 mvcc_timestamp:12
+                                    │         └── aggregations
+                                    │              └── max [as=max:13]
+                                    │                   └── s:10
+                                    └── 1
 
 exec-ddl
 CREATE TABLE t (a string)
@@ -1664,45 +1688,45 @@ build
 SELECT max(a) FROM t HAVING max(a) < ANY(SELECT b FROM u)
 ----
 select
- ├── columns: max:3
+ ├── columns: max:4
  ├── scalar-group-by
- │    ├── columns: max:3
+ │    ├── columns: max:4
  │    ├── project
  │    │    ├── columns: a:1
  │    │    └── scan t
- │    │         └── columns: a:1 t.rowid:2!null
+ │    │         └── columns: a:1 t.rowid:2!null t.mvcc_timestamp:3
  │    └── aggregations
- │         └── max [as=max:3]
+ │         └── max [as=max:4]
  │              └── a:1
  └── filters
       └── any: lt
            ├── project
-           │    ├── columns: b:4
+           │    ├── columns: b:5
            │    └── scan u
-           │         └── columns: b:4 u.rowid:5!null
-           └── max:3
+           │         └── columns: b:5 u.rowid:6!null u.mvcc_timestamp:7
+           └── max:4
 
 build
 SELECT min(a) IN (SELECT b FROM u) FROM t
 ----
 project
- ├── columns: "?column?":6
+ ├── columns: "?column?":8
  ├── scalar-group-by
- │    ├── columns: min:3
+ │    ├── columns: min:4
  │    ├── project
  │    │    ├── columns: a:1
  │    │    └── scan t
- │    │         └── columns: a:1 t.rowid:2!null
+ │    │         └── columns: a:1 t.rowid:2!null t.mvcc_timestamp:3
  │    └── aggregations
- │         └── min [as=min:3]
+ │         └── min [as=min:4]
  │              └── a:1
  └── projections
-      └── any: eq [as="?column?":6]
+      └── any: eq [as="?column?":8]
            ├── project
-           │    ├── columns: b:4
+           │    ├── columns: b:5
            │    └── scan u
-           │         └── columns: b:4 u.rowid:5!null
-           └── min:3
+           │         └── columns: b:5 u.rowid:6!null u.mvcc_timestamp:7
+           └── min:4
 
 # Regression test for #28240. Make sure that the tuple labels are stripped from
 # the subquery.
@@ -1734,36 +1758,36 @@ build
 SELECT (SELECT (SELECT max(t3.a) FROM t1) FROM t2) FROM t3
 ----
 project
- ├── columns: max:14
+ ├── columns: max:17
  ├── scalar-group-by
- │    ├── columns: max:11
+ │    ├── columns: max:14
  │    ├── project
- │    │    ├── columns: a:10
+ │    │    ├── columns: a:13
  │    │    ├── scan t3
- │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
+ │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  │    │    └── projections
- │    │         └── t3.a:1 [as=a:10]
+ │    │         └── t3.a:1 [as=a:13]
  │    └── aggregations
- │         └── max [as=max:11]
- │              └── a:10
+ │         └── max [as=max:14]
+ │              └── a:13
  └── projections
-      └── subquery [as=max:14]
+      └── subquery [as=max:17]
            └── max1-row
-                ├── columns: max:13
+                ├── columns: max:16
                 └── project
-                     ├── columns: max:13
+                     ├── columns: max:16
                      ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      └── projections
-                          └── subquery [as=max:13]
+                          └── subquery [as=max:16]
                                └── max1-row
-                                    ├── columns: max:12
+                                    ├── columns: max:15
                                     └── project
-                                         ├── columns: max:12
+                                         ├── columns: max:15
                                          ├── scan t1
-                                         │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
+                                         │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
                                          └── projections
-                                              └── max:11 [as=max:12]
+                                              └── max:14 [as=max:15]
 
 build
 SELECT (
@@ -1773,47 +1797,47 @@ SELECT (
 FROM t3;
 ----
 project
- ├── columns: row:17
+ ├── columns: row:20
  ├── scan t3
- │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
+ │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  └── projections
-      └── subquery [as=row:17]
+      └── subquery [as=row:20]
            └── max1-row
-                ├── columns: row:16
+                ├── columns: row:19
                 └── project
-                     ├── columns: row:16
+                     ├── columns: row:19
                      ├── scalar-group-by
-                     │    ├── columns: max:12
+                     │    ├── columns: max:15
                      │    ├── project
-                     │    │    ├── columns: a:11
+                     │    │    ├── columns: a:14
                      │    │    ├── scan t2
-                     │    │    │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    │    │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      │    │    └── projections
-                     │    │         └── t2.a:4 [as=a:11]
+                     │    │         └── t2.a:5 [as=a:14]
                      │    └── aggregations
-                     │         └── max [as=max:12]
-                     │              └── a:11
+                     │         └── max [as=max:15]
+                     │              └── a:14
                      └── projections
-                          └── subquery [as=row:16]
+                          └── subquery [as=row:19]
                                └── max1-row
-                                    ├── columns: row:15
+                                    ├── columns: row:18
                                     └── project
-                                         ├── columns: row:15
+                                         ├── columns: row:18
                                          ├── scalar-group-by
-                                         │    ├── columns: max:10 max:14
+                                         │    ├── columns: max:13 max:17
                                          │    ├── project
-                                         │    │    ├── columns: column13:13 t1.a:7
+                                         │    │    ├── columns: column16:16 t1.a:9
                                          │    │    ├── scan t1
-                                         │    │    │    └── columns: t1.a:7 t1.b:8 t1.rowid:9!null
+                                         │    │    │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null t1.mvcc_timestamp:12
                                          │    │    └── projections
-                                         │    │         └── t1.a:7 + t3.a:1 [as=column13:13]
+                                         │    │         └── t1.a:9 + t3.a:1 [as=column16:16]
                                          │    └── aggregations
-                                         │         ├── max [as=max:10]
-                                         │         │    └── t1.a:7
-                                         │         └── max [as=max:14]
-                                         │              └── column13:13
+                                         │         ├── max [as=max:13]
+                                         │         │    └── t1.a:9
+                                         │         └── max [as=max:17]
+                                         │              └── column16:16
                                          └── projections
-                                              └── (max:10, max:12, max:14) [as=row:15]
+                                              └── (max:13, max:15, max:17) [as=row:18]
 
 build
 SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2;
@@ -1824,40 +1848,40 @@ build
 SELECT (SELECT row(max(t1.a), max(t2.a), max(t1.a + t2.a)) FROM t1) FROM t2 GROUP BY t2.a;
 ----
 project
- ├── columns: row:13
+ ├── columns: row:15
  ├── group-by
- │    ├── columns: t2.a:1 max:9
+ │    ├── columns: t2.a:1 max:11
  │    ├── grouping columns: t2.a:1
  │    ├── project
- │    │    ├── columns: a:8 t2.a:1
+ │    │    ├── columns: a:10 t2.a:1
  │    │    ├── scan t2
- │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.mvcc_timestamp:4
  │    │    └── projections
- │    │         └── t2.a:1 [as=a:8]
+ │    │         └── t2.a:1 [as=a:10]
  │    └── aggregations
- │         └── max [as=max:9]
- │              └── a:8
+ │         └── max [as=max:11]
+ │              └── a:10
  └── projections
-      └── subquery [as=row:13]
+      └── subquery [as=row:15]
            └── max1-row
-                ├── columns: row:12
+                ├── columns: row:14
                 └── project
-                     ├── columns: row:12
+                     ├── columns: row:14
                      ├── scalar-group-by
-                     │    ├── columns: max:7 max:11
+                     │    ├── columns: max:9 max:13
                      │    ├── project
-                     │    │    ├── columns: column10:10 t1.a:4
+                     │    │    ├── columns: column12:12 t1.a:5
                      │    │    ├── scan t1
-                     │    │    │    └── columns: t1.a:4 t1.b:5 t1.rowid:6!null
+                     │    │    │    └── columns: t1.a:5 t1.b:6 t1.rowid:7!null t1.mvcc_timestamp:8
                      │    │    └── projections
-                     │    │         └── t1.a:4 + t2.a:1 [as=column10:10]
+                     │    │         └── t1.a:5 + t2.a:1 [as=column12:12]
                      │    └── aggregations
-                     │         ├── max [as=max:7]
-                     │         │    └── t1.a:4
-                     │         └── max [as=max:11]
-                     │              └── column10:10
+                     │         ├── max [as=max:9]
+                     │         │    └── t1.a:5
+                     │         └── max [as=max:13]
+                     │              └── column12:12
                      └── projections
-                          └── (max:7, max:9, max:11) [as=row:12]
+                          └── (max:9, max:11, max:13) [as=row:14]
 
 build
 SELECT
@@ -1894,48 +1918,48 @@ FROM
     t2;
 ----
 project
- ├── columns: max:14 max:15
+ ├── columns: max:17 max:18
  ├── scalar-group-by
- │    ├── columns: max:12
+ │    ├── columns: max:15
  │    ├── project
- │    │    ├── columns: a:11
+ │    │    ├── columns: a:14
  │    │    ├── scan t2
- │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.mvcc_timestamp:4
  │    │    └── projections
- │    │         └── t2.a:1 [as=a:11]
+ │    │         └── t2.a:1 [as=a:14]
  │    └── aggregations
- │         └── max [as=max:12]
- │              └── a:11
+ │         └── max [as=max:15]
+ │              └── a:14
  └── projections
-      ├── subquery [as=max:14]
+      ├── subquery [as=max:17]
       │    └── max1-row
-      │         ├── columns: max:7
+      │         ├── columns: max:9
       │         └── project
-      │              ├── columns: max:7
+      │              ├── columns: max:9
       │              └── group-by
-      │                   ├── columns: t1.b:5 max:7
-      │                   ├── grouping columns: t1.b:5
+      │                   ├── columns: t1.b:6 max:9
+      │                   ├── grouping columns: t1.b:6
       │                   ├── project
-      │                   │    ├── columns: t1.a:4 t1.b:5
+      │                   │    ├── columns: t1.a:5 t1.b:6
       │                   │    └── scan t1
-      │                   │         └── columns: t1.a:4 t1.b:5 t1.rowid:6!null
+      │                   │         └── columns: t1.a:5 t1.b:6 t1.rowid:7!null t1.mvcc_timestamp:8
       │                   └── aggregations
-      │                        └── max [as=max:7]
-      │                             └── t1.a:4
-      └── subquery [as=max:15]
+      │                        └── max [as=max:9]
+      │                             └── t1.a:5
+      └── subquery [as=max:18]
            └── max1-row
-                ├── columns: max:13
+                ├── columns: max:16
                 └── project
-                     ├── columns: max:13
+                     ├── columns: max:16
                      ├── group-by
-                     │    ├── columns: t1.b:9
-                     │    ├── grouping columns: t1.b:9
+                     │    ├── columns: t1.b:11
+                     │    ├── grouping columns: t1.b:11
                      │    └── project
-                     │         ├── columns: t1.b:9
+                     │         ├── columns: t1.b:11
                      │         └── scan t1
-                     │              └── columns: t1.a:8 t1.b:9 t1.rowid:10!null
+                     │              └── columns: t1.a:10 t1.b:11 t1.rowid:12!null t1.mvcc_timestamp:13
                      └── projections
-                          └── max:12 [as=max:13]
+                          └── max:15 [as=max:16]
 
 build
 SELECT
@@ -1946,37 +1970,37 @@ FROM
 GROUP BY t2.b;
 ----
 project
- ├── columns: array:14 array:15
+ ├── columns: array:17 array:18
  ├── group-by
- │    ├── columns: t2.b:2 max:12
+ │    ├── columns: t2.b:2 max:15
  │    ├── grouping columns: t2.b:2
  │    ├── project
- │    │    ├── columns: a:11 t2.b:2
+ │    │    ├── columns: a:14 t2.b:2
  │    │    ├── scan t2
- │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.mvcc_timestamp:4
  │    │    └── projections
- │    │         └── t2.a:1 [as=a:11]
+ │    │         └── t2.a:1 [as=a:14]
  │    └── aggregations
- │         └── max [as=max:12]
- │              └── a:11
+ │         └── max [as=max:15]
+ │              └── a:14
  └── projections
-      ├── array-flatten [as=array:14]
+      ├── array-flatten [as=array:17]
       │    └── scalar-group-by
-      │         ├── columns: max:7
+      │         ├── columns: max:9
       │         ├── project
-      │         │    ├── columns: t1.a:4
+      │         │    ├── columns: t1.a:5
       │         │    └── scan t1
-      │         │         └── columns: t1.a:4 t1.b:5 t1.rowid:6!null
+      │         │         └── columns: t1.a:5 t1.b:6 t1.rowid:7!null t1.mvcc_timestamp:8
       │         └── aggregations
-      │              └── max [as=max:7]
-      │                   └── t1.a:4
-      └── array-flatten [as=array:15]
+      │              └── max [as=max:9]
+      │                   └── t1.a:5
+      └── array-flatten [as=array:18]
            └── project
-                ├── columns: max:13
+                ├── columns: max:16
                 ├── scan t1
-                │    └── columns: t1.a:8 t1.b:9 t1.rowid:10!null
+                │    └── columns: t1.a:10 t1.b:11 t1.rowid:12!null t1.mvcc_timestamp:13
                 └── projections
-                     └── max:12 [as=max:13]
+                     └── max:15 [as=max:16]
 
 build
 SELECT
@@ -1988,65 +2012,65 @@ FROM
 GROUP BY t2.a, t2.b;
 ----
 project
- ├── columns: array:22 array:23 array:24
+ ├── columns: array:26 array:27 array:28
  ├── group-by
- │    ├── columns: t2.a:1 t2.b:2 max:13
+ │    ├── columns: t2.a:1 t2.b:2 max:16
  │    ├── grouping columns: t2.a:1 t2.b:2
  │    ├── project
- │    │    ├── columns: a:12 t2.a:1 t2.b:2
+ │    │    ├── columns: a:15 t2.a:1 t2.b:2
  │    │    ├── scan t2
- │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null
+ │    │    │    └── columns: t2.a:1 t2.b:2 t2.rowid:3!null t2.mvcc_timestamp:4
  │    │    └── projections
- │    │         └── t2.a:1 [as=a:12]
+ │    │         └── t2.a:1 [as=a:15]
  │    └── aggregations
- │         └── max [as=max:13]
- │              └── a:12
+ │         └── max [as=max:16]
+ │              └── a:15
  └── projections
-      ├── array-flatten [as=array:22]
+      ├── array-flatten [as=array:26]
       │    └── project
-      │         ├── columns: max:7
+      │         ├── columns: max:9
       │         └── group-by
-      │              ├── columns: max:7 b:8
-      │              ├── grouping columns: b:8
+      │              ├── columns: max:9 b:10
+      │              ├── grouping columns: b:10
       │              ├── project
-      │              │    ├── columns: b:8 t1.a:4
+      │              │    ├── columns: b:10 t1.a:5
       │              │    ├── scan t1
-      │              │    │    └── columns: t1.a:4 t1.b:5 t1.rowid:6!null
+      │              │    │    └── columns: t1.a:5 t1.b:6 t1.rowid:7!null t1.mvcc_timestamp:8
       │              │    └── projections
-      │              │         └── t2.b:2 [as=b:8]
+      │              │         └── t2.b:2 [as=b:10]
       │              └── aggregations
-      │                   └── max [as=max:7]
-      │                        └── t1.a:4
-      ├── array-flatten [as=array:23]
+      │                   └── max [as=max:9]
+      │                        └── t1.a:5
+      ├── array-flatten [as=array:27]
       │    └── project
-      │         ├── columns: max:15
+      │         ├── columns: max:18
       │         ├── group-by
-      │         │    ├── columns: b:14
-      │         │    ├── grouping columns: b:14
+      │         │    ├── columns: b:17
+      │         │    ├── grouping columns: b:17
       │         │    └── project
-      │         │         ├── columns: b:14
+      │         │         ├── columns: b:17
       │         │         ├── scan t1
-      │         │         │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null
+      │         │         │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.mvcc_timestamp:14
       │         │         └── projections
-      │         │              └── t2.b:2 [as=b:14]
+      │         │              └── t2.b:2 [as=b:17]
       │         └── projections
-      │              └── max:13 [as=max:15]
-      └── array-flatten [as=array:24]
+      │              └── max:16 [as=max:18]
+      └── array-flatten [as=array:28]
            └── project
-                ├── columns: max:20
+                ├── columns: max:24
                 └── group-by
-                     ├── columns: max:20 b:21
-                     ├── grouping columns: b:21
+                     ├── columns: max:24 b:25
+                     ├── grouping columns: b:25
                      ├── project
-                     │    ├── columns: column19:19 b:21
+                     │    ├── columns: column23:23 b:25
                      │    ├── scan t1
-                     │    │    └── columns: t1.a:16 t1.b:17 t1.rowid:18!null
+                     │    │    └── columns: t1.a:19 t1.b:20 t1.rowid:21!null t1.mvcc_timestamp:22
                      │    └── projections
-                     │         ├── t1.a:16 + t2.a:1 [as=column19:19]
-                     │         └── t2.b:2 [as=b:21]
+                     │         ├── t1.a:19 + t2.a:1 [as=column23:23]
+                     │         └── t2.b:2 [as=b:25]
                      └── aggregations
-                          └── max [as=max:20]
-                               └── column19:19
+                          └── max [as=max:24]
+                               └── column23:23
 
 build
 SELECT
@@ -2068,57 +2092,57 @@ FROM
     t3;
 ----
 project
- ├── columns: "?column?":21
+ ├── columns: "?column?":25
  ├── scalar-group-by
- │    ├── columns: max:8 max:18
+ │    ├── columns: max:10 max:22
  │    ├── project
- │    │    ├── columns: a:7 column17:17
+ │    │    ├── columns: a:9 column21:21
  │    │    ├── scan t3
- │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null
+ │    │    │    └── columns: t3.a:1 t3.b:2 t3.rowid:3!null t3.mvcc_timestamp:4
  │    │    └── projections
- │    │         ├── t3.a:1 [as=a:7]
- │    │         └── subquery [as=column17:17]
+ │    │         ├── t3.a:1 [as=a:9]
+ │    │         └── subquery [as=column21:21]
  │    │              └── max1-row
- │    │                   ├── columns: max:15
+ │    │                   ├── columns: max:19
  │    │                   └── project
- │    │                        ├── columns: max:15
+ │    │                        ├── columns: max:19
  │    │                        └── group-by
- │    │                             ├── columns: max:15 b:16
- │    │                             ├── grouping columns: b:16
+ │    │                             ├── columns: max:19 b:20
+ │    │                             ├── grouping columns: b:20
  │    │                             ├── project
- │    │                             │    ├── columns: b:16 t1.a:12
+ │    │                             │    ├── columns: b:20 t1.a:15
  │    │                             │    ├── scan t1
- │    │                             │    │    └── columns: t1.a:12 t1.b:13 t1.rowid:14!null
+ │    │                             │    │    └── columns: t1.a:15 t1.b:16 t1.rowid:17!null t1.mvcc_timestamp:18
  │    │                             │    └── projections
- │    │                             │         └── t3.b:2 [as=b:16]
+ │    │                             │         └── t3.b:2 [as=b:20]
  │    │                             └── aggregations
- │    │                                  └── max [as=max:15]
- │    │                                       └── t1.a:12
+ │    │                                  └── max [as=max:19]
+ │    │                                       └── t1.a:15
  │    └── aggregations
- │         ├── max [as=max:8]
- │         │    └── a:7
- │         └── max [as=max:18]
- │              └── column17:17
+ │         ├── max [as=max:10]
+ │         │    └── a:9
+ │         └── max [as=max:22]
+ │              └── column21:21
  └── projections
-      └── subquery [as="?column?":21]
+      └── subquery [as="?column?":25]
            └── max1-row
-                ├── columns: "?column?":20
+                ├── columns: "?column?":24
                 └── project
-                     ├── columns: "?column?":20
+                     ├── columns: "?column?":24
                      ├── scan t2
-                     │    └── columns: t2.a:4 t2.b:5 t2.rowid:6!null
+                     │    └── columns: t2.a:5 t2.b:6 t2.rowid:7!null t2.mvcc_timestamp:8
                      └── projections
-                          └── tuple [as="?column?":20]
+                          └── tuple [as="?column?":24]
                                ├── not
                                │    └── any: ge
                                │         ├── project
-                               │         │    ├── columns: max:19
+                               │         │    ├── columns: max:23
                                │         │    ├── scan t1
-                               │         │    │    └── columns: t1.a:9 t1.b:10 t1.rowid:11!null
+                               │         │    │    └── columns: t1.a:11 t1.b:12 t1.rowid:13!null t1.mvcc_timestamp:14
                                │         │    └── projections
-                               │         │         └── max:18 [as=max:19]
-                               │         └── t2.a:4
-                               └── max:8
+                               │         │         └── max:22 [as=max:23]
+                               │         └── t2.a:5
+                               └── max:10
 
 exec-ddl
 CREATE TABLE v (x INT)
@@ -2135,20 +2159,20 @@ SELECT * FROM w WHERE y = ARRAY(SELECT x FROM v ORDER BY x)
 project
  ├── columns: y:1!null
  └── select
-      ├── columns: y:1!null w.rowid:2!null
+      ├── columns: y:1!null w.rowid:2!null w.mvcc_timestamp:3
       ├── scan w
-      │    └── columns: y:1 w.rowid:2!null
+      │    └── columns: y:1 w.rowid:2!null w.mvcc_timestamp:3
       └── filters
            └── eq
                 ├── y:1
                 └── array-flatten
                      └── sort
-                          ├── columns: x:3
-                          ├── ordering: +3
+                          ├── columns: x:4
+                          ├── ordering: +4
                           └── project
-                               ├── columns: x:3
+                               ├── columns: x:4
                                └── scan v
-                                    └── columns: x:3 v.rowid:4!null
+                                    └── columns: x:4 v.rowid:5!null v.mvcc_timestamp:6
 
 # Regression test for #30424. Aggregate function in the WHERE subquery
 # is aggregated in the outer scope, so it's not allowed.
@@ -2168,26 +2192,26 @@ group-by
  └── project
       ├── columns: s:4
       └── select
-           ├── columns: k:1!null i:2 f:3 s:4 j:5
+           ├── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
            ├── scan a
-           │    └── columns: k:1!null i:2 f:3 s:4 j:5
+           │    └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
            └── filters
                 └── subquery
                      └── max1-row
-                          ├── columns: "?column?":12!null
+                          ├── columns: "?column?":14!null
                           └── project
-                               ├── columns: "?column?":12!null
+                               ├── columns: "?column?":14!null
                                ├── scalar-group-by
-                               │    ├── columns: count:11!null
+                               │    ├── columns: count:13!null
                                │    ├── project
-                               │    │    ├── columns: i:7
+                               │    │    ├── columns: i:8
                                │    │    └── scan a
-                               │    │         └── columns: k:6!null i:7 f:8 s:9 j:10
+                               │    │         └── columns: k:7!null i:8 f:9 s:10 j:11 mvcc_timestamp:12
                                │    └── aggregations
-                               │         └── count [as=count:11]
-                               │              └── i:7
+                               │         └── count [as=count:13]
+                               │              └── i:8
                                └── projections
-                                    └── count:11 >= 100 [as="?column?":12]
+                                    └── count:13 >= 100 [as="?column?":14]
 
 exec-ddl
 CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z));

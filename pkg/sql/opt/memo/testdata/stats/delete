@@ -39,46 +39,46 @@ FROM [DELETE FROM xyz WHERE z=5.5 RETURNING *]
 WHERE x > 'foo'
 ----
 with &1
- ├── columns: x:7(string!null) y:8(int!null) z:9(float!null)
+ ├── columns: x:9(string!null) y:10(int!null) z:11(float!null)
  ├── volatile, mutations
- ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
- ├── key: (7)
- ├── fd: ()-->(9), (7)-->(8)
+ ├── stats: [rows=3.33333333, distinct(9)=3.33333333, null(9)=0]
+ ├── key: (9)
+ ├── fd: ()-->(11), (9)-->(10)
  ├── delete xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
- │    ├── fetch columns: xyz.x:4(string) xyz.y:5(int) xyz.z:6(float)
+ │    ├── fetch columns: xyz.x:5(string) xyz.y:6(int) xyz.z:7(float)
  │    ├── volatile, mutations
  │    ├── stats: [rows=10]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2)
  │    └── select
- │         ├── columns: xyz.x:4(string!null) xyz.y:5(int!null) xyz.z:6(float!null)
- │         ├── stats: [rows=10, distinct(6)=1, null(6)=0]
- │         ├── key: (4)
- │         ├── fd: ()-->(6), (4)-->(5)
+ │         ├── columns: xyz.x:5(string!null) xyz.y:6(int!null) xyz.z:7(float!null) mvcc_timestamp:8(decimal)
+ │         ├── stats: [rows=10, distinct(7)=1, null(7)=0]
+ │         ├── key: (5)
+ │         ├── fd: ()-->(7), (5)-->(6,8)
  │         ├── scan xyz
- │         │    ├── columns: xyz.x:4(string!null) xyz.y:5(int!null) xyz.z:6(float)
- │         │    ├── stats: [rows=1000, distinct(4)=1000, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=10]
- │         │    ├── key: (4)
- │         │    └── fd: (4)-->(5,6)
+ │         │    ├── columns: xyz.x:5(string!null) xyz.y:6(int!null) xyz.z:7(float) mvcc_timestamp:8(decimal)
+ │         │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=100, null(7)=10]
+ │         │    ├── key: (5)
+ │         │    └── fd: (5)-->(6-8)
  │         └── filters
- │              └── xyz.z:6 = 5.5 [type=bool, outer=(6), constraints=(/6: [/5.5 - /5.5]; tight), fd=()-->(6)]
+ │              └── xyz.z:7 = 5.5 [type=bool, outer=(7), constraints=(/7: [/5.5 - /5.5]; tight), fd=()-->(7)]
  └── select
-      ├── columns: x:7(string!null) y:8(int!null) z:9(float!null)
-      ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
-      ├── key: (7)
-      ├── fd: ()-->(9), (7)-->(8)
+      ├── columns: x:9(string!null) y:10(int!null) z:11(float!null)
+      ├── stats: [rows=3.33333333, distinct(9)=3.33333333, null(9)=0]
+      ├── key: (9)
+      ├── fd: ()-->(11), (9)-->(10)
       ├── with-scan &1
-      │    ├── columns: x:7(string!null) y:8(int!null) z:9(float!null)
+      │    ├── columns: x:9(string!null) y:10(int!null) z:11(float!null)
       │    ├── mapping:
-      │    │    ├──  xyz.x:1(string) => x:7(string)
-      │    │    ├──  xyz.y:2(int) => y:8(int)
-      │    │    └──  xyz.z:3(float) => z:9(float)
-      │    ├── stats: [rows=10, distinct(7)=10, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0]
-      │    ├── key: (7)
-      │    └── fd: ()-->(9), (7)-->(8)
+      │    │    ├──  xyz.x:1(string) => x:9(string)
+      │    │    ├──  xyz.y:2(int) => y:10(int)
+      │    │    └──  xyz.z:3(float) => z:11(float)
+      │    ├── stats: [rows=10, distinct(9)=10, null(9)=0, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0]
+      │    ├── key: (9)
+      │    └── fd: ()-->(11), (9)-->(10)
       └── filters
-           └── x:7 > 'foo' [type=bool, outer=(7), constraints=(/7: [/e'foo\x00' - ]; tight)]
+           └── x:9 > 'foo' [type=bool, outer=(9), constraints=(/9: [/e'foo\x00' - ]; tight)]
 
 # Cardinality is zero.
 build
@@ -86,22 +86,22 @@ DELETE FROM xyz WHERE False RETURNING *
 ----
 delete xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
- ├── fetch columns: x:4(string) y:5(int) z:6(float)
+ ├── fetch columns: x:5(string) y:6(int) z:7(float)
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  └── select
-      ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+      ├── columns: x:5(string!null) y:6(int!null) z:7(float) mvcc_timestamp:8(decimal)
       ├── cardinality: [0 - 0]
       ├── stats: [rows=0]
-      ├── key: (4)
-      ├── fd: (4)-->(5,6)
+      ├── key: (5)
+      ├── fd: (5)-->(6-8)
       ├── scan xyz
-      │    ├── columns: x:4(string!null) y:5(int!null) z:6(float)
+      │    ├── columns: x:5(string!null) y:6(int!null) z:7(float) mvcc_timestamp:8(decimal)
       │    ├── stats: [rows=1000]
-      │    ├── key: (4)
-      │    └── fd: (4)-->(5,6)
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6-8)
       └── filters
            └── false [type=bool]

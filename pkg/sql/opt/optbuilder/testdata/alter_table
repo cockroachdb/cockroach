@@ -61,12 +61,12 @@ build
 ALTER INDEX abc@bc SPLIT AT SELECT b FROM abc ORDER BY a
 ----
 alter-table-split abc@bc
- ├── columns: key:4 pretty:5 split_enforced_until:6
+ ├── columns: key:5 pretty:6 split_enforced_until:7
  ├── project
  │    ├── columns: b:2  [hidden: a:1!null]
  │    ├── ordering: +1
  │    └── scan abc
- │         ├── columns: a:1!null b:2 c:3
+ │         ├── columns: a:1!null b:2 c:3 mvcc_timestamp:4
  │         └── ordering: +1
  └── CAST(NULL AS STRING)
 
@@ -77,7 +77,7 @@ ALTER TABLE abc UNSPLIT AT VALUES (1), (2)
 alter-table-unsplit abc
  ├── columns: key:1 pretty:2
  └── values
-      ├── columns: column1:6!null
+      ├── columns: column1:7!null
       ├── (1,)
       └── (2,)
 
@@ -104,7 +104,7 @@ ALTER INDEX abc@bc UNSPLIT AT VALUES (1, 'foo'), (2, 'bar')
 alter-table-unsplit abc@bc
  ├── columns: key:1 pretty:2
  └── values
-      ├── columns: column1:6!null column2:7!null
+      ├── columns: column1:7!null column2:8!null
       ├── (1, 'foo')
       └── (2, 'bar')
 
@@ -119,11 +119,11 @@ ALTER INDEX abc@bc UNSPLIT AT SELECT b FROM abc ORDER BY a
 alter-table-unsplit abc@bc
  ├── columns: key:1 pretty:2
  └── project
-      ├── columns: b:7  [hidden: a:6!null]
-      ├── ordering: +6
+      ├── columns: b:8  [hidden: a:7!null]
+      ├── ordering: +7
       └── scan abc
-           ├── columns: a:6!null b:7 c:8
-           └── ordering: +6
+           ├── columns: a:7!null b:8 c:9 mvcc_timestamp:10
+           └── ordering: +7
 
 # Tests for ALTER TABLE EXPERIMENTAL_RELOCATE.
 build

@@ -5,14 +5,19 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 build
 SELECT * FROM xy WITH ORDINALITY
 ----
-ordinality
- ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+project
+ ├── columns: x:1(int!null) y:2(int) ordinality:4(int!null)
  ├── key: (1)
- ├── fd: (1)-->(2,3), (3)-->(1,2)
- ├── prune: (1,2)
- └── scan xy
-      ├── columns: x:1(int!null) y:2(int)
+ ├── fd: (1)-->(2,4), (4)-->(1,2)
+ ├── prune: (1,2,4)
+ └── ordinality
+      ├── columns: x:1(int!null) y:2(int) mvcc_timestamp:3(decimal) ordinality:4(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2)
-      ├── prune: (1,2)
-      └── interesting orderings: (+1)
+      ├── fd: (1)-->(2-4), (4)-->(1-3)
+      ├── prune: (1-3)
+      └── scan xy
+           ├── columns: x:1(int!null) y:2(int) mvcc_timestamp:3(decimal)
+           ├── key: (1)
+           ├── fd: (1)-->(2,3)
+           ├── prune: (1-3)
+           └── interesting orderings: (+1)

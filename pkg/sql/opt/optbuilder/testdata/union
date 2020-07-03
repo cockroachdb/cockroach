@@ -302,49 +302,49 @@ build
 SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
 ----
 union
- ├── columns: v:7
+ ├── columns: v:9
  ├── left columns: uniontest.v:2
- ├── right columns: uniontest.v:5
+ ├── right columns: uniontest.v:6
  ├── project
  │    ├── columns: uniontest.v:2
  │    └── select
- │         ├── columns: k:1!null uniontest.v:2 rowid:3!null
+ │         ├── columns: k:1!null uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: k:1 uniontest.v:2 rowid:3!null
+ │         │    └── columns: k:1 uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         └── filters
  │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5
+      ├── columns: uniontest.v:6
       └── select
-           ├── columns: k:4!null uniontest.v:5 rowid:6!null
+           ├── columns: k:5!null uniontest.v:6 rowid:7!null mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: k:4 uniontest.v:5 rowid:6!null
+           │    └── columns: k:5 uniontest.v:6 rowid:7!null mvcc_timestamp:8
            └── filters
-                └── k:4 = 2
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
 ----
 union-all
- ├── columns: v:7
+ ├── columns: v:9
  ├── left columns: uniontest.v:2
- ├── right columns: uniontest.v:5
+ ├── right columns: uniontest.v:6
  ├── project
  │    ├── columns: uniontest.v:2
  │    └── select
- │         ├── columns: k:1!null uniontest.v:2 rowid:3!null
+ │         ├── columns: k:1!null uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: k:1 uniontest.v:2 rowid:3!null
+ │         │    └── columns: k:1 uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         └── filters
  │              └── k:1 = 1
  └── project
-      ├── columns: uniontest.v:5
+      ├── columns: uniontest.v:6
       └── select
-           ├── columns: k:4!null uniontest.v:5 rowid:6!null
+           ├── columns: k:5!null uniontest.v:6 rowid:7!null mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: k:4 uniontest.v:5 rowid:6!null
+           │    └── columns: k:5 uniontest.v:6 rowid:7!null mvcc_timestamp:8
            └── filters
-                └── k:4 = 2
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
@@ -352,23 +352,23 @@ SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 
 intersect
  ├── columns: v:2
  ├── left columns: v:2
- ├── right columns: v:5
+ ├── right columns: v:6
  ├── project
  │    ├── columns: v:2
  │    └── select
- │         ├── columns: k:1!null v:2 rowid:3!null
+ │         ├── columns: k:1!null v:2 rowid:3!null mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: k:1 v:2 rowid:3!null
+ │         │    └── columns: k:1 v:2 rowid:3!null mvcc_timestamp:4
  │         └── filters
  │              └── k:1 = 1
  └── project
-      ├── columns: v:5
+      ├── columns: v:6
       └── select
-           ├── columns: k:4!null v:5 rowid:6!null
+           ├── columns: k:5!null v:6 rowid:7!null mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: k:4 v:5 rowid:6!null
+           │    └── columns: k:5 v:6 rowid:7!null mvcc_timestamp:8
            └── filters
-                └── k:4 = 2
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
@@ -376,23 +376,23 @@ SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE 
 intersect-all
  ├── columns: v:2
  ├── left columns: v:2
- ├── right columns: v:5
+ ├── right columns: v:6
  ├── project
  │    ├── columns: v:2
  │    └── select
- │         ├── columns: k:1!null v:2 rowid:3!null
+ │         ├── columns: k:1!null v:2 rowid:3!null mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: k:1 v:2 rowid:3!null
+ │         │    └── columns: k:1 v:2 rowid:3!null mvcc_timestamp:4
  │         └── filters
  │              └── k:1 = 1
  └── project
-      ├── columns: v:5
+      ├── columns: v:6
       └── select
-           ├── columns: k:4!null v:5 rowid:6!null
+           ├── columns: k:5!null v:6 rowid:7!null mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: k:4 v:5 rowid:6!null
+           │    └── columns: k:5 v:6 rowid:7!null mvcc_timestamp:8
            └── filters
-                └── k:4 = 2
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
@@ -400,23 +400,23 @@ SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
 except
  ├── columns: v:2
  ├── left columns: v:2
- ├── right columns: v:5
+ ├── right columns: v:6
  ├── project
  │    ├── columns: v:2
  │    └── select
- │         ├── columns: k:1!null v:2 rowid:3!null
+ │         ├── columns: k:1!null v:2 rowid:3!null mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: k:1 v:2 rowid:3!null
+ │         │    └── columns: k:1 v:2 rowid:3!null mvcc_timestamp:4
  │         └── filters
  │              └── k:1 = 1
  └── project
-      ├── columns: v:5
+      ├── columns: v:6
       └── select
-           ├── columns: k:4!null v:5 rowid:6!null
+           ├── columns: k:5!null v:6 rowid:7!null mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: k:4 v:5 rowid:6!null
+           │    └── columns: k:5 v:6 rowid:7!null mvcc_timestamp:8
            └── filters
-                └── k:4 = 2
+                └── k:5 = 2
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
@@ -424,55 +424,55 @@ SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k =
 except-all
  ├── columns: v:2
  ├── left columns: v:2
- ├── right columns: v:5
+ ├── right columns: v:6
  ├── project
  │    ├── columns: v:2
  │    └── select
- │         ├── columns: k:1!null v:2 rowid:3!null
+ │         ├── columns: k:1!null v:2 rowid:3!null mvcc_timestamp:4
  │         ├── scan uniontest
- │         │    └── columns: k:1 v:2 rowid:3!null
+ │         │    └── columns: k:1 v:2 rowid:3!null mvcc_timestamp:4
  │         └── filters
  │              └── k:1 = 1
  └── project
-      ├── columns: v:5
+      ├── columns: v:6
       └── select
-           ├── columns: k:4!null v:5 rowid:6!null
+           ├── columns: k:5!null v:6 rowid:7!null mvcc_timestamp:8
            ├── scan uniontest
-           │    └── columns: k:4 v:5 rowid:6!null
+           │    └── columns: k:5 v:6 rowid:7!null mvcc_timestamp:8
            └── filters
-                └── k:4 = 2
+                └── k:5 = 2
 
 build
 (SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: v:7
- ├── internal-ordering: -7
- ├── ordering: -7
+ ├── columns: v:9
+ ├── internal-ordering: -9
+ ├── ordering: -9
  ├── sort
- │    ├── columns: v:7
- │    ├── ordering: -7
+ │    ├── columns: v:9
+ │    ├── ordering: -9
  │    ├── limit hint: 2.00
  │    └── union-all
- │         ├── columns: v:7
+ │         ├── columns: v:9
  │         ├── left columns: uniontest.v:2
- │         ├── right columns: uniontest.v:5
+ │         ├── right columns: uniontest.v:6
  │         ├── project
  │         │    ├── columns: uniontest.v:2
  │         │    └── select
- │         │         ├── columns: k:1!null uniontest.v:2 rowid:3!null
+ │         │         ├── columns: k:1!null uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         │         ├── scan uniontest
- │         │         │    └── columns: k:1 uniontest.v:2 rowid:3!null
+ │         │         │    └── columns: k:1 uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         │         └── filters
  │         │              └── k:1 = 1
  │         └── project
- │              ├── columns: uniontest.v:5
+ │              ├── columns: uniontest.v:6
  │              └── select
- │                   ├── columns: k:4!null uniontest.v:5 rowid:6!null
+ │                   ├── columns: k:5!null uniontest.v:6 rowid:7!null mvcc_timestamp:8
  │                   ├── scan uniontest
- │                   │    └── columns: k:4 uniontest.v:5 rowid:6!null
+ │                   │    └── columns: k:5 uniontest.v:6 rowid:7!null mvcc_timestamp:8
  │                   └── filters
- │                        └── k:4 = 2
+ │                        └── k:5 = 2
  └── 2
 
 # The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
@@ -480,66 +480,66 @@ build
 SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
 ----
 limit
- ├── columns: v:7
- ├── internal-ordering: -7
- ├── ordering: -7
+ ├── columns: v:9
+ ├── internal-ordering: -9
+ ├── ordering: -9
  ├── sort
- │    ├── columns: v:7
- │    ├── ordering: -7
+ │    ├── columns: v:9
+ │    ├── ordering: -9
  │    ├── limit hint: 2.00
  │    └── union-all
- │         ├── columns: v:7
+ │         ├── columns: v:9
  │         ├── left columns: uniontest.v:2
- │         ├── right columns: uniontest.v:5
+ │         ├── right columns: uniontest.v:6
  │         ├── project
  │         │    ├── columns: uniontest.v:2
  │         │    └── select
- │         │         ├── columns: k:1!null uniontest.v:2 rowid:3!null
+ │         │         ├── columns: k:1!null uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         │         ├── scan uniontest
- │         │         │    └── columns: k:1 uniontest.v:2 rowid:3!null
+ │         │         │    └── columns: k:1 uniontest.v:2 rowid:3!null mvcc_timestamp:4
  │         │         └── filters
  │         │              └── k:1 = 1
  │         └── project
- │              ├── columns: uniontest.v:5
+ │              ├── columns: uniontest.v:6
  │              └── select
- │                   ├── columns: k:4!null uniontest.v:5 rowid:6!null
+ │                   ├── columns: k:5!null uniontest.v:6 rowid:7!null mvcc_timestamp:8
  │                   ├── scan uniontest
- │                   │    └── columns: k:4 uniontest.v:5 rowid:6!null
+ │                   │    └── columns: k:5 uniontest.v:6 rowid:7!null mvcc_timestamp:8
  │                   └── filters
- │                        └── k:4 = 2
+ │                        └── k:5 = 2
  └── 2
 
 build
 SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 union
- ├── columns: v:7
+ ├── columns: v:9
  ├── left columns: uniontest.v:2
- ├── right columns: k:4
+ ├── right columns: k:5
  ├── project
  │    ├── columns: uniontest.v:2
  │    └── scan uniontest
- │         └── columns: k:1 uniontest.v:2 rowid:3!null
+ │         └── columns: k:1 uniontest.v:2 rowid:3!null mvcc_timestamp:4
  └── project
-      ├── columns: k:4
+      ├── columns: k:5
       └── scan uniontest
-           └── columns: k:4 uniontest.v:5 rowid:6!null
+           └── columns: k:5 uniontest.v:6 rowid:7!null mvcc_timestamp:8
 
 build
 SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 union-all
- ├── columns: v:7
+ ├── columns: v:9
  ├── left columns: uniontest.v:2
- ├── right columns: k:4
+ ├── right columns: k:5
  ├── project
  │    ├── columns: uniontest.v:2
  │    └── scan uniontest
- │         └── columns: k:1 uniontest.v:2 rowid:3!null
+ │         └── columns: k:1 uniontest.v:2 rowid:3!null mvcc_timestamp:4
  └── project
-      ├── columns: k:4
+      ├── columns: k:5
       └── scan uniontest
-           └── columns: k:4 uniontest.v:5 rowid:6!null
+           └── columns: k:5 uniontest.v:6 rowid:7!null mvcc_timestamp:8
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
@@ -694,55 +694,55 @@ build
 (SELECT x, x, y FROM xy) UNION (SELECT a, b, c FROM abc)
 ----
 union
- ├── columns: x:8 x:9!null y:10!null
+ ├── columns: x:10 x:11!null y:12!null
  ├── left columns: xy.x:1 xy.x:1 xy.y:2
- ├── right columns: a:4 b:5 c:6
+ ├── right columns: a:5 b:6 c:7
  ├── project
  │    ├── columns: xy.x:1!null xy.y:2!null
  │    └── scan xy
- │         └── columns: xy.x:1!null xy.y:2!null xy.rowid:3!null
+ │         └── columns: xy.x:1!null xy.y:2!null xy.rowid:3!null xy.mvcc_timestamp:4
  └── project
-      ├── columns: a:4 b:5!null c:6!null
+      ├── columns: a:5 b:6!null c:7!null
       └── scan abc
-           └── columns: a:4 b:5!null c:6!null abc.rowid:7!null
+           └── columns: a:5 b:6!null c:7!null abc.rowid:8!null abc.mvcc_timestamp:9
 
 build
 (SELECT a FROM abc ORDER BY b) UNION ALL (SELECT b FROM abc) ORDER BY a
 ----
 sort
- ├── columns: a:9
- ├── ordering: +9
+ ├── columns: a:11
+ ├── ordering: +11
  └── union-all
-      ├── columns: a:9
+      ├── columns: a:11
       ├── left columns: abc.a:1
-      ├── right columns: b:6
+      ├── right columns: b:7
       ├── project
       │    ├── columns: abc.a:1 b:2!null
       │    └── scan abc
-      │         └── columns: abc.a:1 b:2!null c:3!null rowid:4!null
+      │         └── columns: abc.a:1 b:2!null c:3!null rowid:4!null mvcc_timestamp:5
       └── project
-           ├── columns: b:6!null
+           ├── columns: b:7!null
            └── scan abc
-                └── columns: abc.a:5 b:6!null c:7!null rowid:8!null
+                └── columns: abc.a:6 b:7!null c:8!null rowid:9!null mvcc_timestamp:10
 
 build
 (SELECT a FROM abc ORDER BY b) UNION ALL (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
 sort
- ├── columns: a:9
- ├── ordering: +9
+ ├── columns: a:11
+ ├── ordering: +11
  └── union-all
-      ├── columns: a:9
+      ├── columns: a:11
       ├── left columns: abc.a:1
-      ├── right columns: abc.a:5
+      ├── right columns: abc.a:6
       ├── project
       │    ├── columns: abc.a:1 b:2!null
       │    └── scan abc
-      │         └── columns: abc.a:1 b:2!null c:3!null rowid:4!null
+      │         └── columns: abc.a:1 b:2!null c:3!null rowid:4!null mvcc_timestamp:5
       └── project
-           ├── columns: abc.a:5 c:7!null
+           ├── columns: abc.a:6 c:8!null
            └── scan abc
-                └── columns: abc.a:5 b:6!null c:7!null rowid:8!null
+                └── columns: abc.a:6 b:7!null c:8!null rowid:9!null mvcc_timestamp:10
 
 build
 (SELECT a FROM abc ORDER BY b) EXCEPT (SELECT b FROM abc ORDER BY c, b, a)
@@ -750,15 +750,15 @@ build
 except
  ├── columns: a:1
  ├── left columns: a:1
- ├── right columns: b:6
+ ├── right columns: b:7
  ├── project
  │    ├── columns: a:1 b:2!null
  │    └── scan abc
- │         └── columns: a:1 b:2!null c:3!null rowid:4!null
+ │         └── columns: a:1 b:2!null c:3!null rowid:4!null mvcc_timestamp:5
  └── project
-      ├── columns: a:5 b:6!null c:7!null
+      ├── columns: a:6 b:7!null c:8!null
       └── scan abc
-           └── columns: a:5 b:6!null c:7!null rowid:8!null
+           └── columns: a:6 b:7!null c:8!null rowid:9!null mvcc_timestamp:10
 
 # Tests for type propagation.
 
@@ -843,34 +843,34 @@ build
 (SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
 ----
 except
- ├── columns: "?column?":6
- ├── left columns: "?column?":6
- ├── right columns: column1:5
+ ├── columns: "?column?":8
+ ├── left columns: "?column?":8
+ ├── right columns: column1:7
  ├── project
- │    ├── columns: "?column?":6
+ │    ├── columns: "?column?":8
  │    ├── project
- │    │    ├── columns: "?column?":2
+ │    │    ├── columns: "?column?":3
  │    │    ├── scan a
- │    │    │    └── columns: a:1!null
+ │    │    │    └── columns: a:1!null mvcc_timestamp:2
  │    │    └── projections
- │    │         └── NULL [as="?column?":2]
+ │    │         └── NULL [as="?column?":3]
  │    └── projections
- │         └── "?column?":2::INT8 [as="?column?":6]
+ │         └── "?column?":3::INT8 [as="?column?":8]
  └── values
-      ├── columns: column1:5
+      ├── columns: column1:7
       ├── tuple
       │    └── subquery
       │         └── max1-row
-      │              ├── columns: "?column?":4!null
+      │              ├── columns: "?column?":6!null
       │              └── limit
-      │                   ├── columns: "?column?":4!null
+      │                   ├── columns: "?column?":6!null
       │                   ├── project
-      │                   │    ├── columns: "?column?":4!null
+      │                   │    ├── columns: "?column?":6!null
       │                   │    ├── limit hint: 1.00
       │                   │    ├── scan a
-      │                   │    │    ├── columns: a:3!null
+      │                   │    │    ├── columns: a:4!null mvcc_timestamp:5
       │                   │    │    └── limit hint: 1.00
       │                   │    └── projections
-      │                   │         └── 1 [as="?column?":4]
+      │                   │         └── 1 [as="?column?":6]
       │                   └── 1
       └── (1,)

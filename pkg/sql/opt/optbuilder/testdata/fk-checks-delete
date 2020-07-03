@@ -11,39 +11,39 @@ DELETE FROM child WHERE c = 4
 ----
 delete child
  ├── columns: <none>
- ├── fetch columns: c:3 p:4
+ ├── fetch columns: c:4 p:5
  └── select
-      ├── columns: c:3!null p:4!null
+      ├── columns: c:4!null p:5!null mvcc_timestamp:6
       ├── scan child
-      │    └── columns: c:3!null p:4!null
+      │    └── columns: c:4!null p:5!null mvcc_timestamp:6
       └── filters
-           └── c:3 = 4
+           └── c:4 = 4
 
 build
 DELETE FROM parent WHERE p = 3
 ----
 delete parent
  ├── columns: <none>
- ├── fetch columns: x:4 parent.p:5 other:6
+ ├── fetch columns: x:5 parent.p:6 other:7
  ├── input binding: &1
  ├── select
- │    ├── columns: x:4 parent.p:5!null other:6
+ │    ├── columns: x:5 parent.p:6!null other:7 parent.mvcc_timestamp:8
  │    ├── scan parent
- │    │    └── columns: x:4 parent.p:5!null other:6
+ │    │    └── columns: x:5 parent.p:6!null other:7 parent.mvcc_timestamp:8
  │    └── filters
- │         └── parent.p:5 = 3
+ │         └── parent.p:6 = 3
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
-                ├── columns: p:7!null
+                ├── columns: p:9!null
                 ├── with-scan &1
-                │    ├── columns: p:7!null
+                │    ├── columns: p:9!null
                 │    └── mapping:
-                │         └──  parent.p:5 => p:7
+                │         └──  parent.p:6 => p:9
                 ├── scan child
-                │    └── columns: child.p:9!null
+                │    └── columns: child.p:11!null
                 └── filters
-                     └── p:7 = child.p:9
+                     └── p:9 = child.p:11
 
 exec-ddl
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other))
@@ -54,37 +54,37 @@ DELETE FROM parent WHERE p = 3
 ----
 delete parent
  ├── columns: <none>
- ├── fetch columns: x:4 parent.p:5 parent.other:6
+ ├── fetch columns: x:5 parent.p:6 parent.other:7
  ├── input binding: &1
  ├── select
- │    ├── columns: x:4 parent.p:5!null parent.other:6
+ │    ├── columns: x:5 parent.p:6!null parent.other:7 parent.mvcc_timestamp:8
  │    ├── scan parent
- │    │    └── columns: x:4 parent.p:5!null parent.other:6
+ │    │    └── columns: x:5 parent.p:6!null parent.other:7 parent.mvcc_timestamp:8
  │    └── filters
- │         └── parent.p:5 = 3
+ │         └── parent.p:6 = 3
  └── f-k-checks
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── semi-join (hash)
-      │         ├── columns: p:7!null
+      │         ├── columns: p:9!null
       │         ├── with-scan &1
-      │         │    ├── columns: p:7!null
+      │         │    ├── columns: p:9!null
       │         │    └── mapping:
-      │         │         └──  parent.p:5 => p:7
+      │         │         └──  parent.p:6 => p:9
       │         ├── scan child
-      │         │    └── columns: child.p:9!null
+      │         │    └── columns: child.p:11!null
       │         └── filters
-      │              └── p:7 = child.p:9
+      │              └── p:9 = child.p:11
       └── f-k-checks-item: child2(p) -> parent(other)
            └── semi-join (hash)
-                ├── columns: other:10
+                ├── columns: other:13
                 ├── with-scan &1
-                │    ├── columns: other:10
+                │    ├── columns: other:13
                 │    └── mapping:
-                │         └──  parent.other:6 => other:10
+                │         └──  parent.other:7 => other:13
                 ├── scan child2
-                │    └── columns: child2.p:12!null
+                │    └── columns: child2.p:15!null
                 └── filters
-                     └── other:10 = child2.p:12
+                     └── other:13 = child2.p:15
 
 exec-ddl
 CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
@@ -99,38 +99,38 @@ DELETE FROM doubleparent WHERE p1 = 10
 ----
 delete doubleparent
  ├── columns: <none>
- ├── fetch columns: doubleparent.p1:4 doubleparent.p2:5 other:6
+ ├── fetch columns: doubleparent.p1:5 doubleparent.p2:6 other:7
  ├── input binding: &1
  ├── select
- │    ├── columns: doubleparent.p1:4!null doubleparent.p2:5!null other:6
+ │    ├── columns: doubleparent.p1:5!null doubleparent.p2:6!null other:7 doubleparent.mvcc_timestamp:8
  │    ├── scan doubleparent
- │    │    └── columns: doubleparent.p1:4!null doubleparent.p2:5!null other:6
+ │    │    └── columns: doubleparent.p1:5!null doubleparent.p2:6!null other:7 doubleparent.mvcc_timestamp:8
  │    └── filters
- │         └── doubleparent.p1:4 = 10
+ │         └── doubleparent.p1:5 = 10
  └── f-k-checks
       └── f-k-checks-item: doublechild(p1,p2) -> doubleparent(p1,p2)
            └── semi-join (hash)
-                ├── columns: p1:7!null p2:8!null
+                ├── columns: p1:9!null p2:10!null
                 ├── with-scan &1
-                │    ├── columns: p1:7!null p2:8!null
+                │    ├── columns: p1:9!null p2:10!null
                 │    └── mapping:
-                │         ├──  doubleparent.p1:4 => p1:7
-                │         └──  doubleparent.p2:5 => p2:8
+                │         ├──  doubleparent.p1:5 => p1:9
+                │         └──  doubleparent.p2:6 => p2:10
                 ├── scan doublechild
-                │    └── columns: doublechild.p1:10 doublechild.p2:11
+                │    └── columns: doublechild.p1:12 doublechild.p2:13
                 └── filters
-                     ├── p1:7 = doublechild.p1:10
-                     └── p2:8 = doublechild.p2:11
+                     ├── p1:9 = doublechild.p1:12
+                     └── p2:10 = doublechild.p2:13
 
 build
 DELETE FROM doublechild WHERE p1 = 10
 ----
 delete doublechild
  ├── columns: <none>
- ├── fetch columns: c:4 p1:5 p2:6
+ ├── fetch columns: c:5 p1:6 p2:7
  └── select
-      ├── columns: c:4!null p1:5!null p2:6
+      ├── columns: c:5!null p1:6!null p2:7 mvcc_timestamp:8
       ├── scan doublechild
-      │    └── columns: c:4!null p1:5 p2:6
+      │    └── columns: c:5!null p1:6 p2:7 mvcc_timestamp:8
       └── filters
-           └── p1:5 = 10
+           └── p1:6 = 10

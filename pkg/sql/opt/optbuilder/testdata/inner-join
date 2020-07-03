@@ -14,53 +14,53 @@ build
 SELECT * FROM a, b
 ----
 project
- ├── columns: x:1!null y:2 x:3 y:4
+ ├── columns: x:1!null y:2 x:4 y:5
  └── inner-join (cross)
-      ├── columns: a.x:1!null a.y:2 b.x:3 b.y:4 rowid:5!null
+      ├── columns: a.x:1!null a.y:2 a.mvcc_timestamp:3 b.x:4 b.y:5 rowid:6!null b.mvcc_timestamp:7
       ├── scan a
-      │    └── columns: a.x:1!null a.y:2
+      │    └── columns: a.x:1!null a.y:2 a.mvcc_timestamp:3
       ├── scan b
-      │    └── columns: b.x:3 b.y:4 rowid:5!null
+      │    └── columns: b.x:4 b.y:5 rowid:6!null b.mvcc_timestamp:7
       └── filters (true)
 
 build
 SELECT a.x, b.y FROM a, b WHERE a.x = b.x
 ----
 project
- ├── columns: x:1!null y:4
+ ├── columns: x:1!null y:5
  └── select
-      ├── columns: a.x:1!null a.y:2 b.x:3!null b.y:4 rowid:5!null
+      ├── columns: a.x:1!null a.y:2 a.mvcc_timestamp:3 b.x:4!null b.y:5 rowid:6!null b.mvcc_timestamp:7
       ├── inner-join (cross)
-      │    ├── columns: a.x:1!null a.y:2 b.x:3 b.y:4 rowid:5!null
+      │    ├── columns: a.x:1!null a.y:2 a.mvcc_timestamp:3 b.x:4 b.y:5 rowid:6!null b.mvcc_timestamp:7
       │    ├── scan a
-      │    │    └── columns: a.x:1!null a.y:2
+      │    │    └── columns: a.x:1!null a.y:2 a.mvcc_timestamp:3
       │    ├── scan b
-      │    │    └── columns: b.x:3 b.y:4 rowid:5!null
+      │    │    └── columns: b.x:4 b.y:5 rowid:6!null b.mvcc_timestamp:7
       │    └── filters (true)
       └── filters
-           └── a.x:1 = b.x:3
+           └── a.x:1 = b.x:4
 
 build
 SELECT * FROM c, b, a WHERE c.x = a.x AND b.x = a.x
 ----
 project
- ├── columns: x:1!null y:2 z:3 x:5!null y:6 x:8!null y:9
+ ├── columns: x:1!null y:2 z:3 x:6!null y:7 x:10!null y:11
  └── select
-      ├── columns: c.x:1!null c.y:2 z:3 c.rowid:4!null b.x:5!null b.y:6 b.rowid:7!null a.x:8!null a.y:9
+      ├── columns: c.x:1!null c.y:2 z:3 c.rowid:4!null c.mvcc_timestamp:5 b.x:6!null b.y:7 b.rowid:8!null b.mvcc_timestamp:9 a.x:10!null a.y:11 a.mvcc_timestamp:12
       ├── inner-join (cross)
-      │    ├── columns: c.x:1 c.y:2 z:3 c.rowid:4!null b.x:5 b.y:6 b.rowid:7!null a.x:8!null a.y:9
+      │    ├── columns: c.x:1 c.y:2 z:3 c.rowid:4!null c.mvcc_timestamp:5 b.x:6 b.y:7 b.rowid:8!null b.mvcc_timestamp:9 a.x:10!null a.y:11 a.mvcc_timestamp:12
       │    ├── scan c
-      │    │    └── columns: c.x:1 c.y:2 z:3 c.rowid:4!null
+      │    │    └── columns: c.x:1 c.y:2 z:3 c.rowid:4!null c.mvcc_timestamp:5
       │    ├── inner-join (cross)
-      │    │    ├── columns: b.x:5 b.y:6 b.rowid:7!null a.x:8!null a.y:9
+      │    │    ├── columns: b.x:6 b.y:7 b.rowid:8!null b.mvcc_timestamp:9 a.x:10!null a.y:11 a.mvcc_timestamp:12
       │    │    ├── scan b
-      │    │    │    └── columns: b.x:5 b.y:6 b.rowid:7!null
+      │    │    │    └── columns: b.x:6 b.y:7 b.rowid:8!null b.mvcc_timestamp:9
       │    │    ├── scan a
-      │    │    │    └── columns: a.x:8!null a.y:9
+      │    │    │    └── columns: a.x:10!null a.y:11 a.mvcc_timestamp:12
       │    │    └── filters (true)
       │    └── filters (true)
       └── filters
-           └── (c.x:1 = a.x:8) AND (b.x:5 = a.x:8)
+           └── (c.x:1 = a.x:10) AND (b.x:6 = a.x:10)
 
 exec-ddl
 CREATE TABLE db1.a (x INT PRIMARY KEY, y FLOAT, z STRING)
@@ -83,13 +83,15 @@ error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
 build fully-qualify-names
 SELECT * FROM db1.a, db2.a
 ----
-inner-join (cross)
- ├── columns: x:1!null y:2 z:3 x:4!null y:5
- ├── scan db1.public.a
- │    └── columns: db1.public.a.x:1!null db1.public.a.y:2 db1.public.a.z:3
- ├── scan db2.public.a
- │    └── columns: db2.public.a.x:4!null db2.public.a.y:5
- └── filters (true)
+project
+ ├── columns: x:1!null y:2 z:3 x:5!null y:6
+ └── inner-join (cross)
+      ├── columns: db1.public.a.x:1!null db1.public.a.y:2 db1.public.a.z:3 db1.public.a.mvcc_timestamp:4 db2.public.a.x:5!null db2.public.a.y:6 db2.public.a.mvcc_timestamp:7
+      ├── scan db1.public.a
+      │    └── columns: db1.public.a.x:1!null db1.public.a.y:2 db1.public.a.z:3 db1.public.a.mvcc_timestamp:4
+      ├── scan db2.public.a
+      │    └── columns: db2.public.a.x:5!null db2.public.a.y:6 db2.public.a.mvcc_timestamp:7
+      └── filters (true)
 
 build fully-qualify-names
 SELECT * FROM a, a
@@ -100,13 +102,17 @@ error (42712): source name "a" specified more than once (missing AS clause)
 build fully-qualify-names
 SELECT * FROM a, (SELECT * FROM a) AS a
 ----
-inner-join (cross)
- ├── columns: x:1!null y:2 x:3!null y:4
- ├── scan t.public.a
- │    └── columns: t.public.a.x:1!null t.public.a.y:2
- ├── scan t.public.a
- │    └── columns: t.public.a.x:3!null t.public.a.y:4
- └── filters (true)
+project
+ ├── columns: x:1!null y:2 x:4!null y:5
+ └── inner-join (cross)
+      ├── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.mvcc_timestamp:3 t.public.a.x:4!null t.public.a.y:5
+      ├── scan t.public.a
+      │    └── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.mvcc_timestamp:3
+      ├── project
+      │    ├── columns: t.public.a.x:4!null t.public.a.y:5
+      │    └── scan t.public.a
+      │         └── columns: t.public.a.x:4!null t.public.a.y:5 t.public.a.mvcc_timestamp:6
+      └── filters (true)
 
 build fully-qualify-names
 SELECT * FROM t.a, a
@@ -116,13 +122,15 @@ error (42712): source name "a" specified more than once (missing AS clause)
 build fully-qualify-names
 SELECT * FROM t.a, a AS a
 ----
-inner-join (cross)
- ├── columns: x:1!null y:2 x:3!null y:4
- ├── scan t.public.a
- │    └── columns: t.public.a.x:1!null t.public.a.y:2
- ├── scan t.public.a
- │    └── columns: t.public.a.x:3!null t.public.a.y:4
- └── filters (true)
+project
+ ├── columns: x:1!null y:2 x:4!null y:5
+ └── inner-join (cross)
+      ├── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.mvcc_timestamp:3 t.public.a.x:4!null t.public.a.y:5 t.public.a.mvcc_timestamp:6
+      ├── scan t.public.a
+      │    └── columns: t.public.a.x:1!null t.public.a.y:2 t.public.a.mvcc_timestamp:3
+      ├── scan t.public.a
+      │    └── columns: t.public.a.x:4!null t.public.a.y:5 t.public.a.mvcc_timestamp:6
+      └── filters (true)
 
 build fully-qualify-names
 SELECT a.* FROM t.a, a AS a

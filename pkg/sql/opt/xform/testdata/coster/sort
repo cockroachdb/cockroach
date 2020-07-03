@@ -15,12 +15,12 @@ SELECT f FROM a ORDER BY f DESC
 sort
  ├── columns: f:2!null
  ├── stats: [rows=1000]
- ├── cost: 1269.34569
+ ├── cost: 1279.34569
  ├── ordering: -2
  └── scan a
       ├── columns: f:2!null
       ├── stats: [rows=1000]
-      └── cost: 1050.02
+      └── cost: 1060.02
 
 # Test sort on 0 rows.
 opt
@@ -55,7 +55,7 @@ sort
  ├── stats: [rows=1000]
  ├── cost: 1301.40805
  ├── ordering: +2,+3,+1
- └── scan abc
+ └── scan abc@cb
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000]
       └── cost: 1070.02

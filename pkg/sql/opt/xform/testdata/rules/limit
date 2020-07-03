@@ -153,10 +153,10 @@ limit
  │    └── columns: s:4
  └── subquery
       └── scan a@s_idx
-           ├── columns: k:6!null
+           ├── columns: k:7!null
            ├── limit: 1
            ├── key: ()
-           └── fd: ()-->(6)
+           └── fd: ()-->(7)
 
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
@@ -278,7 +278,7 @@ opt
 EXPLAIN SELECT * FROM abcd@b WHERE a >= 20 AND a <= 30 ORDER BY b DESC LIMIT 5
 ----
 explain
- ├── columns: tree:5 field:6 description:7
+ ├── columns: tree:6 field:7 description:8
  └── limit
       ├── columns: a:1!null b:2 c:3 d:4
       ├── internal-ordering: -2
@@ -318,7 +318,7 @@ Initial expression
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
   explain
-   ├── columns: tree:5 field:6 description:7
+   ├── columns: tree:6 field:7 description:8
    └── sort
         ├── columns: a:1!null b:2 c:3 d:4
         ├── cardinality: [0 - 5]
@@ -338,25 +338,30 @@ Initial expression
              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
              │    ├── ordering: -2
              │    ├── limit hint: 5.00
-             │    └── select
+             │    └── project
              │         ├── columns: a:1!null b:2 c:3 d:4
              │         ├── cardinality: [0 - 11]
              │         ├── key: (1)
              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-             │         ├── scan abcd
-             │         │    ├── columns: a:1!null b:2 c:3 d:4
-             │         │    ├── flags: force-index=b
-             │         │    ├── key: (1)
-             │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
-             │         └── filters
-             │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+             │         └── select
+             │              ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+             │              ├── cardinality: [0 - 11]
+             │              ├── key: (1)
+             │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+             │              ├── scan abcd
+             │              │    ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+             │              │    ├── flags: force-index=b
+             │              │    ├── key: (1)
+             │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+             │              └── filters
+             │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
              └── 5
 ================================================================================
 SimplifySelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:5 field:6 description:7
+    ├── columns: tree:6 field:7 description:8
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -376,27 +381,32 @@ SimplifySelectFilters
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    ├── limit hint: 5.00
-              │    └── select
+              │    └── project
               │         ├── columns: a:1!null b:2 c:3 d:4
   -           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         ├── scan abcd
-              │         │    ├── columns: a:1!null b:2 c:3 d:4
-              │         │    ├── flags: force-index=b
-              │         │    ├── key: (1)
-              │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         └── filters
-  -           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
-  +           │              ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
-  +           │              └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+              │         └── select
+              │              ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+  -           │              ├── cardinality: [0 - 11]
+              │              ├── key: (1)
+              │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              ├── scan abcd
+              │              │    ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+              │              │    ├── flags: force-index=b
+              │              │    ├── key: (1)
+              │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              └── filters
+  -           │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +           │                   ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
+  +           │                   └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
               └── 5
 ================================================================================
 ConsolidateSelectFilters
   Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
 ================================================================================
    explain
-    ├── columns: tree:5 field:6 description:7
+    ├── columns: tree:6 field:7 description:8
     └── sort
          ├── columns: a:1!null b:2 c:3 d:4
          ├── cardinality: [0 - 5]
@@ -416,27 +426,130 @@ ConsolidateSelectFilters
               │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
               │    ├── ordering: -2
               │    ├── limit hint: 5.00
-              │    └── select
+              │    └── project
               │         ├── columns: a:1!null b:2 c:3 d:4
   +           │         ├── cardinality: [0 - 11]
               │         ├── key: (1)
               │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         ├── scan abcd
-              │         │    ├── columns: a:1!null b:2 c:3 d:4
-              │         │    ├── flags: force-index=b
-              │         │    ├── key: (1)
-              │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
-              │         └── filters
-  -           │              ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
-  -           │              └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+              │         └── select
+              │              ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+  +           │              ├── cardinality: [0 - 11]
+              │              ├── key: (1)
+              │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              ├── scan abcd
+              │              │    ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+              │              │    ├── flags: force-index=b
+              │              │    ├── key: (1)
+              │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+              │              └── filters
+  -           │                   ├── a:1 >= 20 [outer=(1), constraints=(/1: [/20 - ]; tight)]
+  -           │                   └── a:1 <= 30 [outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+  +           │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+              └── 5
+================================================================================
+PruneSelectCols
+  Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+================================================================================
+   explain
+    ├── columns: tree:6 field:7 description:8
+    └── sort
+         ├── columns: a:1!null b:2 c:3 d:4
+         ├── cardinality: [0 - 5]
+         ├── key: (1)
+         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+         ├── ordering: -2
+         └── limit
+              ├── columns: a:1!null b:2 c:3 d:4
+              ├── internal-ordering: -2
+              ├── cardinality: [0 - 5]
+              ├── key: (1)
+              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              ├── sort
+              │    ├── columns: a:1!null b:2 c:3 d:4
+              │    ├── cardinality: [0 - 11]
+              │    ├── key: (1)
+              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │    ├── ordering: -2
+              │    ├── limit hint: 5.00
+              │    └── project
+              │         ├── columns: a:1!null b:2 c:3 d:4
+              │         ├── cardinality: [0 - 11]
+              │         ├── key: (1)
+              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │         └── select
+  -           │              ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+  +           │              ├── columns: a:1!null b:2 c:3 d:4
+              │              ├── cardinality: [0 - 11]
+              │              ├── key: (1)
+  -           │              ├── fd: (1)-->(2-5), (2-4)~~>(1)
+  +           │              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │              ├── scan abcd
+  -           │              │    ├── columns: a:1!null b:2 c:3 d:4 mvcc_timestamp:5
+  +           │              │    ├── columns: a:1!null b:2 c:3 d:4
+              │              │    ├── flags: force-index=b
+              │              │    ├── key: (1)
+  -           │              │    └── fd: (1)-->(2-5), (2-4)~~>(1)
+  +           │              │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+              │              └── filters
+              │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+              └── 5
+================================================================================
+EliminateProject
+  Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+================================================================================
+   explain
+    ├── columns: tree:6 field:7 description:8
+    └── sort
+         ├── columns: a:1!null b:2 c:3 d:4
+         ├── cardinality: [0 - 5]
+         ├── key: (1)
+         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+         ├── ordering: -2
+         └── limit
+              ├── columns: a:1!null b:2 c:3 d:4
+              ├── internal-ordering: -2
+              ├── cardinality: [0 - 5]
+              ├── key: (1)
+              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              ├── sort
+              │    ├── columns: a:1!null b:2 c:3 d:4
+              │    ├── cardinality: [0 - 11]
+              │    ├── key: (1)
+              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │    ├── ordering: -2
+              │    ├── limit hint: 5.00
+  -           │    └── project
+  +           │    └── select
+              │         ├── columns: a:1!null b:2 c:3 d:4
+              │         ├── cardinality: [0 - 11]
+              │         ├── key: (1)
+              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  -           │         └── select
+  -           │              ├── columns: a:1!null b:2 c:3 d:4
+  -           │              ├── cardinality: [0 - 11]
+  -           │              ├── key: (1)
+  -           │              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+  -           │              ├── scan abcd
+  -           │              │    ├── columns: a:1!null b:2 c:3 d:4
+  -           │              │    ├── flags: force-index=b
+  -           │              │    ├── key: (1)
+  -           │              │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+  -           │              └── filters
+  -           │                   └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
+  +           │         ├── scan abcd
+  +           │         │    ├── columns: a:1!null b:2 c:3 d:4
+  +           │         │    ├── flags: force-index=b
+  +           │         │    ├── key: (1)
+  +           │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+  +           │         └── filters
   +           │              └── (a:1 >= 20) AND (a:1 <= 30) [outer=(1), constraints=(/1: [/20 - /30]; tight)]
               └── 5
 ================================================================================
 GenerateIndexScans
-  Cost: 5134.91
+  Cost: 5144.91
 ================================================================================
    explain
-    ├── columns: tree:5 field:6 description:7
+    ├── columns: tree:6 field:7 description:8
   - └── sort
   + └── limit
          ├── columns: a:1!null b:2 c:3 d:4
@@ -505,10 +618,10 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 5134.91
+  Cost: 5144.91
 ================================================================================
   explain
-   ├── columns: tree:5 field:6 description:7
+   ├── columns: tree:6 field:7 description:8
    └── limit
         ├── columns: a:1!null b:2 c:3 d:4
         ├── internal-ordering: -2
@@ -630,13 +743,13 @@ limit
  │    └── union
  │         ├── union
  │         │    ├── scan index_tab@b
- │         │    │    ├── constraint: /9/13/14/8: [/1 - /1]
+ │         │    │    ├── constraint: /10/14/15/9: [/1 - /1]
  │         │    │    └── limit: 10
  │         │    └── scan index_tab@b
- │         │         ├── constraint: /16/20/21/15: [/2 - /2]
+ │         │         ├── constraint: /18/22/23/17: [/2 - /2]
  │         │         └── limit: 10
  │         └── scan index_tab@b
- │              ├── constraint: /23/27/28/22: [/3 - /3]
+ │              ├── constraint: /26/30/31/25: [/3 - /3]
  │              └── limit: 10
  └── 10
 
@@ -649,10 +762,10 @@ scalar-group-by
  │    ├── sort
  │    │    └── union
  │    │         ├── scan index_tab@c,rev
- │    │         │    ├── constraint: /11/14/15/9: [/'US_EAST' - /'US_EAST']
+ │    │         │    ├── constraint: /12/15/16/10: [/'US_EAST' - /'US_EAST']
  │    │         │    └── limit: 1(rev)
  │    │         └── scan index_tab@c,rev
- │    │              ├── constraint: /18/21/22/16: [/'US_WEST' - /'US_WEST']
+ │    │              ├── constraint: /20/23/24/18: [/'US_WEST' - /'US_WEST']
  │    │              └── limit: 1(rev)
  │    └── 1
  └── aggregations
@@ -670,10 +783,10 @@ scalar-group-by
  │    ├── sort
  │    │    └── union
  │    │         ├── scan index_tab@d,rev
- │    │         │    ├── constraint: /12/13/14/15/9: [/1/2 - /1/2]
+ │    │         │    ├── constraint: /13/14/15/16/10: [/1/2 - /1/2]
  │    │         │    └── limit: 1(rev)
  │    │         └── scan index_tab@d,rev
- │    │              ├── constraint: /19/20/21/22/16: [/4/5 - /4/5]
+ │    │              ├── constraint: /21/22/23/24/18: [/4/5 - /4/5]
  │    │              └── limit: 1(rev)
  │    └── 1
  └── aggregations
@@ -690,13 +803,13 @@ scalar-group-by
  │    │    └── union
  │    │         ├── union
  │    │         │    ├── scan index_tab@b,rev
- │    │         │    │    ├── constraint: /10/14/15/9: [/1 - /1]
+ │    │         │    │    ├── constraint: /11/15/16/10: [/1 - /1]
  │    │         │    │    └── limit: 1(rev)
  │    │         │    └── scan index_tab@b,rev
- │    │         │         ├── constraint: /17/21/22/16: [/2 - /2]
+ │    │         │         ├── constraint: /19/23/24/18: [/2 - /2]
  │    │         │         └── limit: 1(rev)
  │    │         └── scan index_tab@b,rev
- │    │              ├── constraint: /24/28/29/23: [/3 - /3]
+ │    │              ├── constraint: /27/31/32/26: [/3 - /3]
  │    │              └── limit: 1(rev)
  │    └── 1
  └── aggregations
@@ -715,10 +828,10 @@ limit
  ├── sort
  │    └── union
  │         ├── scan index_tab@c
- │         │    ├── constraint: /10/13/14/8: [/'US_EAST' - /'US_EAST']
+ │         │    ├── constraint: /11/14/15/9: [/'US_EAST' - /'US_EAST']
  │         │    └── limit: 10
  │         └── scan index_tab@c
- │              ├── constraint: /17/20/21/15: [/'US_WEST' - /'US_WEST']
+ │              ├── constraint: /19/22/23/17: [/'US_WEST' - /'US_WEST']
  │              └── limit: 10
  └── 10
 
@@ -733,10 +846,10 @@ index-join index_tab
       ├── sort
       │    └── union
       │         ├── scan index_tab@c
-      │         │    ├── constraint: /10/13/14/8: [/'US_EAST' - /'US_EAST']
+      │         │    ├── constraint: /11/14/15/9: [/'US_EAST' - /'US_EAST']
       │         │    └── limit: 10
       │         └── scan index_tab@c
-      │              ├── constraint: /17/20/21/15: [/'US_WEST' - /'US_WEST']
+      │              ├── constraint: /19/22/23/17: [/'US_WEST' - /'US_WEST']
       │              └── limit: 10
       └── 10
 

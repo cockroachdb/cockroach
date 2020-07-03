@@ -17,58 +17,74 @@ CREATE VIEW v AS SELECT a FROM t AS t2
 build
 SELECT * FROM t FOR UPDATE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 build
 SELECT * FROM t FOR NO KEY UPDATE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-no-key-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-no-key-update
 
 build
 SELECT * FROM t FOR SHARE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-share
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-share
 
 build
 SELECT * FROM t FOR KEY SHARE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-key-share
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-key-share
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-share
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-share
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-no-key-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-no-key-update
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 build
 SELECT * FROM t FOR UPDATE OF t
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 build
 SELECT * FROM t FOR UPDATE OF t2
@@ -79,12 +95,12 @@ build
 SELECT 1 FROM t FOR UPDATE OF t
 ----
 project
- ├── columns: "?column?":3!null
+ ├── columns: "?column?":4!null
  ├── scan t
- │    ├── columns: a:1!null b:2
+ │    ├── columns: a:1!null b:2 mvcc_timestamp:3
  │    └── locking: for-update
  └── projections
-      └── 1 [as="?column?":3]
+      └── 1 [as="?column?":4]
 
 # ------------------------------------------------------------------------------
 # Tests with table aliases.
@@ -93,9 +109,11 @@ project
 build
 SELECT * FROM t AS t2 FOR UPDATE
 ----
-scan t2
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 build
 SELECT * FROM t AS t2 FOR UPDATE OF t
@@ -105,9 +123,11 @@ error (42P01): relation "t" in FOR UPDATE clause not found in FROM clause
 build
 SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
-scan t2
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 # ------------------------------------------------------------------------------
 # Tests with numeric table references.
@@ -117,16 +137,20 @@ scan t2
 build
 SELECT * FROM [53 AS t] FOR UPDATE
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 build
 SELECT * FROM [53 AS t] FOR UPDATE OF t
 ----
-scan t
+project
  ├── columns: a:1!null b:2
- └── locking: for-update
+ └── scan t
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      └── locking: for-update
 
 build
 SELECT * FROM [53 AS t] FOR UPDATE OF t2
@@ -143,7 +167,7 @@ SELECT * FROM v FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -152,7 +176,7 @@ SELECT * FROM v FOR UPDATE OF v
 project
  ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -180,7 +204,7 @@ SELECT * FROM v AS v2 FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -194,7 +218,7 @@ SELECT * FROM v AS v2 FOR UPDATE OF v2
 project
  ├── columns: a:1!null
  └── scan t2
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 # ------------------------------------------------------------------------------
@@ -211,7 +235,7 @@ SELECT * FROM (SELECT a FROM t) FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -220,7 +244,7 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE)
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -229,7 +253,7 @@ SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-no-key-update
 
 build
@@ -238,7 +262,7 @@ SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-no-key-update
 
 build
@@ -252,7 +276,7 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -261,7 +285,7 @@ SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -270,7 +294,7 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
@@ -284,40 +308,40 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 project
  ├── columns: a:1!null
  └── scan t
-      ├── columns: a:1!null b:2
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
       └── locking: for-update
 
 build
 SELECT (SELECT a FROM t) FOR UPDATE
 ----
 project
- ├── columns: a:3
+ ├── columns: a:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:3]
+      └── subquery [as=a:4]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── project
                      ├── columns: t.a:1!null
                      └── scan t
-                          └── columns: t.a:1!null b:2
+                          └── columns: t.a:1!null b:2 mvcc_timestamp:3
 
 build
 SELECT (SELECT a FROM t FOR UPDATE)
 ----
 project
- ├── columns: a:3
+ ├── columns: a:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:3]
+      └── subquery [as=a:4]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── project
                      ├── columns: t.a:1!null
                      └── scan t
-                          ├── columns: t.a:1!null b:2
+                          ├── columns: t.a:1!null b:2 mvcc_timestamp:3
                           └── locking: for-update
 
 build
@@ -329,50 +353,50 @@ build
 SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
 project
- ├── columns: a:3
+ ├── columns: a:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:3]
+      └── subquery [as=a:4]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── project
                      ├── columns: t.a:1!null
                      └── scan t
-                          ├── columns: t.a:1!null b:2
+                          ├── columns: t.a:1!null b:2 mvcc_timestamp:3
                           └── locking: for-update
 
 build
 SELECT (SELECT a FROM t) AS r FOR UPDATE
 ----
 project
- ├── columns: r:3
+ ├── columns: r:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:3]
+      └── subquery [as=r:4]
            └── max1-row
                 ├── columns: a:1!null
                 └── project
                      ├── columns: a:1!null
                      └── scan t
-                          └── columns: a:1!null b:2
+                          └── columns: a:1!null b:2 mvcc_timestamp:3
 
 build
 SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
 project
- ├── columns: r:3
+ ├── columns: r:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:3]
+      └── subquery [as=r:4]
            └── max1-row
                 ├── columns: a:1!null
                 └── project
                      ├── columns: a:1!null
                      └── scan t
-                          ├── columns: a:1!null b:2
+                          ├── columns: a:1!null b:2 mvcc_timestamp:3
                           └── locking: for-update
 
 build
@@ -384,82 +408,90 @@ build
 SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 project
- ├── columns: r:3
+ ├── columns: r:4
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:3]
+      └── subquery [as=r:4]
            └── max1-row
                 ├── columns: a:1!null
                 └── project
                      ├── columns: a:1!null
                      └── scan t
-                          ├── columns: a:1!null b:2
+                          ├── columns: a:1!null b:2 mvcc_timestamp:3
                           └── locking: for-update
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 ----
-select
+project
  ├── columns: a:1!null b:2
- ├── scan t
- │    ├── columns: a:1!null b:2
- │    └── locking: for-update
- └── filters
-      └── any: eq
-           ├── project
-           │    ├── columns: a:3!null
-           │    └── scan t
-           │         └── columns: a:3!null b:4
-           └── a:1
+ └── select
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      ├── scan t
+      │    ├── columns: a:1!null b:2 mvcc_timestamp:3
+      │    └── locking: for-update
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: a:4!null
+                │    └── scan t
+                │         └── columns: a:4!null b:5 mvcc_timestamp:6
+                └── a:1
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
 ----
-select
+project
  ├── columns: a:1!null b:2
- ├── scan t
- │    └── columns: a:1!null b:2
- └── filters
-      └── any: eq
-           ├── project
-           │    ├── columns: a:3!null
-           │    └── scan t
-           │         ├── columns: a:3!null b:4
-           │         └── locking: for-update
-           └── a:1
+ └── select
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      ├── scan t
+      │    └── columns: a:1!null b:2 mvcc_timestamp:3
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: a:4!null
+                │    └── scan t
+                │         ├── columns: a:4!null b:5 mvcc_timestamp:6
+                │         └── locking: for-update
+                └── a:1
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 ----
-select
+project
  ├── columns: a:1!null b:2
- ├── scan t
- │    ├── columns: a:1!null b:2
- │    └── locking: for-update
- └── filters
-      └── any: eq
-           ├── project
-           │    ├── columns: a:3!null
-           │    └── scan t
-           │         └── columns: a:3!null b:4
-           └── a:1
+ └── select
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      ├── scan t
+      │    ├── columns: a:1!null b:2 mvcc_timestamp:3
+      │    └── locking: for-update
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: a:4!null
+                │    └── scan t
+                │         └── columns: a:4!null b:5 mvcc_timestamp:6
+                └── a:1
 
 build
 SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
 ----
-select
+project
  ├── columns: a:1!null b:2
- ├── scan t
- │    └── columns: a:1!null b:2
- └── filters
-      └── any: eq
-           ├── project
-           │    ├── columns: a:3!null
-           │    └── scan t
-           │         ├── columns: a:3!null b:4
-           │         └── locking: for-update
-           └── a:1
+ └── select
+      ├── columns: a:1!null b:2 mvcc_timestamp:3
+      ├── scan t
+      │    └── columns: a:1!null b:2 mvcc_timestamp:3
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: a:4!null
+                │    └── scan t
+                │         ├── columns: a:4!null b:5 mvcc_timestamp:6
+                │         └── locking: for-update
+                └── a:1
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
@@ -473,59 +505,59 @@ build
 SELECT * FROM [SELECT a FROM t] FOR UPDATE
 ----
 with &1
- ├── columns: a:3!null
+ ├── columns: a:4!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         └── columns: t.a:1!null b:2
+ │         └── columns: t.a:1!null b:2 mvcc_timestamp:3
  └── with-scan &1
-      ├── columns: a:3!null
+      ├── columns: a:4!null
       └── mapping:
-           └──  t.a:1 => a:3
+           └──  t.a:1 => a:4
 
 build
 WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 ----
 with &1 (cte)
- ├── columns: a:3!null
+ ├── columns: a:4!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         └── columns: t.a:1!null b:2
+ │         └── columns: t.a:1!null b:2 mvcc_timestamp:3
  └── with-scan &1 (cte)
-      ├── columns: a:3!null
+      ├── columns: a:4!null
       └── mapping:
-           └──  t.a:1 => a:3
+           └──  t.a:1 => a:4
 
 build
 SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
 with &1
- ├── columns: a:3!null
+ ├── columns: a:4!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         ├── columns: t.a:1!null b:2
+ │         ├── columns: t.a:1!null b:2 mvcc_timestamp:3
  │         └── locking: for-update
  └── with-scan &1
-      ├── columns: a:3!null
+      ├── columns: a:4!null
       └── mapping:
-           └──  t.a:1 => a:3
+           └──  t.a:1 => a:4
 
 build
 WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
 with &1 (cte)
- ├── columns: a:3!null
+ ├── columns: a:4!null
  ├── project
  │    ├── columns: t.a:1!null
  │    └── scan t
- │         ├── columns: t.a:1!null b:2
+ │         ├── columns: t.a:1!null b:2 mvcc_timestamp:3
  │         └── locking: for-update
  └── with-scan &1 (cte)
-      ├── columns: a:3!null
+      ├── columns: a:4!null
       └── mapping:
-           └──  t.a:1 => a:3
+           └──  t.a:1 => a:4
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
@@ -535,79 +567,79 @@ build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u
-      │    └── columns: u.a:3!null c:4
+      │    └── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    └── columns: t.a:1!null b:2
+      │    └── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-share
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
@@ -618,65 +650,65 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t2
-      │    ├── columns: t2.a:1!null b:2
+      │    ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3!null c:4
+      │    ├── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       │    └── locking: for-share
       └── filters
-           └── t2.a:1 = u2.a:3
+           └── t2.a:1 = u2.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-no-key-update
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-key-share
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 build
 SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-no-key-update
       ├── scan u
-      │    ├── columns: u.a:3!null c:4
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u.a:3
+           └── t.a:1 = u.a:4
 
 # ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
@@ -686,17 +718,17 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t2
-      │    ├── columns: t2.a:1!null b:2
+      │    ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3!null c:4
+      │    ├── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t2.a:1 = u2.a:3
+           └── t2.a:1 = u2.a:4
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
@@ -717,47 +749,47 @@ build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t2
-      │    ├── columns: t2.a:1!null b:2
+      │    ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u2
-      │    └── columns: u2.a:3!null c:4
+      │    └── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       └── filters
-           └── t2.a:1 = u2.a:3
+           └── t2.a:1 = u2.a:4
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t2
-      │    └── columns: t2.a:1!null b:2
+      │    └── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3
       ├── scan u2
-      │    ├── columns: u2.a:3!null c:4
+      │    ├── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t2.a:1 = u2.a:3
+           └── t2.a:1 = u2.a:4
 
 build
 SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t2.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t2
-      │    ├── columns: t2.a:1!null b:2
+      │    ├── columns: t2.a:1!null b:2 t2.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3!null c:4
+      │    ├── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t2.a:1 = u2.a:3
+           └── t2.a:1 = u2.a:4
 
 
 # Postgres doesn't support applying locking clauses to joins. The following
@@ -768,17 +800,17 @@ build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3!null c:4
+      │    ├── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u2.a:3
+           └── t.a:1 = u2.a:4
 
 build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
@@ -799,17 +831,17 @@ build
 SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
 project
- ├── columns: a:1!null b:2 c:4
+ ├── columns: a:1!null b:2 c:5
  └── inner-join (hash)
-      ├── columns: t.a:1!null b:2 u2.a:3!null c:4
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u2.a:4!null c:5 u2.mvcc_timestamp:6
       ├── scan t
-      │    ├── columns: t.a:1!null b:2
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
       │    └── locking: for-update
       ├── scan u2
-      │    ├── columns: u2.a:3!null c:4
+      │    ├── columns: u2.a:4!null c:5 u2.mvcc_timestamp:6
       │    └── locking: for-update
       └── filters
-           └── t.a:1 = u2.a:3
+           └── t.a:1 = u2.a:4
 
 # ------------------------------------------------------------------------------
 # Tests with lateral joins.
@@ -818,53 +850,63 @@ project
 build
 SELECT * FROM t, u FOR UPDATE
 ----
-inner-join (cross)
- ├── columns: a:1!null b:2 a:3!null c:4
- ├── scan t
- │    ├── columns: t.a:1!null b:2
- │    └── locking: for-update
- ├── scan u
- │    ├── columns: u.a:3!null c:4
- │    └── locking: for-update
- └── filters (true)
+project
+ ├── columns: a:1!null b:2 a:4!null c:5
+ └── inner-join (cross)
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
+      │    └── locking: for-update
+      ├── scan u
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
+      │    └── locking: for-update
+      └── filters (true)
 
 build
 SELECT * FROM t, u FOR UPDATE OF t
 ----
-inner-join (cross)
- ├── columns: a:1!null b:2 a:3!null c:4
- ├── scan t
- │    ├── columns: t.a:1!null b:2
- │    └── locking: for-update
- ├── scan u
- │    └── columns: u.a:3!null c:4
- └── filters (true)
+project
+ ├── columns: a:1!null b:2 a:4!null c:5
+ └── inner-join (cross)
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
+      │    └── locking: for-update
+      ├── scan u
+      │    └── columns: u.a:4!null c:5 u.mvcc_timestamp:6
+      └── filters (true)
 
 build
 SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
-inner-join (cross)
- ├── columns: a:1!null b:2 a:3!null c:4
- ├── scan t
- │    ├── columns: t.a:1!null b:2
- │    └── locking: for-share
- ├── scan u
- │    ├── columns: u.a:3!null c:4
- │    └── locking: for-update
- └── filters (true)
+project
+ ├── columns: a:1!null b:2 a:4!null c:5
+ └── inner-join (cross)
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5 u.mvcc_timestamp:6
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
+      │    └── locking: for-share
+      ├── scan u
+      │    ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
+      │    └── locking: for-update
+      └── filters (true)
 
 build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
-inner-join-apply
- ├── columns: a:1!null b:2 a:3!null c:4
- ├── scan t
- │    ├── columns: t.a:1!null b:2
- │    └── locking: for-update
- ├── scan sub
- │    ├── columns: sub.a:3!null c:4
- │    └── locking: for-update
- └── filters (true)
+project
+ ├── columns: a:1!null b:2 a:4!null c:5
+ └── inner-join-apply
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3
+      │    └── locking: for-update
+      ├── project
+      │    ├── columns: u.a:4!null c:5
+      │    └── scan u
+      │         ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
+      │         └── locking: for-update
+      └── filters (true)
 
 build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF u
@@ -874,14 +916,18 @@ error (42P01): relation "u" in FOR UPDATE clause not found in FROM clause
 build
 SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
-inner-join-apply
- ├── columns: a:1!null b:2 a:3!null c:4
- ├── scan t
- │    └── columns: t.a:1!null b:2
- ├── scan sub
- │    ├── columns: sub.a:3!null c:4
- │    └── locking: for-update
- └── filters (true)
+project
+ ├── columns: a:1!null b:2 a:4!null c:5
+ └── inner-join-apply
+      ├── columns: t.a:1!null b:2 t.mvcc_timestamp:3 u.a:4!null c:5
+      ├── scan t
+      │    └── columns: t.a:1!null b:2 t.mvcc_timestamp:3
+      ├── project
+      │    ├── columns: u.a:4!null c:5
+      │    └── scan u
+      │         ├── columns: u.a:4!null c:5 u.mvcc_timestamp:6
+      │         └── locking: for-update
+      └── filters (true)
 
 # ------------------------------------------------------------------------------
 # Tests with virtual tables.

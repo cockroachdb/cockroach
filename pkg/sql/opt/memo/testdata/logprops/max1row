@@ -9,34 +9,40 @@ CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 build
 SELECT * FROM xyzs WHERE (SELECT v FROM kuv) = 'foo'
 ----
-select
+project
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
  ├── interesting orderings: (+1) (-4,+3,+1)
- ├── scan xyzs
- │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── key: (1)
- │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    ├── prune: (1-4)
- │    └── interesting orderings: (+1) (-4,+3,+1)
- └── filters
-      └── eq [type=bool, subquery]
-           ├── subquery [type=string]
-           │    └── max1-row
-           │         ├── columns: v:7(string)
-           │         ├── error: "more than one row returned by a subquery used as an expression"
-           │         ├── cardinality: [0 - 1]
-           │         ├── key: ()
-           │         ├── fd: ()-->(7)
-           │         └── project
-           │              ├── columns: v:7(string)
-           │              ├── prune: (7)
-           │              └── scan kuv
-           │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
-           │                   ├── key: (5)
-           │                   ├── fd: (5)-->(6,7)
-           │                   ├── prune: (5-7)
-           │                   └── interesting orderings: (+5)
-           └── const: 'foo' [type=string]
+ └── select
+      ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.mvcc_timestamp:5(decimal)
+      ├── key: (1)
+      ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+      ├── prune: (1-5)
+      ├── interesting orderings: (+1) (-4,+3,+1)
+      ├── scan xyzs
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) xyzs.mvcc_timestamp:5(decimal)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2)
+      │    ├── prune: (1-5)
+      │    └── interesting orderings: (+1) (-4,+3,+1)
+      └── filters
+           └── eq [type=bool, subquery]
+                ├── subquery [type=string]
+                │    └── max1-row
+                │         ├── columns: v:8(string)
+                │         ├── error: "more than one row returned by a subquery used as an expression"
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(8)
+                │         └── project
+                │              ├── columns: v:8(string)
+                │              ├── prune: (8)
+                │              └── scan kuv
+                │                   ├── columns: k:6(int!null) u:7(float) v:8(string) kuv.mvcc_timestamp:9(decimal)
+                │                   ├── key: (6)
+                │                   ├── fd: (6)-->(7-9)
+                │                   ├── prune: (6-9)
+                │                   └── interesting orderings: (+6)
+                └── const: 'foo' [type=string]

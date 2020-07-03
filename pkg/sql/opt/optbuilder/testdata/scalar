@@ -902,30 +902,35 @@ build
 SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
 ----
 project
- ├── columns: b:1!null array:3
+ ├── columns: b:1!null array:5
  ├── scan y
- │    └── columns: b:1!null
+ │    └── columns: b:1!null y.mvcc_timestamp:2
  └── projections
-      └── array-flatten [as=array:3]
-           └── select
-                ├── columns: a:2!null
-                ├── scan x
-                │    └── columns: a:2!null
-                └── filters
-                     └── a:2 = b:1
+      └── array-flatten [as=array:5]
+           └── project
+                ├── columns: a:3!null
+                └── select
+                     ├── columns: a:3!null x.mvcc_timestamp:4
+                     ├── scan x
+                     │    └── columns: a:3!null x.mvcc_timestamp:4
+                     └── filters
+                          └── a:3 = b:1
 
 build
 SELECT b, ARRAY(SELECT a FROM x ORDER BY a) FROM y
 ----
 project
- ├── columns: b:1!null array:3
+ ├── columns: b:1!null array:5
  ├── scan y
- │    └── columns: b:1!null
+ │    └── columns: b:1!null y.mvcc_timestamp:2
  └── projections
-      └── array-flatten [as=array:3]
-           └── scan x
-                ├── columns: a:2!null
-                └── ordering: +2
+      └── array-flatten [as=array:5]
+           └── project
+                ├── columns: a:3!null
+                ├── ordering: +3
+                └── scan x
+                     ├── columns: a:3!null x.mvcc_timestamp:4
+                     └── ordering: +3
 
 build
 SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
@@ -1148,18 +1153,18 @@ build
 SELECT ARRAY(SELECT x FROM u ORDER BY x)
 ----
 project
- ├── columns: array:3
+ ├── columns: array:4
  ├── values
  │    └── ()
  └── projections
-      └── array-flatten [as=array:3]
+      └── array-flatten [as=array:4]
            └── sort
                 ├── columns: x:1
                 ├── ordering: +1
                 └── project
                      ├── columns: x:1
                      └── scan u
-                          └── columns: x:1 rowid:2!null
+                          └── columns: x:1 rowid:2!null mvcc_timestamp:3
 
 build
 SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x)
@@ -1167,20 +1172,20 @@ SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x)
 project
  ├── columns: y:1!null
  └── select
-      ├── columns: y:1!null v.rowid:2!null
+      ├── columns: y:1!null v.rowid:2!null v.mvcc_timestamp:3
       ├── scan v
-      │    └── columns: y:1 v.rowid:2!null
+      │    └── columns: y:1 v.rowid:2!null v.mvcc_timestamp:3
       └── filters
            └── eq
                 ├── y:1
                 └── array-flatten
                      └── sort
-                          ├── columns: x:3
-                          ├── ordering: +3
+                          ├── columns: x:4
+                          ├── ordering: +4
                           └── project
-                               ├── columns: x:3
+                               ├── columns: x:4
                                └── scan u
-                                    └── columns: x:3 u.rowid:4!null
+                                    └── columns: x:4 u.rowid:5!null u.mvcc_timestamp:6
 
 build
 SELECT ARRAY(SELECT (y, 2) FROM u ORDER BY x) FROM v

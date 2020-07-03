@@ -12,7 +12,7 @@ SELECT * FROM av
 project
  ├── columns: k:1!null i:2 s:4
  └── scan a
-      └── columns: k:1!null i:2 f:3 s:4 j:5
+      └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
 
 build
 SELECT av.i, s, t.public.av.s AS s2 FROM t.av
@@ -22,29 +22,29 @@ project
  └── project
       ├── columns: k:1!null i:2 s:4
       └── scan a
-           └── columns: k:1!null i:2 f:3 s:4 j:5
+           └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
 
 # Self view join (multiple references to view).
 build
 SELECT av.k, av2.s FROM av, av AS av2 WHERE av.k=av2.k
 ----
 project
- ├── columns: k:1!null s:9
+ ├── columns: k:1!null s:10
  └── select
-      ├── columns: k:1!null i:2 s:4 k:6!null i:7 s:9
+      ├── columns: k:1!null i:2 s:4 k:7!null i:8 s:10
       ├── inner-join (cross)
-      │    ├── columns: k:1!null i:2 s:4 k:6!null i:7 s:9
+      │    ├── columns: k:1!null i:2 s:4 k:7!null i:8 s:10
       │    ├── project
       │    │    ├── columns: k:1!null i:2 s:4
       │    │    └── scan a
-      │    │         └── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │         └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
       │    ├── project
-      │    │    ├── columns: k:6!null i:7 s:9
+      │    │    ├── columns: k:7!null i:8 s:10
       │    │    └── scan a
-      │    │         └── columns: k:6!null i:7 f:8 s:9 j:10
+      │    │         └── columns: k:7!null i:8 f:9 s:10 j:11 mvcc_timestamp:12
       │    └── filters (true)
       └── filters
-           └── k:1 = k:6
+           └── k:1 = k:7
 
 # View with aliased column names, filter, and ORDER BY.
 exec-ddl
@@ -60,9 +60,9 @@ project
  └── project
       ├── columns: k:1!null f:3 s:4
       └── select
-           ├── columns: k:1!null i:2!null f:3 s:4 j:5
+           ├── columns: k:1!null i:2!null f:3 s:4 j:5 mvcc_timestamp:6
            ├── scan a
-           │    └── columns: k:1!null i:2 f:3 s:4 j:5
+           │    └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
            └── filters
                 └── i:2 = 10
 
@@ -71,7 +71,7 @@ build
 SELECT array_agg(y) FROM av2
 ----
 scalar-group-by
- ├── columns: array_agg:6
+ ├── columns: array_agg:7
  ├── internal-ordering: +4
  ├── sort
  │    ├── columns: f:3 s:4
@@ -81,13 +81,13 @@ scalar-group-by
  │         └── project
  │              ├── columns: k:1!null f:3 s:4
  │              └── select
- │                   ├── columns: k:1!null i:2!null f:3 s:4 j:5
+ │                   ├── columns: k:1!null i:2!null f:3 s:4 j:5 mvcc_timestamp:6
  │                   ├── scan a
- │                   │    └── columns: k:1!null i:2 f:3 s:4 j:5
+ │                   │    └── columns: k:1!null i:2 f:3 s:4 j:5 mvcc_timestamp:6
  │                   └── filters
  │                        └── i:2 = 10
  └── aggregations
-      └── array-agg [as=array_agg:6]
+      └── array-agg [as=array_agg:7]
            └── f:3
 
 # Verify that an outer table is visible from a subquery that uses

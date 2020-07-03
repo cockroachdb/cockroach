@@ -16,7 +16,7 @@ limit
  │    ├── ordering: +1
  │    ├── limit hint: 5.00
  │    └── scan t
- │         ├── columns: k:1!null v:2 w:3
+ │         ├── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │         ├── ordering: +1
  │         └── limit hint: 5.00
  └── 5
@@ -35,7 +35,7 @@ limit
  │    └── project
  │         ├── columns: k:1!null v:2
  │         └── scan t
- │              └── columns: k:1!null v:2 w:3
+ │              └── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  └── 5
 
 build
@@ -46,7 +46,7 @@ limit
  ├── project
  │    ├── columns: k:1!null v:2
  │    └── scan t
- │         └── columns: k:1!null v:2 w:3
+ │         └── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  └── 1 + 2
 
 build
@@ -61,7 +61,7 @@ limit
  │    ├── ordering: +1
  │    ├── limit hint: 1.00
  │    └── scan t
- │         ├── columns: k:1!null v:2 w:3
+ │         ├── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │         ├── ordering: +1
  │         └── limit hint: 1.00
  └── 1
@@ -83,7 +83,7 @@ limit
  │    │    ├── ordering: +1
  │    │    ├── limit hint: 4.00
  │    │    └── scan t
- │    │         ├── columns: k:1!null v:2 w:3
+ │    │         ├── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │    │         ├── ordering: +1
  │    │         └── limit hint: 4.00
  │    └── 3
@@ -100,7 +100,7 @@ offset
  │    ├── columns: k:1!null v:2
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: k:1!null v:2 w:3
+ │         ├── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │         └── ordering: +1
  └── 5
 
@@ -115,7 +115,7 @@ limit
  │    ├── columns: k:1!null
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: k:1!null v:2 w:3
+ │         ├── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │         └── ordering: +1
  └── 1 + 1
 
@@ -133,25 +133,27 @@ build
 SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 limit
- ├── columns: sum:4  [hidden: v:2]
+ ├── columns: sum:5  [hidden: v:2]
  ├── internal-ordering: -2
  ├── ordering: -2
  ├── project
- │    ├── columns: v:2 sum:4
+ │    ├── columns: v:2 sum:5
  │    ├── ordering: -2
  │    ├── limit hint: 10.00
  │    └── group-by
- │         ├── columns: k:1!null v:2 sum:4
+ │         ├── columns: k:1!null v:2 sum:5
  │         ├── grouping columns: k:1!null v:2
  │         ├── ordering: -2
  │         ├── limit hint: 10.00
  │         ├── sort
  │         │    ├── columns: k:1!null v:2 w:3
  │         │    ├── ordering: -2
- │         │    └── scan t
- │         │         └── columns: k:1!null v:2 w:3
+ │         │    └── project
+ │         │         ├── columns: k:1!null v:2 w:3
+ │         │         └── scan t
+ │         │              └── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │         └── aggregations
- │              └── sum [as=sum:4]
+ │              └── sum [as=sum:5]
  │                   └── w:3
  └── 10
 
@@ -172,7 +174,7 @@ limit
  │         └── project
  │              ├── columns: v:2
  │              └── scan t
- │                   └── columns: k:1!null v:2 w:3
+ │                   └── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  └── 10
 
 build
@@ -266,7 +268,7 @@ project
       │    └── project
       │         ├── columns: k:1!null v:2
       │         └── scan t
-      │              └── columns: k:1!null v:2 w:3
+      │              └── columns: k:1!null v:2 w:3 mvcc_timestamp:4
       └── 10
 
 # This kind of query can be used to work around memory usage limits. We need to
@@ -296,7 +298,7 @@ limit
  │         │    └── project
  │         │         ├── columns: w:3
  │         │         └── scan t
- │         │              └── columns: k:1!null v:2 w:3
+ │         │              └── columns: k:1!null v:2 w:3 mvcc_timestamp:4
  │         └── 100
  └── 25
 

@@ -159,16 +159,16 @@ memo (optimized, ~7KB, required=[presentation: b:4])
  ├── G1: (project G2 G3 b)
  │    └── [presentation: b:4]
  │         ├── best: (project G2 G3 b)
- │         └── cost: 1080.14
+ │         └── cost: 1090.14
  ├── G2: (select G4 G5) (index-join G6 p,cols=(3,4))
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1080.03
+ │         └── cost: 1090.03
  ├── G3: (projections)
  ├── G4: (scan p,cols=(3,4))
  │    └── []
  │         ├── best: (scan p,cols=(3,4))
- │         └── cost: 1070.02
+ │         └── cost: 1080.02
  ├── G5: (filters G7)
  ├── G6: (scan p@if_s,partial,cols=(3,5))
  │    └── []
@@ -190,16 +190,16 @@ memo (optimized, ~8KB, required=[presentation: b:4])
  ├── G1: (project G2 G3 b)
  │    └── [presentation: b:4]
  │         ├── best: (project G2 G3 b)
- │         └── cost: 1100.07
+ │         └── cost: 1110.07
  ├── G2: (select G4 G5) (index-join G6 p,cols=(1-4))
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1100.03
+ │         └── cost: 1110.03
  ├── G3: (projections)
  ├── G4: (scan p,cols=(1-4))
  │    └── []
  │         ├── best: (scan p,cols=(1-4))
- │         └── cost: 1090.02
+ │         └── cost: 1100.02
  ├── G5: (filters G7 G8)
  ├── G6: (select G9 G10)
  │    └── []
@@ -232,21 +232,21 @@ memo (optimized, ~8KB, required=[presentation: b:4])
  ├── G1: (project G2 G3 b)
  │    └── [presentation: b:4]
  │         ├── best: (project G2 G3 b)
- │         └── cost: 1080.08
+ │         └── cost: 1090.08
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1080.03
+ │         └── cost: 1090.03
  ├── G3: (projections)
  ├── G4: (scan p,cols=(3,4))
  │    └── []
  │         ├── best: (scan p,cols=(3,4))
- │         └── cost: 1070.02
+ │         └── cost: 1080.02
  ├── G5: (filters G8 G9)
  ├── G6: (index-join G10 p,cols=(3,4))
  │    └── []
  │         ├── best: (index-join G10 p,cols=(3,4))
- │         └── cost: 5140.02
+ │         └── cost: 5150.02
  ├── G7: (filters G9)
  ├── G8: (eq G11 G12)
  ├── G9: (variable b)
@@ -268,21 +268,21 @@ memo (optimized, ~9KB, required=[presentation: b:4])
  ├── G1: (project G2 G3 b)
  │    └── [presentation: b:4]
  │         ├── best: (project G2 G3 b)
- │         └── cost: 1090.05
+ │         └── cost: 1100.05
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1090.03
+ │         └── cost: 1100.03
  ├── G3: (projections)
  ├── G4: (scan p,cols=(1,3,4))
  │    └── []
  │         ├── best: (scan p,cols=(1,3,4))
- │         └── cost: 1080.02
+ │         └── cost: 1090.02
  ├── G5: (filters G8 G9 G10)
  ├── G6: (index-join G11 p,cols=(1,3,4))
  │    └── []
  │         ├── best: (index-join G11 p,cols=(1,3,4))
- │         └── cost: 1120.93
+ │         └── cost: 1121.03
  ├── G7: (filters G10)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
@@ -310,26 +310,26 @@ memo (optimized, ~11KB, required=[presentation: i:1,s:2,b:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G5)
  │    └── [presentation: i:1,s:2,b:3]
  │         ├── best: (select G2 G3)
- │         └── cost: 1080.03
+ │         └── cost: 1090.03
  ├── G2: (scan q,cols=(1-3))
  │    └── []
  │         ├── best: (scan q,cols=(1-3))
- │         └── cost: 1070.02
+ │         └── cost: 1080.02
  ├── G3: (filters G9 G10)
  ├── G4: (index-join G11 q,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G11 q,cols=(1-3))
- │         └── cost: 5120.02
+ │         └── cost: 5130.02
  ├── G5: (filters G10)
  ├── G6: (index-join G12 q,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G12 q,cols=(1-3))
- │         └── cost: 5120.02
+ │         └── cost: 5130.02
  ├── G7: (filters G9)
  ├── G8: (index-join G13 q,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G13 q,cols=(1-3))
- │         └── cost: 1706.69
+ │         └── cost: 1710.02
  ├── G9: (gt G14 G15)
  ├── G10: (eq G16 G17)
  ├── G11: (scan q@i_gt_0,partial,cols=(1,4))
@@ -358,16 +358,16 @@ memo (optimized, ~5KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 1080.14
+ │         └── cost: 1090.14
  ├── G2: (select G4 G5)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1080.03
+ │         └── cost: 1090.03
  ├── G3: (projections)
  ├── G4: (scan p,cols=(1,3))
  │    └── []
  │         ├── best: (scan p,cols=(1,3))
- │         └── cost: 1070.02
+ │         └── cost: 1080.02
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -394,10 +394,10 @@ memo (optimized, ~5KB, required=[presentation: k:1])
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── [presentation: k:1]
  │         ├── best: (scan a,cols=(1),constrained)
- │         └── cost: 1.05
+ │         └── cost: 1.06
  ├── G2: (scan a,cols=(1)) (scan a@u,cols=(1)) (scan a@v,cols=(1))
  │    └── []
- │         ├── best: (scan a,cols=(1))
+ │         ├── best: (scan a@u,cols=(1))
  │         └── cost: 1040.02
  ├── G3: (filters G4)
  ├── G4: (eq G5 G6)
@@ -431,7 +431,7 @@ memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── []
- │         ├── best: (scan a,cols=(1,3))
+ │         ├── best: (scan a@u,cols=(1,3))
  │         └── cost: 1050.02
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
@@ -468,13 +468,13 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
- │         ├── best: (scan a,cols=(1,2))
+ │         ├── best: (scan a@u,cols=(1,2))
  │         └── cost: 1050.02
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan a,cols=(1,2),constrained)
- │         └── cost: 1.06
+ │         └── cost: 1.07
  ├── G7: (filters G8)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G13)
@@ -514,13 +514,13 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
- │         ├── best: (scan a,cols=(1,2))
+ │         ├── best: (scan a@u,cols=(1,2))
  │         └── cost: 1050.02
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan a,cols=(1,2),constrained)
- │         └── cost: 1.06
+ │         └── cost: 1.07
  ├── G7: (filters G8)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G13)
@@ -554,7 +554,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized, ~6KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -566,7 +566,7 @@ memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G3: (projections)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── []
- │         ├── best: (scan a)
+ │         ├── best: (scan a@u)
  │         └── cost: 1060.02
  ├── G5: (filters G10 G11)
  ├── G6: (scan a@u,constrained)
@@ -646,15 +646,15 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized, ~3KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G4 b,cols=(1-4))
- │         └── cost: 51.32
+ │         └── cost: 51.42
  ├── G2: (scan b)
  │    └── []
  │         ├── best: (scan b)
- │         └── cost: 1080.02
+ │         └── cost: 1090.02
  ├── G3: (filters G5)
  ├── G4: (scan b@v,cols=(1,3),constrained)
  │    └── []
@@ -708,20 +708,20 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
- │         └── cost: 24.16
+ │         └── cost: 24.20
  ├── G2: (scan b)
  │    └── []
  │         ├── best: (scan b)
- │         └── cost: 1080.02
+ │         └── cost: 1090.02
  ├── G3: (filters G7 G8)
  ├── G4: (scan b,constrained)
  │    └── []
  │         ├── best: (scan b,constrained)
- │         └── cost: 360.01
+ │         └── cost: 363.34
  ├── G5: (filters G7)
  ├── G6: (select G9 G10)
  │    └── []
@@ -760,7 +760,7 @@ Source expression:
         ├── columns: k:1!null u:2!null
         ├── key: (1)
         ├── fd: ()-->(2)
-        ├── scan a
+        ├── scan a@u
         │    ├── columns: k:1!null u:2
         │    ├── key: (1)
         │    └── fd: (1)-->(2)
@@ -806,20 +806,20 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
-memo (optimized, ~5KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G5)
- │         └── cost: 51.43
+ │         └── cost: 51.53
  ├── G2: (scan b)
  │    └── []
  │         ├── best: (scan b)
- │         └── cost: 1080.02
+ │         └── cost: 1090.02
  ├── G3: (filters G6 G7)
  ├── G4: (index-join G8 b,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G8 b,cols=(1-4))
- │         └── cost: 51.32
+ │         └── cost: 51.42
  ├── G5: (filters G7)
  ├── G6: (range G9)
  ├── G7: (eq G10 G11)
@@ -870,25 +870,25 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G6 G7)
- │         └── cost: 24.21
+ │         └── cost: 24.24
  ├── G2: (scan b)
  │    └── []
  │         ├── best: (scan b)
- │         └── cost: 1080.02
+ │         └── cost: 1090.02
  ├── G3: (filters G8 G9 G10)
  ├── G4: (scan b,constrained)
  │    └── []
  │         ├── best: (scan b,constrained)
- │         └── cost: 360.01
+ │         └── cost: 363.34
  ├── G5: (filters G8 G9)
  ├── G6: (index-join G11 b,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G11 b,cols=(1-4))
- │         └── cost: 24.16
+ │         └── cost: 24.20
  ├── G7: (filters G9)
  ├── G8: (range G12)
  ├── G9: (eq G13 G14)
@@ -938,20 +938,20 @@ select
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
-memo (optimized, ~5KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
- │         └── cost: 411.23
+ │         └── cost: 412.03
  ├── G2: (scan b)
  │    └── []
  │         ├── best: (scan b)
- │         └── cost: 1080.02
+ │         └── cost: 1090.02
  ├── G3: (filters G5 G6)
  ├── G4: (index-join G7 b,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G7 b,cols=(1-4))
- │         └── cost: 410.42
+ │         └── cost: 411.22
  ├── G5: (gt G8 G9)
  ├── G6: (lt G8 G10)
  ├── G7: (scan b@u,cols=(1,2),constrained)
@@ -1060,16 +1060,16 @@ memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 567.81
+ │         └── cost: 568.92
  ├── G2: (select G4 G5) (index-join G6 b,cols=(1,4))
  │    └── []
  │         ├── best: (index-join G6 b,cols=(1,4))
- │         └── cost: 566.69
+ │         └── cost: 567.80
  ├── G3: (projections)
  ├── G4: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
- │         └── cost: 1060.02
+ │         └── cost: 1070.02
  ├── G5: (filters G7)
  ├── G6: (scan b@inv_idx,cols=(1),constrained)
  │    └── []
@@ -1934,7 +1934,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -1945,14 +1945,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8), (6)-->(7)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6: [/1 - /1]
+      │              ├── key: (6)
+      │              └── fd: ()-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -1970,7 +1970,7 @@ distinct-on
  ├── union-all
  │    ├── columns: k:1!null u:2 v:3 w:4!null
  │    ├── left columns: k:1!null u:2 v:3 w:4!null
- │    ├── right columns: k:5 u:6 v:7 w:8
+ │    ├── right columns: k:6 u:7 v:8 w:9
  │    ├── select
  │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
  │    │    ├── key: (1)
@@ -1987,20 +1987,20 @@ distinct-on
  │    │    └── filters
  │    │         └── w:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
  │    └── select
- │         ├── columns: k:5!null u:6 v:7!null w:8!null
- │         ├── key: (5)
- │         ├── fd: ()-->(7,8), (5)-->(6)
+ │         ├── columns: k:6!null u:7 v:8!null w:9!null
+ │         ├── key: (6)
+ │         ├── fd: ()-->(8,9), (6)-->(7)
  │         ├── index-join d
- │         │    ├── columns: k:5!null u:6 v:7 w:8
- │         │    ├── key: (5)
- │         │    ├── fd: ()-->(7), (5)-->(6,8)
+ │         │    ├── columns: k:6!null u:7 v:8 w:9
+ │         │    ├── key: (6)
+ │         │    ├── fd: ()-->(8), (6)-->(7,9)
  │         │    └── scan d@v
- │         │         ├── columns: k:5!null v:7!null
- │         │         ├── constraint: /7/5: [/1 - /1]
- │         │         ├── key: (5)
- │         │         └── fd: ()-->(7)
+ │         │         ├── columns: k:6!null v:8!null
+ │         │         ├── constraint: /8/6: [/1 - /1]
+ │         │         ├── key: (6)
+ │         │         └── fd: ()-->(8)
  │         └── filters
- │              └── w:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+ │              └── w:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
  └── aggregations
       ├── const-agg [as=u:2, outer=(2)]
       │    └── u:2
@@ -2023,7 +2023,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2!null v:3!null
       │    ├── left columns: k:1!null u:2!null v:3!null
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── inner-join (zigzag d@u d@v)
       │    │    ├── columns: k:1!null u:2!null v:3!null
       │    │    ├── eq columns: [1] = [1]
@@ -2035,15 +2035,15 @@ project
       │    │         ├── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       │    │         └── v:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
       │    └── inner-join (zigzag d@u d@v)
-      │         ├── columns: k:5!null u:6!null v:7!null
-      │         ├── eq columns: [5] = [5]
-      │         ├── left fixed columns: [6] = [10]
-      │         ├── right fixed columns: [7] = [2]
-      │         ├── key: (5)
-      │         ├── fd: ()-->(6,7)
+      │         ├── columns: k:6!null u:7!null v:8!null
+      │         ├── eq columns: [6] = [6]
+      │         ├── left fixed columns: [7] = [10]
+      │         ├── right fixed columns: [8] = [2]
+      │         ├── key: (6)
+      │         ├── fd: ()-->(7,8)
       │         └── filters
-      │              ├── v:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
-      │              └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+      │              ├── v:8 = 2 [outer=(8), constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
+      │              └── u:7 = 10 [outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2054,10 +2054,10 @@ opt expect=SplitDisjunction
 SELECT sum(k) FROM d WHERE u = 1 OR v = 1
 ----
 scalar-group-by
- ├── columns: sum:5
+ ├── columns: sum:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── distinct-on
  │    ├── columns: k:1!null u:2 v:3
  │    ├── grouping columns: k:1!null
@@ -2066,7 +2066,7 @@ scalar-group-by
  │    ├── union-all
  │    │    ├── columns: k:1!null u:2 v:3
  │    │    ├── left columns: k:1!null u:2 v:3
- │    │    ├── right columns: k:6 u:7 v:8
+ │    │    ├── right columns: k:7 u:8 v:9
  │    │    ├── index-join d
  │    │    │    ├── columns: k:1!null u:2!null v:3
  │    │    │    ├── key: (1)
@@ -2077,21 +2077,21 @@ scalar-group-by
  │    │    │         ├── key: (1)
  │    │    │         └── fd: ()-->(2)
  │    │    └── index-join d
- │    │         ├── columns: k:6!null u:7 v:8!null
- │    │         ├── key: (6)
- │    │         ├── fd: ()-->(8), (6)-->(7)
+ │    │         ├── columns: k:7!null u:8 v:9!null
+ │    │         ├── key: (7)
+ │    │         ├── fd: ()-->(9), (7)-->(8)
  │    │         └── scan d@v
- │    │              ├── columns: k:6!null v:8!null
- │    │              ├── constraint: /8/6: [/1 - /1]
- │    │              ├── key: (6)
- │    │              └── fd: ()-->(8)
+ │    │              ├── columns: k:7!null v:9!null
+ │    │              ├── constraint: /9/7: [/1 - /1]
+ │    │              ├── key: (7)
+ │    │              └── fd: ()-->(9)
  │    └── aggregations
  │         ├── const-agg [as=u:2, outer=(2)]
  │         │    └── u:2
  │         └── const-agg [as=v:3, outer=(3)]
  │              └── v:3
  └── aggregations
-      └── sum [as=sum:5, outer=(1)]
+      └── sum [as=sum:6, outer=(1)]
            └── k:1
 
 # Multi-column primary key.
@@ -2109,7 +2109,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null j:2!null u:3 v:4
       │    ├── left columns: k:1!null j:2!null u:3 v:4
-      │    ├── right columns: k:5 j:6 u:7 v:8
+      │    ├── right columns: k:6 j:7 u:8 v:9
       │    ├── index-join f
       │    │    ├── columns: k:1!null j:2!null u:3!null v:4
       │    │    ├── key: (1,2)
@@ -2120,14 +2120,14 @@ project
       │    │         ├── key: (1,2)
       │    │         └── fd: ()-->(3)
       │    └── index-join f
-      │         ├── columns: k:5!null j:6!null u:7 v:8!null
-      │         ├── key: (5,6)
-      │         ├── fd: ()-->(8), (5,6)-->(7)
+      │         ├── columns: k:6!null j:7!null u:8 v:9!null
+      │         ├── key: (6,7)
+      │         ├── fd: ()-->(9), (6,7)-->(8)
       │         └── scan f@v
-      │              ├── columns: k:5!null j:6!null v:8!null
-      │              ├── constraint: /8/5/6: [/2 - /2]
-      │              ├── key: (5,6)
-      │              └── fd: ()-->(8)
+      │              ├── columns: k:6!null j:7!null v:9!null
+      │              ├── constraint: /9/6/7: [/2 - /2]
+      │              ├── key: (6,7)
+      │              └── fd: ()-->(9)
       └── aggregations
            ├── const-agg [as=u:3, outer=(3)]
            │    └── u:3
@@ -2149,7 +2149,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -2160,14 +2160,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,8)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/5 - /8]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6: [/5 - /8]
+      │              ├── key: (6)
+      │              └── fd: (6)-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2191,7 +2191,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null j:4
       │    ├── left columns: k:1!null j:4
-      │    ├── right columns: k:5 j:8
+      │    ├── right columns: k:6 j:9
       │    ├── immutable
       │    ├── scan b
       │    │    ├── columns: k:1!null j:4
@@ -2200,14 +2200,14 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,4)
       │    └── index-join b
-      │         ├── columns: k:5!null j:8
+      │         ├── columns: k:6!null j:9
       │         ├── immutable
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(8)
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(9)
       │         └── scan b@inv_idx
-      │              ├── columns: k:5!null
-      │              ├── constraint: /8/5: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
-      │              └── key: (5)
+      │              ├── columns: k:6!null
+      │              ├── constraint: /9/6: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
+      │              └── key: (6)
       └── aggregations
            └── const-agg [as=j:4, outer=(4)]
                 └── j:4
@@ -2229,7 +2229,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null a:2
       │    ├── left columns: k:1!null a:2
-      │    ├── right columns: k:4 a:5
+      │    ├── right columns: k:5 a:6
       │    ├── immutable
       │    ├── scan c
       │    │    ├── columns: k:1!null a:2
@@ -2238,14 +2238,14 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,2)
       │    └── index-join c
-      │         ├── columns: k:4!null a:5
+      │         ├── columns: k:5!null a:6
       │         ├── immutable
-      │         ├── key: (4)
-      │         ├── fd: (4)-->(5)
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(6)
       │         └── scan c@inv_idx
-      │              ├── columns: k:4!null
-      │              ├── constraint: /5/4: [/ARRAY[2] - /ARRAY[2]]
-      │              └── key: (4)
+      │              ├── columns: k:5!null
+      │              ├── constraint: /6/5: [/ARRAY[2] - /ARRAY[2]]
+      │              └── key: (5)
       └── aggregations
            └── const-agg [as=a:2, outer=(2)]
                 └── a:2
@@ -2265,7 +2265,7 @@ project
       ├── union-all
       │    ├── columns: d.k:1!null d.u:2 d.v:3
       │    ├── left columns: d.k:1!null d.u:2 d.v:3
-      │    ├── right columns: d.k:8 d.u:9 d.v:10
+      │    ├── right columns: d.k:10 d.u:11 d.v:12
       │    ├── index-join d
       │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
       │    │    ├── key: (1)
@@ -2281,31 +2281,31 @@ project
       │    │         │    └── fd: ()-->(2)
       │    │         └── filters
       │    │              └── exists [subquery]
-      │    │                   └── scan a
-      │    │                        ├── columns: a.u:6 a.v:7
+      │    │                   └── scan a@u
+      │    │                        ├── columns: a.u:7 a.v:8
       │    │                        ├── limit: 1
       │    │                        ├── key: ()
-      │    │                        └── fd: ()-->(6,7)
+      │    │                        └── fd: ()-->(7,8)
       │    └── index-join d
-      │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-      │         ├── key: (8)
-      │         ├── fd: ()-->(10), (8)-->(9)
+      │         ├── columns: d.k:10!null d.u:11 d.v:12!null
+      │         ├── key: (10)
+      │         ├── fd: ()-->(12), (10)-->(11)
       │         └── select
-      │              ├── columns: d.k:8!null d.v:10!null
-      │              ├── key: (8)
-      │              ├── fd: ()-->(10)
+      │              ├── columns: d.k:10!null d.v:12!null
+      │              ├── key: (10)
+      │              ├── fd: ()-->(12)
       │              ├── scan d@v
-      │              │    ├── columns: d.k:8!null d.v:10!null
-      │              │    ├── constraint: /10/8: [/1 - /1]
-      │              │    ├── key: (8)
-      │              │    └── fd: ()-->(10)
+      │              │    ├── columns: d.k:10!null d.v:12!null
+      │              │    ├── constraint: /12/10: [/1 - /1]
+      │              │    ├── key: (10)
+      │              │    └── fd: ()-->(12)
       │              └── filters
       │                   └── exists [subquery]
-      │                        └── scan a
-      │                             ├── columns: a.u:6 a.v:7
+      │                        └── scan a@u
+      │                             ├── columns: a.u:7 a.v:8
       │                             ├── limit: 1
       │                             ├── key: ()
-      │                             └── fd: ()-->(6,7)
+      │                             └── fd: ()-->(7,8)
       └── aggregations
            ├── const-agg [as=d.u:2, outer=(2)]
            │    └── d.u:2
@@ -2324,10 +2324,10 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       └── inner-join (hash)
-           ├── columns: d.k:1!null d.u:2!null d.v:3 a.u:6!null
+           ├── columns: d.k:1!null d.u:2!null d.v:3 a.u:7!null
            ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
            ├── key: (1)
-           ├── fd: (1)-->(2,3), (2)==(6), (6)==(2)
+           ├── fd: (1)-->(2,3), (2)==(7), (7)==(2)
            ├── distinct-on
            │    ├── columns: d.k:1!null d.u:2 d.v:3
            │    ├── grouping columns: d.k:1!null
@@ -2336,7 +2336,7 @@ project
            │    ├── union-all
            │    │    ├── columns: d.k:1!null d.u:2 d.v:3
            │    │    ├── left columns: d.k:1!null d.u:2 d.v:3
-           │    │    ├── right columns: d.k:8 d.u:9 d.v:10
+           │    │    ├── right columns: d.k:10 d.u:11 d.v:12
            │    │    ├── index-join d
            │    │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
            │    │    │    ├── key: (1)
@@ -2347,29 +2347,29 @@ project
            │    │    │         ├── key: (1)
            │    │    │         └── fd: ()-->(2)
            │    │    └── index-join d
-           │    │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-           │    │         ├── key: (8)
-           │    │         ├── fd: ()-->(10), (8)-->(9)
+           │    │         ├── columns: d.k:10!null d.u:11 d.v:12!null
+           │    │         ├── key: (10)
+           │    │         ├── fd: ()-->(12), (10)-->(11)
            │    │         └── scan d@v
-           │    │              ├── columns: d.k:8!null d.v:10!null
-           │    │              ├── constraint: /10/8: [/1 - /1]
-           │    │              ├── key: (8)
-           │    │              └── fd: ()-->(10)
+           │    │              ├── columns: d.k:10!null d.v:12!null
+           │    │              ├── constraint: /12/10: [/1 - /1]
+           │    │              ├── key: (10)
+           │    │              └── fd: ()-->(12)
            │    └── aggregations
            │         ├── const-agg [as=d.u:2, outer=(2)]
            │         │    └── d.u:2
            │         └── const-agg [as=d.v:3, outer=(3)]
            │              └── d.v:3
            ├── distinct-on
-           │    ├── columns: a.u:6
-           │    ├── grouping columns: a.u:6
-           │    ├── internal-ordering: +6
-           │    ├── key: (6)
+           │    ├── columns: a.u:7
+           │    ├── grouping columns: a.u:7
+           │    ├── internal-ordering: +7
+           │    ├── key: (7)
            │    └── scan a@u
-           │         ├── columns: a.u:6
-           │         └── ordering: +6
+           │         ├── columns: a.u:7
+           │         └── ordering: +7
            └── filters
-                └── a.u:6 = d.u:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+                └── a.u:7 = d.u:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Correlated subquery with references to outer columns not in the scan columns.
 opt expect=SplitDisjunction
@@ -2383,10 +2383,10 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2-4)
       └── inner-join (hash)
-           ├── columns: d.k:1!null d.u:2 d.v:3 w:4!null a.u:6!null
+           ├── columns: d.k:1!null d.u:2 d.v:3 w:4!null a.u:7!null
            ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
            ├── key: (1)
-           ├── fd: (1)-->(2-4), (4)==(6), (6)==(4)
+           ├── fd: (1)-->(2-4), (4)==(7), (7)==(4)
            ├── distinct-on
            │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
            │    ├── grouping columns: d.k:1!null
@@ -2395,7 +2395,7 @@ project
            │    ├── union-all
            │    │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
            │    │    ├── left columns: d.k:1!null d.u:2 d.v:3 w:4
-           │    │    ├── right columns: d.k:8 d.u:9 d.v:10 w:11
+           │    │    ├── right columns: d.k:10 d.u:11 d.v:12 w:13
            │    │    ├── index-join d
            │    │    │    ├── columns: d.k:1!null d.u:2!null d.v:3 w:4
            │    │    │    ├── key: (1)
@@ -2406,14 +2406,14 @@ project
            │    │    │         ├── key: (1)
            │    │    │         └── fd: ()-->(2)
            │    │    └── index-join d
-           │    │         ├── columns: d.k:8!null d.u:9 d.v:10!null w:11
-           │    │         ├── key: (8)
-           │    │         ├── fd: ()-->(10), (8)-->(9,11)
+           │    │         ├── columns: d.k:10!null d.u:11 d.v:12!null w:13
+           │    │         ├── key: (10)
+           │    │         ├── fd: ()-->(12), (10)-->(11,13)
            │    │         └── scan d@v
-           │    │              ├── columns: d.k:8!null d.v:10!null
-           │    │              ├── constraint: /10/8: [/1 - /1]
-           │    │              ├── key: (8)
-           │    │              └── fd: ()-->(10)
+           │    │              ├── columns: d.k:10!null d.v:12!null
+           │    │              ├── constraint: /12/10: [/1 - /1]
+           │    │              ├── key: (10)
+           │    │              └── fd: ()-->(12)
            │    └── aggregations
            │         ├── const-agg [as=d.u:2, outer=(2)]
            │         │    └── d.u:2
@@ -2422,15 +2422,15 @@ project
            │         └── const-agg [as=w:4, outer=(4)]
            │              └── w:4
            ├── distinct-on
-           │    ├── columns: a.u:6
-           │    ├── grouping columns: a.u:6
-           │    ├── internal-ordering: +6
-           │    ├── key: (6)
+           │    ├── columns: a.u:7
+           │    ├── grouping columns: a.u:7
+           │    ├── internal-ordering: +7
+           │    ├── key: (7)
            │    └── scan a@u
-           │         ├── columns: a.u:6
-           │         └── ordering: +6
+           │         ├── columns: a.u:7
+           │         └── ordering: +7
            └── filters
-                └── a.u:6 = w:4 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+                └── a.u:7 = w:4 [outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
 
 # Apply when outer columns of both sides of OR are a subset of index columns.
 opt expect=SplitDisjunction
@@ -2444,7 +2444,7 @@ distinct-on
  ├── union-all
  │    ├── columns: k:1!null u:2 v:3
  │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
+ │    ├── right columns: k:6 u:7 v:8
  │    ├── index-join e
  │    │    ├── columns: k:1!null u:2!null v:3
  │    │    ├── key: (1)
@@ -2455,14 +2455,14 @@ distinct-on
  │    │         ├── key: (1)
  │    │         └── fd: ()-->(2)
  │    └── index-join e
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: ()-->(7), (5)-->(6)
+ │         ├── columns: k:6!null u:7 v:8!null
+ │         ├── key: (6)
+ │         ├── fd: ()-->(8), (6)-->(7)
  │         └── scan e@vw
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/8/5: [/1 - /1]
- │              ├── key: (5)
- │              └── fd: ()-->(7)
+ │              ├── columns: k:6!null v:8!null
+ │              ├── constraint: /8/9/6: [/1 - /1]
+ │              ├── key: (6)
+ │              └── fd: ()-->(8)
  └── aggregations
       ├── const-agg [as=u:2, outer=(2)]
       │    └── u:2
@@ -2485,7 +2485,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3 w:4!null
       │    ├── left columns: k:1!null u:2 v:3 w:4!null
-      │    ├── right columns: k:5 u:6 v:7 w:8
+      │    ├── right columns: k:6 u:7 v:8 w:9
       │    ├── select
       │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
       │    │    ├── key: (1)
@@ -2502,20 +2502,20 @@ project
       │    │    └── filters
       │    │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
       │    └── select
-      │         ├── columns: k:5!null u:6 v:7!null w:8!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7,8), (5)-->(6)
+      │         ├── columns: k:6!null u:7 v:8!null w:9!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8,9), (6)-->(7)
       │         ├── index-join d
-      │         │    ├── columns: k:5!null u:6 v:7 w:8
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8)
+      │         │    ├── columns: k:6!null u:7 v:8 w:9
+      │         │    ├── key: (6)
+      │         │    ├── fd: ()-->(8), (6)-->(7,9)
       │         │    └── scan d@v
-      │         │         ├── columns: k:5!null v:7!null
-      │         │         ├── constraint: /7/5: [/1 - /1]
-      │         │         ├── key: (5)
-      │         │         └── fd: ()-->(7)
+      │         │         ├── columns: k:6!null v:8!null
+      │         │         ├── constraint: /8/6: [/1 - /1]
+      │         │         ├── key: (6)
+      │         │         └── fd: ()-->(8)
       │         └── filters
-      │              └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
+      │              └── w:9 = 3 [outer=(9), constraints=(/9: [/3 - /3]; tight), fd=()-->(9)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2536,7 +2536,7 @@ distinct-on
  ├── union-all
  │    ├── columns: k:1!null u:2 v:3
  │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
+ │    ├── right columns: k:6 u:7 v:8
  │    ├── index-join d
  │    │    ├── columns: k:1!null u:2!null v:3
  │    │    ├── key: (1)
@@ -2549,16 +2549,16 @@ distinct-on
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2)
  │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: (5)-->(6,7)
+ │         ├── columns: k:6!null u:7 v:8!null
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(7,8)
  │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5
+ │              ├── columns: k:6!null v:8!null
+ │              ├── constraint: /8/6
  │              │    ├── [/2 - /2]
  │              │    └── [/4 - /4]
- │              ├── key: (5)
- │              └── fd: (5)-->(7)
+ │              ├── key: (6)
+ │              └── fd: (6)-->(8)
  └── aggregations
       ├── const-agg [as=u:2, outer=(2)]
       │    └── u:2
@@ -2577,7 +2577,7 @@ distinct-on
  ├── union-all
  │    ├── columns: k:1!null u:2 v:3
  │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
+ │    ├── right columns: k:6 u:7 v:8
  │    ├── index-join d
  │    │    ├── columns: k:1!null u:2!null v:3
  │    │    ├── key: (1)
@@ -2591,17 +2591,17 @@ distinct-on
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2)
  │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: (5)-->(6,7)
+ │         ├── columns: k:6!null u:7 v:8!null
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(7,8)
  │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5
+ │              ├── columns: k:6!null v:8!null
+ │              ├── constraint: /8/6
  │              │    ├── [/2 - /2]
  │              │    ├── [/4 - /4]
  │              │    └── [/6 - /6]
- │              ├── key: (5)
- │              └── fd: (5)-->(7)
+ │              ├── key: (6)
+ │              └── fd: (6)-->(8)
  └── aggregations
       ├── const-agg [as=u:2, outer=(2)]
       │    └── u:2
@@ -2620,7 +2620,7 @@ distinct-on
  ├── union-all
  │    ├── columns: k:1!null u:2 v:3
  │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
+ │    ├── right columns: k:6 u:7 v:8
  │    ├── index-join d
  │    │    ├── columns: k:1!null u:2!null v:3
  │    │    ├── key: (1)
@@ -2633,17 +2633,17 @@ distinct-on
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2)
  │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: (5)-->(6,7)
+ │         ├── columns: k:6!null u:7 v:8!null
+ │         ├── key: (6)
+ │         ├── fd: (6)-->(7,8)
  │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5
+ │              ├── columns: k:6!null v:8!null
+ │              ├── constraint: /8/6
  │              │    ├── [/2 - /2]
  │              │    ├── [/4 - /4]
  │              │    └── [/6 - /6]
- │              ├── key: (5)
- │              └── fd: (5)-->(7)
+ │              ├── key: (6)
+ │              └── fd: (6)-->(8)
  └── aggregations
       ├── const-agg [as=u:2, outer=(2)]
       │    └── u:2
@@ -2666,7 +2666,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3 w:4!null
       │    ├── left columns: k:1!null u:2 v:3 w:4!null
-      │    ├── right columns: k:5 u:6 v:7 w:8
+      │    ├── right columns: k:6 u:7 v:8 w:9
       │    ├── select
       │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
       │    │    ├── key: (1)
@@ -2683,20 +2683,20 @@ project
       │    │    └── filters
       │    │         └── (w:4 = 1) OR (w:4 = 2) [outer=(4), constraints=(/4: [/1 - /1] [/2 - /2]; tight)]
       │    └── select
-      │         ├── columns: k:5!null u:6 v:7!null w:8!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6,8)
+      │         ├── columns: k:6!null u:7 v:8!null w:9!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8), (6)-->(7,9)
       │         ├── index-join d
-      │         │    ├── columns: k:5!null u:6 v:7 w:8
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8)
+      │         │    ├── columns: k:6!null u:7 v:8 w:9
+      │         │    ├── key: (6)
+      │         │    ├── fd: ()-->(8), (6)-->(7,9)
       │         │    └── scan d@v
-      │         │         ├── columns: k:5!null v:7!null
-      │         │         ├── constraint: /7/5: [/4 - /4]
-      │         │         ├── key: (5)
-      │         │         └── fd: ()-->(7)
+      │         │         ├── columns: k:6!null v:8!null
+      │         │         ├── constraint: /8/6: [/4 - /4]
+      │         │         ├── key: (6)
+      │         │         └── fd: ()-->(8)
       │         └── filters
-      │              └── (w:8 = 1) OR (w:8 = 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+      │              └── (w:9 = 1) OR (w:9 = 2) [outer=(9), constraints=(/9: [/1 - /1] [/2 - /2]; tight)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2721,7 +2721,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3 w:4
       │    ├── left columns: k:1!null u:2 v:3 w:4
-      │    ├── right columns: k:5 u:6 v:7 w:8
+      │    ├── right columns: k:6 u:7 v:8 w:9
       │    ├── select
       │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
       │    │    ├── key: (1)
@@ -2738,20 +2738,20 @@ project
       │    │    └── filters
       │    │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
       │    └── select
-      │         ├── columns: k:5!null u:6 v:7!null w:8
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6,8)
+      │         ├── columns: k:6!null u:7 v:8!null w:9
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8), (6)-->(7,9)
       │         ├── index-join d
-      │         │    ├── columns: k:5!null u:6 v:7 w:8
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8)
+      │         │    ├── columns: k:6!null u:7 v:8 w:9
+      │         │    ├── key: (6)
+      │         │    ├── fd: ()-->(8), (6)-->(7,9)
       │         │    └── scan d@v
-      │         │         ├── columns: k:5!null v:7!null
-      │         │         ├── constraint: /7/5: [/4 - /4]
-      │         │         ├── key: (5)
-      │         │         └── fd: ()-->(7)
+      │         │         ├── columns: k:6!null v:8!null
+      │         │         ├── constraint: /8/6: [/4 - /4]
+      │         │         ├── key: (6)
+      │         │         └── fd: ()-->(8)
       │         └── filters
-      │              └── (u:6 = 1) OR (w:8 = 2) [outer=(6,8)]
+      │              └── (u:7 = 1) OR (w:9 = 2) [outer=(7,9)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2789,7 +2789,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -2800,14 +2800,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8), (6)-->(7)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6: [/1 - /1]
+      │              ├── key: (6)
+      │              └── fd: ()-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2844,7 +2844,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:4 u:5 v:6
+      │    ├── right columns: k:5 u:6 v:7
       │    ├── scan a@u
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── constraint: /2/1: [/1 - /1]
@@ -2852,12 +2852,12 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: ()-->(2), (1)-->(3), (3)~~>(1)
       │    └── scan a@v
-      │         ├── columns: k:4!null u:5 v:6!null
-      │         ├── constraint: /6: [/1 - /1]
+      │         ├── columns: k:5!null u:6 v:7!null
+      │         ├── constraint: /7: [/1 - /1]
       │         ├── flags: no-index-join
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         └── fd: ()-->(4-6)
+      │         └── fd: ()-->(5-7)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2911,7 +2911,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -2922,14 +2922,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8), (6)-->(7)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6: [/1 - /1]
+      │              ├── key: (6)
+      │              └── fd: ()-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -2950,7 +2950,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3 w:4!null
       │    ├── left columns: k:1!null u:2 v:3 w:4!null
-      │    ├── right columns: k:5 u:6 v:7 w:8
+      │    ├── right columns: k:6 u:7 v:8 w:9
       │    ├── select
       │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
       │    │    ├── key: (1)
@@ -2967,20 +2967,20 @@ project
       │    │    └── filters
       │    │         └── w:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
       │    └── select
-      │         ├── columns: k:5!null u:6 v:7!null w:8!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7,8), (5)-->(6)
+      │         ├── columns: k:6!null u:7 v:8!null w:9!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8,9), (6)-->(7)
       │         ├── index-join d
-      │         │    ├── columns: k:5!null u:6 v:7 w:8
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8)
+      │         │    ├── columns: k:6!null u:7 v:8 w:9
+      │         │    ├── key: (6)
+      │         │    ├── fd: ()-->(8), (6)-->(7,9)
       │         │    └── scan d@v
-      │         │         ├── columns: k:5!null v:7!null
-      │         │         ├── constraint: /7/5: [/1 - /1]
-      │         │         ├── key: (5)
-      │         │         └── fd: ()-->(7)
+      │         │         ├── columns: k:6!null v:8!null
+      │         │         ├── constraint: /8/6: [/1 - /1]
+      │         │         ├── key: (6)
+      │         │         └── fd: ()-->(8)
       │         └── filters
-      │              └── w:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      │              └── w:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3002,7 +3002,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2!null v:3!null
       │    ├── left columns: k:1!null u:2!null v:3!null
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── inner-join (zigzag d@u d@v)
       │    │    ├── columns: k:1!null u:2!null v:3!null
       │    │    ├── eq columns: [1] = [1]
@@ -3014,15 +3014,15 @@ project
       │    │         ├── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       │    │         └── v:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
       │    └── inner-join (zigzag d@u d@v)
-      │         ├── columns: k:5!null u:6!null v:7!null
-      │         ├── eq columns: [5] = [5]
-      │         ├── left fixed columns: [6] = [10]
-      │         ├── right fixed columns: [7] = [2]
-      │         ├── key: (5)
-      │         ├── fd: ()-->(6,7)
+      │         ├── columns: k:6!null u:7!null v:8!null
+      │         ├── eq columns: [6] = [6]
+      │         ├── left fixed columns: [7] = [10]
+      │         ├── right fixed columns: [8] = [2]
+      │         ├── key: (6)
+      │         ├── fd: ()-->(7,8)
       │         └── filters
-      │              ├── v:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
-      │              └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
+      │              ├── v:8 = 2 [outer=(8), constraints=(/8: [/2 - /2]; tight), fd=()-->(8)]
+      │              └── u:7 = 10 [outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3033,10 +3033,10 @@ opt expect=SplitDisjunctionAddKey
 SELECT count(*) FROM d WHERE u = 1 OR v = 1
 ----
 scalar-group-by
- ├── columns: count:5!null
+ ├── columns: count:6!null
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── project
  │    ├── columns: u:2 v:3
  │    └── distinct-on
@@ -3047,7 +3047,7 @@ scalar-group-by
  │         ├── union-all
  │         │    ├── columns: k:1!null u:2 v:3
  │         │    ├── left columns: k:1!null u:2 v:3
- │         │    ├── right columns: k:6 u:7 v:8
+ │         │    ├── right columns: k:7 u:8 v:9
  │         │    ├── index-join d
  │         │    │    ├── columns: k:1!null u:2!null v:3
  │         │    │    ├── key: (1)
@@ -3058,21 +3058,21 @@ scalar-group-by
  │         │    │         ├── key: (1)
  │         │    │         └── fd: ()-->(2)
  │         │    └── index-join d
- │         │         ├── columns: k:6!null u:7 v:8!null
- │         │         ├── key: (6)
- │         │         ├── fd: ()-->(8), (6)-->(7)
+ │         │         ├── columns: k:7!null u:8 v:9!null
+ │         │         ├── key: (7)
+ │         │         ├── fd: ()-->(9), (7)-->(8)
  │         │         └── scan d@v
- │         │              ├── columns: k:6!null v:8!null
- │         │              ├── constraint: /8/6: [/1 - /1]
- │         │              ├── key: (6)
- │         │              └── fd: ()-->(8)
+ │         │              ├── columns: k:7!null v:9!null
+ │         │              ├── constraint: /9/7: [/1 - /1]
+ │         │              ├── key: (7)
+ │         │              └── fd: ()-->(9)
  │         └── aggregations
  │              ├── const-agg [as=u:2, outer=(2)]
  │              │    └── u:2
  │              └── const-agg [as=v:3, outer=(3)]
  │                   └── v:3
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:6]
 
 
 # Multi-column primary key.
@@ -3089,7 +3089,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null j:2!null u:3 v:4
       │    ├── left columns: k:1!null j:2!null u:3 v:4
-      │    ├── right columns: k:5 j:6 u:7 v:8
+      │    ├── right columns: k:6 j:7 u:8 v:9
       │    ├── index-join f
       │    │    ├── columns: k:1!null j:2!null u:3!null v:4
       │    │    ├── key: (1,2)
@@ -3100,14 +3100,14 @@ project
       │    │         ├── key: (1,2)
       │    │         └── fd: ()-->(3)
       │    └── index-join f
-      │         ├── columns: k:5!null j:6!null u:7 v:8!null
-      │         ├── key: (5,6)
-      │         ├── fd: ()-->(8), (5,6)-->(7)
+      │         ├── columns: k:6!null j:7!null u:8 v:9!null
+      │         ├── key: (6,7)
+      │         ├── fd: ()-->(9), (6,7)-->(8)
       │         └── scan f@v
-      │              ├── columns: k:5!null j:6!null v:8!null
-      │              ├── constraint: /8/5/6: [/2 - /2]
-      │              ├── key: (5,6)
-      │              └── fd: ()-->(8)
+      │              ├── columns: k:6!null j:7!null v:9!null
+      │              ├── constraint: /9/6/7: [/2 - /2]
+      │              ├── key: (6,7)
+      │              └── fd: ()-->(9)
       └── aggregations
            ├── const-agg [as=u:3, outer=(3)]
            │    └── u:3
@@ -3128,7 +3128,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -3139,14 +3139,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,8)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/5 - /8]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6: [/5 - /8]
+      │              ├── key: (6)
+      │              └── fd: (6)-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3169,7 +3169,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 j:4
       │    ├── left columns: k:1!null u:2 j:4
-      │    ├── right columns: k:5 u:6 j:8
+      │    ├── right columns: k:6 u:7 j:9
       │    ├── immutable
       │    ├── index-join b
       │    │    ├── columns: k:1!null u:2!null j:4
@@ -3181,14 +3181,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join b
-      │         ├── columns: k:5!null u:6 j:8
+      │         ├── columns: k:6!null u:7 j:9
       │         ├── immutable
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,8)
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,9)
       │         └── scan b@inv_idx
-      │              ├── columns: k:5!null
-      │              ├── constraint: /8/5: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
-      │              └── key: (5)
+      │              ├── columns: k:6!null
+      │              ├── constraint: /9/6: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
+      │              └── key: (6)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3211,7 +3211,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null a:2 u:3
       │    ├── left columns: k:1!null a:2 u:3
-      │    ├── right columns: k:4 a:5 u:6
+      │    ├── right columns: k:5 a:6 u:7
       │    ├── immutable
       │    ├── index-join c
       │    │    ├── columns: k:1!null a:2 u:3!null
@@ -3223,14 +3223,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
       │    └── index-join c
-      │         ├── columns: k:4!null a:5 u:6
+      │         ├── columns: k:5!null a:6 u:7
       │         ├── immutable
-      │         ├── key: (4)
-      │         ├── fd: (4)-->(5,6)
+      │         ├── key: (5)
+      │         ├── fd: (5)-->(6,7)
       │         └── scan c@inv_idx
-      │              ├── columns: k:4!null
-      │              ├── constraint: /5/4: [/ARRAY[2] - /ARRAY[2]]
-      │              └── key: (4)
+      │              ├── columns: k:5!null
+      │              ├── constraint: /6/5: [/ARRAY[2] - /ARRAY[2]]
+      │              └── key: (5)
       └── aggregations
            ├── const-agg [as=a:2, outer=(2)]
            │    └── a:2
@@ -3251,7 +3251,7 @@ project
       ├── union-all
       │    ├── columns: d.k:1!null d.u:2 d.v:3
       │    ├── left columns: d.k:1!null d.u:2 d.v:3
-      │    ├── right columns: d.k:8 d.u:9 d.v:10
+      │    ├── right columns: d.k:10 d.u:11 d.v:12
       │    ├── index-join d
       │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
       │    │    ├── key: (1)
@@ -3267,31 +3267,31 @@ project
       │    │         │    └── fd: ()-->(2)
       │    │         └── filters
       │    │              └── exists [subquery]
-      │    │                   └── scan a
-      │    │                        ├── columns: a.u:6 a.v:7
+      │    │                   └── scan a@u
+      │    │                        ├── columns: a.u:7 a.v:8
       │    │                        ├── limit: 1
       │    │                        ├── key: ()
-      │    │                        └── fd: ()-->(6,7)
+      │    │                        └── fd: ()-->(7,8)
       │    └── index-join d
-      │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-      │         ├── key: (8)
-      │         ├── fd: ()-->(10), (8)-->(9)
+      │         ├── columns: d.k:10!null d.u:11 d.v:12!null
+      │         ├── key: (10)
+      │         ├── fd: ()-->(12), (10)-->(11)
       │         └── select
-      │              ├── columns: d.k:8!null d.v:10!null
-      │              ├── key: (8)
-      │              ├── fd: ()-->(10)
+      │              ├── columns: d.k:10!null d.v:12!null
+      │              ├── key: (10)
+      │              ├── fd: ()-->(12)
       │              ├── scan d@v
-      │              │    ├── columns: d.k:8!null d.v:10!null
-      │              │    ├── constraint: /10/8: [/1 - /1]
-      │              │    ├── key: (8)
-      │              │    └── fd: ()-->(10)
+      │              │    ├── columns: d.k:10!null d.v:12!null
+      │              │    ├── constraint: /12/10: [/1 - /1]
+      │              │    ├── key: (10)
+      │              │    └── fd: ()-->(12)
       │              └── filters
       │                   └── exists [subquery]
-      │                        └── scan a
-      │                             ├── columns: a.u:6 a.v:7
+      │                        └── scan a@u
+      │                             ├── columns: a.u:7 a.v:8
       │                             ├── limit: 1
       │                             ├── key: ()
-      │                             └── fd: ()-->(6,7)
+      │                             └── fd: ()-->(7,8)
       └── aggregations
            ├── const-agg [as=d.u:2, outer=(2)]
            │    └── d.u:2
@@ -3305,9 +3305,9 @@ SELECT u, v FROM d WHERE (u = 1 OR v = 1) AND EXISTS (SELECT * FROM a WHERE a.u 
 project
  ├── columns: u:2 v:3
  └── inner-join (hash)
-      ├── columns: d.u:2!null d.v:3 a.u:6!null
+      ├── columns: d.u:2!null d.v:3 a.u:7!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      ├── fd: (2)==(6), (6)==(2)
+      ├── fd: (2)==(7), (7)==(2)
       ├── project
       │    ├── columns: d.u:2 d.v:3
       │    └── distinct-on
@@ -3318,7 +3318,7 @@ project
       │         ├── union-all
       │         │    ├── columns: d.k:1!null d.u:2 d.v:3
       │         │    ├── left columns: d.k:1!null d.u:2 d.v:3
-      │         │    ├── right columns: d.k:8 d.u:9 d.v:10
+      │         │    ├── right columns: d.k:10 d.u:11 d.v:12
       │         │    ├── index-join d
       │         │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
       │         │    │    ├── key: (1)
@@ -3329,29 +3329,29 @@ project
       │         │    │         ├── key: (1)
       │         │    │         └── fd: ()-->(2)
       │         │    └── index-join d
-      │         │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-      │         │         ├── key: (8)
-      │         │         ├── fd: ()-->(10), (8)-->(9)
+      │         │         ├── columns: d.k:10!null d.u:11 d.v:12!null
+      │         │         ├── key: (10)
+      │         │         ├── fd: ()-->(12), (10)-->(11)
       │         │         └── scan d@v
-      │         │              ├── columns: d.k:8!null d.v:10!null
-      │         │              ├── constraint: /10/8: [/1 - /1]
-      │         │              ├── key: (8)
-      │         │              └── fd: ()-->(10)
+      │         │              ├── columns: d.k:10!null d.v:12!null
+      │         │              ├── constraint: /12/10: [/1 - /1]
+      │         │              ├── key: (10)
+      │         │              └── fd: ()-->(12)
       │         └── aggregations
       │              ├── const-agg [as=d.u:2, outer=(2)]
       │              │    └── d.u:2
       │              └── const-agg [as=d.v:3, outer=(3)]
       │                   └── d.v:3
       ├── distinct-on
-      │    ├── columns: a.u:6
-      │    ├── grouping columns: a.u:6
-      │    ├── internal-ordering: +6
-      │    ├── key: (6)
+      │    ├── columns: a.u:7
+      │    ├── grouping columns: a.u:7
+      │    ├── internal-ordering: +7
+      │    ├── key: (7)
       │    └── scan a@u
-      │         ├── columns: a.u:6
-      │         └── ordering: +6
+      │         ├── columns: a.u:7
+      │         └── ordering: +7
       └── filters
-           └── a.u:6 = d.u:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+           └── a.u:7 = d.u:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Correlated subquery with references to outer columns not in the scan columns.
 opt expect=SplitDisjunctionAddKey
@@ -3362,9 +3362,9 @@ project
  └── project
       ├── columns: d.u:2 d.v:3 w:4
       └── inner-join (hash)
-           ├── columns: d.u:2 d.v:3 w:4!null a.u:6!null
+           ├── columns: d.u:2 d.v:3 w:4!null a.u:7!null
            ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-           ├── fd: (4)==(6), (6)==(4)
+           ├── fd: (4)==(7), (7)==(4)
            ├── project
            │    ├── columns: d.u:2 d.v:3 w:4
            │    └── distinct-on
@@ -3375,7 +3375,7 @@ project
            │         ├── union-all
            │         │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
            │         │    ├── left columns: d.k:1!null d.u:2 d.v:3 w:4
-           │         │    ├── right columns: d.k:8 d.u:9 d.v:10 w:11
+           │         │    ├── right columns: d.k:10 d.u:11 d.v:12 w:13
            │         │    ├── index-join d
            │         │    │    ├── columns: d.k:1!null d.u:2!null d.v:3 w:4
            │         │    │    ├── key: (1)
@@ -3386,14 +3386,14 @@ project
            │         │    │         ├── key: (1)
            │         │    │         └── fd: ()-->(2)
            │         │    └── index-join d
-           │         │         ├── columns: d.k:8!null d.u:9 d.v:10!null w:11
-           │         │         ├── key: (8)
-           │         │         ├── fd: ()-->(10), (8)-->(9,11)
+           │         │         ├── columns: d.k:10!null d.u:11 d.v:12!null w:13
+           │         │         ├── key: (10)
+           │         │         ├── fd: ()-->(12), (10)-->(11,13)
            │         │         └── scan d@v
-           │         │              ├── columns: d.k:8!null d.v:10!null
-           │         │              ├── constraint: /10/8: [/1 - /1]
-           │         │              ├── key: (8)
-           │         │              └── fd: ()-->(10)
+           │         │              ├── columns: d.k:10!null d.v:12!null
+           │         │              ├── constraint: /12/10: [/1 - /1]
+           │         │              ├── key: (10)
+           │         │              └── fd: ()-->(12)
            │         └── aggregations
            │              ├── const-agg [as=d.u:2, outer=(2)]
            │              │    └── d.u:2
@@ -3402,15 +3402,15 @@ project
            │              └── const-agg [as=w:4, outer=(4)]
            │                   └── w:4
            ├── distinct-on
-           │    ├── columns: a.u:6
-           │    ├── grouping columns: a.u:6
-           │    ├── internal-ordering: +6
-           │    ├── key: (6)
+           │    ├── columns: a.u:7
+           │    ├── grouping columns: a.u:7
+           │    ├── internal-ordering: +7
+           │    ├── key: (7)
            │    └── scan a@u
-           │         ├── columns: a.u:6
-           │         └── ordering: +6
+           │         ├── columns: a.u:7
+           │         └── ordering: +7
            └── filters
-                └── a.u:6 = w:4 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+                └── a.u:7 = w:4 [outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
 
 # Use rowid when there is no explicit primary key.
 opt expect=SplitDisjunctionAddKey
@@ -3426,7 +3426,7 @@ project
       ├── union-all
       │    ├── columns: u:2 v:3 rowid:4!null
       │    ├── left columns: u:2 v:3 rowid:4!null
-      │    ├── right columns: u:6 v:7 rowid:8
+      │    ├── right columns: u:7 v:8 rowid:9
       │    ├── index-join no_explicit_primary_key
       │    │    ├── columns: u:2!null v:3 rowid:4!null
       │    │    ├── key: (4)
@@ -3437,14 +3437,14 @@ project
       │    │         ├── key: (4)
       │    │         └── fd: ()-->(2)
       │    └── index-join no_explicit_primary_key
-      │         ├── columns: u:6 v:7!null rowid:8!null
-      │         ├── key: (8)
-      │         ├── fd: ()-->(7), (8)-->(6)
+      │         ├── columns: u:7 v:8!null rowid:9!null
+      │         ├── key: (9)
+      │         ├── fd: ()-->(8), (9)-->(7)
       │         └── scan no_explicit_primary_key@v
-      │              ├── columns: v:7!null rowid:8!null
-      │              ├── constraint: /7/8: [/5 - /5]
-      │              ├── key: (8)
-      │              └── fd: ()-->(7)
+      │              ├── columns: v:8!null rowid:9!null
+      │              ├── constraint: /8/9: [/5 - /5]
+      │              ├── key: (9)
+      │              └── fd: ()-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3465,7 +3465,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join e
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -3476,14 +3476,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join e
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: ()-->(8), (6)-->(7)
       │         └── scan e@vw
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/8/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/9/6: [/1 - /1]
+      │              ├── key: (6)
+      │              └── fd: ()-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3506,7 +3506,7 @@ project
            ├── union-all
            │    ├── columns: k:1!null u:2 v:3 w:4!null
            │    ├── left columns: k:1!null u:2 v:3 w:4!null
-           │    ├── right columns: k:5 u:6 v:7 w:8
+           │    ├── right columns: k:6 u:7 v:8 w:9
            │    ├── select
            │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
            │    │    ├── key: (1)
@@ -3523,20 +3523,20 @@ project
            │    │    └── filters
            │    │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
            │    └── select
-           │         ├── columns: k:5!null u:6 v:7!null w:8!null
-           │         ├── key: (5)
-           │         ├── fd: ()-->(7,8), (5)-->(6)
+           │         ├── columns: k:6!null u:7 v:8!null w:9!null
+           │         ├── key: (6)
+           │         ├── fd: ()-->(8,9), (6)-->(7)
            │         ├── index-join d
-           │         │    ├── columns: k:5!null u:6 v:7 w:8
-           │         │    ├── key: (5)
-           │         │    ├── fd: ()-->(7), (5)-->(6,8)
+           │         │    ├── columns: k:6!null u:7 v:8 w:9
+           │         │    ├── key: (6)
+           │         │    ├── fd: ()-->(8), (6)-->(7,9)
            │         │    └── scan d@v
-           │         │         ├── columns: k:5!null v:7!null
-           │         │         ├── constraint: /7/5: [/1 - /1]
-           │         │         ├── key: (5)
-           │         │         └── fd: ()-->(7)
+           │         │         ├── columns: k:6!null v:8!null
+           │         │         ├── constraint: /8/6: [/1 - /1]
+           │         │         ├── key: (6)
+           │         │         └── fd: ()-->(8)
            │         └── filters
-           │              └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
+           │              └── w:9 = 3 [outer=(9), constraints=(/9: [/3 - /3]; tight), fd=()-->(9)]
            └── aggregations
                 ├── const-agg [as=u:2, outer=(2)]
                 │    └── u:2
@@ -3559,7 +3559,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -3572,16 +3572,16 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,8)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6
       │              │    ├── [/2 - /2]
       │              │    └── [/4 - /4]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
+      │              ├── key: (6)
+      │              └── fd: (6)-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3602,7 +3602,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -3616,17 +3616,17 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,8)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6
       │              │    ├── [/2 - /2]
       │              │    ├── [/4 - /4]
       │              │    └── [/6 - /6]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
+      │              ├── key: (6)
+      │              └── fd: (6)-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3647,7 +3647,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
+      │    ├── right columns: k:6 u:7 v:8
       │    ├── index-join d
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── key: (1)
@@ -3660,17 +3660,17 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2)
       │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
+      │         ├── columns: k:6!null u:7 v:8!null
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,8)
       │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5
+      │              ├── columns: k:6!null v:8!null
+      │              ├── constraint: /8/6
       │              │    ├── [/2 - /2]
       │              │    ├── [/4 - /4]
       │              │    └── [/6 - /6]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
+      │              ├── key: (6)
+      │              └── fd: (6)-->(8)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3694,7 +3694,7 @@ project
            ├── union-all
            │    ├── columns: k:1!null u:2 v:3 w:4!null
            │    ├── left columns: k:1!null u:2 v:3 w:4!null
-           │    ├── right columns: k:5 u:6 v:7 w:8
+           │    ├── right columns: k:6 u:7 v:8 w:9
            │    ├── select
            │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
            │    │    ├── key: (1)
@@ -3711,20 +3711,20 @@ project
            │    │    └── filters
            │    │         └── (w:4 = 1) OR (w:4 = 2) [outer=(4), constraints=(/4: [/1 - /1] [/2 - /2]; tight)]
            │    └── select
-           │         ├── columns: k:5!null u:6 v:7!null w:8!null
-           │         ├── key: (5)
-           │         ├── fd: ()-->(7), (5)-->(6,8)
+           │         ├── columns: k:6!null u:7 v:8!null w:9!null
+           │         ├── key: (6)
+           │         ├── fd: ()-->(8), (6)-->(7,9)
            │         ├── index-join d
-           │         │    ├── columns: k:5!null u:6 v:7 w:8
-           │         │    ├── key: (5)
-           │         │    ├── fd: ()-->(7), (5)-->(6,8)
+           │         │    ├── columns: k:6!null u:7 v:8 w:9
+           │         │    ├── key: (6)
+           │         │    ├── fd: ()-->(8), (6)-->(7,9)
            │         │    └── scan d@v
-           │         │         ├── columns: k:5!null v:7!null
-           │         │         ├── constraint: /7/5: [/4 - /4]
-           │         │         ├── key: (5)
-           │         │         └── fd: ()-->(7)
+           │         │         ├── columns: k:6!null v:8!null
+           │         │         ├── constraint: /8/6: [/4 - /4]
+           │         │         ├── key: (6)
+           │         │         └── fd: ()-->(8)
            │         └── filters
-           │              └── (w:8 = 1) OR (w:8 = 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+           │              └── (w:9 = 1) OR (w:9 = 2) [outer=(9), constraints=(/9: [/1 - /1] [/2 - /2]; tight)]
            └── aggregations
                 ├── const-agg [as=u:2, outer=(2)]
                 │    └── u:2
@@ -3750,7 +3750,7 @@ project
            ├── union-all
            │    ├── columns: k:1!null u:2 v:3 w:4
            │    ├── left columns: k:1!null u:2 v:3 w:4
-           │    ├── right columns: k:5 u:6 v:7 w:8
+           │    ├── right columns: k:6 u:7 v:8 w:9
            │    ├── select
            │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
            │    │    ├── key: (1)
@@ -3767,20 +3767,20 @@ project
            │    │    └── filters
            │    │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
            │    └── select
-           │         ├── columns: k:5!null u:6 v:7!null w:8
-           │         ├── key: (5)
-           │         ├── fd: ()-->(7), (5)-->(6,8)
+           │         ├── columns: k:6!null u:7 v:8!null w:9
+           │         ├── key: (6)
+           │         ├── fd: ()-->(8), (6)-->(7,9)
            │         ├── index-join d
-           │         │    ├── columns: k:5!null u:6 v:7 w:8
-           │         │    ├── key: (5)
-           │         │    ├── fd: ()-->(7), (5)-->(6,8)
+           │         │    ├── columns: k:6!null u:7 v:8 w:9
+           │         │    ├── key: (6)
+           │         │    ├── fd: ()-->(8), (6)-->(7,9)
            │         │    └── scan d@v
-           │         │         ├── columns: k:5!null v:7!null
-           │         │         ├── constraint: /7/5: [/4 - /4]
-           │         │         ├── key: (5)
-           │         │         └── fd: ()-->(7)
+           │         │         ├── columns: k:6!null v:8!null
+           │         │         ├── constraint: /8/6: [/4 - /4]
+           │         │         ├── key: (6)
+           │         │         └── fd: ()-->(8)
            │         └── filters
-           │              └── (u:6 = 1) OR (w:8 = 2) [outer=(6,8)]
+           │              └── (u:7 = 1) OR (w:9 = 2) [outer=(7,9)]
            └── aggregations
                 ├── const-agg [as=u:2, outer=(2)]
                 │    └── u:2
@@ -3812,7 +3812,7 @@ distinct-on
  ├── union-all
  │    ├── columns: k:1!null u:2 v:3
  │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
+ │    ├── right columns: k:6 u:7 v:8
  │    ├── index-join d
  │    │    ├── columns: k:1!null u:2!null v:3
  │    │    ├── key: (1)
@@ -3823,14 +3823,14 @@ distinct-on
  │    │         ├── key: (1)
  │    │         └── fd: ()-->(2)
  │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: ()-->(7), (5)-->(6)
+ │         ├── columns: k:6!null u:7 v:8!null
+ │         ├── key: (6)
+ │         ├── fd: ()-->(8), (6)-->(7)
  │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5: [/1 - /1]
- │              ├── key: (5)
- │              └── fd: ()-->(7)
+ │              ├── columns: k:6!null v:8!null
+ │              ├── constraint: /8/6: [/1 - /1]
+ │              ├── key: (6)
+ │              └── fd: ()-->(8)
  └── aggregations
       ├── const-agg [as=u:2, outer=(2)]
       │    └── u:2
@@ -3863,7 +3863,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 v:3
       │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:4 u:5 v:6
+      │    ├── right columns: k:5 u:6 v:7
       │    ├── scan a@u
       │    │    ├── columns: k:1!null u:2!null v:3
       │    │    ├── constraint: /2/1: [/1 - /1]
@@ -3871,12 +3871,12 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: ()-->(2), (1)-->(3), (3)~~>(1)
       │    └── scan a@v
-      │         ├── columns: k:4!null u:5 v:6!null
-      │         ├── constraint: /6: [/1 - /1]
+      │         ├── columns: k:5!null u:6 v:7!null
+      │         ├── constraint: /7: [/1 - /1]
       │         ├── flags: no-index-join
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         └── fd: ()-->(4-6)
+      │         └── fd: ()-->(5-7)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2

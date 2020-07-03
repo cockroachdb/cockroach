@@ -45,7 +45,7 @@ Source expression:
    ├── columns: a:1(int!null) b:2(int!null)
    ├── key: (1)
    ├── fd: ()-->(2)
-   ├── scan ab
+   ├── scan ab@secondary
    │    ├── columns: a:1(int!null) b:2(int)
    │    ├── key: (1)
    │    └── fd: (1)-->(2)
@@ -64,7 +64,7 @@ Source expression:
    ├── columns: a:1(int!null) b:2(int!null)
    ├── key: (1)
    ├── fd: ()-->(2)
-   ├── scan ab
+   ├── scan ab@secondary
    │    ├── columns: a:1(int!null) b:2(int)
    │    ├── key: (1)
    │    └── fd: (1)-->(2)
@@ -83,7 +83,7 @@ Source expression:
    ├── columns: a:1(int!null) b:2(int!null)
    ├── key: (1)
    ├── fd: ()-->(2)
-   ├── scan ab
+   ├── scan ab@secondary
    │    ├── columns: a:1(int!null) b:2(int)
    │    ├── key: (1)
    │    └── fd: (1)-->(2)

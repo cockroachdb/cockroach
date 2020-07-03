@@ -10,42 +10,42 @@ opt
 SELECT k, i FROM a UNION SELECT * FROM b
 ----
 union
- ├── columns: k:8 i:9
+ ├── columns: k:10 i:11
  ├── left columns: a.k:1 a.i:2
- ├── right columns: x:5 z:6
- ├── stats: [rows=2000, distinct(8,9)=2000, null(8,9)=0]
- ├── cost: 2150.05
- ├── key: (8,9)
+ ├── right columns: x:6 z:7
+ ├── stats: [rows=2000, distinct(10,11)=2000, null(10,11)=0]
+ ├── cost: 2170.05
+ ├── key: (10,11)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
  │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- │    ├── cost: 1060.02
+ │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
-      ├── columns: x:5 z:6!null
-      ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=0]
-      └── cost: 1050.02
+      ├── columns: x:6 z:7!null
+      ├── stats: [rows=1000, distinct(6,7)=1000, null(6,7)=0]
+      └── cost: 1060.02
 
 opt
 SELECT k, i FROM a UNION ALL SELECT * FROM b
 ----
 union-all
- ├── columns: k:8 i:9
+ ├── columns: k:10 i:11
  ├── left columns: a.k:1 a.i:2
- ├── right columns: x:5 z:6
+ ├── right columns: x:6 z:7
  ├── stats: [rows=2000]
- ├── cost: 2130.05
+ ├── cost: 2150.05
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060.02
+ │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
-      ├── columns: x:5 z:6!null
+      ├── columns: x:6 z:7!null
       ├── stats: [rows=1000]
-      └── cost: 1050.02
+      └── cost: 1060.02
 
 opt
 SELECT k, i FROM a INTERSECT SELECT * FROM b
@@ -53,20 +53,20 @@ SELECT k, i FROM a INTERSECT SELECT * FROM b
 intersect
  ├── columns: k:1 i:2
  ├── left columns: k:1 i:2
- ├── right columns: x:5 z:6
+ ├── right columns: x:6 z:7
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- ├── cost: 2140.05
+ ├── cost: 2160.05
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- │    ├── cost: 1060.02
+ │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
-      ├── columns: x:5 z:6!null
-      ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=0]
-      └── cost: 1050.02
+      ├── columns: x:6 z:7!null
+      ├── stats: [rows=1000, distinct(6,7)=1000, null(6,7)=0]
+      └── cost: 1060.02
 
 opt
 SELECT k, i FROM a INTERSECT ALL SELECT * FROM b
@@ -74,19 +74,19 @@ SELECT k, i FROM a INTERSECT ALL SELECT * FROM b
 intersect-all
  ├── columns: k:1 i:2
  ├── left columns: k:1 i:2
- ├── right columns: x:5 z:6
+ ├── right columns: x:6 z:7
  ├── stats: [rows=1000]
- ├── cost: 2140.05
+ ├── cost: 2160.05
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060.02
+ │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
-      ├── columns: x:5 z:6!null
+      ├── columns: x:6 z:7!null
       ├── stats: [rows=1000]
-      └── cost: 1050.02
+      └── cost: 1060.02
 
 opt
 SELECT k, i FROM a EXCEPT SELECT * FROM b
@@ -94,20 +94,20 @@ SELECT k, i FROM a EXCEPT SELECT * FROM b
 except
  ├── columns: k:1 i:2
  ├── left columns: k:1 i:2
- ├── right columns: x:5 z:6
+ ├── right columns: x:6 z:7
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- ├── cost: 2140.05
+ ├── cost: 2160.05
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- │    ├── cost: 1060.02
+ │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
-      ├── columns: x:5 z:6!null
-      ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=0]
-      └── cost: 1050.02
+      ├── columns: x:6 z:7!null
+      ├── stats: [rows=1000, distinct(6,7)=1000, null(6,7)=0]
+      └── cost: 1060.02
 
 opt
 SELECT k, i FROM a EXCEPT ALL SELECT * FROM b
@@ -115,16 +115,16 @@ SELECT k, i FROM a EXCEPT ALL SELECT * FROM b
 except-all
  ├── columns: k:1 i:2
  ├── left columns: k:1 i:2
- ├── right columns: x:5 z:6
+ ├── right columns: x:6 z:7
  ├── stats: [rows=1000]
- ├── cost: 2140.05
+ ├── cost: 2160.05
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060.02
+ │    ├── cost: 1070.02
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
-      ├── columns: x:5 z:6!null
+      ├── columns: x:6 z:7!null
       ├── stats: [rows=1000]
-      └── cost: 1050.02
+      └── cost: 1060.02
