@@ -13,9 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -23,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -98,62 +94,6 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		})
-}
-
-func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-	flowCtx := &execinfra.FlowCtx{
-		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
-			Settings: st,
-		},
-	}
-	typs := []*types.T{types.Int, types.Int}
-	batch := testAllocator.NewMemBatch(typs)
-	col := batch.ColVec(0).Int64()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		col[i] = 1
-	}
-	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
-			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(i)
-			}
-		}
-	}
-	batch.SetLength(coldata.BatchSize())
-	if useSelectionVector {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			sel[i] = i
-		}
-	}
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	plusOp, err := createTestProjectingOperator(
-		ctx, flowCtx, source, []*types.T{types.Int},
-		"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
-	)
-	require.NoError(b, err)
-	plusOp.Init()
-
-	b.SetBytes(int64(8 * coldata.BatchSize()))
-	for i := 0; i < b.N; i++ {
-		plusOp.Next(ctx)
-	}
-}
-
-func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
-	for _, useSel := range []bool{true, false} {
-		for _, hasNulls := range []bool{true, false} {
-			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
-				benchmarkProjPlusInt64Int64ConstOp(b, useSel, hasNulls)
-			})
-		}
-	}
 }
 
 func TestGetProjectionConstOperator(t *testing.T) {
@@ -339,28 +279,30 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
+	name string,
 	makeProjOp func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error),
 	useSelectionVector bool,
 	hasNulls bool,
-	left, right *types.T,
+	rightConst bool,
 ) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
-	typs := []*types.T{left, right}
+	typs := []*types.T{types.Int, types.Int}
+	if rightConst {
+		typs = typs[:1]
+	}
 	batch := testAllocator.NewMemBatch(typs)
 	nullProb := 0.0
 	if hasNulls {
 		nullProb = nullProbability
 	}
-	const bytesFixedLength = 8
 	for _, colVec := range batch.ColVecs() {
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-			Rand:             rng,
-			Vec:              colVec,
-			N:                coldata.BatchSize(),
-			NullProbability:  nullProb,
-			BytesFixedLength: bytesFixedLength,
+			Rand:            rng,
+			Vec:             colVec,
+			N:               coldata.BatchSize(),
+			NullProbability: nullProb,
 			// We will limit the range of integers so that we won't get "out of
 			// range" errors.
 			IntRange: 64,
@@ -377,62 +319,16 @@ func benchmarkProjOp(
 		}
 	}
 	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	op, err := makeProjOp(source, left, right)
-	if err != nil {
-		// It is possible that we're trying to create an operator for an
-		// invalid projection (for example, int + float) or an operator that is
-		// not supported by the vectorized engine (for example, date +
-		// interval), so we simply skip such configurations.
-		b.Skip()
-		return
-	}
+	op, err := makeProjOp(source, types.Int, types.Int)
+	require.NoError(b, err)
 	op.Init()
 
-	getVecBytesSize := func(vec coldata.Vec, length int64) int64 {
-		switch vec.CanonicalTypeFamily() {
-		case types.BoolFamily:
-			return int64(colmem.SizeOfBool) * length
-		case types.BytesFamily:
-			return bytesFixedLength * length
-		case types.IntFamily:
-			switch vec.Type().Width() {
-			case 16:
-				return int64(colmem.SizeOfInt16) * length
-			case 32:
-				return int64(colmem.SizeOfInt32) * length
-			default:
-				return int64(colmem.SizeOfInt64) * length
-			}
-		case types.FloatFamily:
-			return int64(colmem.SizeOfFloat64) * length
-		case types.DecimalFamily:
-			// We will measure the memory usage of decimals as the length of
-			// the string representation.
-			decs := vec.Decimal()
-			var footprint int64
-			for _, dec := range decs[:length] {
-				footprint += int64(len(dec.String()))
-			}
-			return footprint
-		case types.TimestampTZFamily:
-			return int64(colmem.SizeOfTime) * length
-		case types.IntervalFamily:
-			return int64(colmem.SizeOfDuration) * length
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unsupported type %s", vec.Type()))
-			// This code is unreachable, but the compiler cannot infer that.
-			return 0
-		}
-	}
-	b.SetBytes(getVecBytesSize(batch.ColVec(0), int64(coldata.BatchSize())) +
-		getVecBytesSize(batch.ColVec(1), int64(coldata.BatchSize())))
-	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+	b.Run(name, func(b *testing.B) {
+		b.SetBytes(int64(len(typs) * 8 * coldata.BatchSize()))
 		for i := 0; i < b.N; i++ {
 			op.Next(ctx)
 		}
-	}); err != nil {
-		b.Fatal(err)
-	}
+	})
 }
 
 func BenchmarkProjOp(b *testing.B) {
@@ -462,34 +358,27 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames = append(opNames, execgen.ComparisonOpName[cmpOp])
 		opInfix = append(opInfix, cmpOp.String())
 	}
-	typeName := func(t *types.T) string {
-		return strings.ToTitle(t.String()[0:1]) + t.String()[1:]
-	}
-	// We select a representative type for each physical representation that we
-	// have.
-	typs := []*types.T{
-		types.Int, types.Int4, types.Int2, types.Float, types.Decimal,
-		types.Bool, types.Bytes, types.Timestamp, types.Interval,
-	}
-	// TODO(yuzefovich): add benchmarks for "one-arg-constant" projection
-	// operator variants.
 	for opIdx, opName := range opNames {
 		opInfixForm := opInfix[opIdx]
-		for _, left := range typs {
-			for _, right := range typs {
-				for _, useSel := range []bool{true, false} {
-					for _, hasNulls := range []bool{true, false} {
-						b.Run(fmt.Sprintf("proj%s%s%s/useSel=%t/hasNulls=%t",
-							opName, typeName(left), typeName(right), useSel, hasNulls),
-							func(b *testing.B) {
-								benchmarkProjOp(b, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error) {
-									return createTestProjectingOperator(
-										ctx, flowCtx, source, []*types.T{left, right},
-										fmt.Sprintf("@1 %s @2", opInfixForm), false, /* canFallbackToRowexec */
-									)
-								}, useSel, hasNulls, left, right)
-							})
+		for _, useSel := range []bool{false, true} {
+			for _, hasNulls := range []bool{false, true} {
+				for _, rightConst := range []bool{false, true} {
+					kind := ""
+					if rightConst {
+						kind = "Const"
 					}
+					name := fmt.Sprintf("proj%sInt64Int64%s/useSel=%t/hasNulls=%t", opName, kind, useSel, hasNulls)
+					benchmarkProjOp(b, name, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error) {
+						expr := fmt.Sprintf("@1 %s @2", opInfixForm)
+						typs := []*types.T{left, right}
+						if rightConst {
+							expr = fmt.Sprintf("@1 %s 2", opInfixForm)
+							typs = typs[:1]
+						}
+						return createTestProjectingOperator(
+							ctx, flowCtx, source, typs, expr, false, /* canFallbackToRowexec */
+						)
+					}, useSel, hasNulls, rightConst)
 				}
 			}
 		}
