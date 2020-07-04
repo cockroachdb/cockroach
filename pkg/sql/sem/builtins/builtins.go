@@ -3210,6 +3210,7 @@ may increase either contention or retry errors, or both.`,
 	"crdb_internal.create_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
+			NullableArgs: true,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -3218,6 +3219,9 @@ may increase either contention or retry errors, or both.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := requireNonNull(args[0]); err != nil {
+					return nil, err
+				}
 				sTenID := int64(tree.MustBeDInt(args[0]))
 				if sTenID <= 0 {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
@@ -3237,11 +3241,17 @@ may increase either contention or retry errors, or both.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := requireNonNull(args[0]); err != nil {
+					return nil, err
+				}
 				sTenID := int64(tree.MustBeDInt(args[0]))
 				if sTenID <= 0 {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "tenant ID must be positive")
 				}
-				tenInfo := []byte(tree.MustBeDBytes(args[1]))
+				var tenInfo []byte
+				if args[1] != tree.DNull {
+					tenInfo = []byte(tree.MustBeDBytes(args[1]))
+				}
 				if err := ctx.Tenant.CreateTenant(ctx.Context, uint64(sTenID), tenInfo); err != nil {
 					return nil, err
 				}
@@ -5951,4 +5961,13 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return ctx.StmtTimestamp.Add(offset), nil
+}
+
+var invalidNull = pgerror.New(pgcode.InvalidParameterValue, "input cannot be NULL")
+
+func requireNonNull(d tree.Datum) error {
+	if d == tree.DNull {
+		return invalidNull
+	}
+	return nil
 }
