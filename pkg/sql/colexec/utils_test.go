@@ -1614,20 +1614,6 @@ func createTestProjectingOperator(
 	}
 	if canFallbackToRowexec {
 		args.ProcessorConstructor = rowexec.NewProcessor
-	} else {
-		// It is possible that there is a valid projecting operator with the
-		// given input types, but the vectorized engine doesn't support it. In
-		// such case in the production code we fall back to row-by-row engine,
-		// but the caller of this method doesn't want such behavior. In order
-		// to avoid a nil-pointer exception we mock out the processor
-		// constructor.
-		args.ProcessorConstructor = func(
-			context.Context, *execinfra.FlowCtx, int32,
-			*execinfrapb.ProcessorCoreUnion, *execinfrapb.PostProcessSpec,
-			[]execinfra.RowSource, []execinfra.RowReceiver,
-			[]execinfra.LocalProcessor) (execinfra.Processor, error) {
-			return nil, errors.Errorf("fallback to rowexec is disabled")
-		}
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	result, err := TestNewColOperator(ctx, flowCtx, args)
