@@ -369,7 +369,7 @@ message StacksRequest {
 
 // Represents the type of file.
 // TODO(ridwanmsharif): Add support for log files. They're currently served
-// by an endpoint that parses the log messages, which is not what the 
+// by an endpoint that parses the log messages, which is not what the
 // debug zip client wants.
 enum FileType {
   HEAP = 0;
@@ -861,6 +861,21 @@ message JobRegistryStatusRequest {
   string node_id = 1;
 }
 
+message JobExecutionStatus {
+  message Task {
+      int32 node_id = 1 [
+                    (gogoproto.customname) = "NodeID",
+                    (gogoproto.casttype) =
+                    "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+                    ];
+      int32 processor_id = 2;
+      string name = 3;
+      string status = 4;
+      google.protobuf.Timestamp last_updated = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  }
+  repeated Task tasks = 1 [ (gogoproto.nullable) = false ];
+}
+
 message JobRegistryStatusResponse {
   int32 node_id = 1 [
                     (gogoproto.customname) = "NodeID",
@@ -869,6 +884,7 @@ message JobRegistryStatusResponse {
                     ];
   message Job {
     int64 id = 1;
+    JobExecutionStatus exec_details = 2;
   }
   repeated Job running_jobs = 2;
 }

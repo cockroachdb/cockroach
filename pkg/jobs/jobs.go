@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -124,6 +125,44 @@ const (
 	// maybeAdoptJobs and will stop running it.
 	StatusPauseRequested Status = "pause-requested"
 )
+
+// JobExecutionStatus tracks the detailed status of the execution of a job, such
+// as the most recently reported ephemeral status of its remote processor nodes.
+// Note: this is ephemeral and constantly changing information about the status
+// of various moving parts that are involved in running this job, such as if a
+// given processor is waiting or running, and is separate from the persisted job
+// state and progress info, such as what step it is in or how far though that
+// step it is.
+type JobExecutionStatus struct {
+	syncutil.Mutex
+	Processors map[int32]*ProcessorStatus
+}
+
+// Processor gets or creates the mutable stutus tracker for a processor in this
+// job's execution graph.
+func (j *JobExecutionStatus) Processor(processorID int32) *ProcessorStatus {
+	proc, ok := j.Processors[processorID]
+	if !ok {
+		proc = &ProcessorStatus{}
+		j.Processors[processorID] = proc
+	}
+	return proc
+}
+
+// ProcessorTaskStatus describes the status of a task within a processor in the
+// execution of a job.
+type ProcessorTaskStatus struct {
+	Status            string
+	LastUpdatedMicros int64
+	Details           interface{}
+}
+
+// ProcessorStatus describes the ephemeral status of a processor within the
+// execution of a job.
+type ProcessorStatus struct {
+	NodeID roachpb.NodeID
+	Tasks  map[string]ProcessorTaskStatus
+}
 
 var (
 	errJobCanceled = errors.New("job canceled by user")
