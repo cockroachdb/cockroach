@@ -59,10 +59,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		c,
 		typs,
 		nil, /* output */
-		nil, /* metadataSourcesQueue */
-		nil, /* toClose */
 		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -143,10 +140,7 @@ func BenchmarkMaterializer(b *testing.B) {
 							input,
 							typs,
 							nil, /* output */
-							nil, /* metadataSourcesQueue */
-							nil, /* toClose */
 							nil, /* outputStatsToTrace */
-							nil, /* cancelFlow */
 						)
 						if err != nil {
 							b.Fatal(err)
@@ -203,10 +197,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			c,
 			types,
 			nil, /* output */
-			nil, /* metadataSourcesQueue */
-			nil, /* toClose */
 			nil, /* outputStatsToTrace */
-			nil, /* cancelFlow */
 		)
 		if err != nil {
 			b.Fatal(err)

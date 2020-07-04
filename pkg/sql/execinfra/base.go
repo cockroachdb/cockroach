@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -73,6 +74,21 @@ type RowReceiver interface {
 	//
 	// Implementations of Push() must be thread-safe.
 	Push(row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata) ConsumerStatus
+
+	// Types returns the types of the EncDatumRow that this RowReceiver expects
+	// to be pushed.
+	Types() []*types.T
+
+	// ProducerDone is called when the producer has pushed all the rows and
+	// metadata; it causes the RowReceiver to process all rows and clean up.
+	//
+	// ProducerDone() cannot be called concurrently with Push(), and after it
+	// is called, no other method can be called.
+	ProducerDone()
+}
+
+type BatchReceiver interface {
+	PushBatch(batch coldata.Batch, meta *execinfrapb.ProducerMetadata) ConsumerStatus
 
 	// Types returns the types of the EncDatumRow that this RowReceiver expects
 	// to be pushed.
@@ -174,7 +190,7 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 			case NeedMoreRows:
 				continue
 			case DrainRequested:
-				DrainAndForwardMetadata(ctx, src, dst)
+				drainAndForwardMetadata(ctx, src, dst)
 				dst.ProducerDone()
 				return
 			case ConsumerClosed:
@@ -197,16 +213,16 @@ type Releasable interface {
 	Release()
 }
 
-// DrainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
+// drainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
 // draining metadata) and then forwards all the metadata to dst.
 //
 // When this returns, src has been properly closed (regardless of the presence
 // or absence of an error). dst, however, has not been closed; someone else must
 // call dst.ProducerDone() when all producers have finished draining.
 //
-// It is OK to call DrainAndForwardMetadata() multiple times concurrently on the
+// It is OK to call drainAndForwardMetadata() multiple times concurrently on the
 // same dst (as RowReceiver.Push() is guaranteed to be thread safe).
-func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver) {
+func drainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver) {
 	src.ConsumerDone()
 	for {
 		row, meta := src.Next()
@@ -278,10 +294,10 @@ func GetLeafTxnFinalState(ctx context.Context, txn *kv.Txn) *roachpb.LeafTxnFina
 	return &txnMeta
 }
 
-// DrainAndClose is a version of DrainAndForwardMetadata that drains multiple
+// DrainAndClose is a version of drainAndForwardMetadata that drains multiple
 // sources. These sources are assumed to be the only producers left for dst, so
 // dst is closed once they're all exhausted (this is different from
-// DrainAndForwardMetadata).
+// drainAndForwardMetadata).
 //
 // If cause is specified, it is forwarded to the consumer before all the drain
 // metadata. This is intended to have been the error, if any, that caused the
@@ -303,7 +319,7 @@ func DrainAndClose(
 ) {
 	if cause != nil {
 		// We ignore the returned ConsumerStatus and rely on the
-		// DrainAndForwardMetadata() calls below to close srcs in all cases.
+		// drainAndForwardMetadata() calls below to close srcs in all cases.
 		_ = dst.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: cause})
 	}
 	if len(srcs) > 0 {
@@ -311,11 +327,11 @@ func DrainAndClose(
 		for _, input := range srcs[1:] {
 			wg.Add(1)
 			go func(input RowSource) {
-				DrainAndForwardMetadata(ctx, input, dst)
+				drainAndForwardMetadata(ctx, input, dst)
 				wg.Done()
 			}(input)
 		}
-		DrainAndForwardMetadata(ctx, srcs[0], dst)
+		drainAndForwardMetadata(ctx, srcs[0], dst)
 		wg.Wait()
 	}
 	pushTrailingMeta(ctx)

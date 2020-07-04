@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -180,6 +181,32 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	r.rowsAffected++
 
 	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.types)
+	var err error
+	if r.bufferingDisabled {
+		err = r.conn.Flush(r.pos)
+	} else {
+		_ /* flushed */, err = r.conn.maybeFlush(r.pos)
+	}
+	return err
+}
+
+// AddBatch is part of the CommandResult interface.
+func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	r.assertNotReleased()
+	if r.err != nil {
+		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
+			r.err))
+	}
+	r.conn.writerState.fi.registerCmd(r.pos)
+	if err := r.conn.GetErr(); err != nil {
+		return err
+	}
+	if r.err != nil {
+		panic("can't send row after error")
+	}
+	r.rowsAffected++
+
+	r.conn.bufferBatch(ctx, batch, r.formatCodes, r.conv, r.types)
 	var err error
 	if r.bufferingDisabled {
 		err = r.conn.Flush(r.pos)
@@ -398,6 +425,10 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		return err
 	}
 	return nil
+}
+
+func (r *limitedCommandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("portals with coldata.Batch are unsupported")
 }
 
 // moreResultsNeeded is a restricted connection handler that waits for more

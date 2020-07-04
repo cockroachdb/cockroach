@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -57,6 +58,10 @@ func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	return err
 }
 
+func (b *RowResultWriter) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("unimplemented")
+}
+
 // SetError is part of the rowResultWriter interface.
 func (b *RowResultWriter) SetError(err error) {
 	b.err = err
@@ -90,6 +95,10 @@ func (c *callbackResultWriter) IncrementRowsAffected(n int) {
 
 func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	return c.fn(ctx, row)
+}
+
+func (c *callbackResultWriter) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("unimplemented")
 }
 
 func (c *callbackResultWriter) SetError(err error) {

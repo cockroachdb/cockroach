@@ -171,10 +171,10 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		result.Op,
 		args.outputTypes,
 		nil, /* output */
-		result.MetadataSources,
-		nil, /* toClose */
+		//result.MetadataSources,
+		//nil, /* toClose */
 		nil, /* outputStatsToTrace */
-		nil, /* cancelFlow */
+		//nil, /* cancelFlow */
 	)
 	if err != nil {
 		return err

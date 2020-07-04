@@ -127,10 +127,6 @@ type FlowBase struct {
 	execinfra.FlowCtx
 
 	flowRegistry *FlowRegistry
-	// processors contains a subset of the processors in the flow - the ones that
-	// run in their own goroutines. Some processors that implement RowSource are
-	// scheduled to run in their consumer's goroutine; those are not present here.
-	processors []execinfra.Processor
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []Startable
@@ -187,7 +183,7 @@ func (f *FlowBase) SetTxn(txn *kv.Txn) {
 
 // ConcurrentExecution is part of the Flow interface.
 func (f *FlowBase) ConcurrentExecution() bool {
-	return len(f.processors) > 1
+	panic("ConcurrentExecution should not be called on FlowBase")
 }
 
 var _ Flow = &FlowBase{}
@@ -253,12 +249,6 @@ func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
 	return f.ctxCancel
 }
 
-// SetProcessors overrides the current f.processors with the provided
-// processors. This is used to set up the vectorized flow.
-func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
-	f.processors = processors
-}
-
 // AddRemoteStream adds a remote stream to this flow.
 func (f *FlowBase) AddRemoteStream(streamID execinfrapb.StreamID, streamInfo *InboundStreamInfo) {
 	f.inboundStreams[streamID] = streamInfo
@@ -274,10 +264,10 @@ func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 	return f.localProcessors
 }
 
-// startInternal starts the flow. All processors are started, each in their own
-// goroutine. The caller must forward any returned error to syncFlowConsumer if
-// set.
-func (f *FlowBase) startInternal(
+// StartInternal starts the flow. All accumulated Startables as well as passed
+// in processors are started, each in their own goroutine. The caller must
+// forward any returned error to syncFlowConsumer if set.
+func (f *FlowBase) StartInternal(
 	ctx context.Context, processors []execinfra.Processor, doneFn func(),
 ) error {
 	f.doneFn = doneFn
@@ -332,42 +322,12 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if err := f.startInternal(ctx, f.processors, doneFn); err != nil {
-		// For sync flows, the error goes to the consumer.
-		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			f.syncFlowConsumer.ProducerDone()
-			return nil
-		}
-		return err
-	}
-	return nil
+	panic("Start should not be called on FlowBase")
 }
 
 // Run is part of the Flow interface.
 func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
-	defer f.Wait()
-
-	// We'll take care of the last processor in particular.
-	var headProc execinfra.Processor
-	if len(f.processors) == 0 {
-		return errors.AssertionFailedf("no processors in flow")
-	}
-	headProc = f.processors[len(f.processors)-1]
-	otherProcs := f.processors[:len(f.processors)-1]
-
-	var err error
-	if err = f.startInternal(ctx, otherProcs, doneFn); err != nil {
-		// For sync flows, the error goes to the consumer.
-		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			f.syncFlowConsumer.ProducerDone()
-			return nil
-		}
-		return err
-	}
-	headProc.Run(ctx)
-	return nil
+	panic("Run should not be called on FlowBase")
 }
 
 // Wait is part of the Flow interface.
@@ -420,11 +380,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 
 	// This closes the monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.Stop(ctx)
-	for _, p := range f.processors {
-		if d, ok := p.(Releasable); ok {
-			d.Release()
-		}
-	}
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}

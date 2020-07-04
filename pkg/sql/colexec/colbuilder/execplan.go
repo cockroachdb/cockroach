@@ -71,10 +71,7 @@ func wrapRowSources(
 				input,
 				inputTypes[i],
 				nil, /* output */
-				nil, /* metadataSourcesQueue */
-				nil, /* toClose */
 				nil, /* outputStatsToTrace */
-				nil, /* cancelFlow */
 			)
 			if err != nil {
 				return nil, err

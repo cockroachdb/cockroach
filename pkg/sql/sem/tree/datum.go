@@ -446,14 +446,19 @@ func (d *DBool) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBool) AmbiguousFormat() bool { return false }
 
+// PgwireFormatBool returns a single byte representing a boolean according to
+// pgwire encoding.
+func PgwireFormatBool(d bool) byte {
+	if d {
+		return 't'
+	}
+	return 'f'
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(fmtPgwireFormat) {
-		if bool(*d) {
-			ctx.WriteByte('t')
-		} else {
-			ctx.WriteByte('f')
-		}
+		ctx.WriteByte(PgwireFormatBool(bool(*d)))
 		return
 	}
 	ctx.WriteString(strconv.FormatBool(bool(*d)))
@@ -1865,17 +1870,21 @@ func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DDate) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DDate) Format(ctx *FmtCtx) {
+func FormatDate(d pgdate.Date, ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Date.Format(&ctx.Buffer)
+	d.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DDate) Format(ctx *FmtCtx) {
+	FormatDate(d.Date, ctx)
 }
 
 // Size implements the Datum interface.
@@ -2692,17 +2701,21 @@ func (d *DInterval) ValueAsString() string {
 // AmbiguousFormat implements the Datum interface.
 func (*DInterval) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DInterval) Format(ctx *FmtCtx) {
+func FormatDuration(d duration.Duration, ctx *FmtCtx) {
 	f := ctx.flags
 	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Duration.Format(&ctx.Buffer)
+	d.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DInterval) Format(ctx *FmtCtx) {
+	FormatDuration(d.Duration, ctx)
 }
 
 // Size implements the Datum interface.

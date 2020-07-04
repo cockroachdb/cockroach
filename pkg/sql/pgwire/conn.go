@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1131,6 +1132,50 @@ func (c *conn) bufferRow(
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+	}
+}
+
+// bufferRow serializes a row and adds it to the buffer.
+//
+// formatCodes describes the desired encoding for each column. It can be nil, in
+// which case all columns are encoded using the text encoding. Otherwise, it
+// needs to contain an entry for every column.
+func (c *conn) bufferBatch(
+	ctx context.Context,
+	batch coldata.Batch,
+	formatCodes []pgwirebase.FormatCode,
+	conv sessiondata.DataConversionConfig,
+	typs []*types.T,
+) {
+	sel := batch.Selection()
+	n := batch.Length()
+	vecs := batch.ColVecs()
+	width := int16(len(vecs))
+	// TODO: what if n = 0?
+	for tupleIdx := 0; tupleIdx < n; tupleIdx++ {
+		rowIdx := tupleIdx
+		if sel != nil {
+			rowIdx = sel[rowIdx]
+		}
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
+		c.msgBuilder.putInt16(width)
+		for colIdx, col := range vecs {
+			fmtCode := pgwirebase.FormatText
+			if formatCodes != nil {
+				fmtCode = formatCodes[colIdx]
+			}
+			switch fmtCode {
+			case pgwirebase.FormatText:
+				c.msgBuilder.writeTextPhysicalElement(ctx, col, rowIdx, conv, typs[colIdx])
+			case pgwirebase.FormatBinary:
+				c.msgBuilder.writeBinaryPhysicalElement(ctx, col, rowIdx, conv.Location, typs[colIdx])
+			default:
+				c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
+			}
+		}
+		if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+			panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		}
 	}
 }
 

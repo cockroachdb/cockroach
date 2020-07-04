@@ -325,13 +325,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					materializerInput,
 					typs,
 					nil, /* output */
-					[]execinfrapb.MetadataSource{materializerMetadataSource},
-					[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
-						materializerCalledClose = true
-						return nil
-					}}}, /* toClose */
+					//[]execinfrapb.MetadataSource{materializerMetadataSource},
+					//[]colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+					//	materializerCalledClose = true
+					//	return nil
+					//}}}, /* toClose */
 					nil, /* outputStatsToTrace */
-					func() context.CancelFunc { return cancelLocal },
+					//func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)
 				materializer.Start(ctxLocal)

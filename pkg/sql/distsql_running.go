@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -499,12 +500,16 @@ type DistSQLReceiver struct {
 	progressAtomic   *uint64
 }
 
+var _ execinfra.RowReceiver = &DistSQLReceiver{}
+var _ execinfra.BatchReceiver = &DistSQLReceiver{}
+
 // rowResultWriter is a subset of CommandResult to be used with the
 // DistSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
 	AddRow(ctx context.Context, row tree.Datums) error
+	AddBatch(ctx context.Context, batch coldata.Batch) error
 	IncrementRowsAffected(n int)
 	SetError(error)
 	Err() error
@@ -549,6 +554,7 @@ var _ rowResultWriter = &errOnlyResultWriter{}
 func (w *errOnlyResultWriter) SetError(err error) {
 	w.err = err
 }
+
 func (w *errOnlyResultWriter) Err() error {
 	return w.err
 }
@@ -556,6 +562,11 @@ func (w *errOnlyResultWriter) Err() error {
 func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	panic("AddRow not supported by errOnlyResultWriter")
 }
+
+func (w *errOnlyResultWriter) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("AddBatch not supported by errOnlyResultWriter")
+}
+
 func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
@@ -629,71 +640,76 @@ func (r *DistSQLReceiver) SetError(err error) {
 	r.resultWriter.SetError(err)
 }
 
+// handleMeta handles non-nil metadata.
+func (r *DistSQLReceiver) handleMeta(meta *execinfrapb.ProducerMetadata) execinfra.ConsumerStatus {
+	if meta.LeafTxnFinalState != nil {
+		if r.txn != nil {
+			if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
+				if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
+					r.resultWriter.SetError(err)
+				}
+			}
+		} else {
+			r.resultWriter.SetError(
+				errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
+		}
+	}
+	if meta.Err != nil {
+		// Check if the error we just received should take precedence over a
+		// previous error (if any).
+		if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
+			if r.txn != nil {
+				if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &retryErr) {
+					// Update the txn in response to remote errors. In the non-DistSQL
+					// world, the TxnCoordSender handles "unhandled" retryable errors,
+					// but this one is coming from a distributed SQL node, which has
+					// left the handling up to the root transaction.
+					meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
+					// Update the clock with information from the error. On non-DistSQL
+					// code paths, the DistSender does this.
+					// TODO(andrei): We don't propagate clock signals on success cases
+					// through DistSQL; we should. We also don't propagate them through
+					// non-retryable errors; we also should.
+					r.updateClock(retryErr.PErr.Now)
+				}
+			}
+			r.resultWriter.SetError(meta.Err)
+		}
+	}
+	if len(meta.Ranges) > 0 {
+		r.rangeCache.Insert(r.ctx, meta.Ranges...)
+	}
+	if len(meta.TraceData) > 0 {
+		span := opentracing.SpanFromContext(r.ctx)
+		if span == nil {
+			r.resultWriter.SetError(
+				errors.New("trying to ingest remote spans but there is no recording span set up"))
+		} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
+			r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
+		}
+	}
+	if meta.Metrics != nil {
+		r.bytesRead += meta.Metrics.BytesRead
+		r.rowsRead += meta.Metrics.RowsRead
+		if r.progressAtomic != nil && r.expectedRowsRead != 0 {
+			progress := float64(r.rowsRead) / float64(r.expectedRowsRead)
+			atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
+		}
+		meta.Metrics.Release()
+		meta.Release()
+	}
+	if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
+		metaWriter.AddMeta(r.ctx, meta)
+	}
+	return r.status
+}
+
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if meta != nil {
-		if meta.LeafTxnFinalState != nil {
-			if r.txn != nil {
-				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
-					if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
-						r.resultWriter.SetError(err)
-					}
-				}
-			} else {
-				r.resultWriter.SetError(
-					errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
-			}
-		}
-		if meta.Err != nil {
-			// Check if the error we just received should take precedence over a
-			// previous error (if any).
-			if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
-				if r.txn != nil {
-					if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &retryErr) {
-						// Update the txn in response to remote errors. In the non-DistSQL
-						// world, the TxnCoordSender handles "unhandled" retryable errors,
-						// but this one is coming from a distributed SQL node, which has
-						// left the handling up to the root transaction.
-						meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
-						// Update the clock with information from the error. On non-DistSQL
-						// code paths, the DistSender does this.
-						// TODO(andrei): We don't propagate clock signals on success cases
-						// through DistSQL; we should. We also don't propagate them through
-						// non-retryable errors; we also should.
-						r.updateClock(retryErr.PErr.Now)
-					}
-				}
-				r.resultWriter.SetError(meta.Err)
-			}
-		}
-		if len(meta.Ranges) > 0 {
-			r.rangeCache.Insert(r.ctx, meta.Ranges...)
-		}
-		if len(meta.TraceData) > 0 {
-			span := opentracing.SpanFromContext(r.ctx)
-			if span == nil {
-				r.resultWriter.SetError(
-					errors.New("trying to ingest remote spans but there is no recording span set up"))
-			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
-				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
-			}
-		}
-		if meta.Metrics != nil {
-			r.bytesRead += meta.Metrics.BytesRead
-			r.rowsRead += meta.Metrics.RowsRead
-			if r.progressAtomic != nil && r.expectedRowsRead != 0 {
-				progress := float64(r.rowsRead) / float64(r.expectedRowsRead)
-				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
-			}
-			meta.Metrics.Release()
-			meta.Release()
-		}
-		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
-			metaWriter.AddMeta(r.ctx, meta)
-		}
-		return r.status
+		return r.handleMeta(meta)
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
 		r.resultWriter.SetError(r.ctx.Err())
@@ -742,6 +758,82 @@ func (r *DistSQLReceiver) Push(
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	// Note that AddRow accounts for the memory used by the Datums.
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
+		// ErrLimitedResultClosed is not a real error, it is a
+		// signal to stop distsql and return success to the client.
+		if !errors.Is(commErr, ErrLimitedResultClosed) {
+			// Set the error on the resultWriter too, for the convenience of some of the
+			// clients. If clients don't care to differentiate between communication
+			// errors and query execution errors, they can simply inspect
+			// resultWriter.Err(). Also, this function itself doesn't care about the
+			// distinction and just uses resultWriter.Err() to see if we're still
+			// accepting results.
+			r.resultWriter.SetError(commErr)
+
+			// We don't need to shut down the connection
+			// if there's a portal-related error. This is
+			// definitely a layering violation, but is part
+			// of some accepted technical debt (see comments on
+			// sql/pgwire.limitedCommandResult.moreResultsNeeded).
+			// Instead of changing the signature of AddRow, we have
+			// a sentinel error that is handled specially here.
+			if !errors.Is(commErr, ErrLimitedResultNotSupported) {
+				r.commErr = commErr
+			}
+		}
+		// TODO(andrei): We should drain here. Metadata from this query would be
+		// useful, particularly as it was likely a large query (since AddRow()
+		// above failed, presumably with an out-of-memory error).
+		r.status = execinfra.ConsumerClosed
+	}
+	return r.status
+}
+
+// Push is part of the BatchReceiver interface.
+func (r *DistSQLReceiver) PushBatch(
+	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if meta != nil {
+		return r.handleMeta(meta)
+	}
+	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
+		r.resultWriter.SetError(r.ctx.Err())
+	}
+	if r.resultWriter.Err() != nil {
+		// TODO(andrei): We should drain here if we weren't canceled.
+		return execinfra.ConsumerClosed
+	}
+	if r.status != execinfra.NeedMoreRows {
+		return r.status
+	}
+
+	if r.stmtType != tree.Rows {
+		// We only need the row count. planNodeToRowSource is set up to handle
+		// ensuring that the last stage in the pipeline will return a single-column
+		// row with the row count in it, so just grab that and exit.
+		r.resultWriter.IncrementRowsAffected(int(batch.ColVec(0).Int64()[0]))
+		return r.status
+	}
+
+	if r.discardRows {
+		// Discard rows.
+		return r.status
+	}
+
+	var commErr error
+	// If no columns are needed by the output, the consumer is only looking for
+	// whether a single row is pushed or not, so the contents do not matter, and
+	// planNodeToRowSource is not set up to handle decoding the row.
+	if r.noColsRequired {
+		r.row = []tree.Datum{}
+		r.status = execinfra.ConsumerClosed
+		r.tracing.TraceExecRowsResult(r.ctx, r.row)
+		commErr = r.resultWriter.AddRow(r.ctx, r.row)
+	} else {
+		r.tracing.TraceExecBatchResult(r.ctx, batch)
+		commErr = r.resultWriter.AddBatch(r.ctx, batch)
+	}
+
+	if commErr != nil {
 		// ErrLimitedResultClosed is not a real error, it is a
 		// signal to stop distsql and return success to the client.
 		if !errors.Is(commErr, ErrLimitedResultClosed) {

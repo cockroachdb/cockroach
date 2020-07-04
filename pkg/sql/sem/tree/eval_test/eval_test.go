@@ -209,10 +209,8 @@ func TestEval(t *testing.T) {
 				result.Op,
 				typs,
 				nil, /* output */
-				result.MetadataSources,
-				nil, /* toClose */
+				//result.MetadataSources,
 				nil, /* outputStatsToTrace */
-				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)
 

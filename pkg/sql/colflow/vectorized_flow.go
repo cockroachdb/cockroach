@@ -88,6 +88,9 @@ func (s *countingSemaphore) Release(n int) int {
 
 type vectorizedFlow struct {
 	*flowinfra.FlowBase
+
+	source *colexec.BatchSource
+
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
 
@@ -171,7 +174,7 @@ func (f *vectorizedFlow) Setup(
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		recordingStats = true
 	}
-	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
+	helper := &vectorizedFlowCreatorHelper{f: f}
 
 	testingBatchSize := int64(0)
 	if f.FlowCtx.Cfg.Settings != nil {
@@ -257,6 +260,113 @@ func (f *vectorizedFlow) Setup(
 	return ctx, err
 }
 
+// Start is part of the Flow interface.
+func (f *vectorizedFlow) Start(ctx context.Context, doneFn func()) error {
+	if err := f.StartInternal(ctx, nil /* processors */, doneFn); err != nil {
+		// For sync flows, the error goes to the consumer.
+		if syncFlowConsumer := f.GetSyncFlowConsumer(); syncFlowConsumer != nil {
+			syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// Run is part of the Flow interface.
+func (f *vectorizedFlow) Run(ctx context.Context, doneFn func()) error {
+	defer f.Wait()
+
+	if err := f.StartInternal(ctx, nil /* processors */, doneFn); err != nil {
+		// For sync flows, the error goes to the consumer.
+		if syncFlowConsumer := f.GetSyncFlowConsumer(); syncFlowConsumer != nil {
+			syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
+	if f.source != nil {
+		ctx = f.source.Start(ctx)
+		if br, ok := f.GetSyncFlowConsumer().(execinfra.BatchReceiver); ok {
+			run(ctx, f.source, br)
+		} else {
+			// TODO
+			for batch, meta := f.source.NextBatch(); batch != nil || meta != nil; {
+				batch, meta = f.source.NextBatch()
+			}
+		}
+	}
+	return nil
+}
+
+// Run reads records from the source and outputs them to the receiver, properly
+// draining the source of metadata and closing both the source and receiver.
+//
+// src needs to have been Start()ed before calling this.
+func run(ctx context.Context, src *colexec.BatchSource, dst execinfra.BatchReceiver) {
+	for {
+		batch, meta := src.NextBatch()
+		// Emit the batch; stop if no more batches are needed.
+		if batch != nil || meta != nil {
+			switch dst.PushBatch(batch, meta) {
+			case execinfra.NeedMoreRows:
+				continue
+			case execinfra.DrainRequested:
+				drainAndForwardMetadata(ctx, src, dst)
+				dst.ProducerDone()
+				return
+			case execinfra.ConsumerClosed:
+				src.ConsumerClosed()
+				dst.ProducerDone()
+				return
+			}
+		}
+		// batch == nil && meta == nil: the source has been fully drained.
+		dst.ProducerDone()
+		return
+	}
+}
+
+// drainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
+// draining metadata) and then forwards all the metadata to dst.
+//
+// When this returns, src has been properly closed (regardless of the presence
+// or absence of an error). dst, however, has not been closed; someone else must
+// call dst.ProducerDone() when all producers have finished draining.
+//
+// It is OK to call drainAndForwardMetadata() multiple times concurrently on the
+// same dst (as RowReceiver.Push() is guaranteed to be thread safe).
+func drainAndForwardMetadata(
+	ctx context.Context, src *colexec.BatchSource, dst execinfra.BatchReceiver,
+) {
+	src.ConsumerDone()
+	for {
+		row, meta := src.Next()
+		if meta == nil {
+			if row == nil {
+				return
+			}
+			continue
+		}
+		if row != nil {
+			log.Fatalf(
+				ctx, "both row data and metadata in the same record. row: %s meta: %+v",
+				row.String(src.OutputTypes()), meta,
+			)
+		}
+
+		switch dst.PushBatch(nil /* batch */, meta) {
+		case execinfra.ConsumerClosed:
+			src.ConsumerClosed()
+			return
+		case execinfra.NeedMoreRows:
+		case execinfra.DrainRequested:
+		}
+	}
+}
+
 // IsVectorized is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) IsVectorized() bool {
 	return true
@@ -264,7 +374,7 @@ func (f *vectorizedFlow) IsVectorized() bool {
 
 // ConcurrentExecution is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) ConcurrentExecution() bool {
-	return f.operatorConcurrency || f.FlowBase.ConcurrentExecution()
+	return f.operatorConcurrency
 }
 
 // Release releases this vectorizedFlow back to the pool.
@@ -372,8 +482,8 @@ type flowCreatorHelper interface {
 	// accumulateAsyncComponent stores a component (either a router or an outbox)
 	// to be run asynchronously.
 	accumulateAsyncComponent(runFn)
-	// addMaterializer adds a materializer to the flow.
-	addMaterializer(*colexec.Materializer)
+	// addBatchSource adds a batch source to the flow.
+	addBatchSource(*colexec.BatchSource)
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -437,8 +547,8 @@ type vectorizedFlowCreator struct {
 
 	// numOutboxes counts how many exec.Outboxes have been set up on this node.
 	// It must be accessed atomically.
-	numOutboxes       int32
-	materializerAdded bool
+	numOutboxes      int32
+	batchSourceAdded bool
 
 	// leaves accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
@@ -566,7 +676,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		// - cancelFn is non-nil (it can be nil in tests).
 		// Calling cancelFn will cancel the context that all infrastructure on this
 		// node is listening on, so it will shut everything down.
-		if currentOutboxes == 0 && !s.materializerAdded && cancelFn != nil {
+		if currentOutboxes == 0 && !s.batchSourceAdded && cancelFn != nil {
 			cancelFn()
 		}
 	}
@@ -869,12 +979,10 @@ func (s *vectorizedFlowCreator) setupOutput(
 				)
 			}
 		}
-		proc, err := colexec.NewMaterializer(
+		batchSource, err := colexec.NewBatchConsumer(
 			flowCtx,
-			pspec.ProcessorID,
 			op,
 			columnTypes,
-			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			toClose,
 			outputStatsToTrace,
@@ -884,10 +992,10 @@ func (s *vectorizedFlowCreator) setupOutput(
 			return err
 		}
 		s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
-		// A materializer is a leaf.
-		s.leaves = append(s.leaves, proc)
-		s.addMaterializer(proc)
-		s.materializerAdded = true
+		// A batch source is a leaf.
+		s.leaves = append(s.leaves, batchSource)
+		s.addBatchSource(batchSource)
+		s.batchSourceAdded = true
 	default:
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
 	}
@@ -1093,7 +1201,7 @@ func (s vectorizedInboundStreamHandler) Timeout(err error) {
 // vectorizedFlowCreatorHelper is a flowCreatorHelper that sets up all the
 // vectorized infrastructure to be actually run.
 type vectorizedFlowCreatorHelper struct {
-	f *flowinfra.FlowBase
+	f *vectorizedFlow
 }
 
 var _ flowCreatorHelper = &vectorizedFlowCreatorHelper{}
@@ -1126,10 +1234,8 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 		}))
 }
 
-func (r *vectorizedFlowCreatorHelper) addMaterializer(m *colexec.Materializer) {
-	processors := make([]execinfra.Processor, 1)
-	processors[0] = m
-	r.f.SetProcessors(processors)
+func (r *vectorizedFlowCreatorHelper) addBatchSource(source *colexec.BatchSource) {
+	r.f.source = source
 }
 
 func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
@@ -1165,7 +1271,7 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(*colexec.Materializer) {}
+func (r *noopFlowCreatorHelper) addBatchSource(source *colexec.BatchSource) {}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil

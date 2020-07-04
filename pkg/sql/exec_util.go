@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -1617,6 +1618,14 @@ func (st *SessionTracing) TraceExecConsume(ctx context.Context) (context.Context
 func (st *SessionTracing) TraceExecRowsResult(ctx context.Context, values tree.Datums) {
 	if st.showResults {
 		log.VEventfDepth(ctx, 2, 1, "output row: %s", values)
+	}
+}
+
+// TraceExecBatchResult conditionally emits a trace message for a single output
+// batch.
+func (st *SessionTracing) TraceExecBatchResult(ctx context.Context, batch coldata.Batch) {
+	if st.showResults {
+		log.VEventfDepth(ctx, 2, 1, "output batch: %s", batch)
 	}
 }
 

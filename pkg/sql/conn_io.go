@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -713,6 +714,8 @@ type RestrictedCommandResult interface {
 	// shallow copy if it needs to.
 	AddRow(ctx context.Context, row tree.Datums) error
 
+	AddBatch(ctx context.Context, batch coldata.Batch) error
+
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
 	IncrementRowsAffected(n int)
@@ -907,6 +910,10 @@ func (r *bufferedCommandResult) AddRow(ctx context.Context, row tree.Datums) err
 	copy(rowCopy, row)
 	r.rows = append(r.rows, rowCopy)
 	return nil
+}
+
+func (r *bufferedCommandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("unimplemented")
 }
 
 func (r *bufferedCommandResult) DisableBuffering() {

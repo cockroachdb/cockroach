@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -246,6 +247,9 @@ func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) er
 	case w.rowsCh <- row:
 		return nil
 	}
+}
+func (w *changefeedResultWriter) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("unimplemented")
 }
 func (w *changefeedResultWriter) IncrementRowsAffected(n int) {
 	w.rowsAffected += n

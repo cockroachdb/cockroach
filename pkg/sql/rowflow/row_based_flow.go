@@ -27,6 +27,11 @@ import (
 type rowBasedFlow struct {
 	*flowinfra.FlowBase
 
+	// processors contains a subset of the processors in the flow - the ones that
+	// run in their own goroutines. Some processors that implement RowSource are
+	// scheduled to run in their consumer's goroutine; those are not present here.
+	processors []execinfra.Processor
+
 	localStreams map[execinfrapb.StreamID]execinfra.RowReceiver
 }
 
@@ -64,6 +69,46 @@ func (f *rowBasedFlow) Setup(
 	return ctx, f.setupProcessors(ctx, spec, inputSyncs)
 }
 
+// Start is part of the Flow interface.
+func (f *rowBasedFlow) Start(ctx context.Context, doneFn func()) error {
+	if err := f.StartInternal(ctx, f.processors, doneFn); err != nil {
+		// For sync flows, the error goes to the consumer.
+		if syncFlowConsumer := f.GetSyncFlowConsumer(); syncFlowConsumer != nil {
+			syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// Run is part of the Flow interface.
+func (f *rowBasedFlow) Run(ctx context.Context, doneFn func()) error {
+	defer f.Wait()
+
+	// We'll take care of the last processor in particular.
+	var headProc execinfra.Processor
+	if len(f.processors) == 0 {
+		return errors.AssertionFailedf("no processors in flow")
+	}
+	headProc = f.processors[len(f.processors)-1]
+	otherProcs := f.processors[:len(f.processors)-1]
+
+	var err error
+	if err = f.StartInternal(ctx, otherProcs, doneFn); err != nil {
+		// For sync flows, the error goes to the consumer.
+		if syncFlowConsumer := f.GetSyncFlowConsumer(); syncFlowConsumer != nil {
+			syncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+			syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
+	headProc.Run(ctx)
+	return nil
+}
+
 // setupProcessors creates processors for each spec in f.spec, fusing processors
 // together when possible (when an upstream processor implements RowSource, only
 // has one output, and that output is a simple PASS_THROUGH output), and
@@ -72,7 +117,7 @@ func (f *rowBasedFlow) Setup(
 func (f *rowBasedFlow) setupProcessors(
 	ctx context.Context, spec *execinfrapb.FlowSpec, inputSyncs [][]execinfra.RowSource,
 ) error {
-	processors := make([]execinfra.Processor, 0, len(spec.Processors))
+	f.processors = make([]execinfra.Processor, 0, len(spec.Processors))
 
 	// Populate processors: see which processors need their own goroutine and
 	// which are fused with their consumer.
@@ -151,10 +196,9 @@ func (f *rowBasedFlow) setupProcessors(
 			return false
 		}
 		if !fuse() {
-			processors = append(processors, p)
+			f.processors = append(f.processors, p)
 		}
 	}
-	f.SetProcessors(processors)
 	return nil
 }
 
@@ -411,8 +455,18 @@ func (f *rowBasedFlow) Release() {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Cleanup(ctx context.Context) {
+	for _, p := range f.processors {
+		if d, ok := p.(flowinfra.Releasable); ok {
+			d.Release()
+		}
+	}
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
+}
+
+// ConcurrentExecution is part of the flowinfra.Flow interface.
+func (f *rowBasedFlow) ConcurrentExecution() bool {
+	return len(f.processors) > 1
 }
 
 type copyingRowReceiver struct {
