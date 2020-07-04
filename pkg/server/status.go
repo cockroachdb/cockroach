@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -2099,8 +2100,46 @@ func (s *statusServer) JobRegistryStatus(
 		job := serverpb.JobRegistryStatusResponse_Job{
 			Id: jID,
 		}
+		execStatus := s.admin.server.sqlServer.jobRegistry.ExecutionStatusDetails(jID)
+		if execStatus != nil {
+			execStatus.Lock()
+			execDetails := &serverpb.JobExecutionStatus{}
+			for id, proc := range execStatus.Processors {
+				for i := range proc.Tasks {
+					execDetails.Tasks = append(execDetails.Tasks, serverpb.JobExecutionStatus_Task{
+						NodeID:      proc.NodeID,
+						ProcessorId: id,
+						Name:        i,
+						Status:      proc.Tasks[i].Status,
+						LastUpdated: timeutil.FromUnixMicros(proc.Tasks[i].LastUpdatedMicros),
+					})
+				}
+			}
+			execStatus.Unlock()
+			if execDetails.Tasks != nil {
+				sort.Slice(execDetails.Tasks, func(iIdx, jIdx int) bool {
+					i, j := execDetails.Tasks[iIdx], execDetails.Tasks[jIdx]
+					if i.NodeID < j.NodeID {
+						return true
+					}
+					if i.NodeID == j.NodeID {
+						if i.ProcessorId < j.ProcessorId {
+							return true
+						}
+						if i.ProcessorId == j.ProcessorId {
+							return i.Name < j.Name
+						}
+					}
+					return false
+				})
+				job.ExecDetails = execDetails
+			}
+		}
 		resp.RunningJobs = append(resp.RunningJobs, &job)
 	}
+	sort.Slice(resp.RunningJobs, func(i, j int) bool {
+		return resp.RunningJobs[i].Id < resp.RunningJobs[j].Id
+	})
 	return resp, nil
 }
 

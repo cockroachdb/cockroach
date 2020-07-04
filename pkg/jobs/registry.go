@@ -64,6 +64,11 @@ var (
 		time.Hour*24*14)
 )
 
+type ownedJob struct {
+	cancel context.CancelFunc
+	status *JobExecutionStatus
+}
+
 // Registry creates Jobs and manages their leases and cancelation.
 //
 // Job information is stored in the `system.jobs` table.  Each node will
@@ -132,15 +137,15 @@ type Registry struct {
 		// the timestamp-based approach to determine when to steal jobs.
 		// TODO: Remove this and deprecate Lease.Epoch proto field
 		epoch int64
-		// jobs holds a map from job id to its context cancel func. This should
-		// be populated with jobs that are currently being run (and owned) by
+		// jobs holds a map from job id to its state and context cancel func. This
+		// should be populated with jobs that are currently being run (and owned) by
 		// this registry. Calling the func will cancel the context the job was
-		// started/resumed with. This should only be called by the registry when
-		// it is attempting to halt its own jobs due to liveness problems. Jobs
-		// are normally canceled on any node by the CANCEL JOB statement, which is
+		// started/resumed with. This should only be called by the registry when it
+		// is attempting to halt its own jobs due to liveness problems. Jobs are
+		// normally canceled on any node by the CANCEL JOB statement, which is
 		// propagated to jobs via the .Progressed call. This function should not be
 		// used to cancel a job in that way.
-		jobs map[int64]context.CancelFunc
+		jobs map[int64]ownedJob
 	}
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
@@ -194,7 +199,7 @@ func MakeRegistry(
 		adoptionCh:          make(chan struct{}),
 	}
 	r.mu.epoch = 1
-	r.mu.jobs = make(map[int64]context.CancelFunc)
+	r.mu.jobs = make(map[int64]ownedJob)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
 }
@@ -1261,11 +1266,11 @@ func (r *Registry) cancelAll(ctx context.Context) {
 
 func (r *Registry) cancelAllLocked(ctx context.Context) {
 	r.mu.AssertHeld()
-	for jobID, cancel := range r.mu.jobs {
+	for jobID, detail := range r.mu.jobs {
 		log.Warningf(ctx, "job %d: canceling due to liveness failure", jobID)
-		cancel()
+		detail.cancel()
 	}
-	r.mu.jobs = make(map[int64]context.CancelFunc)
+	r.mu.jobs = make(map[int64]ownedJob)
 }
 
 // register registers an about to be resumed job in memory so that it can be
@@ -1278,19 +1283,19 @@ func (r *Registry) register(jobID int64, cancel func()) error {
 	if _, alreadyRegistered := r.mu.jobs[jobID]; alreadyRegistered {
 		return errors.Errorf("job %d: already registered", jobID)
 	}
-	r.mu.jobs[jobID] = cancel
+	r.mu.jobs[jobID] = ownedJob{cancel: cancel}
 	return nil
 }
 
 func (r *Registry) unregister(jobID int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	cancel, ok := r.mu.jobs[jobID]
+	detail, ok := r.mu.jobs[jobID]
 	// It is possible for a job to be double unregistered. unregister is always
 	// called at the end of resume. But it can also be called during cancelAll
 	// and in the adopt loop under certain circumstances.
 	if ok {
-		cancel()
+		detail.cancel()
 		delete(r.mu.jobs, jobID)
 	}
 }
@@ -1299,4 +1304,20 @@ func (r *Registry) unregister(jobID int64) {
 // a job to be adopted.
 func (r *Registry) TestingNudgeAdoptionQueue() {
 	r.adoptionCh <- struct{}{}
+}
+
+// ExecutionStatusDetails returns a reference to the detailed execution status
+// for the specified job if it is currently being run by this registry.
+func (r *Registry) ExecutionStatusDetails(jobID int64) *JobExecutionStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	detail, ok := r.mu.jobs[jobID]
+	if !ok {
+		return nil
+	}
+	if detail.status == nil {
+		detail.status = &JobExecutionStatus{Processors: make(map[int32]*ProcessorStatus)}
+		r.mu.jobs[jobID] = detail
+	}
+	return detail.status
 }
