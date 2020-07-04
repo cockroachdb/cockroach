@@ -49,7 +49,7 @@ func registerPgx(r *testRegistry) {
 
 		t.Status("installing pgx")
 		if err := repeatRunE(
-			ctx, c, node, "install pgx", "go get -u github.com/jackc/pgx",
+			ctx, c, node, "install pgx", fmt.Sprintf("go get -u github.com/jackc/pgx@%s", supportedTag),
 		); err != nil {
 			t.Fatal(err)
 		}
