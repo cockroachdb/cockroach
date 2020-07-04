@@ -2576,3 +2576,20 @@ query R
 SELECT ST_Azimuth(ST_Point(0, 0)::geography, ST_Point(0, 0)::geography)
 ----
 NULL
+
+statement error Argument must be LINESTRING geometries
+SELECT ST_MakePolygon('MULTIPOINT(0 0, 1 1)')
+
+statement error Argument must be LINESTRING geometries
+SELECT ST_AsText(ST_MakePolygon( ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), ARRAY[ST_GeomFromText('MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)')]));
+
+query T 
+SELECT ST_AsText(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)')));
+----
+POLYGON ((75 29, 77 29, 77 29, 75 29))
+
+query T 
+SELECT ST_AsText(ST_MakePolygon( ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), ARRAY[ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')]));
+----
+POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
+

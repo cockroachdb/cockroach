@@ -530,6 +530,47 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_makepolygon": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, outer *tree.DGeometry) (tree.Datum, error) {
+				g, err := geomfn.MakePolygon(outer.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a new Polygon with the given outer linestring.`,
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"outer", types.Geometry},
+				{"interior", types.AnyArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				outer := args[0].(*tree.DGeometry)
+				interiorArr := tree.MustBeDArray(args[1])
+				interior := make([]*geo.Geometry, len(interiorArr.Array))
+				for i, v := range interiorArr.Array {
+					interior[i] = v.(*tree.DGeometry).Geometry
+				}
+				g, err := geomfn.MakePolygon(outer.Geometry, interior...)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(g), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a new Polygon with the given outer linestring and interior (hole) linestrings.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	"st_geomcollfromtext":        geometryFromTextCheckShapeBuiltin(geopb.ShapeType_GeometryCollection),
 	"st_geomcollfromwkb":         geometryFromWKBCheckShapeBuiltin(geopb.ShapeType_GeometryCollection),
