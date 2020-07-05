@@ -21,6 +21,7 @@ package colexec
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -49,20 +50,22 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // {{/*
 func _POPULATE_SELS(b coldata.Batch, hashBuffer []uint64, _BATCH_HAS_SELECTION bool) { // */}}
 	// {{define "populateSels" -}}
-	for selIdx, hashCode := range hashBuffer {
-		selsSlot := -1
-		for slot, hash := range op.scratch.hashCodeForSelsSlot {
-			if hash == hashCode {
-				// We have already seen a tuple with the same hashCode
-				// previously, so we will append into the same sels slot.
-				selsSlot = slot
-				break
-			}
-		}
-		if selsSlot < 0 {
-			// This is the first tuple in hashBuffer with this hashCode, so we
-			// will add this tuple to the next available sels slot.
-			selsSlot = len(op.scratch.hashCodeForSelsSlot)
+	if len(hashBuffer) == 0 {
+		return
+	}
+	// The first hashcode is always new to us.
+	op.scratch.hashCodeForSelsSlot = append(op.scratch.hashCodeForSelsSlot, hashBuffer[0])
+	// {{if .BatchHasSelection}}
+	op.scratch.sels[0] = append(op.scratch.sels[0], batchSelection[0])
+	// {{else}}
+	op.scratch.sels[0] = append(op.scratch.sels[0], 0)
+	// {{end}}
+	selsSlot := 0
+	for selIdx := 1; selIdx < len(hashBuffer); selIdx++ {
+		hashCode := hashBuffer[selIdx]
+		if op.scratch.hashCodeForSelsSlot[selsSlot] != hashCode {
+			// We've advanced to a new value in hashBuffer. Make a new slot.
+			selsSlot++
 			op.scratch.hashCodeForSelsSlot = append(op.scratch.hashCodeForSelsSlot, hashCode)
 		}
 		// {{if .BatchHasSelection}}
@@ -83,6 +86,7 @@ func (op *hashAggregator) populateSels(b coldata.Batch, hashBuffer []uint64) {
 	// they all are of zero length here (see the comment for op.scratch.sels
 	// for context).
 	op.scratch.hashCodeForSelsSlot = op.scratch.hashCodeForSelsSlot[:0]
+	sort.Ints(hashBuffer)
 	if batchSelection := b.Selection(); batchSelection != nil {
 		_POPULATE_SELS(b, hashBuffer, true)
 	} else {
