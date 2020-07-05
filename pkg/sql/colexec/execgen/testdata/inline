@@ -210,3 +210,40 @@ func a() {
 const _ = "inlined_b"
 ----
 ----
+
+# Test chains of inlined functions.
+inline
+package main
+
+func a() {
+  b()
+}
+
+// execgen:inline
+func b() {
+  c()
+}
+
+// execgen:inline
+func c() {
+  foo = bar
+}
+----
+----
+package main
+
+func a() {
+	{
+		{
+			foo = bar
+		}
+	}
+}
+
+// execgen:inline
+const _ = "inlined_b"
+
+// execgen:inline
+const _ = "inlined_c"
+----
+----
