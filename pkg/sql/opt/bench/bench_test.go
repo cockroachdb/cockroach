@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -571,8 +572,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 	}
 
 	root := execMemo.RootExpr()
-	execFactory := stubFactory{}
-	eb := execbuilder.New(&execFactory, execMemo, nil /* catalog */, root, &h.evalCtx)
+	eb := execbuilder.New(exec.StubFactory{}, execMemo, nil /* catalog */, root, &h.evalCtx)
 	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)
 	}
