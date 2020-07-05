@@ -55,6 +55,8 @@ const (
 type hashAggregator struct {
 	OneInputNode
 
+	batchSize int
+
 	allocator *colmem.Allocator
 
 	aggCols  [][]uint32
@@ -195,6 +197,7 @@ func NewHashAggregator(
 
 	return &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
+		batchSize:    coldata.BatchSize(),
 		allocator:    allocator,
 
 		aggCols:    aggCols,
@@ -219,16 +222,16 @@ func (op *hashAggregator) Init() {
 	op.input.Init()
 	op.output.Batch = op.allocator.NewMemBatch(op.outputTypes)
 
-	op.scratch.sels = make([][]int, coldata.BatchSize())
-	op.scratch.hashCodeForSelsSlot = make([]uint64, coldata.BatchSize())
-	op.scratch.diff = make([]bool, coldata.BatchSize())
+	op.scratch.sels = make([][]int, op.batchSize)
+	op.scratch.hashCodeForSelsSlot = make([]uint64, op.batchSize)
+	op.scratch.diff = make([]bool, op.batchSize)
 	// Eventually, op.keyMapping will contain as many tuples as there are
 	// groups in the input, but we don't know that number upfront, so we
 	// allocate it with some reasonably sized constant capacity.
 	op.keyMapping = newAppendOnlyBufferedBatch(
-		op.allocator, op.groupTypes, coldata.BatchSize(),
+		op.allocator, op.groupTypes, op.batchSize,
 	)
-	op.hashBuffer = make([]uint64, coldata.BatchSize())
+	op.hashBuffer = make([]uint64, op.batchSize)
 }
 
 func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
@@ -252,7 +255,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			if op.output.pendingOutput {
 				remainingAggFuncs := op.aggFuncMap[op.output.resumeHashCode][op.output.resumeIdx:]
 				for groupIdx, aggFunc := range remainingAggFuncs {
-					if curOutputIdx < coldata.BatchSize() {
+					if curOutputIdx < op.batchSize {
 						for _, fn := range aggFunc.fns {
 							fn.SetOutputIndex(curOutputIdx)
 							fn.Flush()
@@ -272,7 +275,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 
 			for aggHashCode, aggFuncs := range op.aggFuncMap {
 				for groupIdx, aggFunc := range aggFuncs {
-					if curOutputIdx < coldata.BatchSize() {
+					if curOutputIdx < op.batchSize {
 						for _, fn := range aggFunc.fns {
 							fn.SetOutputIndex(curOutputIdx)
 							fn.Flush()
