@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,7 +31,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, resolver.ResolveRequireSequenceDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}

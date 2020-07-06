@@ -637,7 +637,7 @@ func ResolveFK(
 		originCols[i] = col
 	}
 
-	target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, resolver.ResolveRequireTableDesc)
+	target, err := resolver.ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -906,7 +906,7 @@ func addInterleave(
 	}
 
 	parentTable, err := resolver.ResolveExistingTableObject(
-		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireTableDesc,
+		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
 	)
 	if err != nil {
 		return err
@@ -1860,7 +1860,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			newDefs = make(tree.TableDefs, 0, len(n.Defs))
 			newDefs = append(newDefs, n.Defs[:i]...)
 		}
-		td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, resolver.ResolveRequireTableDesc)
+		td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
