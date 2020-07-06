@@ -57,12 +57,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Checks that the timestamp is the same for all the rows, and that
+// it lies between the startTime and the endTime.
+func validTimestamp(
+	rows [][]string, colIndices int, startTime time.Time, endTime time.Time, timeNow time.Time,
+) bool {
+	if len(rows) == 0 {
+		return true
+	}
+	targetTimeStr := ""
+	for _, row := range rows {
+		if targetTimeStr == "" {
+			targetTimeStr = row[colIndices]
+		} else {
+			if targetTimeStr != row[colIndices] {
+				return false
+			}
+		}
+	}
+
+	return !timeNow.Before(startTime) && !timeNow.After(endTime)
+}
 
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2613,13 +2636,74 @@ func TestImportIntoCSV(t *testing.T) {
 				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
 				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
 		})
-		t.Run("now-impure", func(t *testing.T) {
-			data = "1\n2"
-			sqlDB.Exec(t, `CREATE TABLE t(a INT, b TIMESTAMP DEFAULT now())`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.ExpectErr(t,
-				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
-				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+		t.Run("current-timestamp", func(t *testing.T) {
+			// TODO(anzoteh96): need to figure out a way for timeofday() validation
+			// because the format returned is different from the usually UTC format
+			// and it's stored as string in the database.
+			data = "1\n2\n3\n4\n5\n6"
+			testCases := []struct {
+				defaultExpr string
+				colType     string
+				millisecond bool
+			}{
+				{
+					defaultExpr: "current_date()",
+					colType:     "DATE",
+				},
+				{
+					defaultExpr: "current_timestamp()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					defaultExpr: "current_timestamp",
+					colType:     "TIMESTAMP",
+					millisecond: true,
+				},
+				{
+					defaultExpr: "localtimestamp()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					defaultExpr: "localtimestamp",
+					colType:     "TIMESTAMP",
+					millisecond: true,
+				},
+				{
+					defaultExpr: "now()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					defaultExpr: "statement_timestamp()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					defaultExpr: "transaction_timestamp()",
+					colType:     "TIMESTAMP",
+				},
+			}
+
+			for _, test := range testCases {
+				if test.millisecond {
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(a INT, b %s DEFAULT %s(%d))`, test.colType, test.defaultExpr, 3))
+				} else {
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(a INT, b %s DEFAULT %s)`, test.colType, test.defaultExpr))
+				}
+				timeStart := timeutil.Now()
+				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+				timeEnd := timeutil.Now()
+				if test.colType == "DATE" {
+					timeStart = timeStart.Truncate(24 * time.Hour)
+					timeEnd = timeEnd.Truncate(24 * time.Hour)
+				} else if test.millisecond {
+					timeStart = timeStart.Truncate((time.Millisecond))
+					timeEnd = timeEnd.Truncate((time.Millisecond))
+				}
+				var timeNow time.Time
+				sqlDB.QueryRow(t, `SELECT b from t`).Scan(&timeNow)
+				timeStr := sqlDB.QueryStr(t, `SELECT * from t`)
+				assert.True(t, validTimestamp(timeStr, 1, timeStart, timeEnd, timeNow), test.defaultExpr, timeStart, timeStr, timeEnd)
+				sqlDB.Exec(t, `DROP TABLE t`)
+			}
 		})
 		t.Run("pgdump", func(t *testing.T) {
 			data = "INSERT INTO t VALUES (1, 2), (3, 4)"

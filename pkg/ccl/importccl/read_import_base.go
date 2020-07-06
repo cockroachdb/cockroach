@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -485,6 +486,10 @@ func runParallelImport(
 	producer importRowProducer,
 	consumer importRowConsumer,
 ) error {
+	sec := importCtx.walltime / int64(time.Second)
+	nsec := importCtx.walltime % int64(time.Second)
+	importCtx.evalCtx.TxnTimestamp = timeutil.Unix(sec, nsec)
+	importCtx.evalCtx.StmtTimestamp = timeutil.Unix(sec, nsec)
 	batchSize := importCtx.batchSize
 	if batchSize <= 0 {
 		batchSize = parallelImporterReaderBatchSize
