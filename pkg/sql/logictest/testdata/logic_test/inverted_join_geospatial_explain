@@ -46,3 +46,27 @@ render                        ·                      ·
                 └── scan      ·                      ·
 ·                             table                  ltable@primary
 ·                             spans                  FULL SCAN
+
+query TTT
+EXPLAIN SELECT lk, rk1, rk2, rtable.geom
+FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom, rtable.geom, 5)
+----
+·                             distribution           local
+·                             vectorized             true
+render                        ·                      ·
+ └── lookup-join              ·                      ·
+      │                       table                  rtable@primary
+      │                       type                   inner
+      │                       equality               (rk1, rk2) = (rk1, rk2)
+      │                       equality cols are key  ·
+      │                       parallel               ·
+      │                       pred                   st_dwithin(geom, geom, 5.0)
+      └── render              ·                      ·
+           └── inverted-join  ·                      ·
+                │             table                  rtable@geom_index
+                │             type                   inner
+                │             ·                      st_dwithin(@2, @4, 5.0)
+                │             parallel               ·
+                └── scan      ·                      ·
+·                             table                  ltable@primary
+·                             spans                  FULL SCAN
