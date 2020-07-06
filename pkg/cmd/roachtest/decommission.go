@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -28,6 +29,39 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/sync/errgroup"
 )
+
+func registerDecommission(r *testRegistry) {
+	{
+		numNodes := 4
+		duration := time.Hour
+
+		r.Add(testSpec{
+			Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+			Owner:   OwnerKV,
+			Cluster: makeClusterSpec(4),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				if local {
+					duration = 3 * time.Minute
+					t.l.Printf("running with duration=%s in local mode\n", duration)
+				}
+				runDecommission(t, c, numNodes, duration)
+			},
+		})
+	}
+	{
+		numNodes := 6
+		r.Add(testSpec{
+			Name:       "decommission-recommission",
+			Owner:      OwnerKV,
+			MinVersion: "v20.2.0",
+			Timeout:    10 * time.Minute,
+			Cluster:    makeClusterSpec(numNodes),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runDecommissionRecommission(ctx, t, c)
+			},
+		})
+	}
+}
 
 // TODO(tschottdorf): verify that the logs don't contain the messages
 // that would spam the log before #23605. I wonder if we should really
@@ -227,24 +261,6 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 	}
 }
 
-func registerDecommission(r *testRegistry) {
-	const numNodes = 4
-	duration := time.Hour
-
-	r.Add(testSpec{
-		Name:    fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-		Owner:   OwnerKV,
-		Cluster: makeClusterSpec(numNodes),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			if local {
-				duration = 3 * time.Minute
-				t.l.Printf("running with duration=%s in local mode\n", duration)
-			}
-			runDecommission(t, c, numNodes, duration)
-		},
-	})
-}
-
 func execCLI(
 	ctx context.Context, t *test, c *cluster, runNode int, extraArgs ...string,
 ) (string, error) {
@@ -257,34 +273,92 @@ func execCLI(
 	return string(buf), err
 }
 
-func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
+// runDecommissionRecommission tests a bunch of node
+// decommissioning/recommissioning procedures, all the while checking for
+// replica movement and appropriate membership status detection behavior. We go
+// through partial decommissioning of random nodes, ensuring we're able to undo
+// those operations. We then fully decommission nodes, verifying it's an
+// irreversible operation.
+func runDecommissionRecommission(ctx context.Context, t *test, c *cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
 
+	// We use a few helpers for random node ID access.
+	var nodeIDs []int
+	for i := 1; i <= c.spec.NodeCount; i++ {
+		nodeIDs = append(nodeIDs, i)
+	}
+	getRandNode := func() int {
+		return nodeIDs[rand.Intn(len(nodeIDs))]
+	}
+	getRandNodeOtherThan := func(ids ...int) int {
+		for {
+			cur := nodeIDs[rand.Intn(len(nodeIDs))]
+			inBlockList := false
+			for _, id := range ids {
+				if cur == id {
+					inBlockList = true
+				}
+			}
+			if inBlockList {
+				continue
+			}
+			return cur
+		}
+	}
+
+	// We define a few short hands to {d,r}ecommission target nodes, through a
+	// given node.
 	decommission := func(
 		ctx context.Context,
-		runNode int,
 		targetNodes nodeListOption,
+		runNode int,
 		verbs ...string,
 	) (string, error) {
-		args := []string{"node"}
+		args := []string{"node", "decommission"}
 		args = append(args, verbs...)
-		for _, target := range targetNodes {
-			args = append(args, strconv.Itoa(target))
+
+		if len(targetNodes) == 1 && targetNodes[0] == runNode {
+			args = append(args, "--self")
+		} else {
+			for _, target := range targetNodes {
+				args = append(args, strconv.Itoa(target))
+			}
+		}
+		return execCLI(ctx, t, c, runNode, args...)
+	}
+	recommission := func(
+		ctx context.Context,
+		targetNodes nodeListOption,
+		runNode int,
+		verbs ...string,
+	) (string, error) {
+		args := []string{"node", "recommission"}
+		args = append(args, verbs...)
+
+		if len(targetNodes) == 1 && targetNodes[0] == runNode {
+			args = append(args, "--self")
+		} else {
+			for _, target := range targetNodes {
+				args = append(args, strconv.Itoa(target))
+			}
 		}
 		return execCLI(ctx, t, c, runNode, args...)
 	}
 
-	getCsvNumCols := func(csvStr string) (cols int, err error) {
+	// getCsvNumCols returns the number of columns in the given csv string.
+	getCsvNumCols := func(csvStr string) (cols int) {
 		reader := csv.NewReader(strings.NewReader(csvStr))
 		records, err := reader.Read()
 		if err != nil {
-			return 0, errors.Errorf("error reading csv input: \n %v\n errors:%s", csvStr, err)
+			t.Fatal(errors.Errorf("error reading csv input: \n %v\n errors:%s", csvStr, err))
 		}
-		return len(records), nil
+		return len(records)
 	}
 
+	// matchCsv matches a multi-line csv string with the provided regex
+	// (matchColRow[i][j] will be matched against the i-th line, j-th column).
 	matchCSV := func(csvStr string, matchColRow [][]string) (err error) {
 		defer func() {
 			if err != nil {
@@ -326,41 +400,44 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		return err
 	}
 
+	// Header from the output of `cockroach node decommission`.
 	decommissionHeader := []string{
-		"id", "is_live", "replicas", "is_decommissioning", "is_draining",
+		"id", "is_live", "replicas", "is_decommissioning", "membership", "is_draining",
 	}
+	// Footer from the output of `cockroach node decommission`, after successful
+	// decommission.
 	decommissionFooter := []string{
 		"No more data reported on target nodes. " +
 			"Please verify cluster health before removing the nodes.",
 	}
 
-	// Different output here to be backwards compatible with earlier
-	// versions of cockroach (versions pre commit 888813c, which
-	// extends the node status command to include locality information).
-	statusHeaderWithLocality := []string{
+	// Header from the output of `cockroach node status`.
+	statusHeader := []string{
 		"id", "address", "sql_address", "build", "started_at", "updated_at", "locality", "is_available", "is_live",
 	}
-	statusHeaderNoLocality := []string{
-		"id", "address", "sql_address", "build", "started_at", "updated_at", "is_available", "is_live",
+	// Header from the output of `cockroach node status --decommission`.
+	statusHeaderWithDecommission := []string{
+		"id", "address", "sql_address", "build", "started_at", "updated_at", "locality", "is_available", "is_live",
+		"gossiped_replicas", "is_decommissioning", "membership", "is_draining",
 	}
-	statusHeaderNoLocalityNoSQLAddress := []string{
-		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
-	}
-	getStatusCsvOutput := func(ids []string, numCols int) [][]string {
+	// Index of `membership` column in statusHeaderWithDecommission
+	const statusHeaderMembershipColumnIdx = 11
+
+	// expectIDsInStatusOut constructs a matching regex for output of `cockroach
+	// node status`. It matches against the `id` column in the output generated
+	// with and without the `--decommission` flag.
+	expectIDsInStatusOut := func(ids []string, numCols int) [][]string {
 		var res [][]string
 		switch numCols {
-		case len(statusHeaderNoLocality):
-			res = append(res, statusHeaderNoLocality)
-		case len(statusHeaderWithLocality):
-			res = append(res, statusHeaderWithLocality)
-		case len(statusHeaderNoLocalityNoSQLAddress):
-			res = append(res, statusHeaderNoLocalityNoSQLAddress)
+		case len(statusHeader):
+			res = append(res, statusHeader)
+		case len(statusHeaderWithDecommission):
+			res = append(res, statusHeaderWithDecommission)
 		default:
 			t.Fatalf(
-				"Expected status output numCols to be either %d, %d or %d, found %d",
-				len(statusHeaderNoLocalityNoSQLAddress),
-				len(statusHeaderNoLocality),
-				len(statusHeaderWithLocality),
+				"Expected status output numCols to be one of %d or %d, found %d",
+				len(statusHeader),
+				len(statusHeaderWithDecommission),
 				numCols,
 			)
 		}
@@ -374,318 +451,486 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		return res
 	}
 
-	t.l.Printf("decommissioning first node from the second, polling the status manually\n")
+	// expectColumn constructs a matching regex for a given column (identified
+	// by its column index).
+	expectColumn := func(column int, columnRegex []string, numRows, numCols int) [][]string {
+		var res [][]string
+		for r := 0; r < numRows; r++ {
+			build := []string{}
+			for c := 0; c < numCols; c++ {
+				if c == column {
+					build = append(build, columnRegex[r])
+				} else {
+					build = append(build, `.*`)
+				}
+			}
+			res = append(res, build)
+		}
+		return res
+	}
+	// expectCell constructs a matching regex for a given cell (identified by
+	// its row and column indexes).
+	expectCell := func(row, column int, regex string, numRows, numCols int) [][]string {
+		var res [][]string
+		for r := 0; r < numRows; r++ {
+			build := []string{}
+			for c := 0; c < numCols; c++ {
+				if r == row && c == column {
+					build = append(build, regex)
+				} else {
+					build = append(build, `.*`)
+				}
+			}
+			res = append(res, build)
+		}
+		return res
+	}
+
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     5 * time.Second,
-		Multiplier:     1,
+		Multiplier:     2,
 	}
-	if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
-		o, err := decommission(ctx, 2, c.Node(1),
-			"decommission", "--wait=none", "--format=csv")
+
+	// Phew, now for the actual test..
+
+	// Partially decommission then recommission a random node, from another
+	// random node. Run a couple of status checks while doing so.
+	{
+		targetNode, runNode := getRandNode(), getRandNode()
+		t.l.Printf("partially decommissioning n%d from n%d\n", targetNode, runNode)
+		o, err := decommission(ctx, c.Node(targetNode), runNode,
+			"--wait=none", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
 
 		exp := [][]string{
 			decommissionHeader,
-			{"1", "true", "0", "true", "false"},
-			decommissionFooter,
-		}
-
-		return matchCSV(o, exp)
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check that even though the node is decommissioned, we still see it (since
-	// it remains live) in `node ls`.
-	{
-		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format=csv")
-		if err != nil {
-			t.Fatalf("node-ls failed: %v", err)
-		}
-		exp := [][]string{
-			{"id"},
-			{"1"},
-			{"2"},
-			{"3"},
-			{"4"},
+			{strconv.Itoa(targetNode), "true", `\d+`, "true", "decommissioning", "false"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
+
+		// Check that `node status` reflects an ongoing decommissioning status
+		// for the second node.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that `node status` (from n%d) shows n%d as decommissioning\n",
+				runNode, targetNode)
+			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
+			if err != nil {
+				t.Fatalf("node-status failed: %v", err)
+			}
+
+			numCols := getCsvNumCols(o)
+			exp := expectCell(targetNode-1, /* node IDs are 1-indexed */
+				statusHeaderMembershipColumnIdx, `decommissioning`, c.spec.NodeCount, numCols)
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Recommission the target node, cancel the in-flight decommissioning
+		// process.
+		{
+			runNode = getRandNode()
+			t.l.Printf("recommissioning n%d (from n%d)\n", targetNode, runNode)
+			if _, err := recommission(ctx, c.Node(targetNode), runNode); err != nil {
+				t.Fatalf("recommission failed: %v", err)
+			}
+		}
+
+		// Check that `node status` now reflects a 'active' status for the
+		// target node.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that `node status` (from n%d) shows n%d as active\n",
+				targetNode, runNode)
+			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
+			if err != nil {
+				t.Fatalf("node-status failed: %v", err)
+			}
+
+			numCols := getCsvNumCols(o)
+			exp := expectCell(targetNode-1, /* node IDs are 1-indexed */
+				statusHeaderMembershipColumnIdx, `active`, c.spec.NodeCount, numCols)
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	// Ditto `node status`.
+
+	// Check to see that operators aren't able to decommission into
+	// availability. We'll undo the attempted decommissioning event by
+	// recommissioning the targeted nodes.
 	{
-		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format=csv")
-		if err != nil {
-			t.Fatalf("node-status failed: %v", err)
-		}
-		numCols, err := getCsvNumCols(o)
-		if err != nil {
+		runNode := getRandNode()
+		t.l.Printf("attempting to decommission all nodes from n%d\n", runNode)
+		if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
+			o, err := decommission(ctx, c.All(), runNode,
+				"--wait=none", "--format=csv")
+			if err != nil {
+				t.Fatalf("decommission failed: %v", err)
+			}
+
+			exp := [][]string{decommissionHeader}
+			for i := 1; i <= c.spec.NodeCount; i++ {
+				rowRegex := []string{strconv.Itoa(i), "true", `\d+`, "true", "decommissioning", "false"}
+				exp = append(exp, rowRegex)
+			}
+			return matchCSV(o, exp)
+		}); err != nil {
 			t.Fatal(err)
 		}
-		exp := getStatusCsvOutput([]string{`1`, `2`, `3`, `4`}, numCols)
-		if err := matchCSV(o, exp); err != nil {
-			t.Fatal(err)
+
+		// Check that `node status` reflects an ongoing decommissioning status for
+		// all nodes.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that `node status` (from n%d) shows all nodes as decommissioning\n",
+				runNode)
+			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
+			if err != nil {
+				t.Fatalf("node-status failed: %v", err)
+			}
+
+			numCols := getCsvNumCols(o)
+			var colRegex []string
+			for i := 1; i <= c.spec.NodeCount; i++ {
+				colRegex = append(colRegex, `decommissioning`)
+			}
+			exp := expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.spec.NodeCount, numCols)
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Check that we can still do stuff, creating a database should be good
+		// enough.
+		{
+			t.l.Printf("checking that we're able to create a database\n", runNode)
+			db := c.Conn(ctx, runNode)
+			defer db.Close()
+
+			if _, err := db.Exec(`create database still_working;`); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Cancel in-flight decommissioning process of target node.
+		{
+			t.l.Printf("recommissioning all nodes (from n%d)\n", runNode)
+			if _, err := recommission(ctx, c.All(), runNode); err != nil {
+				t.Fatalf("recommission failed: %v", err)
+			}
+		}
+
+		// Check that `node status` now reflects an 'active' status for all
+		// nodes.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that `node status` (from n%d) shows all nodes as active\n",
+				runNode)
+			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv", "--decommission")
+			if err != nil {
+				t.Fatalf("node-status failed: %v", err)
+			}
+
+			numCols := getCsvNumCols(o)
+			var colRegex []string
+			for i := 1; i <= c.spec.NodeCount; i++ {
+				colRegex = append(colRegex, `active`)
+			}
+			exp := expectColumn(statusHeaderMembershipColumnIdx, colRegex, c.spec.NodeCount, numCols)
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
-	t.l.Printf("recommissioning first node (from third node)\n")
-	if _, err := decommission(ctx, 3, c.Node(1), "recommission"); err != nil {
-		t.Fatalf("recommission failed: %v", err)
+	// Fully recommission two random nodes, from a random node, randomly choosing
+	// between using --wait={all,none}. We pin these two nodes to not re-use
+	// them for the block after, as they will have been fully decommissioned and
+	// by definition, non-operational.
+	decommissionedNodeA := getRandNode()
+	decommissionedNodeB := getRandNodeOtherThan(decommissionedNodeA)
+	{
+		targetNodeA, targetNodeB := decommissionedNodeA, decommissionedNodeB
+		if targetNodeB < targetNodeA {
+			targetNodeB, targetNodeA = targetNodeA, targetNodeB
+		}
+
+		runNode := getRandNode()
+		waitStrategy := "all" // Blocking decommission.
+		if i := rand.Intn(2); i == 0 {
+			waitStrategy = "none" // Polling decommission.
+		}
+
+		t.l.Printf("fully decommissioning [n%d,n%d] from n%d, using --wait=%s\n",
+			targetNodeA, targetNodeB, runNode, waitStrategy)
+
+		// When using --wait=none, we poll the decommission status.
+		maxAttempts := 50
+		if waitStrategy == "all" {
+			// --wait=all is a one shot attempt at decommissioning, that polls
+			// internally.
+			maxAttempts = 1
+		}
+
+		if err := retry.WithMaxAttempts(ctx, retryOpts, maxAttempts, func() error {
+			o, err := decommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode,
+				fmt.Sprintf("--wait=%s", waitStrategy), "--format=csv")
+			if err != nil {
+				t.Fatalf("decommission failed: %v", err)
+			}
+
+			exp := [][]string{
+				decommissionHeader,
+				{strconv.Itoa(targetNodeA), "true", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeB), "true", "0", "true", "decommissioned", "false"},
+				decommissionFooter,
+			}
+			return matchCSV(o, exp)
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Check that even though the node is decommissioned, we still see it (since
+		// it remains live) in `node ls`.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that `node ls` (from n%d) shows all nodes\n", runNode)
+			o, err := execCLI(ctx, t, c, runNode, "node", "ls", "--format=csv")
+			if err != nil {
+				t.Fatalf("node-ls failed: %v", err)
+			}
+			exp := [][]string{{"id"}}
+			for i := 1; i <= c.spec.NodeCount; i++ {
+				exp = append(exp, []string{strconv.Itoa(i)})
+			}
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Ditto for `node status`.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that `node status` (from n%d) shows all nodes\n", runNode)
+			o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv")
+			if err != nil {
+				t.Fatalf("node-status failed: %v", err)
+			}
+
+			numCols := getCsvNumCols(o)
+			colRegex := []string{}
+			for i := 1; i <= c.spec.NodeCount; i++ {
+				colRegex = append(colRegex, strconv.Itoa(i))
+			}
+			exp := expectIDsInStatusOut(colRegex, numCols)
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// We expect this to fail, seeing as how it's attempting to recommission
+		// fully decommissioned nodes.
+		{
+			runNode = getRandNode()
+			t.l.Printf("expected to fail: recommissioning [n%d,n%d] (from n%d)\n",
+				targetNodeA, targetNodeB, runNode)
+			if _, err := recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
+				t.Fatal("expected recommission to failed")
+			}
+		}
+
+		// Decommissioning the same nodes again should be a no-op. We do it from
+		// a random node.
+		{
+			runNode = getRandNode()
+			t.l.Printf("checking that decommissioning [n%d,n%d] (from n%d) is a no-op\n",
+				runNode, targetNodeA, targetNodeB)
+			o, err := decommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode,
+				"--wait=all", "--format=csv")
+			if err != nil {
+				t.Fatalf("decommission failed: %v", err)
+			}
+
+			exp := [][]string{
+				decommissionHeader,
+				{strconv.Itoa(targetNodeA), "true", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeB), "true", "0", "true", "decommissioned", "false"},
+				decommissionFooter,
+			}
+			if err := matchCSV(o, exp); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// We restart the nodes and attempt to recommission (should still fail).
+		{
+			runNode = getRandNode()
+			t.l.Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
+				targetNodeA, targetNodeB, runNode)
+			c.Stop(ctx, c.Nodes(targetNodeA, targetNodeB))
+			c.Start(ctx, t, c.Nodes(targetNodeA, targetNodeB), args)
+
+			if _, err := recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
+				t.Fatalf("expected recommission to fail")
+			}
+		}
 	}
 
-	// Verify the --self flag works.
-	t.l.Printf("re-decommissioning first node, from itself\n")
-	selfFlagSupported := true
-	if cmdOutput, err := decommission(ctx, 1, nil, "decommission", "--self"); err != nil {
-		// Until 20.2, --self is not supported.
-		// TODO(knz): Remove this alternative when roachtest does not
-		// test any version lower than 20.2.
-		if strings.Contains(cmdOutput, ": unknown flag: --self") {
-			t.l.Printf("--self not supported; skipping recommission with --self")
-			selfFlagSupported = false
-		} else {
+	// Decommission a downed node (random selected), randomly choosing between
+	// bringing the node back to life or leaving it permanently dead.
+	//
+	// TODO(irfansharif): We could pull merge this "deadness" check into the
+	// previous block, when fully decommissioning multiple nodes, to reduce the
+	// total number of nodes needed in the cluster.
+	{
+		restartDownedNode := false
+		if i := rand.Intn(2); i == 0 {
+			restartDownedNode = true
+		}
+
+		if !restartDownedNode {
+			// We want to test decommissioning a truly dead node. Make sure we
+			// don't waste too much time waiting for the node to be recognized
+			// as dead. Note that we don't want to set this number too low or
+			// everything will seem dead to the allocator at all times, so
+			// nothing will ever happen.
+			func() {
+				db := c.Conn(ctx, 1)
+				defer db.Close()
+				const stmt = "SET CLUSTER SETTING server.time_until_store_dead = '1m15s'"
+				if _, err := db.ExecContext(ctx, stmt); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}
+
+		targetNode := getRandNodeOtherThan(decommissionedNodeA, decommissionedNodeB)
+		t.l.Printf("intentionally killing n%d to later decommission it when down\n", targetNode)
+		c.Stop(ctx, c.Node(targetNode))
+
+		runNode := getRandNodeOtherThan(targetNode)
+		t.l.Printf("decommissioning n%d (from n%d) in absentia\n", targetNode, runNode)
+		if _, err := decommission(ctx, c.Node(targetNode), runNode,
+			"--wait=all", "--format=csv"); err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
-	}
 
-	if selfFlagSupported {
-		t.l.Printf("re-recommissioning first node, from itself\n")
-		if _, err := decommission(ctx, 1, nil, "recommission", "--self"); err != nil {
-			t.Fatalf("recommission failed: %v", err)
+		if restartDownedNode {
+			t.l.Printf("restarting n%d for verification\n", targetNode)
+
+			// Bring targetNode it back up to verify that its replicas still get
+			// removed.
+			c.Start(ctx, t, c.Node(targetNode), args)
 		}
-	}
 
-	t.l.Printf("decommissioning second node from third, using --wait=all\n")
-	{
-		o, err := decommission(ctx, 3, c.Node(2),
-			"decommission", "--wait=all", "--format=csv")
+		// Run decommission a second time to wait until the replicas have
+		// all been GC'ed. Note that we specify "all" because even though
+		// the target node is now running, it may not be live by the time
+		// the command runs.
+		o, err := decommission(ctx, c.Node(targetNode), runNode,
+			"--wait=all", "--format=csv")
 		if err != nil {
 			t.Fatalf("decommission failed: %v", err)
 		}
 
 		exp := [][]string{
 			decommissionHeader,
-			{"2", "true", "0", "true", "false"},
-			decommissionFooter,
-		}
-		if err := matchCSV(o, exp); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	t.l.Printf("recommissioning second node from itself\n")
-	if _, err := decommission(ctx, 2, c.Node(2), "recommission"); err != nil {
-		t.Fatalf("recommission failed: %v", err)
-	}
-
-	t.l.Printf("decommissioning third node (from itself)\n")
-	func() {
-		// This should not take longer than five minutes, and if it does, it's
-		// likely stuck forever and we want to see the output.
-		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-		defer cancel()
-		o, err := decommission(timeoutCtx, 3, c.Node(3),
-			"decommission", "--wait=all", "--format=csv")
-		if err != nil {
-			t.Fatalf("decommission failed: %v", err)
-		}
-
-		exp := [][]string{
-			decommissionHeader,
-			{"3", "true", "0", "true", "false"},
-			decommissionFooter,
-		}
-		if err := matchCSV(o, exp); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	// Now that the third node is down and decommissioned, decommissioning it
-	// again should be a no-op. We do it from node one but as always it doesn't
-	// matter.
-	t.l.Printf("checking that other nodes see node three as successfully decommissioned\n")
-	{
-		o, err := decommission(ctx, 2, c.Node(3),
-			"decommission", "--format=csv") // wait=all is implied
-		if err != nil {
-			t.Fatalf("decommission failed: %v", err)
-		}
-
-		exp := [][]string{
-			decommissionHeader,
-			{"3", "true", "0", "true", "false"},
+			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioned", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
 		}
 
-		// Bring the node back up. It's still decommissioned, so it won't be of much use.
-		c.Stop(ctx, c.Node(3))
-		c.Start(ctx, t, c.Node(3), args)
+		if !restartDownedNode {
+			// Check that (at least after a bit) the node disappears from `node
+			// ls` because it is decommissioned and not live.
+			if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
+				runNode := getRandNodeOtherThan(targetNode)
+				o, err := execCLI(ctx, t, c, runNode, "node", "ls", "--format=csv")
+				if err != nil {
+					t.Fatalf("node-ls failed: %v", err)
+				}
 
-		// Recommission. Welcome back!
-		if _, err = decommission(ctx, 2, c.Node(3), "recommission"); err != nil {
-			t.Fatalf("recommission failed: %v", err)
-		}
-	}
+				var exp [][]string
+				for i := 1; i <= c.spec.NodeCount; i++ {
+					exp = append(exp, []string{fmt.Sprintf("[^%d]", targetNode)})
+				}
 
-	// Kill the first node and verify that we can decommission it while it's down,
-	// bringing it back up to verify that its replicas still get removed.
-	t.l.Printf("intentionally killing first node\n")
-	c.Stop(ctx, c.Node(1))
-	t.l.Printf("decommission first node, starting with it down but restarting it for verification\n")
-	{
-		_, err := decommission(ctx, 2, c.Node(1), "decommission", "--wait=all")
-		if err != nil {
-			t.Fatalf("decommission failed: %v", err)
-		}
-		c.Start(ctx, t, c.Node(1), args)
+				return matchCSV(o, exp)
+			}); err != nil {
+				t.Fatal(err)
+			}
 
-		// Run a second time to wait until the replicas have all been GC'ed.
-		// Note that we specify "all" because even though the first node is
-		// now running, it may not be live by the time the command runs.
-		o, err := decommission(ctx, 2, c.Node(1),
-			"decommission", "--wait=all", "--format=csv")
-		if err != nil {
-			t.Fatalf("decommission failed: %v", err)
+			// Ditto for `node status`
+			if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
+				runNode := getRandNodeOtherThan(targetNode)
+				o, err := execCLI(ctx, t, c, runNode, "node", "status", "--format=csv")
+				if err != nil {
+					t.Fatalf("node-status failed: %v", err)
+				}
+
+				numCols := getCsvNumCols(o)
+				var expC []string
+				// We're checking for n-1 rows, where n is the node count.
+				for i := 1; i < c.spec.NodeCount; i++ {
+					expC = append(expC, fmt.Sprintf("[^%d].*", targetNode))
+				}
+				exp := expectIDsInStatusOut(expC, numCols)
+				return matchCSV(o, exp)
+			}); err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		exp := [][]string{
-			decommissionHeader,
-			{"1", "true|false", "0", "true", "false"},
-			decommissionFooter,
+		{
+			t.l.Printf("wiping n%d and adding it back to the cluster as a new node\n", targetNode)
+
+			c.Stop(ctx, c.Node(targetNode))
+			c.Wipe(ctx, c.Node(targetNode))
+
+			joinNode := targetNode%c.spec.NodeCount + 1
+			joinAddr := c.InternalAddr(ctx, c.Node(joinNode))[0]
+			c.Start(ctx, t, c.Node(targetNode), startArgs(
+				fmt.Sprintf("-a=--join %s", joinAddr),
+			))
 		}
-		if err := matchCSV(o, exp); err != nil {
+
+		if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
+			o, err := execCLI(ctx, t, c, getRandNode(), "node", "status", "--format=csv")
+			if err != nil {
+				t.Fatalf("node-status failed: %v", err)
+			}
+			numCols := getCsvNumCols(o)
+			var expC []string
+			for i := 1; i <= c.spec.NodeCount; i++ {
+				expC = append(expC, fmt.Sprintf("[^%d].*", targetNode))
+			}
+			exp := expectIDsInStatusOut(expC, numCols)
+			return matchCSV(o, exp)
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// Now we want to test decommissioning a truly dead node. Make sure we don't
-	// waste too much time waiting for the node to be recognized as dead. Note that
-	// we don't want to set this number too low or everything will seem dead to the
-	// allocator at all times, so nothing will ever happen.
-	func() {
-		db := c.Conn(ctx, 2)
-		defer db.Close()
-		const stmt = "SET CLUSTER SETTING server.time_until_store_dead = '1m15s'"
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	t.l.Printf("intentionally killing first node\n")
-	c.Stop(ctx, c.Node(1))
-	// It is being decommissioned in absentia, meaning that its replicas are
-	// being removed due to deadness. We can't see that reflected in the output
-	// since the current mechanism gets its replica counts from what the node
-	// reports about itself, so our assertion here is somewhat weak.
-	t.l.Printf("decommission first node in absentia using --wait=all\n")
-	{
-		o, err := decommission(ctx, 3, c.Node(1), "decommission", "--wait=all", "--format=csv")
-		if err != nil {
-			t.Fatalf("decommission failed: %v", err)
-		}
-
-		// Note we don't check precisely zero replicas (which the node would write
-		// itself, but it's dead). Also note that the target node may still be
-		// "live" when it's marked as decommissioned, as its replica count may
-		// drop to zero faster than liveness times out.
-		exp := [][]string{
-			decommissionHeader,
-			{"1", `true|false`, "0", `true`, `false`},
-			decommissionFooter,
-		}
-		if err := matchCSV(o, exp); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Check that (at least after a bit) the node disappears from `node ls`
-	// because it is decommissioned and not live.
-	for {
-		o, err := execCLI(ctx, t, c, 2, "node", "ls", "--format=csv")
-		if err != nil {
-			t.Fatalf("node-ls failed: %v", err)
-		}
-
-		exp := [][]string{
-			{"id"},
-			{"2"},
-			{"3"},
-			{"4"},
-		}
-
-		if err := matchCSV(o, exp); err != nil {
-			time.Sleep(time.Second)
-			continue
-		}
-		break
-	}
-	for {
-		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format=csv")
-		if err != nil {
-			t.Fatalf("node-status failed: %v", err)
-		}
-		numCols, err := getCsvNumCols(o)
-		if err != nil {
-			t.Fatal(err)
-		}
-		exp := getStatusCsvOutput([]string{`2`, `3`, `4`}, numCols)
-		if err := matchCSV(o, exp); err != nil {
-			time.Sleep(time.Second)
-			continue
-		}
-		break
-	}
-
-	// Wipe data of node 1 and start it as a new node.
-	// It will join the cluster with a node id of 5.
-	// This is done to verify that node status works when a new node is started
-	// with an address belonging to an old decommissioned node.
-	{
-		c.Wipe(ctx, c.Node(1))
-		c.Start(ctx, t, c.Node(1), startArgs(fmt.Sprintf("-a=--join %s",
-			c.InternalAddr(ctx, c.Node(2))[0])))
-	}
-
-	if err := retry.WithMaxAttempts(ctx, retryOpts, 50, func() error {
-		o, err := execCLI(ctx, t, c, 2, "node", "status", "--format=csv")
-		if err != nil {
-			t.Fatalf("node-status failed: %v", err)
-		}
-		numCols, err := getCsvNumCols(o)
-		if err != nil {
-			t.Fatal(err)
-		}
-		exp := getStatusCsvOutput([]string{`2`, `3`, `4`, `5`}, numCols)
-		return matchCSV(o, exp)
-	}); err != nil {
-		t.Fatal(err)
-	}
-
+	// We'll verify the set of events, in order, we expect to get posted to
+	// system.eventlog.
 	if err := retry.ForDuration(time.Minute, func() error {
 		// Verify the event log has recorded exactly one decommissioned or
-		// recommissioned event for each commissioning operation.
-		//
-		// Spurious errors appear to be possible since we might be trying to
-		// send RPCs to the (relatively recently) down node:
-		//
-		// pq: rpc error: code = Unavailable desc = grpc: the connection is
-		// unavailable
-		//
-		// Seen in https://teamcity.cockroachdb.com/viewLog.html?buildId=344802.
-		db := c.Conn(ctx, 2)
+		// recommissioned event for each membership operation.
+		db := c.Conn(ctx, 1)
 		defer db.Close()
 
 		rows, err := db.Query(`
-SELECT "eventType", "targetID" FROM system.eventlog
-WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
-			"node_decommissioned", "node_recommissioned",
+			SELECT "eventType" FROM system.eventlog WHERE "eventType" IN ($1, $2, $3) ORDER BY timestamp
+			`, "node_decommissioned", "node_decommissioning", "node_recommissioned",
 		)
 		if err != nil {
 			t.l.Printf("retrying: %v\n", err)
@@ -699,21 +944,35 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 		}
 
 		expMatrix := [][]string{
-			{"node_decommissioned", "1"},
-			{"node_recommissioned", "1"},
-			{"node_decommissioned", "1"},
-			{"node_recommissioned", "1"},
-			{"node_decommissioned", "2"},
-			{"node_recommissioned", "2"},
-			{"node_decommissioned", "3"},
-			{"node_recommissioned", "3"},
-			{"node_decommissioned", "1"},
-		}
+			// Partial decommission attempt of a single node.
+			{"node_decommissioning"},
+			{"node_recommissioned"},
 
-		if !selfFlagSupported {
-			// If `--self` is not supported then we don't expect to see
-			// node 1 self decommission and recommission (step 3 and 4).
-			expMatrix = append(expMatrix[:2], expMatrix[4:]...)
+			// Cluster wide decommissioning attempt.
+			{"node_decommissioning"},
+			{"node_decommissioning"},
+			{"node_decommissioning"},
+			{"node_decommissioning"},
+			{"node_decommissioning"},
+			{"node_decommissioning"},
+
+			// Cluster wide recommissioning, to undo previous decommissioning attempt.
+			{"node_recommissioned"},
+			{"node_recommissioned"},
+			{"node_recommissioned"},
+			{"node_recommissioned"},
+			{"node_recommissioned"},
+			{"node_recommissioned"},
+
+			// Full decommission of two nodes.
+			{"node_decommissioning"},
+			{"node_decommissioning"},
+			{"node_decommissioned"},
+			{"node_decommissioned"},
+
+			// Full decommission of a single node.
+			{"node_decommissioning"},
+			{"node_decommissioned"},
 		}
 
 		if !reflect.DeepEqual(matrix, expMatrix) {
@@ -722,34 +981,5 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 		return nil
 	}); err != nil {
 		t.Fatal(err)
-	}
-
-	// Last, verify that the operator can't shoot themselves in the foot by
-	// accidentally decommissioning all nodes.
-	//
-	// Specify wait=none because the command would block forever (the replicas have
-	// nowhere to go).
-	if _, err := decommission(ctx, 2, c.All(), "decommission", "--wait=none"); err != nil {
-		t.Fatalf("decommission failed: %v", err)
-	}
-
-	// Check that we can still do stuff. Creating a database should be good enough.
-	db := c.Conn(ctx, 2)
-	defer db.Close()
-
-	if _, err := db.Exec(`CREATE DATABASE still_working;`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Recommission all nodes.
-	if _, err := decommission(ctx, 2, c.All(), "recommission"); err != nil {
-		t.Fatalf("recommission failed: %v", err)
-	}
-
-	// To verify that all nodes are actually accepting replicas again, decommission
-	// the first nodes (blocking until it's done). This proves that the other nodes
-	// absorb the first one's replicas.
-	if _, err := decommission(ctx, 2, c.Node(1), "decommission"); err != nil {
-		t.Fatalf("decommission failed: %v", err)
 	}
 }
