@@ -213,6 +213,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		[]*types.T{},
 	)
 
+	p.PlanToStreamColMap = []int{}
 	return p, nil
 }
 
