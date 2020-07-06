@@ -55,9 +55,11 @@ export const FINISH_SCHEMA_CHANGE_ROLLBACK = "finish_schema_change_rollback";
 export const NODE_JOIN = "node_join";
 // Recorded when an existing node rejoins the cluster after being offline.
 export const NODE_RESTART = "node_restart";
-// Recorded when a node is marked as decommissioning.
+// Recorded when a node is marked for decommissioning.
+export const NODE_DECOMMISSIONING = "node_decommissioning";
+// Recorded when a node is marked as decommissioned.
 export const NODE_DECOMMISSIONED = "node_decommissioned";
-// Recorded when a decommissioned node is recommissioned.
+// Recorded when a decommissioning node is recommissioned.
 export const NODE_RECOMMISSIONED = "node_recommissioned";
 // Recorded when a cluster setting is changed.
 export const SET_CLUSTER_SETTING = "set_cluster_setting";
@@ -69,7 +71,7 @@ export const REMOVE_ZONE_CONFIG = "remove_zone_config";
 export const CREATE_STATISTICS = "create_statistics";
 
 // Node Event Types
-export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
+export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONING, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [
   CREATE_TABLE, DROP_TABLE, TRUNCATE_TABLE, ALTER_TABLE, CREATE_INDEX,

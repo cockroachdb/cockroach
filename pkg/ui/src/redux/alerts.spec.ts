@@ -15,6 +15,7 @@ import sinon from "sinon";
 import { createHashHistory } from "history";
 
 import * as protos from "src/js/protos";
+import { cockroach } from "src/js/protos";
 import { API_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
@@ -39,6 +40,7 @@ import {
 import {
   livenessReducerObj, versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
+import MembershipStatus = cockroach.kv.kvserver.storagepb.MembershipStatus;
 
 const sandbox = sinon.createSandbox();
 
@@ -80,9 +82,12 @@ describe("alerts", function() {
         assert.deepEqual(versions, ["0.1", "0.2"]);
       });
 
-      it("ignores decommissioned nodes", function () {
+      it("ignores decommissioning/decommissioned nodes", function () {
         dispatch(nodesReducerObj.receiveData([
           {
+            desc: {
+              node_id: 1,
+            },
             build_info: {
               tag: "0.1",
             },
@@ -95,14 +100,32 @@ describe("alerts", function() {
               tag: "0.2",
             },
           },
+          {
+            desc: {
+              node_id: 3,
+            },
+            build_info: {
+              tag: "0.3",
+            },
+          },
         ]));
 
         dispatch(livenessReducerObj.receiveData(
           new protos.cockroach.server.serverpb.LivenessResponse({
-            livenesses: [{
-              node_id: 2,
-              decommissioning: true,
-            }],
+            livenesses: [
+              {
+                node_id: 1,
+                membership: MembershipStatus.ACTIVE,
+              },
+              {
+                node_id: 2,
+                membership: MembershipStatus.DECOMMISSIONING,
+              },
+              {
+                node_id: 3,
+                membership: MembershipStatus.DECOMMISSIONED,
+              },
+            ],
           }),
         ));
 

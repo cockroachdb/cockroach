@@ -514,9 +514,12 @@ func (nl *NodeLiveness) SetDrainingInternal(
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness LivenessRecord, decommission bool,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	liveness LivenessRecord,
+	targetStatus kvserverpb.MembershipStatus,
 ) (changeCommitted bool, err error) {
-	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
+	return nl.setMembershipStatusInternal(ctx, nodeID, liveness, targetStatus)
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling

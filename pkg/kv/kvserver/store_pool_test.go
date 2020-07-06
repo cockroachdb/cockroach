@@ -993,8 +993,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(5 * time.Minute).UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				Draining: false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_LIVE,
 		},
@@ -1006,8 +1005,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 					// Expires just slightly in the future.
 					WallTime: now.UnixNano() + 1,
 				},
-				Decommissioning: false,
-				Draining:        false,
+				Draining: false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_LIVE,
 		},
@@ -1020,8 +1018,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 					// Just expired.
 					WallTime: now.UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				Draining: false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
 		},
@@ -1033,8 +1030,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				Draining: false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
 		},
@@ -1046,8 +1042,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(-threshold).UnixNano() + 1,
 				},
-				Decommissioning: false,
-				Draining:        false,
+				Draining: false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
 		},
@@ -1059,8 +1054,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        false,
+				Draining: false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_DEAD,
 		},
@@ -1072,12 +1066,12 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(time.Second).UnixNano(),
 				},
-				Decommissioning: true,
-				Draining:        false,
+				Membership: kvserverpb.MembershipStatus_DECOMMISSIONING,
+				Draining:   false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
 		},
-		// Decommissioned.
+		// Decommissioning + expired.
 		{
 			liveness: kvserverpb.Liveness{
 				NodeID: 1,
@@ -1085,8 +1079,37 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(-threshold).UnixNano(),
 				},
-				Decommissioning: true,
-				Draining:        false,
+				Membership: kvserverpb.MembershipStatus_DECOMMISSIONING,
+				Draining:   false,
+			},
+			expected: kvserverpb.NodeLivenessStatus_DECOMMISSIONED,
+		},
+		// Decommissioned + live.
+		{
+			liveness: kvserverpb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(time.Second).UnixNano(),
+				},
+				Membership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+				Draining:   false,
+			},
+			// Despite having marked the node as fully decommissioned, through
+			// this NodeLivenessStatus API we still surface the node as
+			// "Decommissioning". See #50707 for more details.
+			expected: kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
+		},
+		// Decommissioned + expired.
+		{
+			liveness: kvserverpb.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-threshold).UnixNano(),
+				},
+				Membership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+				Draining:   false,
 			},
 			expected: kvserverpb.NodeLivenessStatus_DECOMMISSIONED,
 		},
@@ -1098,8 +1121,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				Expiration: hlc.LegacyTimestamp{
 					WallTime: now.Add(5 * time.Minute).UnixNano(),
 				},
-				Decommissioning: false,
-				Draining:        true,
+				Draining: true,
 			},
 			expected: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
 		},

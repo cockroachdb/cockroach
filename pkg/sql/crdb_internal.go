@@ -2735,16 +2735,21 @@ CREATE TABLE crdb_internal.gossip_nodes (
 // crdbInternalGossipLivenessTable exposes local information about the nodes'
 // liveness. The data exposed in this table can be stale/incomplete because
 // gossip doesn't provide guarantees around freshness or consistency.
+//
+// TODO(irfansharif): Remove this decommissioning field in v21.1. It's retained
+// for compatibility with v20.1 binaries where the `cockroach node` cli
+// processes make use of it.
 var crdbInternalGossipLivenessTable = virtualSchemaTable{
 	comment: "locally known gossiped node liveness (RAM; local node only)",
 	schema: `
 CREATE TABLE crdb_internal.gossip_liveness (
-  node_id         INT NOT NULL,
-  epoch           INT NOT NULL,
-  expiration      STRING NOT NULL,
-  draining        BOOL NOT NULL,
-  decommissioning BOOL NOT NULL,
-  updated_at      TIMESTAMP
+  node_id          INT NOT NULL,
+  epoch            INT NOT NULL,
+  expiration       STRING NOT NULL,
+  draining         BOOL NOT NULL,
+  decommissioning  BOOL NOT NULL,
+  membership       STRING NOT NULL,
+  updated_at       TIMESTAMP
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2804,7 +2809,8 @@ CREATE TABLE crdb_internal.gossip_liveness (
 				tree.NewDInt(tree.DInt(l.Epoch)),
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
-				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+				tree.MakeDBool(tree.DBool(!l.Membership.Active())),
+				tree.NewDString(l.Membership.String()),
 				updatedTSDatum,
 			); err != nil {
 				return err

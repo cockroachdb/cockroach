@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -361,8 +362,8 @@ func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
 	return nil
 }
 
-// CallDecommission calls the Decommission RPC on a node.
-func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioning bool) error {
+// Recommission recommissions a given node.
+func (c *transientCluster) Recommission(nodeID roachpb.NodeID) error {
 	nodeIndex := int(nodeID - 1)
 
 	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
@@ -370,8 +371,8 @@ func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioni
 	}
 
 	req := &serverpb.DecommissionRequest{
-		NodeIDs:         []roachpb.NodeID{nodeID},
-		Decommissioning: decommissioning,
+		NodeIDs:          []roachpb.NodeID{nodeID},
+		TargetMembership: kvserverpb.MembershipStatus_ACTIVE,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -387,6 +388,52 @@ func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioni
 	if err != nil {
 		return errors.Wrap(err, "while trying to mark as decommissioning")
 	}
+
+	return nil
+}
+
+// Decommission decommissions a given node.
+func (c *transientCluster) Decommission(nodeID roachpb.NodeID) error {
+	nodeIndex := int(nodeID - 1)
+
+	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
+		return errors.Errorf("node %d does not exist", nodeID)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	adminClient, finish, err := getAdminClient(ctx, *(c.s.Cfg))
+	if err != nil {
+		return err
+	}
+	defer finish()
+
+	// This (cumbersome) two step process is due to the allowed state
+	// transitions for membership status. To mark a node as fully
+	// decommissioned, it has to be marked as decommissioning first.
+	{
+		req := &serverpb.DecommissionRequest{
+			NodeIDs:          []roachpb.NodeID{nodeID},
+			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONING,
+		}
+		_, err = adminClient.Decommission(ctx, req)
+		if err != nil {
+			return errors.Wrap(err, "while trying to mark as decommissioning")
+		}
+	}
+
+	{
+		req := &serverpb.DecommissionRequest{
+			NodeIDs:          []roachpb.NodeID{nodeID},
+			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+		}
+		_, err = adminClient.Decommission(ctx, req)
+		if err != nil {
+			return errors.Wrap(err, "while trying to mark as decommissioned")
+		}
+	}
+
 	return nil
 }
 

@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -64,9 +66,10 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	_, rows, err := runQuery(
 		conn,
 		makeQuery(`SELECT node_id FROM crdb_internal.gossip_liveness
-               WHERE decommissioning = false OR split_part(expiration,',',1)::decimal > now()::decimal`),
+               WHERE membership = 'active' OR split_part(expiration,',',1)::decimal > now()::decimal`),
 		false,
 	)
+
 	if err != nil {
 		return err
 	}
@@ -105,6 +108,7 @@ var statusNodesColumnHeadersForStats = []string{
 var statusNodesColumnHeadersForDecommission = []string{
 	"gossiped_replicas",
 	"is_decommissioning",
+	"membership",
 	"is_draining",
 }
 
@@ -143,7 +147,7 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 
 	maybeAddActiveNodesFilter := func(query string) string {
 		if !showDecommissioned {
-			query += " WHERE decommissioning = false OR split_part(expiration,',',1)::decimal > now()::decimal"
+			query += " WHERE membership = 'active' OR split_part(expiration,',',1)::decimal > now()::decimal"
 		}
 		return query
 	}
@@ -184,10 +188,12 @@ SELECT node_id AS id,
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
+	// TODO(irfansharif): Remove the `is_decommissioning` column in v20.2.
 	const decommissionQuery = `
 SELECT node_id AS id,
        ranges AS gossiped_replicas,
-       decommissioning AS is_decommissioning,
+       membership != 'active' as is_decommissioning,
+       membership AS membership,
        draining AS is_draining
 FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (node_id)`
 
@@ -274,6 +280,7 @@ var decommissionNodesColumnHeaders = []string{
 	"is_live",
 	"replicas",
 	"is_decommissioning",
+	"membership",
 	"is_draining",
 }
 
@@ -330,7 +337,6 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, nodeIDs)
 }
 
@@ -409,11 +415,17 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
+	// Marking a node as fully decommissioned is driven by a two-step process.
+	// We start off by marking each node as 'decommissioning'. In doing so,
+	// replicas are slowly moved off of these nodes. It's only after when we're
+	// made aware that the replica counts have all hit zero, and that all nodes
+	// have been successfully marked as 'decommissioning', that we then go and
+	// mark each node as 'decommissioned'.
 	prevResponse := serverpb.DecommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
-			NodeIDs:         nodeIDs,
-			Decommissioning: true,
+			NodeIDs:          nodeIDs,
+			TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONING,
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -430,18 +442,43 @@ func runDecommissionNodeImpl(
 		} else {
 			fmt.Fprintf(stderr, ".")
 		}
+
+		anyActive := false
 		var replicaCount int64
-		allDecommissioning := true
 		for _, status := range resp.Status {
+			anyActive = anyActive || status.Membership.Active()
 			replicaCount += status.ReplicaCount
-			allDecommissioning = allDecommissioning && status.Decommissioning
 		}
-		if replicaCount == 0 && allDecommissioning {
+
+		if !anyActive && replicaCount == 0 {
+			// We now mark the nodes as fully decommissioned.
+			req := &serverpb.DecommissionRequest{
+				NodeIDs:          nodeIDs,
+				TargetMembership: kvserverpb.MembershipStatus_DECOMMISSIONED,
+			}
+			resp, err := c.Decommission(ctx, req)
+			if err != nil {
+				fmt.Fprintln(stderr)
+				return errors.Wrap(err, "while trying to mark as decommissioned")
+			}
+			if !reflect.DeepEqual(&prevResponse, resp) {
+				fmt.Fprintln(stderr)
+				if err := printDecommissionStatus(*resp); err != nil {
+					return err
+				}
+				prevResponse = *resp
+			}
+
 			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
 				"Please verify cluster health before removing the nodes.")
 			return nil
 		}
+
 		if wait == nodeDecommissionWaitNone {
+			// The intent behind --wait=none is for it to be used when polling
+			// manually from an external system. We'll only mark nodes as
+			// fully decommissioned once the replica count hits zero and they're
+			// all marked as decommissioning.
 			return nil
 		}
 		if replicaCount < minReplicaCount {
@@ -453,7 +490,7 @@ func runDecommissionNodeImpl(
 }
 
 func decommissionResponseAlignment() string {
-	return "rcrcc"
+	return "rcrccc"
 }
 
 // decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
@@ -468,7 +505,8 @@ func decommissionResponseValueToRows(
 			strconv.FormatInt(int64(node.NodeID), 10),
 			strconv.FormatBool(node.IsLive),
 			strconv.FormatInt(node.ReplicaCount, 10),
-			strconv.FormatBool(node.Decommissioning),
+			strconv.FormatBool(!node.Membership.Active()),
+			node.Membership.String(),
 			strconv.FormatBool(node.Draining),
 		})
 	}
@@ -522,13 +560,19 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	}
 
 	c := serverpb.NewAdminClient(conn)
-
 	req := &serverpb.DecommissionRequest{
-		NodeIDs:         nodeIDs,
-		Decommissioning: false,
+		NodeIDs:          nodeIDs,
+		TargetMembership: kvserverpb.MembershipStatus_ACTIVE,
 	}
 	resp, err := c.Decommission(ctx, req)
 	if err != nil {
+		// If it's a specific illegal membership transition error, we try to
+		// surface a more readable message to the user. See
+		// ValidateLivenessTransition in kvserverpb/liveness.go for where this
+		// error is generated.
+		if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
+			return errors.Newf("%s", s.Message())
+		}
 		return err
 	}
 	return printDecommissionStatus(*resp)

@@ -70,6 +70,7 @@ const (
 	VersionUserDefinedSchemas
 	VersionNoOriginFKIndexes
 	VersionClientRangeInfosOnBatchResponse
+	VersionNodeMembershipStatus
 
 	// Add new versions here (step one of two).
 )
@@ -530,6 +531,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// individual response headers to the batch header.
 		Key:     VersionClientRangeInfosOnBatchResponse,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
+	},
+	{
+		// VersionNodeMembershipStatus gates the usage of the MembershipStatus
+		// enum in the Liveness proto. See comment on proto definition for more
+		// details.
+		Key:     VersionNodeMembershipStatus,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 11},
 	},
 
 	// Add new versions here (step two of two).
