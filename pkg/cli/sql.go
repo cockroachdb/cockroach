@@ -527,13 +527,13 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 		fmt.Printf("node %d has been restarted\n", nodeID)
 		return nextState
 	case "recommission":
-		if err := demoCtx.transientCluster.CallDecommission(roachpb.NodeID(nodeID), false /* decommissioning */); err != nil {
+		if err := demoCtx.transientCluster.Recommission(roachpb.NodeID(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
-		if err := demoCtx.transientCluster.CallDecommission(roachpb.NodeID(nodeID), true /* decommissioning */); err != nil {
+		if err := demoCtx.transientCluster.Decommission(roachpb.NodeID(nodeID)); err != nil {
 			return c.internalServerError(errState, err)
 		}
 		fmt.Printf("node %d has been decommissioned\n", nodeID)

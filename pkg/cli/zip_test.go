@@ -30,10 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -341,25 +339,21 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now mark the stopped node as decommissioned, and check that zip
-	// skips over it automatically.
-	s := tc.Server(0)
-	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	// skips over it automatically. We specifically use --wait=none because
+	// we're decommissioning a node in a 3-node cluster, so there's no node to
+	// up-replicate the under-replicated ranges to.
+	{
+		_, err := c.RunWithCapture(fmt.Sprintf("node decommission --wait=none %d", 2))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	as := serverpb.NewAdminClient(conn)
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:         []roachpb.NodeID{2},
-		Decommissioning: true,
-	}
-	if _, err := as.Decommission(context.Background(), req); err != nil {
-		t.Fatal(err)
-	}
+
 	// We use .Override() here instead of SET CLUSTER SETTING in SQL to
 	// override the 1m15s minimum placed on the cluster setting. There
 	// is no risk to see the override bumped due to a gossip update
 	// because this setting is not otherwise set in the test cluster.
+	s := tc.Server(0)
 	kvserver.TimeUntilStoreDead.Override(&s.ClusterSettings().SV, kvserver.TestTimeUntilStoreDead)
 
 	datadriven.RunTest(t, "testdata/zip/partial2",

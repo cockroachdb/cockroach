@@ -71,7 +71,8 @@ https://github.com/cockroachdb/cockroach/issues/48676`,
 			// running. If that branch corresponds to an older release, then upgrading
 			// to head after 19.2 fails.
 			minVersion: "v19.2.0",
-			timeout:    30 * time.Minute},
+			timeout:    30 * time.Minute,
+		},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4

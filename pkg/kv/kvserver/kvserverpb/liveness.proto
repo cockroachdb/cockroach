@@ -45,9 +45,61 @@ message Liveness {
   util.hlc.LegacyTimestamp expiration = 3 [(gogoproto.nullable) = false];
   bool draining = 4;
 
-  // decommissioning is true if the given node is decommissioning or
-  // fully decommissioned.
-  bool decommissioning = 5;
+  // MembershipStatus (one of "active", "decommissioning", "decommissioned")
+  // is the membership status of the given node.
+  //
+  // NB: This field was upgraded from a boolean `decommissioning` field that
+  // didn't explicitly capture the fully decommissioned state. Care was taken in
+  // the defining MembershipStatus to be on-the-wire compatible with the boolean
+  // representation.
+  MembershipStatus membership = 5;
+}
+
+// MembershipStatus enumerates the possible membership states a node could in.
+//
+//    +--------------------+                                        +--------------------+
+//    |                    |     cockroach node decommission        |                    |
+//    |                    |--------------------------------------->|                    |
+//    |       Active       |                                        |  Decommissioning   |
+//    |                    |<---------------------------------------|                    |
+//    |                    |     cockroach node recommission        |                    |
+//    +--------------------+                                        +--------------------+
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             |
+//                                                                             v
+//                                                                  +--------------------+
+//                                                                  |                    |
+//                                                                  |                    |
+//                                                                  |   Decommissioned   |
+//                                                                  |                    |
+//                                                                  |                    |
+//                                                                  +--------------------+
+//
+// Note that we've intentionally elided a 'recommissioning' state. To
+// recommission a node is to simply cancel an inflight decommissioning process,
+// which we do by persisting the appropriate membership status in the liveness
+// record. It then makes no sense to bother with persisting an explicit
+// in-progress state.
+enum MembershipStatus {
+  option (gogoproto.goproto_enum_stringer) = false;
+  // Active represents a node that is an active member of the cluster, and is
+  // neither decommissioning nor fully decommissioned.
+  ACTIVE = 0;
+
+  // Decommissioning represents a node that we've only started decommissioning,
+  // but has not yet fully decommissioned. It is safe to recommission it during
+  // this time in order to cancel the inflight decommissioning process.
+  DECOMMISSIONING = 1;
+
+  // Decommissioned represents a node that has been fully decommissioned. It
+  // will no longer be allowed to join the cluster.
+  //
+  // TODO(irfansharif): We don't disallow the joining as yet (but will come in
+  // as part of the Connect RPC subsystem).
+  DECOMMISSIONED = 2;
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the

@@ -69,6 +69,7 @@ const (
 	VersionAddScheduledJobsTable
 	VersionUserDefinedSchemas
 	VersionNoOriginFKIndexes
+	VersionNodeMembershipStatus
 
 	// Add new versions here (step one of two).
 )
@@ -523,6 +524,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// indexes on the origin side of the relationship.
 		Key:     VersionNoOriginFKIndexes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionNodeMembershipStatus gates the usage of the MembershipStatus
+		// enum in the Liveness proto. See comment on proto definition for more
+		// details.
+		Key:     VersionNodeMembershipStatus,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).
