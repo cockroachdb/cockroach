@@ -1,4 +1,4 @@
-# LogicTest: !fakedist-metadata !3node-tenant
+# LogicTest: local local-vec-off
 
 # TODO(sumeer): move these to opt/exec/execbuilder/testdata since logic tests
 # are not supposed to change when a plan changes.
