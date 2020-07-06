@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -33,21 +34,32 @@ func registerPebble(r *testRegistry) {
 		const dataTar = dataDir + "/data.tar"
 		const benchDir = dataDir + "/bench"
 
+		runCmd := func(cmd string) {
+			c.l.PrintfCtx(ctx, "> %s", cmd)
+			err := c.RunL(ctx, c.l, c.All(), cmd)
+			c.l.Printf("> result: %+v", err)
+			if err := ctx.Err(); err != nil {
+				c.l.Printf("(note: incoming context was canceled: %s", err)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		// Generate the initial DB state. This is somewhat time consuming for
 		// larger value sizes, so we do this once and reuse the same DB state on
 		// all of the workloads.
-		initCmd := fmt.Sprintf(
-			"./pebble bench ycsb %s"+
+		runCmd(fmt.Sprintf(
+			"(./pebble bench ycsb %s"+
 				" --wipe "+
 				" --workload=read=100"+
 				" --concurrency=1"+
 				" --values=%d"+
 				" --initial-keys=%d"+
 				" --cache=%d"+
-				" --num-ops=1",
-			benchDir, size, initialKeys, cache)
-		c.Run(ctx, c.All(), initCmd)
-		c.Run(ctx, c.All(), "rm -f "+dataTar+"; tar cvPf "+dataTar+" "+benchDir)
+				" --num-ops=1 && "+
+				"rm -f %s && tar cvPf %s %s) > init.log 2>&1",
+			benchDir, size, initialKeys, cache, dataTar, dataTar, benchDir))
 
 		for _, workload := range []string{"A", "B", "C", "D", "E"} {
 			keys := "zipf"
@@ -56,7 +68,7 @@ func registerPebble(r *testRegistry) {
 				keys = "uniform"
 			}
 
-			cmd := fmt.Sprintf(
+			runCmd(fmt.Sprintf(
 				"rm -fr %s && tar xPf %s &&"+
 					" ./pebble bench ycsb %s"+
 					" --workload=%s"+
@@ -66,20 +78,24 @@ func registerPebble(r *testRegistry) {
 					" --initial-keys=0"+
 					" --prepopulated-keys=%d"+
 					" --cache=%d"+
-					" --duration=%s",
-				benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration)
-			c.Run(ctx, c.All(), cmd)
+					" --duration=%s > ycsb.log 2>&1",
+				benchDir, dataTar, benchDir, workload, size, keys, initialKeys, cache, duration))
+
+			dest := filepath.Join(t.artifactsDir, fmt.Sprintf("ycsb_%s.log", workload))
+			if err := c.Get(ctx, c.l, "ycsb.log", dest, c.All()); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
-	for _, size := range []int{64, 1024, 4096} {
+	for _, size := range []int{64, 1024} {
 		size := size
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("pebble/ycsb/size=%d", size),
 			Owner:      OwnerStorage,
 			Timeout:    2 * time.Hour,
 			MinVersion: "v20.1.0",
-			Cluster:    makeClusterSpec(1, cpu(16)),
+			Cluster:    makeClusterSpec(5, cpu(16)),
 			Tags:       []string{"pebble"},
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				run(ctx, t, c, size)
