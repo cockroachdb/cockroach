@@ -514,6 +514,9 @@ func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
 func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
     return u.val.([]tree.PartitionedBackup)
 }
+func (u *sqlSymUnion) fullBackupClause() *tree.FullBackupClause {
+    return u.val.(*tree.FullBackupClause)
+}
 func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
   return u.val.(geopb.ShapeType)
 }
@@ -570,7 +573,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTION_PASSPHRASE END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
-%token <str> EXISTS EXECUTE EXPERIMENTAL
+%token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
@@ -602,7 +605,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
-%token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
+%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -614,13 +617,13 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 %token <str> QUERIES QUERY
 
-%token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
+%token <str> RANGE RANGES READ REAL RECURSIVE RECURRING REF REFERENCES
 %token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
-%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVISION_HISTORY REVOKE RIGHT
+%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
-%token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCATTER SCHEDULE SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
@@ -740,6 +743,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
+%type <tree.Statement> create_schedule_for_backup_stmt
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
@@ -843,7 +847,7 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
-%type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
+%type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
@@ -1098,6 +1102,9 @@ func (u *sqlSymUnion) alterTypeAddValuePlacement() *tree.AlterTypeAddValuePlacem
 %type <bool> opt_temp
 %type <bool> opt_temp_create_table
 %type <bool> role_or_group_or_user
+
+%type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
+%type <*tree.FullBackupClause> opt_full_backup_clause
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -2099,6 +2106,161 @@ backup_options:
     $$.val = &tree.BackupOptions{Detached: true}
   }
 
+// %Help: CREATE SCHEDULE - backup data periodically
+// %Category: CCL
+// %Text:
+// CREATE SCHEDULE [<description>]
+// FOR BACKUP [<targets>] TO <location...>
+// [WITH <backup_option>[=<value>] [, ...]]
+// RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
+// [WITH EXPERIMENTAL SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
+//
+// All backups run in UTC timezone.
+//
+// Description:
+//   Optional description (or name) for this schedule
+//
+// Targets:
+//   empty targets: Backup entire cluster
+//   DATABASE <pattern> [, ...]: comma separated list of databases to backup.
+//   TABLE <pattern> [, ...]: comma separated list of tables to backup.
+//
+// Location:
+//   "[scheme]://[host]/[path prefix to backup]?[parameters]"
+//   Backup schedule will create subdirectories under this location to store
+//   full and periodic backups.
+//
+// WITH <options>:
+//   Options specific to BACKUP: See BACKUP options
+//
+// RECURRING <crontab>:
+//   The RECURRING expression specifies when we backup.  By default these are incremental
+//   backups that capture changes since the last backup, writing to the "current" backup.
+//
+//   Schedule specified as a string in crontab format.
+//   All times in UTC.
+//     "5 0 * * *": run schedule 5 minutes past midnight.
+//     "@daily": run daily, at midnight
+//   See https://en.wikipedia.org/wiki/Cron
+//
+//   RECURRING NEVER indicates that the schedule is non recurring.
+//   If, in addition to 'NEVER', the 'first_run' schedule option is specified,
+//   then the schedule will execute once at that time (that is: it's a one-off execution).
+//   If the 'first_run' is not specified, then the created scheduled will be in 'PAUSED' state,
+//   and will need to be unpaused before it can execute.
+//
+// FULL BACKUP <crontab|ALWAYS>:
+//   The optional FULL BACKUP '<cron expr>' clause specifies when we'll start a new full backup,
+//   which becomes the "current" backup when complete.
+//   If FULL BACKUP ALWAYS is specified, then the backups triggered by the RECURRING clause will
+//   always be full backups. For free users, this is the only accepted value of FULL BACKUP.
+//
+//   If the FULL BACKUP clause is omitted, we will select a reasonable default:
+//      * RECURRING <= 1 hour: we default to FULL BACKUP '@daily';
+//      * RECURRING <= 1 day:  we default to FULL BACKUP '@weekly';
+//      * Otherwise: we default to FULL BACKUP ALWAYS.
+//
+// EXPERIMENTAL SCHEDULE OPTIONS:
+//   The schedule can be modified by specifying the following options (which are considered
+//   to be experimental at this time):
+//   * first_run=TIMESTAMPTZ:
+//     execute the schedule at the specified time. If not specified, the default is to execute
+//     the scheduled based on it's next RECURRING time.
+//   * on_execution_failure='[retry|reschedule|pause]':
+//     If an error occurs during the execution, handle the error based as:
+//     * retry: retry execution right away
+//     * reschedule: retry execution by rescheduling it based on its RECURRING expression.
+//       This is the default.
+//     * pause: pause this schedule.  Requires manual intervention to unpause.
+//   * on_previous_running='[start|skip|wait]':
+//     If the previous backup started by this schedule still running, handle this as:
+//     * start: start this execution anyway, even if the previous one still running.
+//     * skip: skip this execution, reschedule it based on RECURRING (or change_capture_period)
+//       expression.
+//     * wait: wait for the previous execution to complete.  This is the default.
+//
+// %SeeAlso: BACKUP
+create_schedule_for_backup_stmt:
+  CREATE SCHEDULE /*$3=*/opt_description FOR BACKUP /*$6=*/opt_backup_targets TO
+  /*$8=*/partitioned_backup /*$9=*/opt_with_backup_options
+  /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
+  {
+    $$.val = &tree.ScheduledBackup{
+      ScheduleName:     $3.expr(),
+      Recurrence:       $10.expr(),
+      FullBackup:       $11.fullBackupClause(),
+      To:               $8.partitionedBackup(),
+      Targets:          $6.targetListPtr(),
+      BackupOptions:    *($9.backupOptions()),
+      ScheduleOptions:  $12.kvOptions(),
+    }
+  }
+| CREATE SCHEDULE error  // SHOW HELP: CREATE SCHEDULE
+
+opt_description:
+  string_or_placeholder
+| /* EMPTY */
+  {
+     $$.val = nil
+  }
+
+
+// sconst_or_placeholder matches a simple string, or a placeholder.
+sconst_or_placeholder:
+  SCONST
+  {
+    $$.val =  tree.NewStrVal($1)
+  }
+| PLACEHOLDER
+  {
+    p := $1.placeholder()
+    sqllex.(*lexer).UpdateNumPlaceholders(p)
+    $$.val = p
+  }
+
+cron_expr:
+  RECURRING NEVER
+  {
+    $$.val = nil
+  }
+| RECURRING sconst_or_placeholder
+  // Can't use string_or_placeholder here due to conflict on NEVER branch above
+  // (is NEVER a keyword or a variable?).
+  {
+    $$.val = $2.expr()
+  }
+
+opt_full_backup_clause:
+  FULL BACKUP sconst_or_placeholder
+  // Can't use string_or_placeholder here due to conflict on ALWAYS branch below
+  // (is ALWAYS a keyword or a variable?).
+  {
+    $$.val = &tree.FullBackupClause{Recurrence: $3.expr()}
+  }
+| FULL BACKUP ALWAYS
+  {
+    $$.val = &tree.FullBackupClause{AlwaysFull: true}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.FullBackupClause)(nil)
+  }
+
+opt_with_schedule_options:
+  WITH EXPERIMENTAL SCHEDULE OPTIONS kv_option_list
+  {
+    $$.val = $5.kvOptions()
+  }
+| WITH EXPERIMENTAL SCHEDULE OPTIONS '(' kv_option_list ')'
+  {
+    $$.val = $6.kvOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
+
+
 // %Help: RESTORE - restore data from external storage
 // %Category: CCL
 // %Text:
@@ -2487,6 +2649,7 @@ create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
+| create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
@@ -10366,6 +10529,7 @@ unreserved_keyword:
 | EXCLUDE
 | EXCLUDING
 | EXECUTE
+| EXECUTION
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
 | EXPERIMENTAL_FINGERPRINTS
@@ -10435,6 +10599,7 @@ unreserved_keyword:
 | MONTH
 | NAMES
 | NAN
+| NEVER
 | NEXT
 | NO
 | NORMAL
@@ -10476,6 +10641,7 @@ unreserved_keyword:
 | RANGE
 | RANGES
 | READ
+| RECURRING
 | RECURSIVE
 | REF
 | REINDEX
@@ -10487,6 +10653,7 @@ unreserved_keyword:
 | RESTORE
 | RESTRICT
 | RESUME
+| RETRY
 | REVISION_HISTORY
 | REVOKE
 | ROLE
@@ -10495,6 +10662,7 @@ unreserved_keyword:
 | ROLLUP
 | ROWS
 | RULE
+| SCHEDULE
 | SETTING
 | SETTINGS
 | STATUS
