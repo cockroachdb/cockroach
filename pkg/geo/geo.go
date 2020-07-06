@@ -111,8 +111,8 @@ func NewGeometryFromPointCoords(x, y float64) (*Geometry, error) {
 	return NewGeometry(s)
 }
 
-// NewGeometryFromGeom creates a new Geometry object from a geom.T object.
-func NewGeometryFromGeom(g geom.T) (*Geometry, error) {
+// NewGeometryFromGeomT creates a new Geometry object from a geom.T object.
+func NewGeometryFromGeomT(g geom.T) (*Geometry, error) {
 	spatialObject, err := spatialObjectFromGeomT(g, geopb.SpatialObjectType_GeometryType)
 	if err != nil {
 		return nil, err
@@ -309,8 +309,8 @@ func NewGeographyUnsafe(spatialObject geopb.SpatialObject) *Geography {
 	return &Geography{spatialObject: spatialObject}
 }
 
-// NewGeographyFromGeom creates a new Geography from a geom.T object.
-func NewGeographyFromGeom(g geom.T) (*Geography, error) {
+// NewGeographyFromGeomT creates a new Geography from a geom.T object.
+func NewGeographyFromGeomT(g geom.T) (*Geography, error) {
 	spatialObject, err := spatialObjectFromGeomT(g, geopb.SpatialObjectType_GeographyType)
 	if err != nil {
 		return nil, err
@@ -318,9 +318,9 @@ func NewGeographyFromGeom(g geom.T) (*Geography, error) {
 	return NewGeography(spatialObject)
 }
 
-// MustNewGeographyFromGeom enforces no error from NewGeographyFromGeom.
-func MustNewGeographyFromGeom(g geom.T) *Geography {
-	ret, err := NewGeographyFromGeom(g)
+// MustNewGeographyFromGeomT enforces no error from NewGeographyFromGeomT.
+func MustNewGeographyFromGeomT(g geom.T) *Geography {
+	ret, err := NewGeographyFromGeomT(g)
 	if err != nil {
 		panic(err)
 	}
@@ -469,7 +469,7 @@ func (g *Geography) AsS2(emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 		return nil, err
 	}
 	// TODO(otan): convert by reading from EWKB to S2 directly.
-	return S2RegionsFromGeom(geomRepr, emptyBehavior)
+	return S2RegionsFromGeomT(geomRepr, emptyBehavior)
 }
 
 // BoundingRect returns the bounding s2.Rect of the given Geography.
@@ -531,11 +531,11 @@ func IsLinearRingCCW(linearRing *geom.LinearRing) bool {
 	return areaSign > 0
 }
 
-// S2RegionsFromGeom converts an geom representation of an object
+// S2RegionsFromGeomT converts an geom representation of an object
 // to s2 regions.
 // As S2 does not really handle empty geometries well, we need to ingest emptyBehavior and
 // react appropriately.
-func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Region, error) {
+func S2RegionsFromGeomT(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Region, error) {
 	var regions []s2.Region
 	if geomRepr.Empty() {
 		switch emptyBehavior {
@@ -584,7 +584,7 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 		}
 	case *geom.GeometryCollection:
 		for _, geom := range repr.Geoms() {
-			subRegions, err := S2RegionsFromGeom(geom, emptyBehavior)
+			subRegions, err := S2RegionsFromGeomT(geom, emptyBehavior)
 			if err != nil {
 				return nil, err
 			}
@@ -592,7 +592,7 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 		}
 	case *geom.MultiPoint:
 		for i := 0; i < repr.NumPoints(); i++ {
-			subRegions, err := S2RegionsFromGeom(repr.Point(i), emptyBehavior)
+			subRegions, err := S2RegionsFromGeomT(repr.Point(i), emptyBehavior)
 			if err != nil {
 				return nil, err
 			}
@@ -600,7 +600,7 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 		}
 	case *geom.MultiLineString:
 		for i := 0; i < repr.NumLineStrings(); i++ {
-			subRegions, err := S2RegionsFromGeom(repr.LineString(i), emptyBehavior)
+			subRegions, err := S2RegionsFromGeomT(repr.LineString(i), emptyBehavior)
 			if err != nil {
 				return nil, err
 			}
@@ -608,7 +608,7 @@ func S2RegionsFromGeom(geomRepr geom.T, emptyBehavior EmptyBehavior) ([]s2.Regio
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < repr.NumPolygons(); i++ {
-			subRegions, err := S2RegionsFromGeom(repr.Polygon(i), emptyBehavior)
+			subRegions, err := S2RegionsFromGeomT(repr.Polygon(i), emptyBehavior)
 			if err != nil {
 				return nil, err
 			}

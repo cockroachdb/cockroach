@@ -91,7 +91,7 @@ func (s *s2GeometryIndex) InvertedIndexKeys(c context.Context, g *geo.Geometry) 
 	}
 	var keys []Key
 	if gt != nil {
-		r := s.s2RegionsFromPlanarGeom(gt)
+		r := s.s2RegionsFromPlanarGeomT(gt)
 		keys = invertedIndexKeys(c, s.rc, r)
 	}
 	if clipped {
@@ -115,7 +115,7 @@ func (s *s2GeometryIndex) CoveredBy(c context.Context, g *geo.Geometry) (RPKeyEx
 	}
 	var expr RPKeyExpr
 	if gt != nil {
-		r := s.s2RegionsFromPlanarGeom(gt)
+		r := s.s2RegionsFromPlanarGeomT(gt)
 		expr = coveredBy(c, s.rc, r)
 	}
 	if clipped {
@@ -138,7 +138,7 @@ func (s *s2GeometryIndex) Intersects(c context.Context, g *geo.Geometry) (UnionK
 	}
 	var spans UnionKeySpans
 	if gt != nil {
-		r := s.s2RegionsFromPlanarGeom(gt)
+		r := s.s2RegionsFromPlanarGeomT(gt)
 		spans = intersects(c, s.rc, r)
 	}
 	if clipped {
@@ -290,10 +290,10 @@ func (s *s2GeometryIndex) planarPointToS2Point(x float64, y float64) s2.Point {
 	return face0UVToXYZPoint(u, v)
 }
 
-// TODO(sumeer): this is similar to s2RegionsFromGeom() but needs to do
+// TODO(sumeer): this is similar to s2RegionsFromGeomT() but needs to do
 // a different point conversion. If these functions do not diverge further,
 // and turn out not to be performance critical, merge the two implementations.
-func (s *s2GeometryIndex) s2RegionsFromPlanarGeom(geomRepr geom.T) []s2.Region {
+func (s *s2GeometryIndex) s2RegionsFromPlanarGeomT(geomRepr geom.T) []s2.Region {
 	var regions []s2.Region
 	switch repr := geomRepr.(type) {
 	case *geom.Point:
@@ -332,19 +332,19 @@ func (s *s2GeometryIndex) s2RegionsFromPlanarGeom(geomRepr geom.T) []s2.Region {
 		}
 	case *geom.GeometryCollection:
 		for _, geom := range repr.Geoms() {
-			regions = append(regions, s.s2RegionsFromPlanarGeom(geom)...)
+			regions = append(regions, s.s2RegionsFromPlanarGeomT(geom)...)
 		}
 	case *geom.MultiPoint:
 		for i := 0; i < repr.NumPoints(); i++ {
-			regions = append(regions, s.s2RegionsFromPlanarGeom(repr.Point(i))...)
+			regions = append(regions, s.s2RegionsFromPlanarGeomT(repr.Point(i))...)
 		}
 	case *geom.MultiLineString:
 		for i := 0; i < repr.NumLineStrings(); i++ {
-			regions = append(regions, s.s2RegionsFromPlanarGeom(repr.LineString(i))...)
+			regions = append(regions, s.s2RegionsFromPlanarGeomT(repr.LineString(i))...)
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < repr.NumPolygons(); i++ {
-			regions = append(regions, s.s2RegionsFromPlanarGeom(repr.Polygon(i))...)
+			regions = append(regions, s.s2RegionsFromPlanarGeomT(repr.Polygon(i))...)
 		}
 	}
 	return regions
@@ -355,6 +355,6 @@ func (s *s2GeometryIndex) TestingInnerCovering(g *geo.Geometry) s2.CellUnion {
 	if err != nil || gt == nil {
 		return nil
 	}
-	r := s.s2RegionsFromPlanarGeom(gt)
+	r := s.s2RegionsFromPlanarGeomT(gt)
 	return innerCovering(s.rc, r)
 }

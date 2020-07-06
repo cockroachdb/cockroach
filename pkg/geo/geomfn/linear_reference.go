@@ -52,7 +52,7 @@ func LineInterpolatePoints(g *geo.Geometry, fraction float64, repeat bool) (*geo
 					return nil, err
 				}
 			}
-			return geo.NewGeometryFromGeom(interpolatedPoints)
+			return geo.NewGeometryFromGeomT(interpolatedPoints)
 		}
 		interpolatedPointEWKB, err := geos.InterpolateLine(g.EWKB(), fraction*lengthOfLineString)
 		if err != nil {

@@ -141,7 +141,7 @@ func distanceLineStringInternal(
 		return nil, errors.Newf("programmer error: unknown behavior")
 	}
 	lineString := geom.NewLineStringFlat(geom.XY, append(coordA, coordB...)).SetSRID(int(a.SRID()))
-	return geo.NewGeometryFromGeom(lineString)
+	return geo.NewGeometryFromGeomT(lineString)
 }
 
 // maxDistanceInternal finds the maximum distance between two geometries.

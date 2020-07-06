@@ -41,7 +41,7 @@ func Segmentize(g *geo.Geometry, segmentMaxLength float64) (*geo.Geometry, error
 		if err != nil {
 			return nil, err
 		}
-		return geo.NewGeometryFromGeom(segGeometry)
+		return geo.NewGeometryFromGeomT(segGeometry)
 	}
 }
 
