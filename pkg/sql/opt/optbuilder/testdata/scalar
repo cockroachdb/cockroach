@@ -1243,3 +1243,19 @@ if-err [type=decimal]
  │    └── variable: "@1":1 [type=decimal]
  └── err-code
       └── const: '10000' [type=string]
+
+# Verify that we build a Coalesce of the correct type when the inputs
+# are NULL (#50978).
+build-scalar
+CASE WHEN true THEN 1234:::OID ELSE COALESCE(NULL, NULL) END
+----
+case [type=oid]
+ ├── true [type=bool]
+ ├── when [type=oid]
+ │    ├── true [type=bool]
+ │    └── const: 1234 [type=oid]
+ └── coalesce [type=oid]
+      ├── cast: OID [type=oid]
+      │    └── null [type=unknown]
+      └── cast: OID [type=oid]
+           └── null [type=unknown]

@@ -237,3 +237,9 @@ SELECT 1::pg_catalog.special_int
 # don't have types.
 query error pq: type "crdb_internal.mytype" does not exist
 SELECT 1::crdb_internal.mytype
+
+# Regression test for #50978.
+query T
+SELECT CASE WHEN true THEN 1234:::OID ELSE COALESCE(NULL, NULL) END
+----
+1234
