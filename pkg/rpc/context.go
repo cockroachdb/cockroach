@@ -513,7 +513,7 @@ func (a internalClientAdapter) Join(
 }
 
 func (a internalClientAdapter) UnsafeHealRange(
-	ctx context.Context, req *roachpb.UnsafeHealRangeRequest,
+	ctx context.Context, req *roachpb.UnsafeHealRangeRequest, _ ...grpc.CallOption,
 ) (*roachpb.UnsafeHealRangeResponse, error) {
 	return a.InternalServer.UnsafeHealRange(ctx, req)
 }

@@ -2243,9 +2243,6 @@ message UnsafeHealRangeResponse {}
 
 // Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
-  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
-
   rpc UnsafeHealRange (UnsafeHealRangeRequest) returns (UnsafeHealRangeResponse) {}
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}

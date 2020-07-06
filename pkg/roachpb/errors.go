@@ -940,8 +940,8 @@ func (e *ReplicaTooOldError) Error() string {
 	return e.message(nil)
 }
 
-func (*ReplicaTooOldError) message(_ *Error) string {
-	return "sender replica too old, discarding message"
+func (e *ReplicaTooOldError) message(_ *Error) string {
+	return fmt.Sprintf("sender replica (id %d) too old, discarding message", e.ReplicaID)
 }
 
 // Type is part of the ErrorDetailInterface.

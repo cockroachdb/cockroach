@@ -111,15 +111,15 @@ OR
 	// Now 'lostrange' is on n6-n8 and nothing else is. The nodes go down
 	// permanently (the wiping prevents the test runner from failing the
 	// test after it has passed - we cannot restart those nodes).
-	c.Stop(ctx, c.Range(6, 8))
-	c.Wipe(ctx, c.Range(6, 8))
+	c.Stop(ctx, c.Range(6, 7))
+	c.Wipe(ctx, c.Range(6, 7))
 
 	// Should not be able to read from it even (generously) after a lease timeout.
 	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; SELECT * FROM lostrange;`)
 	require.Error(t, err)
 	c.l.Printf("table is now unavailable, as planned")
 
-	const nodeID = 1 // where to put the replica, matches node number in roachtest
+	const nodeID = 8 // where to put the replica, matches node number in roachtest
 	for rangeID := range lostRangeIDs {
 		c.Run(ctx, c.Node(nodeID), "./cockroach", "debug", "unsafe-heal-missing-range", "--insecure",
 			fmt.Sprint(rangeID),

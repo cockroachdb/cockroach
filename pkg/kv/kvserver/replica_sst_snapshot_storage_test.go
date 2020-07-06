@@ -129,7 +129,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 	keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
 
-	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0)
+	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0, true /* clearRange */)
 	require.NoError(t, err)
 	err = msstw.Finish(ctx)
 	require.NoError(t, err)

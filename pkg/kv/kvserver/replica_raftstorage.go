@@ -506,6 +506,8 @@ type IncomingSnapshot struct {
 	// See the comment on VersionUnreplicatedRaftTruncatedState for details.
 	UsesUnreplicatedTruncatedState bool
 	snapType                       SnapshotRequest_Type
+
+	OmitClear bool // see SnapshotRequest_HEADER.OmitClear
 }
 
 func (s *IncomingSnapshot) String() string {
@@ -756,6 +758,8 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "unexpected range ID %d", s.Desc.RangeID)
 	}
 
+	// TODO: should have the "patching" and "new range" snapshot types here.
+	// Maybe we only need one extra type, too?
 	snapType := inSnap.snapType
 	defer func() {
 		if err == nil {
@@ -768,7 +772,12 @@ func (r *Replica) applySnapshot(
 		}
 	}()
 
-	if raft.IsEmptySnap(snap) {
+	// If this is a range recovery snapshot which is trying to salvage some data,
+	// and we would have to subsume replicas, bail out. We can support this but
+	// it's not trivial to implement.
+	discardRecoverySnap := inSnap.OmitClear && len(subsumedRepls) > 0
+
+	if raft.IsEmptySnap(snap) || discardRecoverySnap {
 		// Raft discarded the snapshot, indicating that our local state is
 		// already ahead of what the snapshot provides. But we count it for
 		// stats (see the defer above).
@@ -825,7 +834,8 @@ func (r *Replica) applySnapshot(
 	unreplicatedSST := storage.MakeIngestionSSTWriter(unreplicatedSSTFile)
 	defer unreplicatedSST.Close()
 
-	// Clearing the unreplicated state.
+	// Clearing the unreplicated state. Note that we do this even if
+	// `inSnap.OmitClear` is set (which affects only replicated data).
 	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
 	unreplicatedStart := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey)
 	unreplicatedEnd := storage.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())

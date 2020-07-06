@@ -13,6 +13,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -88,6 +89,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// After the proposal quota is enabled all entries applied by this replica
 			// will be appended to the quotaReleaseQueue. The proposalQuotaBaseIndex
 			// and the quotaReleaseQueue together track status.Applied exactly.
+			log.Infof(ctx, "TBG baseidx = %d\n%s", status.Applied, debug.Stack())
 			r.mu.proposalQuotaBaseIndex = status.Applied
 			if r.mu.proposalQuota != nil {
 				log.Fatal(ctx, "proposalQuota was not nil before becoming the leader")
@@ -217,6 +219,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// difference back to the quota pool.
 		numReleases := minIndex - r.mu.proposalQuotaBaseIndex
 
+		if len(r.mu.quotaReleaseQueue) < int(numReleases) {
+			return // HACK(tbg)
+		}
+
 		// NB: Release deals with cases where allocs being released do not originate
 		// from this incarnation of quotaReleaseQueue, which can happen if a
 		// proposal acquires quota while this replica is the raft leader in some
@@ -230,7 +236,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// index and the not yet released applied entries to not equal the applied
 	// index.
 	releasableIndex := r.mu.proposalQuotaBaseIndex + uint64(len(r.mu.quotaReleaseQueue))
-	if releasableIndex != status.Applied {
+	if false && releasableIndex != status.Applied { // HACK(tbg)
 		log.Fatalf(ctx, "proposalQuotaBaseIndex (%d) + quotaReleaseQueueLen (%d) = %d"+
 			" must equal the applied index (%d)",
 			r.mu.proposalQuotaBaseIndex, len(r.mu.quotaReleaseQueue), releasableIndex,

@@ -183,6 +183,10 @@ message SnapshotRequest {
     //
     // See VersionUnreplicatedRaftTruncatedState.
     bool unreplicated_truncated_state = 8;
+
+    // When set, the snapshot will be applied on top of the existing replica.
+    // Will fail if there is no existing replica.
+    bool omit_clear = 10;
   }
 
   Header header = 1;

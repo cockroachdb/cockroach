@@ -1874,6 +1874,9 @@ func (r *Replica) sendSnapshot(
 
 	canAvoidSendingLog := !usesReplicatedTruncatedState &&
 		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
+	if !canAvoidSendingLog {
+		panic("nooo")
+	}
 
 	if canAvoidSendingLog {
 		// If we're not using a legacy (replicated) truncated state, we avoid

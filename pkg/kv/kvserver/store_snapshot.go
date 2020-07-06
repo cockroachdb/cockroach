@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -117,10 +116,11 @@ type kvBatchSnapshotStrategy struct {
 // SSTSnapshotStorageScratch that handles chunking SSTs and persisting them to
 // disk.
 type multiSSTWriter struct {
-	scratch   *SSTSnapshotStorageScratch
-	currSST   storage.SSTWriter
-	keyRanges []rditer.KeyRange
-	currRange int
+	scratch    *SSTSnapshotStorageScratch
+	currSST    storage.SSTWriter
+	keyRanges  []rditer.KeyRange
+	clearRange bool // if true, initialize each sst with range deletion tombstone
+	currRange  int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
@@ -131,11 +131,13 @@ func newMultiSSTWriter(
 	scratch *SSTSnapshotStorageScratch,
 	keyRanges []rditer.KeyRange,
 	sstChunkSize int64,
+	clearRange bool,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		scratch:      scratch,
 		keyRanges:    keyRanges,
 		sstChunkSize: sstChunkSize,
+		clearRange:   clearRange,
 	}
 	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
@@ -150,9 +152,11 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(newSSTFile)
 	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
-		msstw.currSST.Close()
-		return errors.Wrap(err, "failed to clear range on sst file writer")
+	if msstw.clearRange {
+		if err := msstw.currSST.ClearRange(msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+			msstw.currSST.Close()
+			return errors.Wrap(err, "failed to clear range on sst file writer")
+		}
 	}
 	return nil
 }
@@ -224,7 +228,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most three SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize, !header.OmitClear)
 	if err != nil {
 		return noSnap, err
 	}
@@ -368,6 +372,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// together.
 	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
+	log.Infof(ctx, "%+v \n %+v", header, snap)
 	preallocSize := endIndex - firstIndex
 	const maxPreallocSize = 1000
 	if preallocSize > maxPreallocSize {
@@ -392,15 +397,19 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	rangeID := header.State.Desc.RangeID
 
-	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
-		return 0, err
+	// TODO(tbg): had to add this check to avoid opening second iter when the
+	// `EngineSnap` is really a *pebbleBatch. Check in w/ storage.
+	if firstIndex < endIndex {
+		if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+			return 0, err
+		}
 	}
 
 	// The difference between the snapshot index (applied index at the time of
 	// snapshot) and the truncated index should equal the number of log entries
 	// shipped over.
 	expLen := endIndex - firstIndex
-	if expLen != uint64(len(logEntries)) {
+	if false && expLen != uint64(len(logEntries)) { // HACK
 		// We've generated a botched snapshot. We could fatal right here but opt
 		// to warn loudly instead, and fatal at the caller to capture a checkpoint
 		// of the underlying storage engine.
@@ -903,39 +912,44 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 
 func HackSendSnapshot(
 	ctx context.Context,
+	eng storage.Engine,
 	st *cluster.Settings,
 	cc *grpc.ClientConn,
 	now hlc.Timestamp,
 	desc roachpb.RangeDescriptor,
-	to roachpb.ReplicaDescriptor,
+	from, to roachpb.ReplicaDescriptor,
+	wipe bool,
 ) error {
-	eng := storage.NewDefaultInMem()
-	defer eng.Close()
 
-	var ms enginepb.MVCCStats
+	// TODO(tbg): push this stuff to the replica itself, get the proper locks, etc.
+	sl := stateloader.Make(desc.RangeID)
+	ms, err := sl.LoadMVCCStats(ctx, eng)
+	if err != nil {
+		return err
+	}
 	if err := storage.MVCCPutProto(
 		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, nil /* txn */, &desc,
 	); err != nil {
 		return err
 	}
-	ms, err := stateloader.WriteInitialReplicaState(
-		ctx,
-		eng,
-		ms,
-		desc,
-		roachpb.Lease{},
-		hlc.Timestamp{}, // gcThreshold
-		stateloader.TruncatedStateUnreplicated,
-	)
-	if err != nil {
-		return err
+
+	log.Infof(ctx, "TBG wipe=%t", wipe)
+	if wipe {
+		var err error
+		ms, err = stateloader.WriteInitialReplicaState(
+			ctx,
+			eng,
+			ms,
+			desc,
+			roachpb.Lease{},
+			hlc.Timestamp{}, // gcThreshold
+			stateloader.TruncatedStateUnreplicated,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
-	sl := stateloader.Make(desc.RangeID)
-	state, err := sl.Load(ctx, eng, &desc)
-	if err != nil {
-		return err
-	}
 	hs, err := sl.LoadHardState(ctx, eng)
 	if err != nil {
 		return err
@@ -946,12 +960,32 @@ func HackSendSnapshot(
 		return err
 	}
 
+	snap := eng.NewBatch()
+	{
+		// Make sure recipient sees this snapshot as ahead.
+
+		ras, err := sl.LoadRangeAppliedState(ctx, snap)
+		if err != nil {
+			return err
+		}
+		if err := sl.SetRangeAppliedState(
+			ctx, snap, ras.RaftAppliedIndex+1, ras.LeaseAppliedIndex, &ms,
+		); err != nil {
+			return err
+		}
+		// Avoid sending any log entries (which is a legacy path we want to avoid
+		// hitting).
+		sl.SetRaftTruncatedState(ctx, snap, &roachpb.RaftTruncatedState{
+			Index: ras.RaftAppliedIndex + 1,
+			Term:  hs.Term,
+		})
+	}
 	outgoingSnap, err := snapshot(
 		ctx,
 		snapUUID,
 		sl,
 		SnapshotRequest_RAFT,
-		eng,
+		snap,
 		desc.RangeID,
 		raftentry.NewCache(1),
 		func(func(SideloadStorage) error) error { return nil },
@@ -960,8 +994,8 @@ func HackSendSnapshot(
 	if err != nil {
 		return err
 	}
+	defer outgoingSnap.Close()
 
-	from := to
 	req := RaftMessageRequest{
 		RangeID:     desc.RangeID,
 		FromReplica: from,
@@ -976,7 +1010,7 @@ func HackSendSnapshot(
 	}
 
 	header := SnapshotRequest_Header{
-		State:                      state,
+		State:                      outgoingSnap.State,
 		RaftMessageRequest:         req,
 		RangeSize:                  ms.Total(),
 		CanDecline:                 false,
@@ -984,6 +1018,7 @@ func HackSendSnapshot(
 		Strategy:                   SnapshotRequest_KV_BATCH,
 		Type:                       SnapshotRequest_RAFT,
 		UnreplicatedTruncatedState: true,
+		OmitClear:                  !wipe,
 	}
 
 	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
@@ -991,6 +1026,8 @@ func HackSendSnapshot(
 		return err
 	}
 
+	throwawayEng := storage.NewDefaultInMem()
+	defer throwawayEng.Close()
 	return initAndSendSnapshot(
 		ctx,
 		stream,
@@ -998,7 +1035,7 @@ func HackSendSnapshot(
 		noopStorePool{},
 		header,
 		&outgoingSnap,
-		eng.NewBatch,
+		throwawayEng.NewBatch,
 		func() {},
 	)
 }
