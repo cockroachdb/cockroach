@@ -1255,6 +1255,9 @@ func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tre
 	if err != nil {
 		panic(err)
 	}
+	if typedFunc == tree.DNull {
+		return tree.DNull
+	}
 
 	f = typedFunc.(*tree.FuncExpr)
 	args := make(memo.ScalarListExpr, len(f.Exprs))
