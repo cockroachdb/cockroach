@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -582,7 +583,7 @@ func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastInt
 				continue
 			}
 		case opt.FunctionOp:
-			if IsGeoIndexFunction(f.Condition) {
+			if invertedidx.IsGeoIndexFunction(f.Condition) {
 				cost += geoFnCost
 			}
 			// TODO(mjibson): do we need to cost other functions?
