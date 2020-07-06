@@ -14,8 +14,6 @@ import map from "lodash/map";
 import isUndefined from "lodash/isUndefined";
 import times from "lodash/times";
 
-import getHighlightedText from "src/util/highlightedText";
-import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 
 import styles from "./sortabletable.module.styl";
@@ -77,7 +75,6 @@ interface TableProps {
   // i.e. each row has an expand/collapse arrow on its left, and renders
   // a full-width area below it when expanded.
   expandableConfig?: ExpandableConfig;
-  drawer?: boolean;
   firstCellBordered?: boolean;
   renderNoResult?: React.ReactNode;
   loading?: boolean;
@@ -120,11 +117,6 @@ export class SortableTable extends React.Component<TableProps> {
   };
 
   state = {
-    visible: false,
-    drawerData: {
-      statement: "",
-      search: "",
-    },
     activeIndex: NaN,
   };
 
@@ -161,7 +153,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   renderRow = (rowIndex: number) => {
-    const { columns, expandableConfig, drawer, firstCellBordered } = this.props;
+    const { columns, expandableConfig, firstCellBordered } = this.props;
     const classes = cx(
       "sort-table__row",
       "sort-table__row--body",
@@ -176,10 +168,6 @@ export class SortableTable extends React.Component<TableProps> {
         key={rowIndex}
         className={classes}
         onClick={() => {
-          if (drawer) {
-            this.setState({ activeIndex: rowIndex });
-            this.showDrawer(rowIndex);
-          }
           if (onClickExpand) {
             onClickExpand(rowIndex, !expanded);
           }
@@ -228,36 +216,8 @@ export class SortableTable extends React.Component<TableProps> {
     return output;
   }
 
-  showDrawer = (rowIndex: number) => {
-    const { drawer, columns } = this.props;
-    const { drawerData } = this.state;
-    const values: any = columns[0].cell(rowIndex);
-    this.setState({
-      visible: true,
-      drawerData: drawer ? values.props : drawerData,
-    });
-  }
-
-  onClose = () => {
-    this.setState({
-      visible: false,
-      drawerData: {
-        statement: "",
-        search: "",
-      },
-      activeIndex: NaN,
-    });
-  }
-
-  onChange = (e: { target: { value: any; }; }) => {
-    this.setState({
-      placement: e.target.value,
-    });
-  }
-
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className, loading, loadingLabel, empty, emptyProps } = this.props;
-    const { visible, drawerData } = this.state;
+    const { sortSetting, columns, expandableConfig, firstCellBordered, count, renderNoResult, className, loading, loadingLabel, empty, emptyProps } = this.props;
     if (empty) {
       return <Empty {...emptyProps}/>;
     }
@@ -309,11 +269,6 @@ export class SortableTable extends React.Component<TableProps> {
             <Spin className={cx("table__loading--spin")} indicator={<Icon component={SpinIcon} spin />} />
             {loadingLabel && <span className={cx("table__loading--label")}>{loadingLabel}</span>}
           </div>
-        )}
-        {drawer && (
-          <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
-            <span className={cx("drawer__content")}>{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
-          </DrawerComponent>
         )}
         {count === 0 && (
           <div className={cx("table__no-results")}>
