@@ -212,7 +212,7 @@ func distanceInternal(
 func geomToGeodist(g geom.T) (geodist.Shape, error) {
 	switch g := g.(type) {
 	case *geom.Point:
-		return &geomGeodistPoint{Coord: g.Coords()}, nil
+		return &geodist.Point{GeomPoint: g.Coords()}, nil
 	case *geom.LineString:
 		return &geomGeodistLineString{LineString: g}, nil
 	case *geom.Polygon:
@@ -220,19 +220,6 @@ func geomToGeodist(g geom.T) (geodist.Shape, error) {
 	}
 	return nil, errors.Newf("could not find shape: %T", g)
 }
-
-// geomGeodistPoint implements geodist.Point.
-type geomGeodistPoint struct {
-	geom.Coord
-}
-
-var _ geodist.Point = (*geomGeodistPoint)(nil)
-
-// IsShape implements the geodist.Point interface.
-func (*geomGeodistPoint) IsShape() {}
-
-// Point implements the geodist.Point interface.
-func (*geomGeodistPoint) IsPoint() {}
 
 // geomGeodistLineString implements geodist.LineString.
 type geomGeodistLineString struct {
@@ -250,8 +237,8 @@ func (*geomGeodistLineString) IsLineString() {}
 // Edge implements the geodist.LineString interface.
 func (g *geomGeodistLineString) Edge(i int) geodist.Edge {
 	return geodist.Edge{
-		V0: &geomGeodistPoint{Coord: g.LineString.Coord(i)},
-		V1: &geomGeodistPoint{Coord: g.LineString.Coord(i + 1)},
+		V0: geodist.Point{GeomPoint: g.LineString.Coord(i)},
+		V1: geodist.Point{GeomPoint: g.LineString.Coord(i + 1)},
 	}
 }
 
@@ -262,7 +249,7 @@ func (g *geomGeodistLineString) NumEdges() int {
 
 // Vertex implements the geodist.LineString interface.
 func (g *geomGeodistLineString) Vertex(i int) geodist.Point {
-	return &geomGeodistPoint{Coord: g.LineString.Coord(i)}
+	return geodist.Point{GeomPoint: g.LineString.Coord(i)}
 }
 
 // NumVertexes implements the geodist.LineString interface.
@@ -286,8 +273,8 @@ func (*geomGeodistLinearRing) IsLinearRing() {}
 // Edge implements the geodist.LinearRing interface.
 func (g *geomGeodistLinearRing) Edge(i int) geodist.Edge {
 	return geodist.Edge{
-		V0: &geomGeodistPoint{Coord: g.LinearRing.Coord(i)},
-		V1: &geomGeodistPoint{Coord: g.LinearRing.Coord(i + 1)},
+		V0: geodist.Point{GeomPoint: g.LinearRing.Coord(i)},
+		V1: geodist.Point{GeomPoint: g.LinearRing.Coord(i + 1)},
 	}
 }
 
@@ -298,7 +285,7 @@ func (g *geomGeodistLinearRing) NumEdges() int {
 
 // Vertex implements the geodist.LinearRing interface.
 func (g *geomGeodistLinearRing) Vertex(i int) geodist.Point {
-	return &geomGeodistPoint{Coord: g.LinearRing.Coord(i)}
+	return geodist.Point{GeomPoint: g.LinearRing.Coord(i)}
 }
 
 // NumVertexes implements the geodist.LinearRing interface.
@@ -341,7 +328,7 @@ var _ geodist.EdgeCrosser = (*geomGeodistEdgeCrosser)(nil)
 
 // ChainCrossing implements geodist.EdgeCrosser.
 func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Point) {
-	nextEdgeV1 := p.(*geomGeodistPoint).Coord
+	nextEdgeV1 := p.GeomPoint
 	result := lineintersector.LineIntersectsLine(
 		c.strategy,
 		c.edgeV0,
@@ -351,9 +338,9 @@ func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.P
 	)
 	c.nextEdgeV0 = nextEdgeV1
 	if result.HasIntersection() {
-		return true, &geomGeodistPoint{result.Intersection()[0]}
+		return true, geodist.Point{GeomPoint: result.Intersection()[0]}
 	}
-	return false, nil
+	return false, geodist.Point{}
 }
 
 // geomMinDistanceUpdater finds the minimum distance using geom calculations.
@@ -390,9 +377,9 @@ func (u *geomMinDistanceUpdater) Distance() float64 {
 }
 
 // Update implements the geodist.DistanceUpdater interface.
-func (u *geomMinDistanceUpdater) Update(aInterface geodist.Point, bInterface geodist.Point) bool {
-	a := aInterface.(*geomGeodistPoint).Coord
-	b := bInterface.(*geomGeodistPoint).Coord
+func (u *geomMinDistanceUpdater) Update(aPoint geodist.Point, bPoint geodist.Point) bool {
+	a := aPoint.GeomPoint
+	b := bPoint.GeomPoint
 
 	dist := coordNorm(coordSub(a, b))
 	if dist < u.currentValue {
@@ -411,8 +398,8 @@ func (u *geomMinDistanceUpdater) Update(aInterface geodist.Point, bInterface geo
 
 // OnIntersects implements the geodist.DistanceUpdater interface.
 func (u *geomMinDistanceUpdater) OnIntersects(p geodist.Point) bool {
-	u.coordA = p.(*geomGeodistPoint).Coord
-	u.coordB = p.(*geomGeodistPoint).Coord
+	u.coordA = p.GeomPoint
+	u.coordB = p.GeomPoint
 	u.currentValue = 0
 	return true
 }
@@ -464,9 +451,9 @@ func (u *geomMaxDistanceUpdater) Distance() float64 {
 }
 
 // Update implements the geodist.DistanceUpdater interface.
-func (u *geomMaxDistanceUpdater) Update(aInterface geodist.Point, bInterface geodist.Point) bool {
-	a := aInterface.(*geomGeodistPoint).Coord
-	b := bInterface.(*geomGeodistPoint).Coord
+func (u *geomMaxDistanceUpdater) Update(aPoint geodist.Point, bPoint geodist.Point) bool {
+	a := aPoint.GeomPoint
+	b := bPoint.GeomPoint
 
 	dist := coordNorm(coordSub(a, b))
 	if dist > u.currentValue {
@@ -522,9 +509,9 @@ func (c *geomDistanceCalculator) NewEdgeCrosser(
 ) geodist.EdgeCrosser {
 	return &geomGeodistEdgeCrosser{
 		strategy:   &lineintersector.NonRobustLineIntersector{},
-		edgeV0:     edge.V0.(*geomGeodistPoint).Coord,
-		edgeV1:     edge.V1.(*geomGeodistPoint).Coord,
-		nextEdgeV0: startPoint.(*geomGeodistPoint).Coord,
+		edgeV0:     edge.V0.GeomPoint,
+		edgeV1:     edge.V1.GeomPoint,
+		nextEdgeV0: startPoint.GeomPoint,
 	}
 }
 
@@ -567,11 +554,11 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 	// See also: https://en.wikipedia.org/wiki/Winding_number
 	// See also: https://en.wikipedia.org/wiki/Nonzero-rule
 	windingNumber := 0
-	p := point.(*geomGeodistPoint).Coord
+	p := point.GeomPoint
 	for edgeIdx := 0; edgeIdx < polygon.NumEdges(); edgeIdx++ {
 		e := polygon.Edge(edgeIdx)
-		eV0 := e.V0.(*geomGeodistPoint).Coord
-		eV1 := e.V1.(*geomGeodistPoint).Coord
+		eV0 := e.V0.GeomPoint
+		eV1 := e.V1.GeomPoint
 		// Same vertex; none of these checks will pass.
 		if coordEqual(eV0, eV1) {
 			continue
@@ -610,15 +597,11 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 
 // ClosestPointToEdge implements geodist.DistanceCalculator.
 func (c *geomDistanceCalculator) ClosestPointToEdge(
-	edge geodist.Edge, pointInterface geodist.Point,
+	e geodist.Edge, p geodist.Point,
 ) (geodist.Point, bool) {
-	eV0 := edge.V0.(*geomGeodistPoint).Coord
-	eV1 := edge.V1.(*geomGeodistPoint).Coord
-	p := pointInterface.(*geomGeodistPoint).Coord
-
 	// Edge is a single point. Closest point must be any edge vertex.
-	if coordEqual(eV0, eV1) {
-		return edge.V0, coordEqual(eV0, p)
+	if coordEqual(e.V0.GeomPoint, e.V1.GeomPoint) {
+		return e.V0, coordEqual(e.V0.GeomPoint, p.GeomPoint)
 	}
 
 	// From http://www.faqs.org/faqs/graphics/algorithms-faq/, section 1.02
@@ -639,19 +622,19 @@ func (c *geomDistanceCalculator) ClosestPointToEdge(
 	//      r<0      P is on the backward extension of AB
 	//      r>1      P is on the forward extension of AB
 	//      0<r<1    P is interior to AB
-	if coordEqual(p, eV0) {
-		return pointInterface, true
+	if coordEqual(p.GeomPoint, e.V0.GeomPoint) {
+		return p, true
 	}
-	if coordEqual(p, eV1) {
-		return pointInterface, true
+	if coordEqual(p.GeomPoint, e.V1.GeomPoint) {
+		return p, true
 	}
 
-	ac := coordSub(p, eV0)
-	ab := coordSub(eV1, eV0)
+	ac := coordSub(p.GeomPoint, e.V0.GeomPoint)
+	ab := coordSub(e.V1.GeomPoint, e.V0.GeomPoint)
 
 	r := coordDot(ac, ab) / coordNorm2(ab)
 	if r < 0 || r > 1 {
-		return pointInterface, false
+		return p, false
 	}
-	return &geomGeodistPoint{Coord: coordAdd(eV0, coordMul(ab, r))}, true
+	return geodist.Point{GeomPoint: coordAdd(e.V0.GeomPoint, coordMul(ab, r))}, true
 }
