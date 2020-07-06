@@ -1689,13 +1689,13 @@ upsert decimals
       │    │    │    │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
       │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │         └── decimals.d:16
-      │    │    │    │    │    │              └── decimals.a:13 + decimals.c:15
+      │    │    │    │    │    │              └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a:8 = decimals.a:13
       │    │    │    │    └── projections
       │    │    │    │         └── crdb_internal.round_decimal_values(b:9, 1) [as=b:17]
       │    │    │    └── projections
-      │    │    │         └── decimals.a:13 + decimals.c:15 [as=column18:18]
+      │    │    │         └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL [as=column18:18]
       │    │    └── projections
       │    │         └── crdb_internal.round_decimal_values(column18:18, 1) [as=d:19]
       │    └── projections
@@ -1768,11 +1768,11 @@ upsert decimals
       │    │    │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── decimals.d:16
-      │    │    │    │    │              └── decimals.a:13 + decimals.c:15
+      │    │    │    │    │              └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL
       │    │    │    │    └── filters
       │    │    │    │         └── a:8 = decimals.a:13
       │    │    │    └── projections
-      │    │    │         └── decimals.a:13 + decimals.c:15 [as=column17:17]
+      │    │    │         └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL [as=column17:17]
       │    │    └── projections
       │    │         └── crdb_internal.round_decimal_values(column17:17, 1) [as=d:18]
       │    └── projections
@@ -1852,7 +1852,7 @@ upsert decimals
       │    │    │    │    │    │    │    ├── columns: decimals.a:13!null decimals.b:14 decimals.c:15 decimals.d:16
       │    │    │    │    │    │    │    └── computed column expressions
       │    │    │    │    │    │    │         └── decimals.d:16
-      │    │    │    │    │    │    │              └── decimals.a:13 + decimals.c:15
+      │    │    │    │    │    │    │              └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── a:8 = decimals.a:13
       │    │    │    │    │    └── projections
@@ -1860,7 +1860,7 @@ upsert decimals
       │    │    │    │    └── projections
       │    │    │    │         └── crdb_internal.round_decimal_values(b_new:17, 1) [as=b:18]
       │    │    │    └── projections
-      │    │    │         └── decimals.a:13 + decimals.c:15 [as=column19:19]
+      │    │    │         └── decimals.a:13::DECIMAL + decimals.c:15::DECIMAL [as=column19:19]
       │    │    └── projections
       │    │         └── crdb_internal.round_decimal_values(column19:19, 1) [as=d:20]
       │    └── projections

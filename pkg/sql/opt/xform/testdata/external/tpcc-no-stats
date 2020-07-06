@@ -455,7 +455,7 @@ project
            │    ├── key: ()
            │    └── fd: ()-->(10-18)
            └── projections
-                └── crdb_internal.round_decimal_values(warehouse.w_ytd:18 + 3860.61, 2) [as=w_ytd:20, outer=(18), immutable]
+                └── crdb_internal.round_decimal_values(warehouse.w_ytd:18::DECIMAL + 3860.61, 2) [as=w_ytd:20, outer=(18), immutable]
 
 opt format=hide-qual
 UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
@@ -489,7 +489,7 @@ project
            │    ├── key: ()
            │    └── fd: ()-->(12-22)
            └── projections
-                └── crdb_internal.round_decimal_values(district.d_ytd:21 + 3860.61, 2) [as=d_ytd:24, outer=(21), immutable]
+                └── crdb_internal.round_decimal_values(district.d_ytd:21::DECIMAL + 3860.61, 2) [as=d_ytd:24, outer=(21), immutable]
 
 opt format=hide-qual
 SELECT c_id
@@ -581,10 +581,10 @@ project
  │         │    ├── key: ()
  │         │    └── fd: ()-->(22-42)
  │         └── projections
- │              ├── crdb_internal.round_decimal_values(customer.c_balance:38 - 3860.61, 2) [as=c_balance:47, outer=(38), immutable]
- │              ├── crdb_internal.round_decimal_values(customer.c_ytd_payment:39 + 3860.61, 2) [as=c_ytd_payment:48, outer=(39), immutable]
+ │              ├── crdb_internal.round_decimal_values(customer.c_balance:38::DECIMAL - 3860.61, 2) [as=c_balance:47, outer=(38), immutable]
+ │              ├── crdb_internal.round_decimal_values(customer.c_ytd_payment:39::DECIMAL + 3860.61, 2) [as=c_ytd_payment:48, outer=(39), immutable]
  │              ├── c_payment_cnt:40 + 1 [as=c_payment_cnt_new:45, outer=(40), immutable]
- │              └── CASE c_credit:35 WHEN 'BC' THEN left((((((c_id:22::STRING || c_d_id:23::STRING) || c_w_id:24::STRING) || '5') || '10') || '3860.61') || c_data:42, 500) ELSE c_data:42 END [as=c_data_new:46, outer=(22-24,35,42), immutable]
+ │              └── CASE c_credit:35 WHEN 'BC' THEN left((((((c_id:22::STRING || c_d_id:23::STRING) || c_w_id:24::STRING) || '5') || '10') || '3860.61') || c_data:42::STRING, 500) ELSE c_data:42::STRING END [as=c_data_new:46, outer=(22-24,35,42), immutable]
  └── projections
       └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:49, outer=(14,21), immutable]
 
@@ -907,7 +907,7 @@ update customer
       │    ├── key: (22,23)
       │    └── fd: ()-->(24), (22,23)-->(25-42)
       └── projections
-           ├── crdb_internal.round_decimal_values(customer.c_balance:38 + CASE c_d_id:23 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance:45, outer=(23,38), immutable]
+           ├── crdb_internal.round_decimal_values(customer.c_balance:38::DECIMAL + CASE c_d_id:23 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance:45, outer=(23,38), immutable]
            └── c_delivery_cnt:41 + 1 [as=c_delivery_cnt_new:43, outer=(41), immutable]
 
 opt format=hide-qual
