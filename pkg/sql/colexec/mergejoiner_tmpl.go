@@ -199,9 +199,9 @@ func _PROBE_SWITCH(
 							// {{end}}
 
 							lSelIdx = _L_SEL_IND
-							lVal = execgen.UNSAFEGET(lKeys, lSelIdx)
+							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = _R_SEL_IND
-							rVal = execgen.UNSAFEGET(rKeys, rSelIdx)
+							rVal = rKeys.Get(rSelIdx)
 							_ASSIGN_CMP(cmp, lVal, rVal, lKeys, rKeys)
 
 							// {{if _JOIN_TYPE.IsSetOp}}
@@ -247,7 +247,7 @@ func _PROBE_SWITCH(
 								}
 								// {{end}}
 								lSelIdx = _L_SEL_IND
-								newLVal := execgen.UNSAFEGET(lKeys, lSelIdx)
+								newLVal := lKeys.Get(lSelIdx)
 								_ASSIGN_EQ(match, newLVal, lVal, _, lKeys, lKeys)
 								if !match {
 									lComplete = true
@@ -283,7 +283,7 @@ func _PROBE_SWITCH(
 								}
 								// {{end}}
 								rSelIdx = _R_SEL_IND
-								newRVal := execgen.UNSAFEGET(rKeys, rSelIdx)
+								newRVal := rKeys.Get(rSelIdx)
 								_ASSIGN_EQ(match, newRVal, rVal, _, rKeys, rKeys)
 								if !match {
 									rComplete = true
@@ -555,7 +555,7 @@ func _INCREMENT_LEFT_SWITCH(
 			// {{end}}
 			lSelIdx = _L_SEL_IND
 			// {{with .Global}}
-			newLVal := execgen.UNSAFEGET(lKeys, lSelIdx)
+			newLVal := lKeys.Get(lSelIdx)
 			_ASSIGN_EQ(match, newLVal, lVal, _, lKeys, lKeys)
 			// {{end}}
 			if !match {
@@ -612,7 +612,7 @@ func _INCREMENT_RIGHT_SWITCH(
 		// {{end}}
 		rSelIdx = _R_SEL_IND
 		// {{with .Global}}
-		newRVal := execgen.UNSAFEGET(rKeys, rSelIdx)
+		newRVal := rKeys.Get(rSelIdx)
 		_ASSIGN_EQ(match, newRVal, rVal, _, rKeys, rKeys)
 		// {{end}}
 		if !match {
@@ -830,7 +830,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 						} else
 						// {{end}}
 						{
-							val = execgen.UNSAFEGET(srcCol, srcStartIdx)
+							val = srcCol.Get(srcStartIdx)
 							for i := 0; i < toAppend; i++ {
 								execgen.SET(outCol, outStartIdx, val)
 								outStartIdx++
@@ -1019,7 +1019,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 									out.Nulls().SetNullRange(outStartIdx, outStartIdx+toAppend)
 									outStartIdx += toAppend
 								} else {
-									val = execgen.UNSAFEGET(srcCol, srcStartIdx)
+									val = srcCol.Get(srcStartIdx)
 									for i := 0; i < toAppend; i++ {
 										execgen.SET(outCol, outStartIdx, val)
 										outStartIdx++
@@ -1150,7 +1150,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 							} else
 							// {{end}}
 							{
-								v := execgen.UNSAFEGET(srcCol, sel[o.builderState.right.curSrcStartIdx])
+								v := srcCol.Get(sel[o.builderState.right.curSrcStartIdx])
 								execgen.SET(outCol, outStartIdx, v)
 							}
 							// {{else}}
@@ -1160,7 +1160,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 							} else
 							// {{end}}
 							{
-								v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
+								v := srcCol.Get(o.builderState.right.curSrcStartIdx)
 								execgen.SET(outCol, outStartIdx, v)
 							}
 							// {{end}}
@@ -1327,7 +1327,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 									if src.Nulls().NullAt(o.builderState.right.curSrcStartIdx) {
 										out.Nulls().SetNull(outStartIdx)
 									} else {
-										v := execgen.UNSAFEGET(srcCol, o.builderState.right.curSrcStartIdx)
+										v := srcCol.Get(o.builderState.right.curSrcStartIdx)
 										execgen.SET(outCol, outStartIdx, v)
 									}
 								} else {

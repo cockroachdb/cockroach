@@ -219,7 +219,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := execgen.UNSAFEGET(col, i)
+					v := col.Get(i)
 					if !nulls.NullAt(i) && cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -228,9 +228,9 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = execgen.UNSAFEGET(col, n-1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					v := execgen.UNSAFEGET(col, i)
+					v := col.Get(i)
 					if !nulls.NullAt(i) && cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -241,7 +241,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					v := execgen.UNSAFEGET(col, i)
+					v := col.Get(i)
 					if cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -250,9 +250,9 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = execgen.UNSAFEGET(col, n-1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					v := execgen.UNSAFEGET(col, i)
+					v := col.Get(i)
 					if cmpIn_TYPE(v, col, si.filterRow, si.hasNulls) == compVal {
 						sel[idx] = i
 						idx++
@@ -301,7 +301,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := execgen.UNSAFEGET(col, i)
+					v := col.Get(i)
 					cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -316,7 +316,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
 				} else {
-					v := execgen.UNSAFEGET(col, i)
+					v := col.Get(i)
 					cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 					if cmpRes == siNull {
 						projNulls.SetNull(i)
@@ -330,7 +330,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				v := execgen.UNSAFEGET(col, i)
+				v := col.Get(i)
 				cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
@@ -341,7 +341,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		} else {
 			col = execgen.SLICE(col, 0, n)
 			for i := 0; i < n; i++ {
-				v := execgen.UNSAFEGET(col, i)
+				v := col.Get(i)
 				cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
