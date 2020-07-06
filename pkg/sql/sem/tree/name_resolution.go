@@ -600,6 +600,31 @@ func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKi
 	return nil
 }
 
+// RequiredTableKind controls what kind of TableDescriptor backed object is
+// requested to be resolved.
+type RequiredTableKind int
+
+// RequiredTableKind options have descriptive names.
+const (
+	ResolveAnyTableKind RequiredTableKind = iota
+	ResolveRequireTableDesc
+	ResolveRequireViewDesc
+	ResolveRequireTableOrViewDesc
+	ResolveRequireSequenceDesc
+)
+
+var requiredTypeNames = [...]string{
+	ResolveAnyTableKind:           "any",
+	ResolveRequireTableDesc:       "table",
+	ResolveRequireViewDesc:        "view",
+	ResolveRequireTableOrViewDesc: "table or view",
+	ResolveRequireSequenceDesc:    "sequence",
+}
+
+func (r RequiredTableKind) String() string {
+	return requiredTypeNames[r]
+}
+
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
@@ -609,6 +634,9 @@ type ObjectLookupFlags struct {
 	AllowWithoutPrimaryKey bool
 	// Control what type of object is being requested.
 	DesiredObjectKind DesiredObjectKind
+	// Control what kind of table object is being requested. This field is
+	// only respected when DesiredObjectKind is TableObject.
+	DesiredTableDescKind RequiredTableKind
 }
 
 // ObjectLookupFlagsWithRequired returns a default ObjectLookupFlags object
@@ -617,5 +645,15 @@ type ObjectLookupFlags struct {
 func ObjectLookupFlagsWithRequired() ObjectLookupFlags {
 	return ObjectLookupFlags{
 		CommonLookupFlags: CommonLookupFlags{Required: true},
+	}
+}
+
+// ObjectLookupFlagsWithRequiredTableKind returns an ObjectLookupFlags with
+// Required set to true, and the DesiredTableDescKind set to the input kind.
+func ObjectLookupFlagsWithRequiredTableKind(kind RequiredTableKind) ObjectLookupFlags {
+	return ObjectLookupFlags{
+		CommonLookupFlags:    CommonLookupFlags{Required: true},
+		DesiredObjectKind:    TableObject,
+		DesiredTableDescKind: kind,
 	}
 }

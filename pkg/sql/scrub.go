@@ -89,7 +89,7 @@ func (n *scrubNode) startExec(params runParams) error {
 		// If the tableName provided refers to a view and error will be
 		// returned here.
 		tableDesc, err := params.p.ResolveExistingObjectEx(
-			params.ctx, n.n.Table, true /*required*/, resolver.ResolveRequireTableDesc)
+			params.ctx, n.n.Table, true /*required*/, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return err
 		}

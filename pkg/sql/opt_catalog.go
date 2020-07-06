@@ -171,7 +171,8 @@ func (oc *optCatalog) ResolveDataSource(
 	}
 
 	oc.tn = *name
-	desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveAnyDescType)
+	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
+	desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
