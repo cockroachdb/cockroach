@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -22,6 +23,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
+
+var supportedDefaultRegex = []string{
+	`^current_date\(\)$`, `^current_timestamp\([0-9]*\)$`,
+	`^localtimestamp\([0-9]*\)$`, `^now\(\)$`, `^statement_timestamp\(\)$`,
+	`^timeofday\(\)$`, `^transaction_timestamp\(\)$`,
+}
+
+func isSupportedDefaultExpr(ctx *tree.EvalContext, expr tree.TypedExpr) (bool, error) {
+	if tree.IsConst(ctx, expr) {
+		return true, nil
+	}
+	for _, supportedStr := range supportedDefaultRegex {
+		matched, err := regexp.Match(supportedStr, []byte(expr.String()))
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // KVInserter implements the putter interface.
 type KVInserter func(roachpb.KeyValue)
@@ -374,7 +397,11 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	for i := range c.cols {
 		col := &c.cols[i]
 		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
-			if !tree.IsConst(c.EvalCtx, c.defaultExprs[i]) {
+			isSupported, err := isSupportedDefaultExpr(c.EvalCtx, c.defaultExprs[i])
+			if err != nil {
+				return err
+			}
+			if !isSupported {
 				// Check if the default expression is a constant expression as we do not
 				// support non-constant default expressions for non-target columns in IMPORT INTO.
 				//
