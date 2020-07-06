@@ -24,6 +24,8 @@ import { nullOfReturnType } from "src/util/types";
  * keyword.
  */
 export import LivenessStatus = protos.cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
+import { cockroach } from "src/js/protos";
+import MembershipStatus = cockroach.kv.kvserver.storagepb.MembershipStatus;
 
 /**
  * livenessNomenclature resolves a mismatch between the terms used for liveness
@@ -357,7 +359,8 @@ export const versionsSelector = createSelector(
       // Exclude this node if it's known to be decommissioning.
       .filter((status) => !status.desc ||
         !livenessStatusByNodeID[status.desc.node_id] ||
-        !livenessStatusByNodeID[status.desc.node_id].decommissioning)
+        !livenessStatusByNodeID[status.desc.node_id].membership ||
+        !(livenessStatusByNodeID[status.desc.node_id].membership !== MembershipStatus.ACTIVE))
       // Collect the surviving nodes' build tags.
       .map((status) => status.build_info.tag)
       .uniq()

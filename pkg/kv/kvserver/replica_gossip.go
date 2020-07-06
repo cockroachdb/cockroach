@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -176,6 +177,15 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 				continue
 			}
 		}
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
+			// We can't transmit liveness records with a backwards incompatible
+			// representation unless we're told by the user that there are no
+			// pre-v20.1 nodes around. We should never get here.
+			if kvLiveness.Membership.Decommissioned() {
+				log.Fatal(ctx, "programming error: illegal membership status: decommissioned")
+			}
+		}
+
 		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
 			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)
 		}

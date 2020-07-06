@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // IsLive returns whether the node is considered live at the given time.
@@ -41,10 +43,73 @@ func (l *Liveness) IsDead(now time.Time, threshold time.Duration) bool {
 	return !now.Before(deadAsOf)
 }
 
-func (l Liveness) String() string {
+func (l *Liveness) String() string {
 	var extra string
-	if l.Draining || l.Decommissioning {
-		extra = fmt.Sprintf(" drain:%t decom:%t", l.Draining, l.Decommissioning)
+	if l.Draining || l.Membership.Decommissioning() || l.Membership.Decommissioned() {
+		extra = fmt.Sprintf(" drain:%t membership:%s", l.Draining, l.Membership.String())
 	}
 	return fmt.Sprintf("liveness(nid:%d epo:%d exp:%s%s)", l.NodeID, l.Epoch, l.Expiration, extra)
+}
+
+// Decommissioning is a shorthand to check if the membership status is DECOMMISSIONING.
+func (c MembershipStatus) Decommissioning() bool { return c == MembershipStatus_DECOMMISSIONING }
+
+// Decommissioned is a shorthand to check if the membership status is DECOMMISSIONED.
+func (c MembershipStatus) Decommissioned() bool { return c == MembershipStatus_DECOMMISSIONED }
+
+// Active is a shorthand to check if the membership status is ACTIVE.
+func (c MembershipStatus) Active() bool { return c == MembershipStatus_ACTIVE }
+
+func (c MembershipStatus) String() string {
+	// NB: These strings must not be changed, since the CLI matches on them.
+	switch c {
+	case MembershipStatus_ACTIVE:
+		return "active"
+	case MembershipStatus_DECOMMISSIONING:
+		return "decommissioning"
+	case MembershipStatus_DECOMMISSIONED:
+		return "decommissioned"
+	default:
+		err := "unknown membership status, expected one of [active,decommissioning,decommissioned]"
+		panic(err)
+	}
+}
+
+// ValidateLivenessTransition validates transitions of the liveness record,
+// returning an error if the proposed transition is invalid. Ignoring no-ops
+// (which also includes decommissioning a decommissioned node) the valid state
+// transitions for Membership are as follows:
+//
+// 	  Decommissioning  => Active
+// 	  Active           => Decommissioning
+// 	  Decommissioning  => Decommissioned
+//
+// See diagram above the Membership type for more details.
+func ValidateLivenessTransition(old, new Liveness) error {
+	if old.Membership == new.Membership {
+		// No-op.
+		return nil
+	}
+
+	if old.Membership.Decommissioned() && new.Membership.Decommissioning() {
+		// No-op.
+		return nil
+	}
+
+	if new.Membership.Active() && !old.Membership.Decommissioning() {
+		err := fmt.Sprintf("can only recommission a decommissioning node; n%d found to be %s",
+			new.NodeID, old.Membership.String())
+		return status.Error(codes.FailedPrecondition, err)
+	}
+
+	// We don't assert on the new membership being "decommissioning" as all
+	// previous states are valid (again, consider no-ops).
+
+	if new.Membership.Decommissioned() && !old.Membership.Decommissioning() {
+		err := fmt.Sprintf("can only fully decommission an already decommissioning node; n%d found to be %s",
+			new.NodeID, old.Membership.String())
+		return status.Error(codes.FailedPrecondition, err)
+	}
+
+	return nil
 }

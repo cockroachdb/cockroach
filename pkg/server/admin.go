@@ -1686,10 +1686,10 @@ func (s *adminServer) DecommissionStatus(
 			return nil, errors.Wrapf(err, "unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:          l.NodeID,
-			ReplicaCount:    replicaCounts[l.NodeID],
-			Decommissioning: l.Decommissioning,
-			Draining:        l.Draining,
+			NodeID:       l.NodeID,
+			ReplicaCount: replicaCounts[l.NodeID],
+			Membership:   l.Membership,
+			Draining:     l.Draining,
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
@@ -1715,9 +1715,9 @@ func (s *adminServer) Decommission(
 		return nil, status.Errorf(codes.InvalidArgument, "no node ID specified")
 	}
 
-	// Mark the target nodes as decommissioning. They'll find out as they
-	// heartbeat their liveness.
-	if err := s.server.Decommission(ctx, req.Decommissioning, nodeIDs); err != nil {
+	// Mark the target nodes with their new membership status. They'll find out
+	// as they heartbeat their liveness.
+	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs); err != nil {
 		return nil, err
 	}
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})

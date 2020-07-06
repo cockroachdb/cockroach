@@ -268,6 +268,14 @@ func MaybeDecorateGRPCError(
 			if pgcode.MakeCode(string(wErr.Code)) == pgcode.ProtocolViolation {
 				return connSecurityHint()
 			}
+
+			// Are we running a v20.2 binary against a v20.1 server?
+			if strings.Contains(wErr.Message, "column \"membership\" does not exist") {
+				// The v20.2 binary makes use of columns not present in v20.1,
+				// so this is a disallowed operation. Surface a better error
+				// code here.
+				return fmt.Errorf("cannot use a v20.2 cli against servers running v20.1")
+			}
 			// Otherwise, there was a regular SQL error. Just report
 			// that.
 			return err
