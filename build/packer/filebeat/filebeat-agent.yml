@@ -4,10 +4,10 @@ filebeat.inputs:
     - /home/agent/logs/teamcity-build.log
   # Parses release events. All release logs begin with 'done building <package>: ' and end with a closing brace.
   multiline:
-    pattern: '(.*(\d{4}\/(0[1-9]|1[012])\/(0[1-9]|[12][0-9]|3[01]))\s*([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\s*(main.go:[0-9]+:\s*)?done\s*building\s*.*:\s*main\.opts{\s*)|(^Build .* \#[0-9]+, branch .*$)' 
+    pattern: '(.*(\d{4}\/(0[1-9]|1[012])\/(0[1-9]|[12][0-9]|3[01]))\s*([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\s*(main.go:[0-9]+:\s*)?done\s*building\s*.*:\s*main\.opts{\s*)|(^Build .* \#[0-9]+, branch .*$)|(\[([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\]([a-zA-Z|\s]:)?\s*\[Step\s[0-9]+\/[0-9]+\]\s*\++\s*docker push docker.io\/)' 
     negate: true
     match: after
-    flush_pattern: '(^\[([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\]([a-zA-Z|\s]:)?\s*\[Step\s[0-9]+\/[0-9]+\]\s*}\s*$)|(\[([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\][a-zA-Z|\s]:\s*\[Step\s[0-9]+\/[0-9]+\]\s*Process exited with code 0\s*$)|(([0-2][0-9]:[0-5][0-9]:[0-5][0-9]) main.go:[0-9]+: Uploading to s3:)|(^TeamCity server version is ([0-9]|\.)+ \(build [0-9]+\), server timezone: )'
+    flush_pattern: '(^\[([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\]([a-zA-Z|\s]:)?\s*\[Step\s[0-9]+\/[0-9]+\]\s*}\s*$)|(\[([0-2][0-9]:[0-5][0-9]:[0-5][0-9])\][a-zA-Z|\s]:\s*\[Step\s[0-9]+\/[0-9]+\]\s*Process exited with code 0\s*$)|(([0-2][0-9]:[0-5][0-9]:[0-5][0-9]) main.go:[0-9]+: Uploading to s3:)|(^TeamCity server version is ([0-9]|\.)+ \(build [0-9]+\), server timezone: )|([A-Za-z0-9_\.-]+: digest: sha256:[a-z0-9]+ size: [0-9]+)'
 
 processors:
 # Add TeamCity identifier
