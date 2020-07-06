@@ -652,11 +652,10 @@ type PhysicalPlan struct {
 	// and indexJoinNode where not all columns in the table are actually used in
 	// the plan, but are kept for possible use downstream (e.g., sorting).
 	//
-	// When the query is run, the output processor's PlanToStreamColMap is used
-	// by DistSQLReceiver to create an implicit projection on the processor's
-	// output for client consumption (see DistSQLReceiver.Push()). Therefore,
-	// "invisible" columns (e.g., columns required for merge ordering) will not
-	// be output.
+	// Before the query is run, the physical plan must be finalized, and during
+	// the finalization a projection is added to the plan so that
+	// DistSQLReceiver gets rows of the desired schema from the output
+	// processor.
 	PlanToStreamColMap []int
 }
 
@@ -3443,8 +3442,8 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	return planCtx
 }
 
-// FinalizePlan adds a final "result" stage if necessary and populates the
-// endpoints of the plan.
+// FinalizePlan adds a final "result" stage and a final projection if necessary
+// as well as populates the endpoints of the plan.
 func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan) {
 	// Find all MetadataTestSenders in the plan, so that the MetadataTestReceiver
 	// knows how many sender IDs it should expect.
@@ -3457,6 +3456,18 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 
 	// Add a final "result" stage if necessary.
 	plan.EnsureSingleStreamOnGateway()
+
+	// Add a final projection so that DistSQLReceiver gets the rows of the
+	// desired schema.
+	projection := make([]uint32, 0, len(plan.ResultTypes))
+	for _, outputCol := range plan.PlanToStreamColMap {
+		if outputCol >= 0 {
+			projection = append(projection, uint32(outputCol))
+		}
+	}
+	plan.AddProjection(projection)
+	// Update PlanToStreamColMap to nil since it is no longer necessary.
+	plan.PlanToStreamColMap = nil
 
 	if len(metadataSenders) > 0 {
 		plan.AddSingleGroupStage(

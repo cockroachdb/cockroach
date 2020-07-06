@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -109,6 +108,7 @@ func newChangeAggregatorProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ChangeAggregatorSpec,
+	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -120,8 +120,8 @@ func newChangeAggregatorProcessor(
 	}
 	if err := ca.Init(
 		ca,
-		&execinfrapb.PostProcessSpec{},
-		nil, /* types */
+		post,
+		changefeedResultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -142,10 +142,6 @@ func newChangeAggregatorProcessor(
 	}
 
 	return ca, nil
-}
-
-func (ca *changeAggregator) OutputTypes() []*types.T {
-	return changefeedResultTypes
 }
 
 // Start is part of the RowSource interface.
@@ -350,9 +346,9 @@ func (ca *changeAggregator) close() {
 func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
-			return ca.changedRowBuf.Pop(), nil
+			return ca.ProcessRowHelper(ca.changedRowBuf.Pop()), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
-			return ca.resolvedSpanBuf.Pop(), nil
+			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
 		}
 		if err := ca.tick(); err != nil {
 			select {
@@ -483,6 +479,7 @@ func newChangeFrontierProcessor(
 	processorID int32,
 	spec execinfrapb.ChangeFrontierSpec,
 	input execinfra.RowSource,
+	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -495,7 +492,8 @@ func newChangeFrontierProcessor(
 		sf:      span.MakeFrontier(spec.TrackedSpans...),
 	}
 	if err := cf.Init(
-		cf, &execinfrapb.PostProcessSpec{},
+		cf,
+		post,
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
@@ -530,10 +528,6 @@ func newChangeFrontierProcessor(
 	}
 
 	return cf, nil
-}
-
-func (cf *changeFrontier) OutputTypes() []*types.T {
-	return changefeedResultTypes
 }
 
 // Start is part of the RowSource interface.
@@ -656,9 +650,9 @@ func (cf *changeFrontier) shouldProtectBoundaries() bool {
 func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for cf.State == execinfra.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
-			return cf.passthroughBuf.Pop(), nil
+			return cf.ProcessRowHelper(cf.passthroughBuf.Pop()), nil
 		} else if !cf.resolvedBuf.IsEmpty() {
-			return cf.resolvedBuf.Pop(), nil
+			return cf.ProcessRowHelper(cf.resolvedBuf.Pop()), nil
 		}
 
 		if cf.schemaChangeBoundaryReached() && cf.shouldFailOnSchemaChange() {

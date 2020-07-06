@@ -45,18 +45,21 @@ type planNodeToRowSource struct {
 func makePlanNodeToRowSource(
 	source planNode, params runParams, fastPath bool,
 ) (*planNodeToRowSource, error) {
-	nodeColumns := planColumns(source)
-
-	types := make([]*types.T, len(nodeColumns))
-	for i := range nodeColumns {
-		types[i] = nodeColumns[i].Typ
+	var typs []*types.T
+	if fastPath {
+		// If our node is a "fast path node", it means that we're set up to
+		// just return a row count meaning we'll output a single row with a
+		// single INT column.
+		typs = []*types.T{types.Int}
+	} else {
+		typs = getTypesFromResultColumns(planColumns(source))
 	}
-	row := make(sqlbase.EncDatumRow, len(nodeColumns))
+	row := make(sqlbase.EncDatumRow, len(typs))
 
 	return &planNodeToRowSource{
 		node:        source,
 		params:      params,
-		outputTypes: types,
+		outputTypes: typs,
 		row:         row,
 		fastPath:    fastPath,
 	}, nil
