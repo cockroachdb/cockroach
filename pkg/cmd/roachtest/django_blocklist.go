@@ -15,8 +15,6 @@ package main
 // in alphabetical order. As more progress is made with adding compatibility,
 // more test apps should be added here to prevent against regression.
 var enabledDjangoTests = []string{
-	"app_loading",
-	"apps",
 	"admin_changelist",
 	"admin_custom_urls",
 	"admin_docs",
@@ -30,8 +28,6 @@ var enabledDjangoTests = []string{
 	"annotations",
 	"auth_tests",
 	"backends",
-	"base",
-	"bash_completion",
 	"basic",
 	"bulk_create",
 	"cache",
