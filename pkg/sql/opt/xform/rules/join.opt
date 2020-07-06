@@ -214,7 +214,7 @@
         $innerOn:*
         $innerPrivate:* & (NoJoinHints $innerPrivate)
     )
-    $right:* & (ShouldReorderJoins $left $right)
+    $right:* & (ShouldReorderJoins (Root))
     $on:*
     $private:* & (NoJoinHints $private)
 )

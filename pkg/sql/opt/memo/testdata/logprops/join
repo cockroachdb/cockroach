@@ -2390,6 +2390,7 @@ limit
  │    ├── limit hint: 50.00
  │    ├── prune: (8)
  │    ├── interesting orderings: (+1) (+2) (+3) (+5) (+6) (+7) (+8,+7) (+9,+7) (+10)
+ │    ├── join-size: 5
  │    ├── inner-join (cross)
  │    │    ├── columns: st_id:5(int!null) tt_id:6(int!null) s_symb:7(int!null) s_st_id:8(int!null) s_ex_id:9(int!null) ex_id:10(int!null)
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
