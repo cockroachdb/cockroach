@@ -42,8 +42,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -77,8 +77,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -104,8 +104,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -130,8 +130,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -164,8 +164,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -199,8 +199,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -237,8 +237,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -283,8 +283,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{
@@ -317,8 +317,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := aCol.Get(aValueIdx) //gcassert:inline
-			arg2 := bCol.Get(bValueIdx) //gcassert:inline
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 
 			{

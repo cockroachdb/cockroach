@@ -56,8 +56,8 @@ func (c *BoolVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) 
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
 	if !left && right {
@@ -81,7 +81,7 @@ func (c *BoolVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }
@@ -101,8 +101,8 @@ func (c *BytesVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 	cmp = bytes.Compare(left, right)
 	return cmp
@@ -143,8 +143,8 @@ func (c *DecimalVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 in
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 	cmp = tree.CompareDecimals(&left, &right)
 	return cmp
@@ -160,7 +160,7 @@ func (c *DecimalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx].Set(&v)
 	}
 }
@@ -180,8 +180,8 @@ func (c *Int16VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
 	{
@@ -208,7 +208,7 @@ func (c *Int16VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }
@@ -228,8 +228,8 @@ func (c *Int32VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
 	{
@@ -256,7 +256,7 @@ func (c *Int32VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }
@@ -276,8 +276,8 @@ func (c *Int64VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
 	{
@@ -304,7 +304,7 @@ func (c *Int64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }
@@ -324,8 +324,8 @@ func (c *Float64VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 in
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
 	{
@@ -360,7 +360,7 @@ func (c *Float64VecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int)
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }
@@ -380,8 +380,8 @@ func (c *TimestampVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 
 	if left.Before(right) {
@@ -404,7 +404,7 @@ func (c *TimestampVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx in
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }
@@ -424,8 +424,8 @@ func (c *IntervalVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 i
 	} else if n2 {
 		return 1
 	}
-	left := c.vecs[vecIdx1].Get(valIdx1)  //gcassert:inline
-	right := c.vecs[vecIdx2].Get(valIdx2) //gcassert:inline
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 	cmp = left.Compare(right)
 	return cmp
@@ -441,7 +441,7 @@ func (c *IntervalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx) //gcassert:inline
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx][dstIdx] = v
 	}
 }

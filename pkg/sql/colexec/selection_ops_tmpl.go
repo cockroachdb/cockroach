@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,7 +63,7 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		sel = sel[:n]
 		for _, i := range sel {
 			var cmp bool
-			arg := execgen.UNSAFEGET(col, i)
+			arg := col.Get(i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
@@ -79,10 +78,10 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		_ = execgen.UNSAFEGET(col, n-1)
+		_ = col.Get(n - 1)
 		for i := 0; i < n; i++ {
 			var cmp bool
-			arg := execgen.UNSAFEGET(col, i)
+			arg := col.Get(i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
@@ -109,8 +108,8 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 		sel = sel[:n]
 		for _, i := range sel {
 			var cmp bool
-			arg1 := _L_UNSAFEGET(col1, i)
-			arg2 := _R_UNSAFEGET(col2, i)
+			arg1 := col1.Get(i)
+			arg2 := col2.Get(i)
 			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
@@ -125,12 +124,12 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		_ = _L_UNSAFEGET(col1, n-1)
-		_ = _R_UNSAFEGET(col2, n-1)
+		_ = col1.Get(n - 1)
+		_ = col2.Get(n - 1)
 		for i := 0; i < n; i++ {
 			var cmp bool
-			arg1 := _L_UNSAFEGET(col1, i)
-			arg2 := _R_UNSAFEGET(col2, i)
+			arg1 := col1.Get(i)
+			arg2 := col2.Get(i)
 			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
 			// {{if _HAS_NULLS}}
 			isNull = nulls.NullAt(i)
