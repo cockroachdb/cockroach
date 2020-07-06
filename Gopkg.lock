@@ -464,7 +464,7 @@
 
 [[projects]]
   branch = "crl-release-20.1"
-  digest = "1:f02f152cbec6360abf68b83c9972633023bfafc1005ee3bec8ec7de447b1e51b"
+  digest = "1:eddf94a8f7834a81ea2d9b57660f89da05538443206a23b27c9cdc0a7e6d81ac"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -490,7 +490,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "0ad759a48c93537f21ceeeb1a1f97cb816033433"
+  revision = "0d1d1abf018f106fd3dacdfb84199ac4f9a10ab9"
 
 [[projects]]
   branch = "master"
