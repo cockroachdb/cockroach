@@ -92,6 +92,13 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableConsistencyQueue: true,
+					},
+				},
+			},
 		},
 	)
 
@@ -104,7 +111,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 
 	// Write something to the DB.
 	putArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := kv.SendWrapped(context.Background(), store.TestSender(), putArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), putArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +123,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 			EndKey: []byte("aa"),
 		},
 	}
-	if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
+	if _, err := kv.SendWrappedWith(context.Background(), store.DB().NonTransactionalSender(), roachpb.Header{
 		Timestamp: store.Clock().Now(),
 	}, &checkArgs); err != nil {
 		t.Fatal(err)
@@ -140,7 +147,9 @@ func TestCheckConsistencyReplay(t *testing.T) {
 	}
 	state.applies = map[applyKey]int{}
 
-	testKnobs := kvserver.StoreTestingKnobs{}
+	testKnobs := kvserver.StoreTestingKnobs{
+		DisableConsistencyQueue: true,
+	}
 	// Arrange to count the number of times each checksum command applies to each
 	// store.
 	testKnobs.TestingApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
@@ -191,7 +200,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 		},
 	}
 
-	if _, err := kv.SendWrapped(context.Background(), store.TestSender(), &checkArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), &checkArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Check that the request was evaluated twice (first time when forcedRetry was
@@ -211,11 +220,10 @@ func TestCheckConsistencyReplay(t *testing.T) {
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Skipping as part of test-infra-team flaky test cleanup.
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/50830")
-
 	const numStores = 3
-	testKnobs := kvserver.StoreTestingKnobs{}
+	testKnobs := kvserver.StoreTestingKnobs{
+		DisableConsistencyQueue: true,
+	}
 
 	var tc *testcluster.TestCluster
 
@@ -226,8 +234,13 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	notifyReportDiff := make(chan struct{}, 1)
 	testKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff =
 		func(s roachpb.StoreIdent, diff kvserver.ReplicaSnapshotDiffSlice) {
-			ts := tc.Servers[0]
-			store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+			rangeDesc := tc.LookupRangeOrFatal(t, diffKey)
+			repl, pErr := tc.FindRangeLeaseHolder(rangeDesc, nil)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+			// Servers start at 0, but NodeID starts at 1.
+			store, pErr := tc.Servers[repl.NodeID-1].Stores().GetStore(repl.StoreID)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -312,11 +325,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 	// Write something to the DB.
 	pArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := kv.SendWrapped(context.Background(), store.TestSender(), pArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("c"), []byte("d"))
-	if _, err := kv.SendWrapped(context.Background(), store.TestSender(), pArgs); err != nil {
+	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -329,7 +342,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			},
 			Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
 		}
-		resp, err := kv.SendWrapped(context.Background(), store.TestSender(), &checkArgs)
+		resp, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), &checkArgs)
 		if err != nil {
 			t.Fatal(err)
 		}
