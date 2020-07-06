@@ -1451,6 +1451,171 @@ project
       └── filters
            └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3) [outer=(3), immutable]
 
+opt
+SELECT k FROM g WHERE ST_DWithin('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /3
+      │         │    ├── tight: false
+      │         │    └── union spans: ["\x89", "\xfd ")
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom:3
+      │              ├── inverted constraint: /3/1
+      │              │    └── spans: ["\x89", "\xfd ")
+      │              ├── key: (1)
+      │              └── fd: (1)-->(3)
+      └── filters
+           └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+
+opt
+SELECT k FROM g WHERE ST_DFullyWithin('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /3
+      │         │    ├── tight: false
+      │         │    └── union spans: ["\x89", "\xfd ")
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom:3
+      │              ├── inverted constraint: /3/1
+      │              │    └── spans: ["\x89", "\xfd ")
+      │              ├── key: (1)
+      │              └── fd: (1)-->(3)
+      └── filters
+           └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+
+opt
+SELECT k FROM g WHERE ST_DWithin('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog, 2000)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geog:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join g
+      │    ├── columns: k:1!null geog:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /4
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
+      │         │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
+      │         │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
+      │         │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
+      │         │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
+      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── key: (1)
+      │         └── scan g@geog_idx
+      │              ├── columns: k:1!null geog:4
+      │              ├── inverted constraint: /4/1
+      │              │    └── spans
+      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
+      │              │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
+      │              │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
+      │              │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
+      │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
+      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(4)
+      └── filters
+           └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0) [outer=(4), immutable]
+
+opt
+SELECT k FROM g WHERE ST_DWithin('SRID=4326;POINT(-43.23456 72.4567772)'::geography, geog, 2000, false)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geog:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join g
+      │    ├── columns: k:1!null geog:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /4
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
+      │         │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
+      │         │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
+      │         │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
+      │         │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
+      │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── key: (1)
+      │         └── scan g@geog_idx
+      │              ├── columns: k:1!null geog:4
+      │              ├── inverted constraint: /4/1
+      │              │    └── spans
+      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
+      │              │         ├── ["\xfdF\x00\x00\x00\x00\x00\x00\x01", "\xfdH")
+      │              │         ├── ["\xfdH\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
+      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x01", "\xfdR")
+      │              │         ├── ["\xfdR\x00\x00\x00\x00\x00\x00\x01", "\xfdT")
+      │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
+      │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfdT\x00\x00\x00\x00\x00\x00\x00", "\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(4)
+      └── filters
+           └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable]
+
+
 # Multiple geospatial functions.
 opt
 SELECT k FROM g
