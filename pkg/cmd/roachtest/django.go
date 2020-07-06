@@ -20,7 +20,7 @@ var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
 var djangoSupportedTag = "3.0.6"
-var djangoCockroachDBSupportedTag = "3.0"
+var djangoCockroachDBSupportedTag = "3.0.1"
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(
@@ -112,9 +112,9 @@ func registerDjango(r *testRegistry) {
 			ctx,
 			t.l,
 			c,
-			"https://github.com/django/django/",
+			"https://github.com/timgraham/django/",
 			"/mnt/data1/django",
-			djangoSupportedTag,
+			"cockroach-3.0.x",
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -202,8 +202,7 @@ func registerDjango(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parsePythonUnitTestOutput(fullTestResults, expectedFailureList, ignoredlist)
 		results.summarizeAll(
-			t, "django" /* ormName */, blocklistName,
-			expectedFailureList, version, djangoLatestTag,
+			t, "django" /* ormName */, blocklistName, expectedFailureList, version, djangoSupportedTag,
 		)
 	}
 
