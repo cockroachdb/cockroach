@@ -129,7 +129,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(b coldata.Batch, inputIdxs []uint32
 			// Capture col to force bounds check to work. See
 			// https://github.com/golang/go/issues/39756
 			col := col
-			_ = execgen.UNSAFEGET(col, inputLen-1)
+			_ = col.Get(inputLen - 1)
 			// {{if eq "_AGGKIND" "Ordered"}}
 			groups := a.groups
 			// {{end}}
@@ -239,7 +239,7 @@ func _FIND_ANY_NOT_NULL(
 		// current value is non-null, then we can pick the current value to be
 		// the output.
 		// {{with .Global}}
-		val := execgen.UNSAFEGET(col, i)
+		val := col.Get(i)
 		execgen.COPYVAL(a.curAgg, val)
 		// {{end}}
 		a.foundNonNullForCurrentGroup = true

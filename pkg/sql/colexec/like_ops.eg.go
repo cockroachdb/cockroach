@@ -39,7 +39,7 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -50,10 +50,10 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -67,7 +67,7 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -78,10 +78,10 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -136,7 +136,7 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
 				}
 			}
@@ -144,11 +144,11 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
 				}
 			}
@@ -159,16 +159,16 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = bytes.HasPrefix(arg, p.constArg)
 			}
 		} else {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = bytes.HasPrefix(arg, p.constArg)
 			}
 		}
@@ -212,7 +212,7 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -223,10 +223,10 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -240,7 +240,7 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -251,10 +251,10 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -309,7 +309,7 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
 				}
 			}
@@ -317,11 +317,11 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
 				}
 			}
@@ -332,16 +332,16 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = bytes.HasSuffix(arg, p.constArg)
 			}
 		} else {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = bytes.HasSuffix(arg, p.constArg)
 			}
 		}
@@ -385,7 +385,7 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -396,10 +396,10 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -413,7 +413,7 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
 					isNull = false
 					if cmp && !isNull {
@@ -424,10 +424,10 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
 					isNull = false
 					if cmp && !isNull {
@@ -482,7 +482,7 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = p.constArg.Match(arg)
 				}
 			}
@@ -490,11 +490,11 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = p.constArg.Match(arg)
 				}
 			}
@@ -505,16 +505,16 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = p.constArg.Match(arg)
 			}
 		} else {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = p.constArg.Match(arg)
 			}
 		}
@@ -558,7 +558,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -569,10 +569,10 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -586,7 +586,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -597,10 +597,10 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -655,7 +655,7 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 				}
 			}
@@ -663,11 +663,11 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 				}
 			}
@@ -678,16 +678,16 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 			}
 		} else {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 			}
 		}
@@ -731,7 +731,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -742,10 +742,10 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -759,7 +759,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -770,10 +770,10 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
 					isNull = false
 					if cmp && !isNull {
@@ -828,7 +828,7 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 				}
 			}
@@ -836,11 +836,11 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 				}
 			}
@@ -851,16 +851,16 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 			}
 		} else {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 			}
 		}
@@ -904,7 +904,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -915,10 +915,10 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
 					isNull = nulls.NullAt(i)
 					if cmp && !isNull {
@@ -932,7 +932,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 				sel = sel[:n]
 				for _, i := range sel {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
 					isNull = false
 					if cmp && !isNull {
@@ -943,10 +943,10 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			} else {
 				batch.SetSelection(true)
 				sel := batch.Selection()
-				_ = col.Get(n - 1) //gcassert:inline
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					var cmp bool
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
 					isNull = false
 					if cmp && !isNull {
@@ -1001,7 +1001,7 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			for _, i := range sel {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = !p.constArg.Match(arg)
 				}
 			}
@@ -1009,11 +1009,11 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if !colNulls.NullAt(i) {
 					// We only want to perform the projection operation if the value is not null.
-					arg := col.Get(i) //gcassert:inline
+					arg := col.Get(i)
 					projCol[i] = !p.constArg.Match(arg)
 				}
 			}
@@ -1024,16 +1024,16 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = !p.constArg.Match(arg)
 			}
 		} else {
 			col = col
 			_ = 0
 			_ = n
-			_ = projCol.Get(n - 1) //gcassert:inline
+			_ = projCol.Get(n - 1)
 			for i := 0; i < n; i++ {
-				arg := col.Get(i) //gcassert:inline
+				arg := col.Get(i)
 				projCol[i] = !p.constArg.Match(arg)
 			}
 		}

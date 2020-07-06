@@ -41,28 +41,44 @@ type Times []time.Time
 // Durations is a slice of duration.Duration.
 type Durations []duration.Duration
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Bools) Get(idx int) bool { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Int16s) Get(idx int) int16 { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Int32s) Get(idx int) int32 { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Int64s) Get(idx int) int64 { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Float64s) Get(idx int) float64 { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Decimals) Get(idx int) apd.Decimal { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Times) Get(idx int) time.Time { return c[idx] }
 
-// Get returns the element at index idx of the vector.
+// Get returns the element at index idx of the vector. The element cannot be
+// used anymore once the vector is modified.
+//gcassert:inline
 func (c Durations) Get(idx int) duration.Duration { return c[idx] }
 
 // Len returns the length of the vector.

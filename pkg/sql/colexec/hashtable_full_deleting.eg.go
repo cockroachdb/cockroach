@@ -91,8 +91,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -144,8 +144,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -197,8 +197,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -251,8 +251,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -302,8 +302,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -373,8 +373,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -426,8 +426,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -479,8 +479,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -533,8 +533,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -584,8 +584,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -670,8 +670,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -715,8 +715,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -760,8 +760,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -806,8 +806,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -849,8 +849,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -912,8 +912,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -957,8 +957,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1002,8 +1002,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1048,8 +1048,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1091,8 +1091,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1168,8 +1168,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1219,8 +1219,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1270,8 +1270,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1322,8 +1322,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1371,8 +1371,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1440,8 +1440,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1491,8 +1491,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1542,8 +1542,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1594,8 +1594,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1643,8 +1643,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1716,8 +1716,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1767,8 +1767,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -1818,8 +1818,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1870,8 +1870,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1919,8 +1919,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -1988,8 +1988,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2039,8 +2039,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2090,8 +2090,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2142,8 +2142,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2191,8 +2191,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2265,8 +2265,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2316,8 +2316,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2367,8 +2367,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2419,8 +2419,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2468,8 +2468,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2537,8 +2537,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2588,8 +2588,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2639,8 +2639,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2691,8 +2691,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2740,8 +2740,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2817,8 +2817,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2870,8 +2870,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -2923,8 +2923,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -2977,8 +2977,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3028,8 +3028,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3099,8 +3099,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3152,8 +3152,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3205,8 +3205,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3259,8 +3259,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3310,8 +3310,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3389,8 +3389,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3434,8 +3434,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3479,8 +3479,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3525,8 +3525,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3568,8 +3568,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3631,8 +3631,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3676,8 +3676,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3721,8 +3721,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3767,8 +3767,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3810,8 +3810,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -3886,8 +3886,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3942,8 +3942,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -3998,8 +3998,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4055,8 +4055,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4109,8 +4109,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4183,8 +4183,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -4239,8 +4239,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -4295,8 +4295,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4352,8 +4352,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4406,8 +4406,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4484,8 +4484,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -4540,8 +4540,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -4596,8 +4596,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4653,8 +4653,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4707,8 +4707,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4781,8 +4781,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -4837,8 +4837,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -4893,8 +4893,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -4950,8 +4950,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5004,8 +5004,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5083,8 +5083,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -5139,8 +5139,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -5195,8 +5195,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5252,8 +5252,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5306,8 +5306,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5380,8 +5380,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -5436,8 +5436,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -5492,8 +5492,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5549,8 +5549,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5603,8 +5603,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5685,8 +5685,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -5749,8 +5749,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -5813,8 +5813,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5878,8 +5878,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -5940,8 +5940,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6022,8 +6022,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6086,8 +6086,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6150,8 +6150,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6215,8 +6215,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6277,8 +6277,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6367,8 +6367,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6418,8 +6418,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6469,8 +6469,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6521,8 +6521,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6570,8 +6570,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6639,8 +6639,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6690,8 +6690,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6741,8 +6741,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6793,8 +6793,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6842,8 +6842,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -6921,8 +6921,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -6977,8 +6977,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7033,8 +7033,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7090,8 +7090,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7144,8 +7144,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7218,8 +7218,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7274,8 +7274,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7330,8 +7330,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7387,8 +7387,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7441,8 +7441,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7519,8 +7519,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7575,8 +7575,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7631,8 +7631,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7688,8 +7688,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7742,8 +7742,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7816,8 +7816,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7872,8 +7872,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -7928,8 +7928,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -7985,8 +7985,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8039,8 +8039,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8118,8 +8118,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -8174,8 +8174,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -8230,8 +8230,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8287,8 +8287,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8341,8 +8341,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8415,8 +8415,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -8471,8 +8471,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -8527,8 +8527,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8584,8 +8584,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8638,8 +8638,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8720,8 +8720,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -8784,8 +8784,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -8848,8 +8848,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8913,8 +8913,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -8975,8 +8975,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9057,8 +9057,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -9121,8 +9121,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -9185,8 +9185,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9250,8 +9250,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9312,8 +9312,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9402,8 +9402,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -9453,8 +9453,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -9504,8 +9504,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9556,8 +9556,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9605,8 +9605,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9674,8 +9674,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -9725,8 +9725,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -9776,8 +9776,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9828,8 +9828,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9877,8 +9877,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -9957,8 +9957,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10013,8 +10013,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10069,8 +10069,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10126,8 +10126,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10180,8 +10180,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10254,8 +10254,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10310,8 +10310,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10366,8 +10366,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10423,8 +10423,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10477,8 +10477,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10555,8 +10555,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10611,8 +10611,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10667,8 +10667,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10724,8 +10724,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10778,8 +10778,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -10852,8 +10852,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10908,8 +10908,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -10964,8 +10964,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11021,8 +11021,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11075,8 +11075,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11154,8 +11154,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -11210,8 +11210,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -11266,8 +11266,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11323,8 +11323,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11377,8 +11377,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11451,8 +11451,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -11507,8 +11507,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -11563,8 +11563,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11620,8 +11620,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11674,8 +11674,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11756,8 +11756,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -11820,8 +11820,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -11884,8 +11884,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -11949,8 +11949,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12011,8 +12011,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12093,8 +12093,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -12157,8 +12157,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -12221,8 +12221,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12286,8 +12286,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12348,8 +12348,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12438,8 +12438,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -12489,8 +12489,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -12540,8 +12540,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12592,8 +12592,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12641,8 +12641,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12710,8 +12710,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -12761,8 +12761,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -12812,8 +12812,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12864,8 +12864,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12913,8 +12913,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -12996,8 +12996,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -13060,8 +13060,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -13124,8 +13124,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13189,8 +13189,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13251,8 +13251,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13333,8 +13333,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -13397,8 +13397,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -13461,8 +13461,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13526,8 +13526,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13588,8 +13588,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13674,8 +13674,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -13738,8 +13738,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -13802,8 +13802,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13867,8 +13867,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -13929,8 +13929,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14011,8 +14011,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -14075,8 +14075,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -14139,8 +14139,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14204,8 +14204,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14266,8 +14266,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14353,8 +14353,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -14417,8 +14417,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -14481,8 +14481,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14546,8 +14546,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14608,8 +14608,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14690,8 +14690,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -14754,8 +14754,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -14818,8 +14818,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14883,8 +14883,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -14945,8 +14945,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15035,8 +15035,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -15099,8 +15099,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -15163,8 +15163,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15228,8 +15228,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15290,8 +15290,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15372,8 +15372,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -15436,8 +15436,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -15500,8 +15500,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15565,8 +15565,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15627,8 +15627,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15717,8 +15717,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -15770,8 +15770,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -15823,8 +15823,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15877,8 +15877,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15928,8 +15928,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -15999,8 +15999,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16052,8 +16052,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16105,8 +16105,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16159,8 +16159,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16210,8 +16210,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16296,8 +16296,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16348,8 +16348,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16400,8 +16400,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16453,8 +16453,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16503,8 +16503,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16573,8 +16573,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16625,8 +16625,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16677,8 +16677,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16730,8 +16730,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16780,8 +16780,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -16865,8 +16865,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16910,8 +16910,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -16955,8 +16955,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -17001,8 +17001,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -17044,8 +17044,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -17107,8 +17107,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -17152,8 +17152,8 @@ func (ht *hashTable) checkColDeleting(
 											} else if buildIsNull {
 												ht.probeScratch.differs[toCheck] = true
 											} else {
-												probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-												buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+												probeVal := probeKeys.Get(probeIdx)
+												buildVal := buildKeys.Get(buildIdx)
 												var unique bool
 
 												{
@@ -17197,8 +17197,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -17243,8 +17243,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{
@@ -17286,8 +17286,8 @@ func (ht *hashTable) checkColDeleting(
 										} else if buildIsNull {
 											ht.probeScratch.differs[toCheck] = true
 										} else {
-											probeVal := probeKeys.Get(probeIdx) //gcassert:inline
-											buildVal := buildKeys.Get(buildIdx) //gcassert:inline
+											probeVal := probeKeys.Get(probeIdx)
+											buildVal := buildKeys.Get(buildIdx)
 											var unique bool
 
 											{

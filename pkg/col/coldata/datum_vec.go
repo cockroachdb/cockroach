@@ -19,7 +19,8 @@ type Datum interface{}
 // tree.Datums in the vectorized engine. In order to avoid import of 'tree'
 // package the implementation of DatumVec lives in 'coldataext' package.
 type DatumVec interface {
-	// Get returns the datum at index i in the vector.
+	// Get returns the datum at index i in the vector. The datum cannot be used
+	// anymore once the vector is modified.
 	Get(i int) Datum
 	// Set sets the datum at index i in the vector. It must check whether the
 	// provided datum is compatible with the type that the DatumVec stores.

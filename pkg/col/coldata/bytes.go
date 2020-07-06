@@ -105,6 +105,7 @@ func (b *Bytes) maybeBackfillOffsets(i int) {
 // unsafe for reuse if any write operation happens.
 // NOTE: if ith element was never set in any way, the behavior of Get is
 // undefined.
+//gcassert:inline
 func (b *Bytes) Get(i int) []byte {
 	return b.data[b.offsets[i]:b.offsets[i+1]]
 }

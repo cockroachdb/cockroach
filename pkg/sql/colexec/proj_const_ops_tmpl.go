@@ -58,12 +58,6 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 	colexecerror.InternalError("")
 }
 
-// _RETURN_UNSAFEGET is the template function that will be replaced by
-// "execgen.UNSAFEGET" which uses _RET_TYP.
-func _RETURN_UNSAFEGET(_, _ interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
 // */}}
 
 // {{define "projConstOp"}}
@@ -136,7 +130,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		}
 	} else {
 		col = execgen.SLICE(col, 0, n)
-		_ = _RETURN_UNSAFEGET(projCol, n-1)
+		_ = projCol.Get(n - 1)
 		for i := 0; i < n; i++ {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
@@ -161,7 +155,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 	if !colNulls.NullAt(i) {
 		// We only want to perform the projection operation if the value is not null.
 		// {{end}}
-		arg := execgen.UNSAFEGET(col, i)
+		arg := col.Get(i)
 		// {{if _IS_CONST_LEFT}}
 		_ASSIGN(projCol[i], p.constArg, arg, projCol, _, col)
 		// {{else}}

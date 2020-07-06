@@ -126,7 +126,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -138,7 +138,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -160,7 +160,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -168,7 +168,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -192,11 +192,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -218,11 +218,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -255,7 +255,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -267,7 +267,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -281,7 +281,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -289,7 +289,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -305,11 +305,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -323,11 +323,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -352,7 +352,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -364,7 +364,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -378,7 +378,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -386,7 +386,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -402,11 +402,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -420,11 +420,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -448,7 +448,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -460,7 +460,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -485,7 +485,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -493,7 +493,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -520,11 +520,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -549,11 +549,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -585,7 +585,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -597,7 +597,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -622,7 +622,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -630,7 +630,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -657,11 +657,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -686,11 +686,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -723,7 +723,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -735,7 +735,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -760,7 +760,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -768,7 +768,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -795,11 +795,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -824,11 +824,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -864,7 +864,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -876,7 +876,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -909,7 +909,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -917,7 +917,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -952,11 +952,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -989,11 +989,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1037,7 +1037,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -1049,7 +1049,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1070,7 +1070,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -1078,7 +1078,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1101,11 +1101,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1126,11 +1126,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1162,7 +1162,7 @@ func (v hashAggFuncs) match(
 					if lhsHasNull {
 						lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								rhsNull := rhs.Nulls().NullAt(rowIdx)
@@ -1174,7 +1174,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1188,7 +1188,7 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 								if lhsNull {
@@ -1196,7 +1196,7 @@ func (v hashAggFuncs) match(
 									continue
 								}
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1212,11 +1212,11 @@ func (v hashAggFuncs) match(
 						}
 					} else {
 						if rhsHasNull {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 
@@ -1230,11 +1230,11 @@ func (v hashAggFuncs) match(
 							}
 
 						} else {
-							lhsVal := lhsCol.Get(aggKeyIdx) //gcassert:inline
+							lhsVal := lhsCol.Get(aggKeyIdx)
 
 							for selIdx, rowIdx := range sel {
 
-								rhsVal := rhsCol.Get(rowIdx) //gcassert:inline
+								rhsVal := rhsCol.Get(rowIdx)
 
 								var cmp bool
 

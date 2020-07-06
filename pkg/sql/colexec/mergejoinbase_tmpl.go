@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -90,9 +89,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].TemplateType()
-				prevVal := execgen.UNSAFEGET(bufferedCol, 0)
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).TemplateType()
-				curVal := execgen.UNSAFEGET(col, tupleToLookAtIdx)
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 				_ASSIGN_EQ(match, prevVal, curVal, _, bufferedCol, col)
 				if !match {

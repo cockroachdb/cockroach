@@ -92,7 +92,7 @@ require (
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jaegertracing/jaeger v1.17.0
 	github.com/jcmturner/gofork v1.0.0 // indirect
-	github.com/jordanlewis/gcassert v0.0.0-20200630054945-8ff878e72753
+	github.com/jordanlewis/gcassert v0.0.0-20200706043056-bf61eb72ee48
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.2.0
 	github.com/kisielk/gotool v1.0.0
@@ -154,7 +154,7 @@ require (
 	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae
 	golang.org/x/text v0.3.2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20200626171337-aa94e735be7f
+	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
 	google.golang.org/api v0.1.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
 	google.golang.org/grpc v1.29.1

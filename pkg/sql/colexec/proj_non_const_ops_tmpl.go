@@ -54,24 +54,6 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 	colexecerror.InternalError("")
 }
 
-// _L_UNSAFEGET is the template function that will be replaced by
-// "execgen.UNSAFEGET" which uses _L_TYP.
-func _L_UNSAFEGET(_, _ interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
-// _R_UNSAFEGET is the template function that will be replaced by
-// "execgen.UNSAFEGET" which uses _R_TYP.
-func _R_UNSAFEGET(_, _ interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
-// _RETURN_UNSAFEGET is the template function that will be replaced by
-// "execgen.UNSAFEGET" which uses _RET_TYP.
-func _RETURN_UNSAFEGET(_, _ interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
 // */}}
 
 // projConstOpBase contains all of the fields for projections with a constant,
@@ -166,8 +148,8 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		// types, we simply omit this code snippet for Bytes. */}}
 		col1 = execgen.SLICE(col1, 0, n)
 		colLen := col1.Len()
-		_ = _RETURN_UNSAFEGET(projCol, colLen-1)
-		_ = _R_UNSAFEGET(col2, colLen-1)
+		_ = projCol.Get(colLen - 1)
+		_ = col2.Get(colLen - 1)
 		// {{end}}
 		for i := 0; i < n; i++ {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
@@ -193,8 +175,8 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 		// We only want to perform the projection operation if both values are not
 		// null.
 		// {{end}}
-		arg1 := _L_UNSAFEGET(col1, i)
-		arg2 := _R_UNSAFEGET(col2, i)
+		arg1 := col1.Get(i)
+		arg2 := col2.Get(i)
 		_ASSIGN(projCol[i], arg1, arg2, projCol, col1, col2)
 		// {{if _HAS_NULLS}}
 	}

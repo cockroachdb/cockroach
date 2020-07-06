@@ -245,7 +245,7 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = execgen.UNSAFEGET(col, n-1)
+			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
 			}
@@ -259,7 +259,7 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 			// Eliminate bounds checks for outputCol[idx].
 			_ = outputCol[n-1]
 			// Eliminate bounds checks for col[idx].
-			_ = execgen.UNSAFEGET(col, n-1)
+			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
 			}
@@ -294,7 +294,7 @@ func (p partitioner_TYPE) partitionWithOrder(
 	// Eliminate bounds checks for outputcol[outputIdx].
 	_ = outputCol[len(order)-1]
 	// Eliminate bounds checks for col[outputIdx].
-	_ = execgen.UNSAFEGET(col, len(order)-1)
+	_ = col.Get(len(order) - 1)
 	outputCol[0] = true
 	if nulls != nil {
 		for outputIdx, checkIdx := range order {
@@ -318,7 +318,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	}
 
 	col := colVec.TemplateType()
-	_ = execgen.UNSAFEGET(col, n-1)
+	_ = col.Get(n - 1)
 	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
@@ -343,7 +343,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 func checkDistinct(
 	checkIdx int, outputIdx int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool,
 ) _GOTYPE {
-	v := execgen.UNSAFEGET(col, checkIdx)
+	v := col.Get(checkIdx)
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal, _, col, _)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
@@ -371,7 +371,7 @@ func checkDistinctWithNulls(
 			outputCol[outputIdx] = true
 		}
 	} else {
-		v := execgen.UNSAFEGET(col, checkIdx)
+		v := col.Get(checkIdx)
 		if lastValNull {
 			// The previous value was null while the current is not.
 			outputCol[outputIdx] = true

@@ -45,18 +45,6 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 	colexecerror.InternalError("")
 }
 
-// _L_UNSAFEGET is the template function that will be replaced by
-// "execgen.UNSAFEGET" which uses _L_TYP.
-func _L_UNSAFEGET(_, _ interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
-// _R_UNSAFEGET is the template function that will be replaced by
-// "execgen.UNSAFEGET" which uses _R_TYP.
-func _R_UNSAFEGET(_, _ interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
 // This is a code snippet that is the main body of checkCol* functions. It
 // takes in the following template "meta" variables that enable/disable certain
 // code paths:
@@ -160,8 +148,8 @@ func _CHECK_COL_BODY(
 			} else if buildIsNull {
 				ht.probeScratch.differs[toCheck] = true
 			} else {
-				probeVal := _L_UNSAFEGET(probeKeys, probeIdx)
-				buildVal := _R_UNSAFEGET(buildKeys, buildIdx)
+				probeVal := probeKeys.Get(probeIdx)
+				buildVal := buildKeys.Get(buildIdx)
 				var unique bool
 				_ASSIGN_NE(unique, probeVal, buildVal, _, probeKeys, buildKeys)
 				ht.probeScratch.differs[toCheck] = ht.probeScratch.differs[toCheck] || unique
