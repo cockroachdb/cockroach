@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -103,7 +102,7 @@ func _MATCH_LOOP(
 ) { // */}}
 	// {{define "matchLoop" -}}
 
-	lhsVal := execgen.UNSAFEGET(lhsCol, aggKeyIdx)
+	lhsVal := lhsCol.Get(aggKeyIdx)
 
 	for selIdx, rowIdx := range sel {
 		// {{if .LhsMaybeHasNulls}}
@@ -124,7 +123,7 @@ func _MATCH_LOOP(
 		// {{end}}
 		// {{end}}
 
-		rhsVal := execgen.UNSAFEGET(rhsCol, rowIdx)
+		rhsVal := rhsCol.Get(rowIdx)
 
 		var cmp bool
 		_ASSIGN_NE(cmp, lhsVal, rhsVal, _, lhsCol, rhsCol)

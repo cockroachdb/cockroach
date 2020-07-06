@@ -24,7 +24,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,7 +65,7 @@ func _REHASH_BODY(
 	// {{if .HasSel}}
 	_ = sel[nKeys-1]
 	// {{else}}
-	_ = execgen.UNSAFEGET(keys, nKeys-1)
+	_ = keys.Get(nKeys - 1)
 	// {{end}}
 	var selIdx int
 	for i := 0; i < nKeys; i++ {
@@ -81,7 +80,7 @@ func _REHASH_BODY(
 			continue
 		}
 		// {{end}}
-		v := execgen.UNSAFEGET(keys, selIdx)
+		v := keys.Get(selIdx)
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v, _, keys)
 		buckets[i] = uint64(p)

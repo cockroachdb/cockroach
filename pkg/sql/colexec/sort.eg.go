@@ -425,8 +425,8 @@ func (s *sortBoolAscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -503,8 +503,8 @@ func (s *sortBytesAscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -573,8 +573,8 @@ func (s *sortDecimalAscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -643,8 +643,8 @@ func (s *sortInt16AscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -724,8 +724,8 @@ func (s *sortInt32AscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -805,8 +805,8 @@ func (s *sortInt64AscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -886,8 +886,8 @@ func (s *sortFloat64AscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -975,8 +975,8 @@ func (s *sortTimestampAscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1052,8 +1052,8 @@ func (s *sortIntervalAscWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1194,8 +1194,8 @@ func (s *sortBoolDescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1272,8 +1272,8 @@ func (s *sortBytesDescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1342,8 +1342,8 @@ func (s *sortDecimalDescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1412,8 +1412,8 @@ func (s *sortInt16DescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1493,8 +1493,8 @@ func (s *sortInt32DescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1574,8 +1574,8 @@ func (s *sortInt64DescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1655,8 +1655,8 @@ func (s *sortFloat64DescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1744,8 +1744,8 @@ func (s *sortTimestampDescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1821,8 +1821,8 @@ func (s *sortIntervalDescWithNullsOp) Less(i, j int) bool {
 	}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -1953,8 +1953,8 @@ func (s *sortBoolAscOp) sortPartitions(ctx context.Context, partitions []int) {
 func (s *sortBoolAscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2021,8 +2021,8 @@ func (s *sortBytesAscOp) sortPartitions(ctx context.Context, partitions []int) {
 func (s *sortBytesAscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2081,8 +2081,8 @@ func (s *sortDecimalAscOp) sortPartitions(ctx context.Context, partitions []int)
 func (s *sortDecimalAscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2141,8 +2141,8 @@ func (s *sortInt16AscOp) sortPartitions(ctx context.Context, partitions []int) {
 func (s *sortInt16AscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2212,8 +2212,8 @@ func (s *sortInt32AscOp) sortPartitions(ctx context.Context, partitions []int) {
 func (s *sortInt32AscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2283,8 +2283,8 @@ func (s *sortInt64AscOp) sortPartitions(ctx context.Context, partitions []int) {
 func (s *sortInt64AscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2354,8 +2354,8 @@ func (s *sortFloat64AscOp) sortPartitions(ctx context.Context, partitions []int)
 func (s *sortFloat64AscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2433,8 +2433,8 @@ func (s *sortTimestampAscOp) sortPartitions(ctx context.Context, partitions []in
 func (s *sortTimestampAscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2500,8 +2500,8 @@ func (s *sortIntervalAscOp) sortPartitions(ctx context.Context, partitions []int
 func (s *sortIntervalAscOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2622,8 +2622,8 @@ func (s *sortBoolDescOp) sortPartitions(ctx context.Context, partitions []int) {
 func (s *sortBoolDescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2690,8 +2690,8 @@ func (s *sortBytesDescOp) sortPartitions(ctx context.Context, partitions []int) 
 func (s *sortBytesDescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2750,8 +2750,8 @@ func (s *sortDecimalDescOp) sortPartitions(ctx context.Context, partitions []int
 func (s *sortDecimalDescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2810,8 +2810,8 @@ func (s *sortInt16DescOp) sortPartitions(ctx context.Context, partitions []int) 
 func (s *sortInt16DescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2881,8 +2881,8 @@ func (s *sortInt32DescOp) sortPartitions(ctx context.Context, partitions []int) 
 func (s *sortInt32DescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -2952,8 +2952,8 @@ func (s *sortInt64DescOp) sortPartitions(ctx context.Context, partitions []int) 
 func (s *sortInt64DescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -3023,8 +3023,8 @@ func (s *sortFloat64DescOp) sortPartitions(ctx context.Context, partitions []int
 func (s *sortFloat64DescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -3102,8 +3102,8 @@ func (s *sortTimestampDescOp) sortPartitions(ctx context.Context, partitions []i
 func (s *sortTimestampDescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
@@ -3169,8 +3169,8 @@ func (s *sortIntervalDescOp) sortPartitions(ctx context.Context, partitions []in
 func (s *sortIntervalDescOp) Less(i, j int) bool {
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := s.sortCol.Get(s.order[i]) //gcassert:inline
-	arg2 := s.sortCol.Get(s.order[j]) //gcassert:inline
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int

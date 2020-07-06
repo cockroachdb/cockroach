@@ -37,7 +37,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -73,7 +73,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				}
 				fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol.AppendVal(val)
 				}
 			}
@@ -115,7 +115,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, apd.Decimal{})
 					toCol[len(toCol)-1].Set(&val)
 				}
@@ -138,7 +138,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -157,7 +157,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -177,7 +177,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -200,7 +200,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -223,7 +223,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -246,7 +246,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
 				toCol = toCol[0:args.DestIdx]
 				for _, selIdx := range sel {
-					val := fromCol.Get(selIdx) //gcassert:inline
+					val := fromCol.Get(selIdx)
 					toCol = append(toCol, val)
 				}
 			}
@@ -309,7 +309,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -319,7 +319,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -329,7 +329,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -338,7 +338,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -365,7 +365,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol.Set(selIdx, v)
 							}
@@ -375,7 +375,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol.Set(selIdx, v)
 					}
 				} else {
@@ -385,7 +385,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol.Set(i+args.DestIdx, v)
 							}
 						}
@@ -394,7 +394,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol.Set(i+args.DestIdx, v)
 					}
 				}
@@ -421,7 +421,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx].Set(&v)
 							}
@@ -431,7 +431,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx].Set(&v)
 					}
 				} else {
@@ -441,7 +441,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx].Set(&v)
 							}
 						}
@@ -450,7 +450,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx].Set(&v)
 					}
 				}
@@ -482,7 +482,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -492,7 +492,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -502,7 +502,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -511,7 +511,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -534,7 +534,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -544,7 +544,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -554,7 +554,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -563,7 +563,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -587,7 +587,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -597,7 +597,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -607,7 +607,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -616,7 +616,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -643,7 +643,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -653,7 +653,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -663,7 +663,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -672,7 +672,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -699,7 +699,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -709,7 +709,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -719,7 +719,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -728,7 +728,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -755,7 +755,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 								_ = i
 								m.nulls.SetNull(selIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								m.nulls.UnsetNull(selIdx)
 								toCol[selIdx] = v
 							}
@@ -765,7 +765,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[selIdx] = v
 					}
 				} else {
@@ -775,7 +775,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 							if nulls.NullAt(selIdx) {
 								m.nulls.SetNull(i + args.DestIdx)
 							} else {
-								v := fromCol.Get(selIdx) //gcassert:inline
+								v := fromCol.Get(selIdx)
 								toCol[i+args.DestIdx] = v
 							}
 						}
@@ -784,7 +784,7 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 					// No Nulls.
 					for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 						selIdx := sel[args.SrcStartIdx+i]
-						v := fromCol.Get(selIdx) //gcassert:inline
+						v := fromCol.Get(selIdx)
 						toCol[i+args.DestIdx] = v
 					}
 				}
@@ -1064,55 +1064,55 @@ func GetValueAt(v Vec, rowIdx int) interface{} {
 		case -1:
 		default:
 			target := v.Bool()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case types.BytesFamily:
 		switch t.Width() {
 		case -1:
 		default:
 			target := v.Bytes()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case types.DecimalFamily:
 		switch t.Width() {
 		case -1:
 		default:
 			target := v.Decimal()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
 			target := v.Int16()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		case 32:
 			target := v.Int32()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		case -1:
 		default:
 			target := v.Int64()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case types.FloatFamily:
 		switch t.Width() {
 		case -1:
 		default:
 			target := v.Float64()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case types.TimestampTZFamily:
 		switch t.Width() {
 		case -1:
 		default:
 			target := v.Timestamp()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case types.IntervalFamily:
 		switch t.Width() {
 		case -1:
 		default:
 			target := v.Interval()
-			return target.Get(rowIdx) //gcassert:inline
+			return target.Get(rowIdx)
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {

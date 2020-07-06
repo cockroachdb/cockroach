@@ -269,12 +269,12 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 	// {{with .Global}}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
-			val := execgen.UNSAFEGET(col, i)
+			val := col.Get(i)
 			_COPYVAL_MAYBE_CAST(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
-			candidate := execgen.UNSAFEGET(col, i)
+			candidate := col.Get(i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
 				_COPYVAL_MAYBE_CAST(a.curAgg, candidate)

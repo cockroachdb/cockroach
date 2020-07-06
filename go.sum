@@ -374,8 +374,8 @@ github.com/jcmturner/gofork v1.0.0/go.mod h1:MK8+TM0La+2rjBD4jE12Kj1pCCxK7d2LK/U
 github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af h1:pmfjZENx5imkbgOkpRUYLnmbU7UEFbjtDA2hxJ1ichM=
 github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af/go.mod h1:Nht3zPeWKUH0NzdCt2Blrr5ys8VGpn0CEB0cQHVjt7k=
 github.com/jonboulle/clockwork v0.1.0/go.mod h1:Ii8DK3G1RaLaWxj9trq07+26W01tbo22gdxWY5EU2bo=
-github.com/jordanlewis/gcassert v0.0.0-20200630054945-8ff878e72753 h1:FXipXC++4uw5v41AxCRFoxoGnQJBuEsObAy9q3a8uww=
-github.com/jordanlewis/gcassert v0.0.0-20200630054945-8ff878e72753/go.mod h1:Qc93dJSt1iLNJCuG9Gy9ds0k/oh4ckhXGkD4AI3cEtM=
+github.com/jordanlewis/gcassert v0.0.0-20200706043056-bf61eb72ee48 h1:d1Ov7s7RbMdHcgE1Eh1CxR+yd2TTKYOCHZf92Tm/fLs=
+github.com/jordanlewis/gcassert v0.0.0-20200706043056-bf61eb72ee48/go.mod h1:Qc93dJSt1iLNJCuG9Gy9ds0k/oh4ckhXGkD4AI3cEtM=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/json-iterator/go v1.1.7/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=
 github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfVYBRgL+9YlvaHOwJU=
@@ -742,6 +742,8 @@ golang.org/x/tools v0.0.0-20200509030707-2212a7e161a5 h1:MeC2gMlMdkd67dn17MEby3r
 golang.org/x/tools v0.0.0-20200509030707-2212a7e161a5/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
 golang.org/x/tools v0.0.0-20200626171337-aa94e735be7f h1:JcoF/bowzCDI+MXu1yLqQGNO3ibqWsWq+Sk7pOT218w=
 golang.org/x/tools v0.0.0-20200626171337-aa94e735be7f/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
+golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347 h1:/e4fNMHdLn7SQSxTrRZTma2xjQW6ELdxcnpqMhpo9X4=
+golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 h1:E7g+9GITq07hpfrRu66IVDexMakfv52eLZ2CXBWiKr4=

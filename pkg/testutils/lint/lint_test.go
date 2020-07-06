@@ -1626,7 +1626,7 @@ func TestLint(t *testing.T) {
 	t.Run("TestGCAssert", func(t *testing.T) {
 		t.Parallel()
 		var buf strings.Builder
-		if err := gcassert.GCAssert("../../sql/colexec", &buf); err != nil {
+		if err := gcassert.GCAssert(&buf, "../../col/coldata", "../../sql/colexec"); err != nil {
 			t.Fatal(err)
 		}
 		output := buf.String()

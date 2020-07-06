@@ -59,16 +59,6 @@ func _CAST(to, from, fromCol interface{}) {
 	colexecerror.InternalError("")
 }
 
-// This will be replaced with execgen.UNSAFEGET.
-func _L_UNSAFEGET(to, from interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
-// This will be replaced with execgen.UNSAFEGET.
-func _R_UNSAFEGET(to, from interface{}) interface{} {
-	colexecerror.InternalError("")
-}
-
 // This will be replaced with execgen.SET.
 func _R_SET(to, from interface{}) {
 	colexecerror.InternalError("")
@@ -106,7 +96,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := _L_UNSAFEGET(inputCol, i)
+									v := inputCol.Get(i)
 									var r _R_GO_TYPE
 									_CAST(r, v, inputCol)
 									_R_SET(outputCol, i, r)
@@ -115,13 +105,13 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = _L_SLICE(inputCol, 0, n)
-							_ = _L_UNSAFEGET(inputCol, n-1)
-							_ = _R_UNSAFEGET(outputCol, n-1)
+							_ = inputCol.Get(n - 1)
+							_ = outputCol.Get(n - 1)
 							for i := 0; i < n; i++ {
 								if inputNulls.NullAt(i) {
 									outputNulls.SetNull(i)
 								} else {
-									v := _L_UNSAFEGET(inputCol, i)
+									v := inputCol.Get(i)
 									var r _R_GO_TYPE
 									_CAST(r, v, inputCol)
 									_R_SET(outputCol, i, r)
@@ -132,7 +122,7 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						if sel != nil {
 							sel = sel[:n]
 							for _, i := range sel {
-								v := _L_UNSAFEGET(inputCol, i)
+								v := inputCol.Get(i)
 								var r _R_GO_TYPE
 								_CAST(r, v, inputCol)
 								_R_SET(outputCol, i, r)
@@ -140,10 +130,10 @@ func cast(inputVec, outputVec coldata.Vec, n int, sel []int) {
 						} else {
 							// Remove bounds checks for inputCol[i] and outputCol[i].
 							inputCol = _L_SLICE(inputCol, 0, n)
-							_ = _L_UNSAFEGET(inputCol, n-1)
-							_ = _R_UNSAFEGET(outputCol, n-1)
+							_ = inputCol.Get(n - 1)
+							_ = outputCol.Get(n - 1)
 							for i := 0; i < n; i++ {
-								v := _L_UNSAFEGET(inputCol, i)
+								v := inputCol.Get(i)
 								var r _R_GO_TYPE
 								_CAST(r, v, inputCol)
 								_R_SET(outputCol, i, r)

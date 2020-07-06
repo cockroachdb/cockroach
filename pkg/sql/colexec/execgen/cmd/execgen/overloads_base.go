@@ -450,26 +450,6 @@ func (b *argWidthOverloadBase) GoTypeSliceName() string {
 	return goTypeSliceName(b.CanonicalTypeFamily, b.Width)
 }
 
-func get(family types.Family, target, i string) string {
-	// Assert that the .Get call is inlined by Go, except in the case
-	// of the DatumVec .Get which isn't inlinable.
-	maybeInline := " //gcassert:inline"
-	if family == typeconv.DatumVecCanonicalTypeFamily {
-		maybeInline = ""
-	}
-	return fmt.Sprintf("%s.Get(%s)%s", target, i, maybeInline)
-}
-
-// Get is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Get(target, i string) string {
-	return get(b.CanonicalTypeFamily, target, i)
-}
-
-// ReturnGet is a function that should only be used in templates.
-func (o *lastArgWidthOverload) ReturnGet(target, i string) string {
-	return get(typeconv.TypeFamilyToCanonicalTypeFamily(o.RetType.Family()), target, i)
-}
-
 func copyVal(canonicalTypeFamily types.Family, dest, src string) string {
 	switch canonicalTypeFamily {
 	case types.BytesFamily:
@@ -622,11 +602,9 @@ var (
 	_    = lawo.Compare
 	_    = lawo.Cast
 	_    = lawo.UnaryAssign
-	_    = lawo.ReturnGet
 
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName
-	_    = awob.Get
 	_    = awob.CopyVal
 	_    = awob.Set
 	_    = awob.Slice

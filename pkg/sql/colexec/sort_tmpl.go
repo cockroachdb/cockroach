@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -183,8 +182,8 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{end}}
 	var lt bool
 	// We always indirect via the order vector.
-	arg1 := execgen.UNSAFEGET(s.sortCol, s.order[i])
-	arg2 := execgen.UNSAFEGET(s.sortCol, s.order[j])
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
 	_ASSIGN_LT(lt, arg1, arg2, _, s.sortCol, s.sortCol)
 	return lt
 }

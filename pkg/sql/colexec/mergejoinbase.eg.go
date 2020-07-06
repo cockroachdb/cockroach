@@ -66,9 +66,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Bool()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Bool()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -111,9 +111,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Bytes()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Bytes()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -148,9 +148,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Decimal()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Decimal()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -184,9 +184,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Int16()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Int16()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -228,9 +228,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Int32()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Int32()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -273,9 +273,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Int64()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Int64()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -321,9 +321,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Float64()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Float64()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -377,9 +377,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Timestamp()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Timestamp()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{
@@ -421,9 +421,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 				bufferedCol := bufferedGroup.firstTuple[colIdx].Interval()
-				prevVal := bufferedCol.Get(0) //gcassert:inline
+				prevVal := bufferedCol.Get(0)
 				col := batch.ColVec(int(colIdx)).Interval()
-				curVal := col.Get(tupleToLookAtIdx) //gcassert:inline
+				curVal := col.Get(tupleToLookAtIdx)
 				var match bool
 
 				{

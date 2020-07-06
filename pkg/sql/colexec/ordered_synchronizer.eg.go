@@ -146,7 +146,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						default:
 							srcCol := vec.Bool()
 							outCol := o.outBoolCols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
 					case types.BytesFamily:
@@ -155,7 +155,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						default:
 							srcCol := vec.Bytes()
 							outCol := o.outBytesCols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol.Set(outputIdx, v)
 						}
 					case types.DecimalFamily:
@@ -164,7 +164,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						default:
 							srcCol := vec.Decimal()
 							outCol := o.outDecimalCols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx].Set(&v)
 						}
 					case types.IntFamily:
@@ -172,18 +172,18 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						case 16:
 							srcCol := vec.Int16()
 							outCol := o.outInt16Cols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						case 32:
 							srcCol := vec.Int32()
 							outCol := o.outInt32Cols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						case -1:
 						default:
 							srcCol := vec.Int64()
 							outCol := o.outInt64Cols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
 					case types.FloatFamily:
@@ -192,7 +192,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						default:
 							srcCol := vec.Float64()
 							outCol := o.outFloat64Cols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
 					case types.TimestampTZFamily:
@@ -201,7 +201,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						default:
 							srcCol := vec.Timestamp()
 							outCol := o.outTimestampCols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
 					case types.IntervalFamily:
@@ -210,7 +210,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						default:
 							srcCol := vec.Interval()
 							outCol := o.outIntervalCols[o.outColsMap[i]]
-							v := srcCol.Get(srcRowIdx) //gcassert:inline
+							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:

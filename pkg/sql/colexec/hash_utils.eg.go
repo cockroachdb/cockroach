@@ -58,7 +58,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						x := 0
@@ -72,7 +72,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -80,7 +80,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						x := 0
@@ -101,7 +101,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						x := 0
@@ -115,12 +115,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						x := 0
@@ -151,7 +151,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
@@ -162,7 +162,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -170,7 +170,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
@@ -188,7 +188,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
@@ -199,12 +199,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						sh := (*reflect.SliceHeader)(unsafe.Pointer(&v))
@@ -232,7 +232,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for equal decimals to hash to the same value we need to
@@ -248,7 +248,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -256,7 +256,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for equal decimals to hash to the same value we need to
@@ -279,7 +279,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for equal decimals to hash to the same value we need to
@@ -295,12 +295,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for equal decimals to hash to the same value we need to
@@ -332,7 +332,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -344,7 +344,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -352,7 +352,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -371,7 +371,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -383,12 +383,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -413,7 +413,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -425,7 +425,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -433,7 +433,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -452,7 +452,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -464,12 +464,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -495,7 +495,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -507,7 +507,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -515,7 +515,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -534,7 +534,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -546,12 +546,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						// In order for integers with different widths but of the same value to
@@ -580,7 +580,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						f := v
@@ -594,7 +594,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -602,7 +602,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						f := v
@@ -623,7 +623,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						f := v
@@ -637,12 +637,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						f := v
@@ -673,7 +673,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						s := v.UnixNano()
@@ -684,7 +684,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -692,7 +692,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						s := v.UnixNano()
@@ -710,7 +710,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						s := v.UnixNano()
@@ -721,12 +721,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						s := v.UnixNano()
@@ -754,7 +754,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						months, days, nanos := v.Months, v.Days, v.Nanos()
@@ -767,7 +767,7 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
@@ -775,7 +775,7 @@ func rehash(
 						if nulls.NullAt(selIdx) {
 							continue
 						}
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						months, days, nanos := v.Months, v.Days, v.Nanos()
@@ -795,7 +795,7 @@ func rehash(
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = sel[i]
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						months, days, nanos := v.Months, v.Days, v.Nanos()
@@ -808,12 +808,12 @@ func rehash(
 				} else {
 					// Early bounds checks.
 					_ = buckets[nKeys-1]
-					_ = keys.Get(nKeys - 1) //gcassert:inline
+					_ = keys.Get(nKeys - 1)
 					var selIdx int
 					for i := 0; i < nKeys; i++ {
 						cancelChecker.check(ctx)
 						selIdx = i
-						v := keys.Get(selIdx) //gcassert:inline
+						v := keys.Get(selIdx)
 						p := uintptr(buckets[i])
 
 						months, days, nanos := v.Months, v.Days, v.Nanos()

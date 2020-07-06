@@ -75,7 +75,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = execgen.SLICE(toCol, 0, args.DestIdx)
 				// {{end}}
 				for _, selIdx := range sel {
-					val := execgen.UNSAFEGET(fromCol, selIdx)
+					val := fromCol.Get(selIdx)
 					execgen.APPENDVAL(toCol, val)
 				}
 			}
@@ -107,7 +107,7 @@ func _COPY_WITH_SEL(
 				// {{end}}
 			} else {
 				// {{with .Global}}
-				v := execgen.UNSAFEGET(fromCol, selIdx)
+				v := fromCol.Get(selIdx)
 				// {{end}}
 				// {{if .SelOnDest}}
 				m.nulls.UnsetNull(selIdx)
@@ -127,7 +127,7 @@ func _COPY_WITH_SEL(
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 		selIdx := sel[args.SrcStartIdx+i]
 		// {{with .Global}}
-		v := execgen.UNSAFEGET(fromCol, selIdx)
+		v := fromCol.Get(selIdx)
 		// {{end}}
 		// {{if .SelOnDest}}
 		// {{with .Global}}
@@ -235,7 +235,7 @@ func GetValueAt(v Vec, rowIdx int) interface{} {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			target := v.TemplateType()
-			return execgen.UNSAFEGET(target, rowIdx)
+			return target.Get(rowIdx)
 			// {{end}}
 		}
 		// {{end}}

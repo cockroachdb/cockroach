@@ -167,7 +167,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						case _TYPE_WIDTH:
 							srcCol := vec._TYPE()
 							outCol := o.out_TYPECols[o.outColsMap[i]]
-							v := execgen.UNSAFEGET(srcCol, srcRowIdx)
+							v := srcCol.Get(srcRowIdx)
 							execgen.SET(outCol, outputIdx, v)
 							// {{end}}
 						}
