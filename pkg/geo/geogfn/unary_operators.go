@@ -69,7 +69,7 @@ func Perimeter(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float
 	default:
 		return 0, nil
 	}
-	regions, err := geo.S2RegionsFromGeom(gt, geo.EmptyBehaviorOmit)
+	regions, err := geo.S2RegionsFromGeomT(gt, geo.EmptyBehaviorOmit)
 	if err != nil {
 		return 0, err
 	}
@@ -93,7 +93,7 @@ func Length(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64,
 	default:
 		return 0, nil
 	}
-	regions, err := geo.S2RegionsFromGeom(gt, geo.EmptyBehaviorOmit)
+	regions, err := geo.S2RegionsFromGeomT(gt, geo.EmptyBehaviorOmit)
 	if err != nil {
 		return 0, err
 	}
@@ -152,7 +152,7 @@ func Project(g *geo.Geography, distance float64, azimuth s1.Angle) (*geo.Geograp
 			geo.NormalizeLatitudeDegrees(projected.Lat.Degrees()),
 		},
 	).SetSRID(point.SRID())
-	return geo.NewGeographyFromGeom(ret)
+	return geo.NewGeographyFromGeomT(ret)
 }
 
 // length returns the sum of the lengtsh and perimeters in the shapes of the Geography.

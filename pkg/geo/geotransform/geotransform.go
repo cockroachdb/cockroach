@@ -36,7 +36,7 @@ func Transform(
 	if err != nil {
 		return nil, err
 	}
-	return geo.NewGeometryFromGeom(newT)
+	return geo.NewGeometryFromGeomT(newT)
 }
 
 // transform performs the projection operation on a geom.T object.
