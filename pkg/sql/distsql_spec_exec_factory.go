@@ -42,24 +42,29 @@ type distSQLSpecExecFactory struct {
 		// localPlanCtx stores the local planning context of the gateway.
 		localPlanCtx *PlanningCtx
 	}
-	singleTenant  bool
-	gatewayNodeID roachpb.NodeID
+	singleTenant       bool
+	forceLocalPlanning bool
+	gatewayNodeID      roachpb.NodeID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
-func newDistSQLSpecExecFactory(p *planner) exec.Factory {
+// newDistSQLSpecExecFactory returns a new distSQLSpecExecFactory.
+// forceLocalPlanning (when true) will force the factory to produce a physical
+// plan fully scheduled on the gateway node.
+func newDistSQLSpecExecFactory(p *planner, forceLocalPlanning bool) exec.Factory {
 	return &distSQLSpecExecFactory{
-		planner:       p,
-		dsp:           p.extendedEvalCtx.DistSQLPlanner,
-		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
-		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
+		planner:            p,
+		dsp:                p.extendedEvalCtx.DistSQLPlanner,
+		singleTenant:       p.execCfg.Codec.ForSystemTenant(),
+		forceLocalPlanning: forceLocalPlanning,
+		gatewayNodeID:      p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 	}
 }
 
 func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
 	distribute := false
-	if e.singleTenant {
+	if e.singleTenant && !e.forceLocalPlanning {
 		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
 	}
 	if distribute {

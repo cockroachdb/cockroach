@@ -404,6 +404,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_partially_distributed_plans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_partially_distributed_plans`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar("disable_partially_distributed_plans", s)
+			if err != nil {
+				return err
+			}
+			m.SetPartiallyDistributedPlansDisabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.PartiallyDistributedPlansDisabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(false)
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_enums`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_enums`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

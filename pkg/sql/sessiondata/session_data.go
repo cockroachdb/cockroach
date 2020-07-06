@@ -49,6 +49,12 @@ type SessionData struct {
 	// ExperimentalDistSQLPlanningMode indicates whether the experimental
 	// DistSQL planning driven by the optimizer is enabled.
 	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
+	// PartiallyDistributedPlansDisabled indicates whether the partially
+	// distributed plans produced by distSQLSpecExecFactory are disabled. It
+	// should be set to 'true' only in tests that verify that the old and the
+	// new factories return exactly the same physical plans.
+	// TODO(yuzefovich): remove it when deleting old sql.execFactory.
+	PartiallyDistributedPlansDisabled bool
 	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
 	// are run for a single query.
 	OptimizerFKCascadesLimit int
