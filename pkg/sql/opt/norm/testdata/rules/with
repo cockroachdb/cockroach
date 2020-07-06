@@ -310,6 +310,7 @@ with &1 (foo)
            ├── key: ()
            ├── fd: ()-->(3-6)
            ├── prune: (3-6)
+           ├── join-size: 4
            ├── cte-uses
            │    ├── &1: count=2 used-columns=(1)
            │    └── &2: count=2 used-columns=(2)

@@ -2569,12 +2569,8 @@ func (c *CustomFuncs) deriveJoinSize(e memo.RelExpr) int {
 
 // ShouldReorderJoins returns whether the optimizer should attempt to find
 // a better ordering of inner joins.
-func (c *CustomFuncs) ShouldReorderJoins(left, right memo.RelExpr) bool {
-	// TODO(justin): referencing left and right here is a hack: ideally
-	// we'd want to be able to reference the logical properties of the
-	// expression being explored in this CustomFunc.
-	size := c.deriveJoinSize(left) + c.deriveJoinSize(right)
-	return size <= c.e.evalCtx.SessionData.ReorderJoinsLimit
+func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
+	return c.deriveJoinSize(root) <= c.e.evalCtx.SessionData.ReorderJoinsLimit
 }
 
 // IsSimpleEquality returns true if all of the filter conditions are equalities

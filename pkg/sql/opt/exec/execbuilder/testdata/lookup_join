@@ -1470,3 +1470,36 @@ limit                                               ·                      ·
 ·                                                   table                  lineitem@primary
 ·                                                   spans                  FULL SCAN
 ·                                                   filter                 l_receiptdate > l_commitdate
+
+# Regression test for #50964.
+statement ok
+CREATE TABLE tab4 (
+  pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col2 STRING, col3 INT8, col4 FLOAT8, col5 STRING,
+  UNIQUE (col3 DESC, col4 DESC)
+)
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
+----
+·                          distribution           full                                          ·                                          ·
+·                          vectorized             true                                          ·                                          ·
+render                     ·                      ·                                             (pk)                                       ·
+ │                         render 0               pk                                            ·                                          ·
+ └── lookup-join           ·                      ·                                             ("project_const_col_@13", pk, col0, col3)  ·
+      │                    table                  tab4@tab4_col3_col4_key                       ·                                          ·
+      │                    type                   semi                                          ·                                          ·
+      │                    equality               (col0, project_const_col_@13) = (col3, col4)  ·                                          ·
+      │                    equality cols are key  ·                                             ·                                          ·
+      │                    parallel               ·                                             ·                                          ·
+      └── render           ·                      ·                                             ("project_const_col_@13", pk, col0, col3)  ·
+           │               render 0               495.6                                         ·                                          ·
+           │               render 1               pk                                            ·                                          ·
+           │               render 2               col0                                          ·                                          ·
+           │               render 3               col3                                          ·                                          ·
+           └── index-join  ·                      ·                                             (pk, col0, col3)                           ·
+                │          table                  tab4@primary                                  ·                                          ·
+                │          key columns            pk                                            ·                                          ·
+                └── scan   ·                      ·                                             (pk, col3)                                 ·
+·                          table                  tab4@tab4_col3_col4_key                       ·                                          ·
+·                          spans                  /NULL-                                        ·                                          ·
