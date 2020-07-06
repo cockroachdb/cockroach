@@ -184,13 +184,15 @@ func NewServerWithInterceptor(
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 
-	var unaryInterceptor grpc.UnaryServerInterceptor
-	var streamInterceptor grpc.StreamServerInterceptor
+	// TODO(tbg): reverse the order in which we populate these slices (the first
+	// element is called first, the last element wraps the actual handler).
+	var unaryInterceptor []grpc.UnaryServerInterceptor
+	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to save a bit of unnecessary work when
 		// tracing is disabled.
-		unaryInterceptor = otgrpc.OpenTracingServerInterceptor(
+		unaryInterceptor = append(unaryInterceptor, otgrpc.OpenTracingServerInterceptor(
 			tracer,
 			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(
 				func(
@@ -202,7 +204,7 @@ func NewServerWithInterceptor(
 					return spanInclusionFuncForServer(
 						tracer.(*tracing.Tracer), parentSpanCtx, method, req, resp)
 				})),
-		)
+		))
 		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
 		// well. The otgrpc package has no such facility, but there's also this:
 		//
@@ -214,68 +216,46 @@ func NewServerWithInterceptor(
 	// out. Doubt measurements can tell the difference though.
 
 	if interceptor != nil {
-		prevUnaryInterceptor := unaryInterceptor
-		unaryInterceptor = func(
+		unaryInterceptor = append(unaryInterceptor, func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 		) (interface{}, error) {
 			if err := interceptor(info.FullMethod); err != nil {
 				return nil, err
 			}
-			if prevUnaryInterceptor != nil {
-				return prevUnaryInterceptor(ctx, req, info, handler)
-			}
 			return handler(ctx, req)
-		}
-	}
+		})
 
-	if interceptor != nil {
-		prevStreamInterceptor := streamInterceptor
-		streamInterceptor = func(
+		streamInterceptor = append(streamInterceptor, func(
 			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 		) error {
 			if err := interceptor(info.FullMethod); err != nil {
 				return err
 			}
-			if prevStreamInterceptor != nil {
-				return prevStreamInterceptor(srv, stream, info, handler)
-			}
 			return handler(srv, stream)
-		}
+		})
 	}
 
 	if !ctx.Config.Insecure {
-		prevUnaryInterceptor := unaryInterceptor
-		unaryInterceptor = func(
+		unaryInterceptor = append(unaryInterceptor, func(
 			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 		) (interface{}, error) {
 			if err := requireSuperUser(ctx); err != nil {
 				return nil, err
 			}
-			if prevUnaryInterceptor != nil {
-				return prevUnaryInterceptor(ctx, req, info, handler)
-			}
 			return handler(ctx, req)
-		}
-		prevStreamInterceptor := streamInterceptor
-		streamInterceptor = func(
+		})
+		streamInterceptor = append(streamInterceptor, func(
 			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 		) error {
 			if err := requireSuperUser(stream.Context()); err != nil {
 				return err
 			}
-			if prevStreamInterceptor != nil {
-				return prevStreamInterceptor(srv, stream, info, handler)
-			}
 			return handler(srv, stream)
-		}
+		})
 	}
 
-	if unaryInterceptor != nil {
-		opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor))
-	}
-	if streamInterceptor != nil {
-		opts = append(opts, grpc.StreamInterceptor(streamInterceptor))
-	}
+	opts = append(opts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
+	opts = append(opts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
