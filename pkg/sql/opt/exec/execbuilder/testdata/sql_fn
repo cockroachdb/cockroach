@@ -241,3 +241,10 @@ CREATE TABLE my_spatial_table (
    CONSTRAINT "primary" PRIMARY KEY (k ASC),
    FAMILY "primary" (k, geom1, geom2, geom3, geom4, geom5, geom6, geom8, geom9, geom10)
 )
+
+# Regression test for #50296. Using AddGeometryColumn with NULL arguments must
+# not panic.
+query T
+SELECT addgeometrycolumn('a', 'b', 3, NULL, 2);
+----
+NULL
