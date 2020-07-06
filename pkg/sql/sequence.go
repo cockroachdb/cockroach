@@ -335,6 +335,11 @@ func removeSequenceOwnerIfExists(
 	if err != nil {
 		return err
 	}
+	// If the table descriptor has already been dropped, there is no need to
+	// remove the reference.
+	if tableDesc.Dropped() {
+		return nil
+	}
 	col, err := tableDesc.FindColumnByID(opts.SequenceOwner.OwnerColumnID)
 	if err != nil {
 		return err
@@ -469,17 +474,21 @@ func maybeAddSequenceDependencies(
 // dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.
 // Called when the respective column (or the whole table) is being dropped.
 func (p *planner) dropSequencesOwnedByCol(
-	ctx context.Context, col *sqlbase.ColumnDescriptor,
+	ctx context.Context, col *sqlbase.ColumnDescriptor, queueJob bool,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqDesc, err := p.Tables().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
 			return err
 		}
+		// This sequence is already getting dropped. Don't do it twice.
+		if seqDesc.Dropped() {
+			continue
+		}
 		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
 			seqDesc.Name, col.ColName())
 		if err := p.dropSequenceImpl(
-			ctx, seqDesc, true /* queueJob */, jobDesc, tree.DropRestrict,
+			ctx, seqDesc, queueJob, jobDesc, tree.DropRestrict,
 		); err != nil {
 			return err
 		}
