@@ -184,36 +184,27 @@ func NewServerWithInterceptor(
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 
-	// TODO(tbg): reverse the order in which we populate these slices (the first
-	// element is called first, the last element wraps the actual handler).
 	var unaryInterceptor []grpc.UnaryServerInterceptor
 	var streamInterceptor []grpc.StreamServerInterceptor
 
-	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-		// We use a SpanInclusionFunc to save a bit of unnecessary work when
-		// tracing is disabled.
-		unaryInterceptor = append(unaryInterceptor, otgrpc.OpenTracingServerInterceptor(
-			tracer,
-			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(
-				func(
-					parentSpanCtx opentracing.SpanContext,
-					method string,
-					req, resp interface{}) bool {
-					// This anonymous func serves to bind the tracer for
-					// spanInclusionFuncForServer.
-					return spanInclusionFuncForServer(
-						tracer.(*tracing.Tracer), parentSpanCtx, method, req, resp)
-				})),
-		))
-		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
-		// well. The otgrpc package has no such facility, but there's also this:
-		//
-		// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/master/tracing/opentracing
+	if !ctx.Config.Insecure {
+		unaryInterceptor = append(unaryInterceptor, func(
+			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			if err := requireSuperUser(ctx); err != nil {
+				return nil, err
+			}
+			return handler(ctx, req)
+		})
+		streamInterceptor = append(streamInterceptor, func(
+			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			if err := requireSuperUser(stream.Context()); err != nil {
+				return err
+			}
+			return handler(srv, stream)
+		})
 	}
-
-	// TODO(tschottdorf): when setting up the interceptors below, could make the
-	// functions a wee bit more performant by hoisting some of the nil checks
-	// out. Doubt measurements can tell the difference though.
 
 	if interceptor != nil {
 		unaryInterceptor = append(unaryInterceptor, func(
@@ -235,23 +226,26 @@ func NewServerWithInterceptor(
 		})
 	}
 
-	if !ctx.Config.Insecure {
-		unaryInterceptor = append(unaryInterceptor, func(
-			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
-		) (interface{}, error) {
-			if err := requireSuperUser(ctx); err != nil {
-				return nil, err
-			}
-			return handler(ctx, req)
-		})
-		streamInterceptor = append(streamInterceptor, func(
-			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
-		) error {
-			if err := requireSuperUser(stream.Context()); err != nil {
-				return err
-			}
-			return handler(srv, stream)
-		})
+	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
+		// We use a SpanInclusionFunc to save a bit of unnecessary work when
+		// tracing is disabled.
+		unaryInterceptor = append(unaryInterceptor, otgrpc.OpenTracingServerInterceptor(
+			tracer,
+			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(
+				func(
+					parentSpanCtx opentracing.SpanContext,
+					method string,
+					req, resp interface{}) bool {
+					// This anonymous func serves to bind the tracer for
+					// spanInclusionFuncForServer.
+					return spanInclusionFuncForServer(
+						tracer.(*tracing.Tracer), parentSpanCtx, method, req, resp)
+				})),
+		))
+		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
+		// well. The otgrpc package has no such facility, but there's also this:
+		//
+		// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/master/tracing/opentracing
 	}
 
 	opts = append(opts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
