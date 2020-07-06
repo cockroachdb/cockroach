@@ -76,17 +76,21 @@ type resolveFlags struct {
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context, tn *TableName, required bool, requiredType resolver.ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 ) (table *MutableTableDescriptor, err error) {
 	return resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
-	ctx context.Context, tn *TableName, required bool, requiredType resolver.ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
-		table, err = resolver.ResolveExistingTableObject(ctx, p, tn, lookupFlags, requiredType)
+		lookupFlags := tree.ObjectLookupFlags{
+			CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+			DesiredObjectKind:    tree.TableObject,
+			DesiredTableDescKind: requiredType,
+		}
+		table, err = resolver.ResolveExistingTableObject(ctx, p, tn, lookupFlags)
 	})
 	return table, err
 }
@@ -157,9 +161,7 @@ func (p *planner) ResolveType(
 		DesiredObjectKind: tree.TypeObject,
 		RequireMutable:    false,
 	}
-	// TODO (rohany): The ResolveAnyDescType argument doesn't do anything here
-	//  if we are looking for a type. This should be cleaned up.
-	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags, resolver.ResolveAnyDescType)
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +265,7 @@ func getDescriptorsFromTargetList(
 			// the returned set of names, so we don't want to error out if we
 			// couldn't resolve a name into a table.
 			descriptor, err := resolver.ResolveMutableExistingTableObject(ctx, p,
-				&objectNames[i], false /* required */, resolver.ResolveAnyDescType)
+				&objectNames[i], false /* required */, tree.ResolveAnyTableKind)
 			if err != nil {
 				return nil, err
 			}
@@ -333,7 +335,7 @@ func findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := resolver.ResolveMutableExistingTableObject(ctx, sc, tn, false /*required*/, resolver.ResolveAnyDescType)
+		tableDesc, err := resolver.ResolveMutableExistingTableObject(ctx, sc, tn, false /*required*/, tree.ResolveAnyTableKind)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -391,7 +393,7 @@ func expandIndexName(
 	tn = &index.Table
 	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
-		desc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, tn, requireTable, resolver.ResolveRequireTableDesc)
+		desc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, tn, requireTable, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -659,7 +661,7 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType resolver.ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (*MutableTableDescriptor, error) {
 	tn := name.ToTableName()
 	table, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
@@ -677,14 +679,16 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType resolver.ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (*MutableTableDescriptor, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:      tree.CommonLookupFlags{Required: required},
 		RequireMutable:         true,
 		AllowWithoutPrimaryKey: true,
+		DesiredObjectKind:      tree.TableObject,
+		DesiredTableDescKind:   requiredType,
 	}
-	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags, requiredType)
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -698,7 +702,7 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType resolver.ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = p.ResolveExistingObjectEx(ctx, name, required, requiredType)
@@ -711,10 +715,14 @@ func (p *planner) ResolveExistingObjectEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType resolver.ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (res *ImmutableTableDescriptor, err error) {
-	lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
-	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags, requiredType)
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: requiredType,
+	}
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err
 	}
