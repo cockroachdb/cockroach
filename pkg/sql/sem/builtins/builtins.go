@@ -2774,6 +2774,8 @@ may increase either contention or retry errors, or both.`,
 	})),
 
 	// JSON functions.
+	// The behavior of both the JSON and JSONB data types in CockroachDB is
+	// similar to the behavior of the JSONB data type in Postgres.
 
 	"json_to_recordset":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: categoryJSON}),
 	"jsonb_to_recordset":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: categoryJSON}),

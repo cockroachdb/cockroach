@@ -853,21 +853,32 @@ func (s *clusterSpec) args() []string {
 		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
 		args = append(args, machineTypeArg)
 	}
-	if s.Zones != "" {
-		switch cloud {
-		case gce:
-			if s.Geo {
-				args = append(args, "--gce-zones="+s.Zones)
-			} else {
-				args = append(args, "--gce-zones="+firstZone(s.Zones))
+
+	if !local {
+		zones := s.Zones
+		if zones == "" {
+			zones = zonesF
+		}
+		if zones != "" {
+			if !s.Geo {
+				zones = firstZone(zones)
 			}
-		case azure:
-			args = append(args, "--azure-locations="+s.Zones)
-		default:
-			fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", cloud)
-			os.Exit(1)
+			var arg string
+			switch cloud {
+			case aws:
+				arg = "--aws-zones=" + zones
+			case gce:
+				arg = "--gce-zones=" + zones
+			case azure:
+				arg = "--azure-locations=" + zones
+			default:
+				fmt.Fprintf(os.Stderr, "specifying zones is not yet supported on %s", cloud)
+				os.Exit(1)
+			}
+			args = append(args, arg)
 		}
 	}
+
 	if s.Geo {
 		args = append(args, "--geo")
 	}
@@ -1175,13 +1186,6 @@ func (f *clusterFactory) newCluster(
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
 	sargs = append(sargs, cfg.spec.args()...)
-	if !local && zonesF != "" && cfg.spec.Zones == "" {
-		if cfg.spec.Geo {
-			sargs = append(sargs, "--gce-zones="+zonesF)
-		} else {
-			sargs = append(sargs, "--gce-zones="+firstZone(zonesF))
-		}
-	}
 	if !cfg.useIOBarrier {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
