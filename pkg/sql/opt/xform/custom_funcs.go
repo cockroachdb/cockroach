@@ -14,12 +14,12 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -978,7 +978,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
-		spanExpr, geoOk = tryConstrainGeoIndex(
+		spanExpr, geoOk = invertedidx.TryConstrainGeoIndex(
 			c.e.evalCtx.Context, filters, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
@@ -1917,7 +1917,7 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		return
 	}
 
-	if !IsGeoIndexFunction(fn) {
+	if !invertedidx.IsGeoIndexFunction(fn) {
 		panic(errors.AssertionFailedf(
 			"GenerateGeoLookupJoins called on a function that cannot be index-accelerated",
 		))
@@ -2020,7 +2020,7 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 // IsGeoIndexFunction returns true if the given function is a geospatial
 // function that can be index-accelerated.
 func (c *CustomFuncs) IsGeoIndexFunction(fn opt.ScalarExpr) bool {
-	return IsGeoIndexFunction(fn)
+	return invertedidx.IsGeoIndexFunction(fn)
 }
 
 // FirstArgIsVariable returns true if the first argument to the given
@@ -3135,16 +3135,4 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 		Flags:   sp.Flags,
 		Locking: sp.Locking,
 	}
-}
-
-// NewDatumToInvertedExpr returns a new DatumToInvertedExpr. Currently there
-// is only one possible implementation returned, geoDatumToInvertedExpr.
-func NewDatumToInvertedExpr(
-	expr tree.TypedExpr, desc *sqlbase.IndexDescriptor,
-) (invertedexpr.DatumToInvertedExpr, error) {
-	if geoindex.IsEmptyConfig(&desc.GeoConfig) {
-		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
-	}
-
-	return NewGeoDatumToInvertedExpr(expr, &desc.GeoConfig)
 }

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package xform
+package invertedidx
 
 import (
 	"context"
@@ -69,11 +69,11 @@ type getSpanExprForGeoIndexFn func(
 	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, *geoindex.Config,
 ) *invertedexpr.SpanExpression
 
-// tryConstrainGeoIndex tries to derive an inverted index constraint for the
+// TryConstrainGeoIndex tries to derive an inverted index constraint for the
 // given geospatial index from the specified filters. If a constraint is
 // derived, it is returned with ok=true. If no constraint can be derived,
-// then tryConstrainGeoIndex returns ok=false.
-func tryConstrainGeoIndex(
+// then TryConstrainGeoIndex returns ok=false.
+func TryConstrainGeoIndex(
 	ctx context.Context, filters memo.FiltersExpr, tabID opt.TableID, index cat.Index,
 ) (invertedConstraint *invertedexpr.SpanExpression, ok bool) {
 	config := index.GeoConfig()
