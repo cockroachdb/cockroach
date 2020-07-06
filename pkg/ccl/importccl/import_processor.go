@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -49,6 +50,14 @@ var _ execinfra.Processor = &readImportDataProcessor{}
 
 func (cp *readImportDataProcessor) OutputTypes() []*types.T {
 	return csvOutputTypes
+}
+
+func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
+	sec := walltime / int64(time.Second)
+	nsec := walltime % int64(time.Second)
+	unixtime := timeutil.Unix(sec, nsec)
+	ctx.StmtTimestamp = unixtime
+	ctx.TxnTimestamp = unixtime
 }
 
 func newReadImportDataProcessor(
@@ -126,6 +135,8 @@ func makeInputConverter(
 		}
 		return nil
 	}
+
+	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
 
 	if evalCtx.Txn != nil {
 		// If we have a transaction, then use it.

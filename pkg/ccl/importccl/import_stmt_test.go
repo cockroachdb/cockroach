@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/linkedin/goavro/v2"
@@ -2627,16 +2628,83 @@ func TestImportIntoCSV(t *testing.T) {
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 			sqlDB.Exec(t, `CREATE TABLE t(a INT, b INT DEFAULT nextval('testseq'))`)
 			sqlDB.ExpectErr(t,
-				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
+				fmt.Sprintf(`function nextval unsupported by IMPORT INTO`),
 				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
 		})
-		t.Run("now-impure", func(t *testing.T) {
-			data = "1\n2"
-			sqlDB.Exec(t, `CREATE TABLE t(a INT, b TIMESTAMP DEFAULT now())`)
-			defer sqlDB.Exec(t, `DROP TABLE t`)
-			sqlDB.ExpectErr(t,
-				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
-				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+		t.Run("current-timestamp", func(t *testing.T) {
+			data = "1\n2\n3\n4\n5\n6"
+			testCases := []struct {
+				name        string
+				defaultExpr string
+				colType     string
+				truncate    time.Duration
+			}{
+				{
+					name:        "current_date",
+					defaultExpr: "current_date()",
+					colType:     "DATE",
+					truncate:    24 * time.Hour,
+				},
+				{
+					name:        "current_timestamp",
+					defaultExpr: "current_timestamp()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					name:        "current_timestamp_with_precision",
+					defaultExpr: "current_timestamp(3)",
+					colType:     "TIMESTAMP",
+					truncate:    time.Millisecond,
+				},
+				{
+					name:        "localtimestamp",
+					defaultExpr: "localtimestamp()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					name:        "localtimestamp_with_precision",
+					defaultExpr: "localtimestamp(3)",
+					colType:     "TIMESTAMP",
+					truncate:    time.Millisecond,
+				},
+				{
+					name:        "now",
+					defaultExpr: "now()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					name:        "statement_timestamp",
+					defaultExpr: "statement_timestamp()",
+					colType:     "TIMESTAMP",
+				},
+				{
+					name:        "transaction_timestamp",
+					defaultExpr: "transaction_timestamp()",
+					colType:     "TIMESTAMP",
+				},
+			}
+
+			for _, test := range testCases {
+				t.Run(test.name, func(t *testing.T) {
+					defer sqlDB.Exec(t, `DROP TABLE t`)
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(a INT, b %s DEFAULT %s)`, test.colType, test.defaultExpr))
+					minTs := timeutil.Now()
+					sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
+					maxTs := timeutil.Now()
+					if test.truncate != 0 {
+						minTs = minTs.Truncate(test.truncate)
+						maxTs = maxTs.Truncate(test.truncate)
+					}
+
+					var numBadRows int
+					sqlDB.QueryRow(t,
+						`SELECT count(*) FROM t WHERE  b !=(SELECT b FROM t WHERE a=1) OR b IS NULL or b < $1 or b > $2`,
+						minTs,
+						maxTs,
+					).Scan(&numBadRows)
+					require.Equal(t, 0, numBadRows)
+				})
+			}
 		})
 		t.Run("pgdump", func(t *testing.T) {
 			data = "INSERT INTO t VALUES (1, 2), (3, 4)"
