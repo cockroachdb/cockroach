@@ -185,7 +185,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// we probably could pool those allocations using sync.Pool. Investigate
 	// this.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
-		bld = execbuilder.New(newDistSQLSpecExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext())
+		bld = execbuilder.New(newDistSQLSpecExecFactory(p, distSQLDefaultPlanning), execMemo, &opc.catalog, root, p.EvalContext())
 		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
@@ -200,6 +200,21 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				return err
 			}
 			// We will fallback to the old path.
+		}
+		if err == nil {
+			m := plan.(*planTop).main
+			if m.isPartiallyDistributed() && p.SessionData().PartiallyDistributedPlansDisabled {
+				// The planning has succeeded, but we've created a partially
+				// distributed plan yet the session variable prohibits such
+				// plan distribution - we need to replan with a new factory
+				// that forces local planning.
+				// TODO(yuzefovich): remove this logic when deleting old
+				// execFactory.
+				bld = execbuilder.New(newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning), execMemo, &opc.catalog, root, p.EvalContext())
+				plan, err = bld.Build()
+			}
+		}
+		if err != nil {
 			bld = nil
 			// TODO(yuzefovich): make the logging conditional on the verbosity
 			// level once new DistSQL planning is no longer experimental.

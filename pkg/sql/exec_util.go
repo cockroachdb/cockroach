@@ -2030,6 +2030,10 @@ func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
 	m.data.ExperimentalDistSQLPlanningMode = val
 }
 
+func (m *sessionDataMutator) SetPartiallyDistributedPlansDisabled(val bool) {
+	m.data.PartiallyDistributedPlansDisabled = val
+}
+
 func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
 	m.data.RequireExplicitPrimaryKeys = val
 }
