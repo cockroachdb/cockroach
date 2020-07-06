@@ -361,27 +361,27 @@ func (nl *NodeLiveness) setDrainingInternal(
 	}()
 
 	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+		newLiveness: kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
 		},
-		old:         liveness.Liveness,
+		oldLiveness: liveness.Liveness,
 		ignoreCache: true,
 		oldRaw:      liveness.raw,
 	}
 	if liveness.Liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness.Liveness
+		update.newLiveness = liveness.Liveness
 	}
 
-	if reporter != nil && drain && !update.updated.Draining {
+	if reporter != nil && drain && !update.newLiveness.Draining {
 		// Report progress to the Drain RPC.
 		reporter(1, "liveness record")
 	}
-	update.updated.Draining = drain
+	update.newLiveness.Draining = drain
 
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		nl.maybeUpdate(actual)
-		if actual.Draining == update.updated.Draining {
+		if actual.Draining == update.newLiveness.Draining {
 			return errNodeDrainingSet
 		}
 		return errors.New("failed to update liveness record because record has changed")
@@ -402,8 +402,8 @@ func (nl *NodeLiveness) setDrainingInternal(
 // livenessUpdate contains the information for CPutting a new version of a
 // liveness record. It has both the new and the old version of the proto.
 type livenessUpdate struct {
-	updated kvserverpb.Liveness
-	old     kvserverpb.Liveness
+	newLiveness kvserverpb.Liveness
+	oldLiveness kvserverpb.Liveness
 	// When ignoreCache is set, we won't assume that our in-memory cached version
 	// of the liveness record is accurate and will use a CPut on the liveness
 	// table with the old value supplied by the client (oldRaw). This is used for
@@ -428,23 +428,23 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 	ctx context.Context, nodeID roachpb.NodeID, liveness LivenessRecord, decommission bool,
 ) (changeCommitted bool, err error) {
 	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+		newLiveness: kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
 		},
-		old:         liveness.Liveness,
+		oldLiveness: liveness.Liveness,
 		ignoreCache: true,
 		oldRaw:      liveness.raw,
 	}
 	if liveness.Liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness.Liveness
+		update.newLiveness = liveness.Liveness
 	}
-	update.updated.Decommissioning = decommission
+	update.newLiveness.Decommissioning = decommission
 
 	var conditionFailed bool
 	if _, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		conditionFailed = true
-		if actual.Decommissioning == update.updated.Decommissioning {
+		if actual.Decommissioning == update.newLiveness.Decommissioning {
 			return nil
 		}
 		return errChangeDecommissioningFailed
@@ -627,30 +627,30 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}()
 
 	update := livenessUpdate{
-		updated: kvserverpb.Liveness{
+		newLiveness: kvserverpb.Liveness{
 			NodeID: nodeID,
 			Epoch:  1,
 		},
-		old: liveness,
+		oldLiveness: liveness,
 	}
 	if liveness != (kvserverpb.Liveness{}) {
-		update.updated = liveness
+		update.newLiveness = liveness
 		if incrementEpoch {
-			update.updated.Epoch++
+			update.newLiveness.Epoch++
 			// Clear draining field.
-			update.updated.Draining = false
+			update.newLiveness.Draining = false
 		}
 	}
 	// We need to add the maximum clock offset to the expiration because it's
 	// used when determining liveness for a node.
 	{
-		update.updated.Expiration = hlc.LegacyTimestamp(
+		update.newLiveness.Expiration = hlc.LegacyTimestamp(
 			nl.clock.Now().Add((nl.livenessThreshold).Nanoseconds(), 0))
 		// This guards against the system clock moving backwards. As long
 		// as the cockroach process is running, checks inside hlc.Clock
 		// will ensure that the clock never moves backwards, but these
 		// checks don't work across process restarts.
-		if update.updated.Expiration.Less(liveness.Expiration) {
+		if update.newLiveness.Expiration.Less(liveness.Expiration) {
 			return errors.Errorf("proposed liveness update expires earlier than previous record")
 		}
 	}
@@ -814,10 +814,10 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness kvserverpb.
 	}
 
 	update := livenessUpdate{
-		updated: liveness,
-		old:     liveness,
+		newLiveness: liveness,
+		oldLiveness: liveness,
 	}
-	update.updated.Epoch++
+	update.newLiveness.Epoch++
 	written, err := nl.updateLiveness(ctx, update, func(actual LivenessRecord) error {
 		defer nl.maybeUpdate(actual)
 		if actual.Epoch > liveness.Epoch {
@@ -918,11 +918,11 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			log.Fatalf(ctx, "unexpected oldRaw when ignoreCache not specified")
 		}
 
-		l, err := nl.GetLiveness(update.updated.NodeID)
+		l, err := nl.GetLiveness(update.newLiveness.NodeID)
 		if err != nil && !errors.Is(err, ErrNoLivenessRecord) {
 			return LivenessRecord{}, err
 		}
-		if err == nil && l.Liveness != update.old {
+		if err == nil && l.Liveness != update.oldLiveness {
 			return LivenessRecord{}, handleCondFailed(l)
 		}
 		oldRaw = l.raw
@@ -931,8 +931,8 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	v := new(roachpb.Value)
 	if err := nl.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		key := keys.NodeLivenessKey(update.updated.NodeID)
-		if err := v.SetProto(&update.updated); err != nil {
+		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
+		if err := v.SetProto(&update.newLiveness); err != nil {
 			log.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		b.CPut(key, v, oldRaw)
@@ -975,7 +975,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	if cb != nil {
 		cb(ctx)
 	}
-	return LivenessRecord{Liveness: update.updated, raw: v.TagAndDataBytes()}, nil
+	return LivenessRecord{Liveness: update.newLiveness, raw: v.TagAndDataBytes()}, nil
 }
 
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the
