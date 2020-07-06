@@ -1378,7 +1378,11 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
 	if !inputCols.SubsetOf(join.Cols) {
-		return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
+		outCols := join.Cols
+		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
+			outCols = join.Cols.Intersection(inputCols)
+		}
+		return b.applySimpleProject(res, outCols, join.ProvidedPhysical().Ordering)
 	}
 	return res, nil
 }

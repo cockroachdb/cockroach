@@ -650,3 +650,14 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/72/1/1/{0-1}, /Table/72/1/1/2/{1-2}'
 ----
 Scan /Table/72/1/1/{0-1}, /Table/72/1/1/2/{1-2}
+
+# Regression test for #50964.
+statement ok
+CREATE TABLE tab4 (
+  pk INT8 PRIMARY KEY, col0 INT8, col1 FLOAT8, col2 STRING, col3 INT8, col4 FLOAT8, col5 STRING,
+  UNIQUE (col3 DESC, col4 DESC)
+)
+
+query I
+SELECT pk FROM tab4 WHERE col0 IN (SELECT col3 FROM tab4 WHERE col4 = 495.6) AND (col3 IS NULL)
+----

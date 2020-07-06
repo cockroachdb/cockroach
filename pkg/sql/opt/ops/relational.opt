@@ -305,10 +305,16 @@ define LookupJoinPrivate {
     # index columns (or a prefix of them).
     KeyCols ColList
 
-    # Cols is the set of columns produced by the lookup join. This set can
-    # contain columns from the input and columns from the index. Any columns not
-    # in the input are retrieved from the index. Cols may not contain some or
-    # all of the KeyCols, if they are not output columns for the join.
+    # Cols is the union between the set of input columns that are returned by
+    # the lookup join and the set of lookup columns retrieved through lookup.
+    #
+    # For inner/left join, this is the set of columns produced by the LookupJoin
+    # operator.
+    # For semi/anti-join, this contains the semi-join output columns (from the
+    # input) plus the columns that we need to look up for the ON condition.
+    #
+    # Cols may not contain some or all of the KeyCols, if they are not output
+    # columns for the join.
     #
     # TODO(radu): this effectively allows an arbitrary projection; it should be
     # just a LookupCols set indicating which columns we should add from the
