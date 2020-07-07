@@ -207,7 +207,7 @@ func TestGetLargestID(t *testing.T) {
 			maxDescID := config.SystemTenantObjectID(descIDs[len(descIDs)-1])
 			kvs, _ /* splits */ := ms.GetInitialValues()
 			pseudoIDs := keys.PseudoTableIDs
-			const pseudoIDIsMax = true // NOTE: will change as new system objects are added
+			const pseudoIDIsMax = false // NOTE: change to false if adding new system not pseudo objects.
 			if pseudoIDIsMax {
 				maxDescID = config.SystemTenantObjectID(keys.MaxPseudoTableID)
 			}
