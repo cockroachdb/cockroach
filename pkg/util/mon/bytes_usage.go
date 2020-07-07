@@ -565,8 +565,10 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 // Shrink releases part of the cumulated allocations by the specified size.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b.used < delta {
-		panic(fmt.Sprintf("%s: no bytes in account to release, current %d, free %d",
-			b.mon.name, b.used, delta))
+		log.ReportOrPanic(ctx, &b.mon.settings.SV,
+			"%s: no bytes in account to release, current %d, free %d",
+			b.mon.name, b.used, delta)
+		delta = b.used
 	}
 	b.used -= delta
 	b.reserved += delta
