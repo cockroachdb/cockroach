@@ -3826,6 +3826,8 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	writeGarbage(3, 10)
 	rowCount := runner.QueryStr(t, "SELECT * FROM foo")
 
+	var tsBefore string
+	runner.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
 	go func() {
 		// N.B. We use the conn rather than the runner here since the test may
 		// finish before the job finishes. The test will finish as soon as the
@@ -3834,7 +3836,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		// backup fails. This test does not particularly care if the BACKUP
 		// completes with a success or failure, as long as the timestamp is released
 		// shortly after the BACKUP is unblocked.
-		_, _ = conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://1/foo'`) // ignore error.
+		_, _ = conn.Exec(`BACKUP TABLE foo TO 'nodelocal://1/foo' AS OF SYSTEM TIME ` + tsBefore) // ignore error.
 	}()
 
 	var jobID string
@@ -3869,6 +3871,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 	// We should have refused to GC over the timestamp which we needed to protect.
 	gcTable(true /* skipShouldQueue */)
+	runner.Exec(t, "SELECT * FROM foo AS OF SYSTEM TIME "+tsBefore)
 
 	// Unblock the blocked backup request.
 	close(allowResponse)
