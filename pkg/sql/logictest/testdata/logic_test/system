@@ -563,7 +563,6 @@ AND name NOT LIKE '%sql.defaults.experimental_distsql_planning%'
 ORDER BY name
 ----
 cluster.secret
-diagnostics.reporting.enabled
 kv.range_merge.queue_enabled
 sql.stats.automatic_collection.min_stale_rows
 version
@@ -581,7 +580,6 @@ WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.defaults.experimental_distsql_planning')
 ORDER BY name
 ----
-diagnostics.reporting.enabled                  true
 kv.range_merge.queue_enabled                   false
 somesetting                                    somevalue
 sql.stats.automatic_collection.min_stale_rows  5
