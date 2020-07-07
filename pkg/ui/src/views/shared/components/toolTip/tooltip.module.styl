@@ -10,24 +10,19 @@
 
 @require '~src/components/core/index.styl'
 
+.tooltip-wrapper
+  :global(.ant-tooltip-arrow)
+    width 20px
+    height 20px
+    &::before
+      background-color: $colors--neutral-0
+      width 20px
+      height 20px
+      border: solid 1px #e7ecf3;
+      box-shadow: none;
+
 :global(.ant-tooltip).tooltip__preset--white
   max-width 500px
-  :global(.ant-tooltip-content)
-    position relative
-    &:after, &:before
-      content ''
-      display block;
-      position absolute;
-      width 0
-      height 0
-      border-style solid
-    &:after
-      border-width 10px
-    &:before
-      border-width 10px
-  :global(.ant-tooltip-arrow)
-    &:before
-      background-color transparent
   :global(.ant-tooltip-inner)
     padding 10px
     border-radius 3px
@@ -37,27 +32,3 @@
     font-family $font-family--base
     text-align left
     color $colors--neutral-6
-
-.tooltip__preset--placement-bottom
-  :global(.ant-tooltip-content)
-    &:after, &:before
-      transform translate(-50%, 0)
-      left 50%
-    &:after
-      top -19px
-      border-color transparent transparent $colors--neutral-0 transparent
-    &:before
-      top -21px
-      border-color transparent transparent $colors--neutral-2 transparent
-
-.tooltip__preset--placement-left
-  :global(.ant-tooltip-content)
-    &:after, &:before
-      top 50%
-      transform translate(0, -50%)
-    &:after
-      right -16px
-      border-color transparent transparent transparent $colors--neutral-0
-    &:before
-      right -18px
-      border-color transparent transparent transparent $colors--neutral-2
