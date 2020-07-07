@@ -58,6 +58,27 @@ const (
 // copy behavior.
 type phaseTimes [sessionNumPhases]time.Time
 
+// getServiceLatency returns the time between a query being received and the end
+// of run.
+func (p *phaseTimes) getServiceLatency() time.Duration {
+	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
+}
+
+// getRunLatency returns the time between a query execution starting and ending.
+func (p *phaseTimes) getRunLatency() time.Duration {
+	return p[plannerEndExecStmt].Sub(p[plannerStartExecStmt])
+}
+
+// getPlanningLatency returns the time it takes for a query to be planned.
+func (p *phaseTimes) getPlanningLatency() time.Duration {
+	return p[plannerEndLogicalPlan].Sub(p[plannerStartLogicalPlan])
+}
+
+// getParsingLatency returns the time it takes for a query to be parsed.
+func (p *phaseTimes) getParsingLatency() time.Duration {
+	return p[sessionEndParse].Sub(p[sessionStartParse])
+}
+
 // EngineMetrics groups a set of SQL metrics.
 type EngineMetrics struct {
 	// The subset of SELECTs that are processed through DistSQL.
@@ -108,19 +129,12 @@ func (ex *connExecutor) recordStatementSummary(
 ) {
 	phaseTimes := &ex.statsCollector.phaseTimes
 
-	// Compute the run latency. This is always recorded in the
-	// server metrics.
-	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
-
 	// Collect the statistics.
+	runLatRaw := phaseTimes.getRunLatency()
 	runLat := runLatRaw.Seconds()
-
-	parseLat := phaseTimes[sessionEndParse].
-		Sub(phaseTimes[sessionStartParse]).Seconds()
-	planLat := phaseTimes[plannerEndLogicalPlan].
-		Sub(phaseTimes[plannerStartLogicalPlan]).Seconds()
-	// service latency: time query received to end of run
-	svcLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionQueryReceived])
+	parseLat := phaseTimes.getParsingLatency().Seconds()
+	planLat := phaseTimes.getPlanningLatency().Seconds()
+	svcLatRaw := phaseTimes.getServiceLatency()
 	svcLat := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.

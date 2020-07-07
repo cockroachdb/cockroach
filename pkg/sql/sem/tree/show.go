@@ -395,6 +395,14 @@ func (node *ShowTransactionStatus) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TRANSACTION STATUS")
 }
 
+// ShowLastQueryStatistics represents a SHOW LAST QUERY STATS statement.
+type ShowLastQueryStatistics struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowLastQueryStatistics) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW LAST QUERY STATISTICS")
+}
+
 // ShowSavepointStatus represents a SHOW SAVEPOINT STATUS statement.
 type ShowSavepointStatus struct {
 }
