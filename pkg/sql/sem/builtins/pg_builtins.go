@@ -138,9 +138,6 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 	return builtinDefinition{
 		props: tree.FunctionProperties{
 			Category: categoryCompatibility,
-			// Ignore validity checks for typeio builtins.
-			// We don't implement these anyway, and they are very hard to special case.
-			IgnoreVolatilityCheck: true,
 		},
 		overloads: []tree.Overload{
 			{
@@ -151,6 +148,10 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 				},
 				Info:       notUsableInfo,
 				Volatility: tree.VolatilityVolatile,
+				// Ignore validity checks for typeio builtins. We don't
+				// implement these anyway, and they are very hard to special
+				// case.
+				IgnoreVolatilityCheck: true,
 			},
 		},
 	}

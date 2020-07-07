@@ -84,11 +84,6 @@ type FunctionProperties struct {
 	// with the FmtParsable directive.
 	AmbiguousReturnType bool
 
-	// IgnoreVolatilityCheck ignores checking the functions overloads against
-	// the Postgres ones at test time.
-	// This should be used with caution.
-	IgnoreVolatilityCheck bool
-
 	// HasSequenceArguments is true if the builtin function takes in a sequence
 	// name (string) and can be used in a scalar expression.
 	// TODO(richardjcai): When implicit casting is supported, these builtins
