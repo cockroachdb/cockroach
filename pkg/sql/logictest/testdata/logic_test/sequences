@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(50840)
+# LogicTest: !3node-tenant(50048)
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
 # USING THE `lastval` FUNCTION
