@@ -7,22 +7,6 @@ import (
 )
 
 func Serve(ln net.Listener, opts Options) error {
-	doneCh := make(chan error)
-	defer close(doneCh)
-	proxyErrCh := make(chan error)
-
-	go func() {
-		for {
-			select {
-			case <-doneCh:
-				return
-
-			case err := <-proxyErrCh:
-				log.Println(err)
-			}
-		}
-	}()
-
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

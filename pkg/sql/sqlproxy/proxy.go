@@ -17,9 +17,15 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
+const pgAcceptSSLRequest = 'S'
+
+// See https://www.postgresql.org/docs/9.1/protocol-message-formats.html.
+var pgSSLRequest = []int32{8, 80877103}
+
+// Options are the options to the Proxy method.
 type Options struct {
-	IncomingTLSConfig *tls.Config
-	OutgoingTLSConfig *tls.Config
+	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
+	OutgoingTLSConfig *tls.Config // config used for proxy -> backend connection
 
 	// TODO(tbg): this is unimplemented and exists only to check which clients
 	// allow use of SNI. Should always return ("", nil).
@@ -29,8 +35,6 @@ type Options struct {
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
-
-	_ struct{} // force explicit init of this struct
 }
 
 func Proxy(conn net.Conn, opts Options) error {
@@ -52,12 +56,12 @@ func Proxy(conn net.Conn, opts Options) error {
 		}
 		_, ok := m.(*pgproto3.SSLRequest)
 		if !ok {
-			code := CodeInsecureUnexpectedStartupMessage
+			code := CodeUnexpectedInsecureStartupMessage
 			sendErrToClient(conn, code, "server requires encryption")
 			return newErrorf(code, "unsupported startup message: %T", m)
 		}
 
-		_, err = conn.Write([]byte("S"))
+		_, err = conn.Write([]byte{pgAcceptSSLRequest})
 		if err != nil {
 			return newErrorf(CodeClientWriteFailed, "acking SSLRequest: %v", err)
 		}
@@ -88,7 +92,7 @@ func Proxy(conn net.Conn, opts Options) error {
 	}
 	msg, ok := m.(*pgproto3.StartupMessage)
 	if !ok {
-		return newErrorf(CodeSecureStartupMessageFailed, "unsupported post-TLS startup message: %T", m)
+		return newErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
 	outgoingAddr, clientErr := opts.OutgoingAddrFromParams(msg.Parameters)
@@ -115,18 +119,21 @@ func Proxy(conn net.Conn, opts Options) error {
 		return newErrorf(CodeBackendDown, "reading response to SSLRequest")
 	}
 
-	if response[0] != 'S' {
+	if response[0] != pgAcceptSSLRequest {
 		return newErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
 	}
 
-	crdbConn = tls.Client(crdbConn, opts.OutgoingTLSConfig)
+	outCfg := opts.OutgoingTLSConfig.Clone()
+	outCfg.ServerName = outgoingAddr
+	crdbConn = tls.Client(crdbConn, outCfg)
 
 	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
 		return newErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v", outgoingAddr, err)
 	}
 
-	errOutgoing := make(chan error)
-	errIncoming := make(chan error)
+	// These channels are buffered because we'll only consume one of them.
+	errOutgoing := make(chan error, 1)
+	errIncoming := make(chan error, 1)
 
 	go func() {
 		_, err := io.Copy(crdbConn, conn)

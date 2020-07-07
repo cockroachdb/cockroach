@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
@@ -85,7 +86,27 @@ func testingTenantIDFromDatabaseForAddr(
 	}
 }
 
-func assertConnectErr(t *testing.T, prefix, suffix string, expCode ErrorCode, expErr string) {
+type assertCtx struct {
+	emittedCode *ErrorCode
+}
+
+func makeAssertCtx() assertCtx {
+	var emittedCode ErrorCode = -1
+	return assertCtx{
+		emittedCode: &emittedCode,
+	}
+}
+
+func (ac *assertCtx) onSendErrToClient(code ErrorCode, msg string) string {
+	*ac.emittedCode = code
+	return msg
+}
+
+func (ac *assertCtx) assertConnectErr(
+	t *testing.T, prefix, suffix string, expCode ErrorCode, expErr string,
+) {
+	t.Helper()
+	*ac.emittedCode = -1
 	t.Run(suffix, func(t *testing.T) {
 		ctx := context.Background()
 		conn, err := pgx.Connect(ctx, prefix+suffix)
@@ -93,23 +114,30 @@ func assertConnectErr(t *testing.T, prefix, suffix string, expCode ErrorCode, ex
 			_ = conn.Close(ctx)
 		}
 		require.Contains(t, err.Error(), expErr)
+		require.Equal(t, expCode, *ac.emittedCode)
+
 	})
 }
 
 func TestLongDBName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ac := makeAssertCtx()
+
 	var m map[string]string
 	opts := Options{
 		OutgoingAddrFromParams: func(mm map[string]string) (string, error) {
 			m = mm
 			return "", errors.New("boom")
 		},
+		OnSendErrToClient: ac.onSendErrToClient,
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
 
 	longDB := strings.Repeat("x", 70) // 63 is limit
 	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s", addr, longDB)
-	assertConnectErr(t, pgurl, "" /* suffix */, CodeParamsRoutingFailed, "boom")
+	ac.assertConnectErr(t, pgurl, "" /* suffix */, CodeParamsRoutingFailed, "boom")
 	require.Equal(t, longDB, m["database"])
 }
 
@@ -121,11 +149,14 @@ func requireCode(t *testing.T, exp ErrorCode, err error) {
 }
 
 func TestFailedConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// TODO(asubiotto): consider using datadriven for these, especially if the
 	// proxy becomes more complex.
 
+	ac := makeAssertCtx()
 	opts := Options{
 		OutgoingAddrFromParams: testingTenantIDFromDatabaseForAddr("undialable%$!@$", "29"),
+		OnSendErrToClient:      ac.onSendErrToClient,
 	}
 	addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
@@ -135,47 +166,55 @@ func TestFailedConnection(t *testing.T) {
 	u := fmt.Sprintf("postgres://unused:unused@localhost:%s/", p)
 	// Valid connections, but no backend server running.
 	for _, sslmode := range []string{"require", "prefer"} {
-		assertConnectErr(
+		ac.assertConnectErr(
 			t, u, "defaultdb_29?sslmode="+sslmode,
 			CodeBackendDown, "unable to reach backend SQL server",
 		)
 	}
-	assertConnectErr(
+	ac.assertConnectErr(
 		t, u, "defaultdb_29?sslmode=verify-ca&sslrootcert=testserver.crt",
 		CodeBackendDown, "unable to reach backend SQL server",
 	)
-	assertConnectErr(
+	ac.assertConnectErr(
 		t, u, "defaultdb_29?sslmode=verify-full&sslrootcert=testserver.crt",
 		CodeBackendDown, "unable to reach backend SQL server",
 	)
 
 	// Unencrypted connections bounce.
 	for _, sslmode := range []string{"disable", "allow"} {
-		assertConnectErr(
+		ac.assertConnectErr(
 			t, u, "defaultdb_29?sslmode="+sslmode,
-			CodeInsecureUnexpectedStartupMessage, "server requires encryption",
+			CodeUnexpectedInsecureStartupMessage, "server requires encryption",
 		)
 	}
 
 	// TenantID rejected by test hook.
-	assertConnectErr(
+	ac.assertConnectErr(
 		t, u, "defaultdb_28?sslmode=require",
 		CodeParamsRoutingFailed, "invalid tenantID",
 	)
 
 	// No TenantID.
-	assertConnectErr(
+	ac.assertConnectErr(
 		t, u, "defaultdb?sslmode=require",
 		CodeParamsRoutingFailed, "malformed database name",
 	)
 }
 
 func TestProxyAgainstSecureCRDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 
 	t.Skip("this test needs a running (secure) CockroachDB instance at the given address")
 	const crdbSQL = "127.0.0.1:52966"
-	// TODO(tbg): use an in-mem test server once this code lives in the CRDB repo.
+	// TODO(asubiotto): use an in-mem test server once this code lives in the CRDB
+	// repo.
+	//
+	// TODO(tbg): if I use the https (!) port of ./cockroach demo, the
+	// connection hangs instead of failing. Why? Probably both ends end up waiting
+	// for the other side due to protocol mismatch. Should set deadlines on all
+	// the read/write ops to avoid this failure mode.
 
 	opts := Options{
 		OutgoingAddrFromParams: testingTenantIDFromDatabaseForAddr(crdbSQL, "29"),

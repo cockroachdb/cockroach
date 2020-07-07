@@ -49,7 +49,7 @@ func run() error {
 	flag.StringVar(&options.targetAddress, "target", "127.0.0.1:26257",
 		"Address to proxy to (a Postgres-compatible server)")
 	flag.BoolVar(&options.verify, "verify", true,
-		"If true, use InsecureSkipVerify=true for connections to target")
+		"If false, use InsecureSkipVerify=true. For testing only.")
 	flag.Parse()
 
 	ln, err := net.Listen("tcp", options.listenAddress)
@@ -66,20 +66,12 @@ func run() error {
 	}
 	opts := proxy.Options{
 		IncomingTLSConfig: &tls.Config{Certificates: []tls.Certificate{cer}},
-		OutgoingTLSConfig: &tls.Config{InsecureSkipVerify: !options.verify},
+		OutgoingTLSConfig: &tls.Config{
+			InsecureSkipVerify: !options.verify,
+		},
 		OutgoingAddrFromParams: func(map[string]string) (addr string, clientErr error) {
 			// TODO(asubiotto): implement the actual translation here once it is clear
-			// how this will work. It's likely that a filename will be passed to the
-			// proxy which contains a lookup map (and which needs to be re-read on
-			// SIGHUP). For now, just send everybody to one address and don't validate
-			// any parameters.
-			// TODO(asubiotto): implement and test the free tier logic:
-			// 1. check the 'database' key. The value either contains no dot, and is
-			// treated as the tenant name (i.e. the actual database name is empty). 2.
-			// if it contains a dot, the tenant name precedes the first dot. Examples:
-			// prancing-koala.mydb has tenant name "prancing-koala" and data- base
-			// mydb (which will have to be written into the map) and "prancing-koala"
-			// has the same tenant name but an empty database.
+			// how this will work.
 			return options.targetAddress, nil
 		},
 	}

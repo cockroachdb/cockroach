@@ -25,19 +25,19 @@ const (
 	// CodeClientWriteFailed indicates an error writing to the client connection.
 	CodeClientWriteFailed
 
-	// CodeInsecureUnexpectedStartupMessage indicates that the client sent a
+	// CodeUnexpectedInsecureStartupMessage indicates that the client sent a
 	// StartupMessage which was unexpected. Typically this means that an
 	// SSLRequest was expected but the client attempted to go ahead without TLS,
 	// or vice versa.
-	CodeInsecureUnexpectedStartupMessage
+	CodeUnexpectedInsecureStartupMessage
 
 	// CodeSNIRoutingFailed indicates an error choosing a backend address based on
 	// the client's SNI header.
 	CodeSNIRoutingFailed
 
-	// CodeSecureStartupMessageFailed indicates an unexpected startup message
+	// CodeUnexpectedStartupMessage indicates an unexpected startup message
 	// received from the client after TLS negotiation.
-	CodeSecureStartupMessageFailed
+	CodeUnexpectedStartupMessage
 
 	// CodeParamsRoutingFailed indicates an error choosing a backend address based
 	// on the client's session parameters.
