@@ -73,6 +73,7 @@ const (
 	VersionNodeMembershipStatus
 	VersionRangeStatsRespHasDesc
 	VersionMinPasswordLength
+	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 
 	// Add new versions here (step one of two).
 )
@@ -550,6 +551,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionMinPasswordLength adds the server.user_login.min_password_length setting.
 		Key:     VersionMinPasswordLength,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
+	},
+	{
+		// VersionAlterSystemJobsTableAddLeaseColumn is a version which modified system.jobs table.
+		Key:     VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
 	},
 
 	// Add new versions here (step two of two).
