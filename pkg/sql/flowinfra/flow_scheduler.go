@@ -13,6 +13,7 @@ package flowinfra
 import (
 	"container/list"
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -43,9 +44,12 @@ type FlowScheduler struct {
 
 	mu struct {
 		syncutil.Mutex
-		numRunning      int
-		maxRunningFlows int
-		queue           *list.List
+		queue *list.List
+	}
+
+	atomics struct {
+		numRunning      int32
+		maxRunningFlows int32
 	}
 }
 
@@ -72,27 +76,35 @@ func NewFlowScheduler(
 		metrics:        metrics,
 	}
 	fs.mu.queue = list.New()
-	fs.mu.maxRunningFlows = int(settingMaxRunningFlows.Get(&settings.SV))
+	fs.atomics.maxRunningFlows = int32(settingMaxRunningFlows.Get(&settings.SV))
 	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
-		fs.mu.Lock()
-		fs.mu.maxRunningFlows = int(settingMaxRunningFlows.Get(&settings.SV))
-		fs.mu.Unlock()
+		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
 	})
 	return fs
 }
 
+// canRunFlow returns whether the FlowScheduler can run the flow. If true is
+// returned, numRunning is also incremented.
+// TODO(radu): we will have more complex resource accounting (like memory).
+//  For now we just limit the number of concurrent flows.
 func (fs *FlowScheduler) canRunFlow(_ Flow) bool {
-	// TODO(radu): we will have more complex resource accounting (like memory).
-	// For now we just limit the number of concurrent flows.
-	return fs.mu.numRunning < fs.mu.maxRunningFlows
+	// Optimistically increase numRunning to account for this new flow.
+	newNumRunning := atomic.AddInt32(&fs.atomics.numRunning, 1)
+	if newNumRunning <= atomic.LoadInt32(&fs.atomics.maxRunningFlows) {
+		// Happy case. This flow did not bring us over the limit, so return that the
+		// flow can be run and is accounted for in numRunning.
+		return true
+	}
+	atomic.AddInt32(&fs.atomics.numRunning, -1)
+	return false
 }
 
-// runFlowNow starts the given flow; does not wait for the flow to complete.
+// runFlowNow starts the given flow; does not wait for the flow to complete. The
+// caller is responsible for incrementing numRunning.
 func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow) error {
 	log.VEventf(
-		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), fs.mu.numRunning,
+		ctx, 1, "flow scheduler running flow %s, currently running %d", f.GetID(), atomic.LoadInt32(&fs.atomics.numRunning)-1,
 	)
-	fs.mu.numRunning++
 	fs.metrics.FlowStart()
 	if err := f.Start(ctx, func() { fs.flowDoneCh <- f }); err != nil {
 		return err
@@ -141,7 +153,7 @@ func (fs *FlowScheduler) Start() {
 		defer fs.mu.Unlock()
 
 		for {
-			if stopped && fs.mu.numRunning == 0 {
+			if stopped && atomic.LoadInt32(&fs.atomics.numRunning) == 0 {
 				// TODO(radu): somehow error out the flows that are still in the queue.
 				return
 			}
@@ -149,7 +161,9 @@ func (fs *FlowScheduler) Start() {
 			select {
 			case <-fs.flowDoneCh:
 				fs.mu.Lock()
-				fs.mu.numRunning--
+				// Decrement numRunning lazily (i.e. only if there is no new flow to
+				// run).
+				decrementNumRunning := stopped
 				fs.metrics.FlowStop()
 				if !stopped {
 					if frElem := fs.mu.queue.Front(); frElem != nil {
@@ -167,7 +181,12 @@ func (fs *FlowScheduler) Start() {
 						if err := fs.runFlowNow(n.ctx, n.flow); err != nil {
 							log.Errorf(n.ctx, "error starting queued flow: %s", err)
 						}
+					} else {
+						decrementNumRunning = true
 					}
+				}
+				if decrementNumRunning {
+					atomic.AddInt32(&fs.atomics.numRunning, -1)
 				}
 
 			case <-fs.stopper.ShouldStop():
