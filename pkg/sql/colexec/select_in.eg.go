@@ -415,27 +415,31 @@ func fillDatumRowBool(t *types.T, datumTuple *tree.DTuple) ([]bool, bool, error)
 func cmpInBool(
 	targetElem bool, targetCol coldata.Bools, filterRow []bool, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
-		{
-			var cmpResult int
-
-			if !targetElem && filterRow[i] {
-				cmpResult = -1
-			} else if targetElem && !filterRow[i] {
-				cmpResult = 1
-			} else {
-				cmpResult = 0
-			}
-
-			cmp = cmpResult == 0
+		if !targetElem && filterRow[i] {
+			cmpResult = -1
+		} else if targetElem && !filterRow[i] {
+			cmpResult = 1
+		} else {
+			cmpResult = 0
 		}
 
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -652,19 +656,23 @@ func fillDatumRowBytes(t *types.T, datumTuple *tree.DTuple) ([][]byte, bool, err
 func cmpInBytes(
 	targetElem []byte, targetCol *coldata.Bytes, filterRow [][]byte, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
-
-		{
-			var cmpResult int
-			cmpResult = bytes.Compare(targetElem, filterRow[i])
-			cmp = cmpResult == 0
-		}
-
-		if cmp {
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+		cmpResult = bytes.Compare(targetElem, filterRow[i])
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -885,19 +893,23 @@ func fillDatumRowDecimal(t *types.T, datumTuple *tree.DTuple) ([]apd.Decimal, bo
 func cmpInDecimal(
 	targetElem apd.Decimal, targetCol coldata.Decimals, filterRow []apd.Decimal, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
-
-		{
-			var cmpResult int
-			cmpResult = tree.CompareDecimals(&targetElem, &filterRow[i])
-			cmp = cmpResult == 0
-		}
-
-		if cmp {
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+		cmpResult = tree.CompareDecimals(&targetElem, &filterRow[i])
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -1114,30 +1126,34 @@ func fillDatumRowInt16(t *types.T, datumTuple *tree.DTuple) ([]int16, bool, erro
 func cmpInInt16(
 	targetElem int16, targetCol coldata.Int16s, filterRow []int16, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
 		{
-			var cmpResult int
-
-			{
-				a, b := int64(targetElem), int64(filterRow[i])
-				if a < b {
-					cmpResult = -1
-				} else if a > b {
-					cmpResult = 1
-				} else {
-					cmpResult = 0
-				}
+			a, b := int64(targetElem), int64(filterRow[i])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else {
+				cmpResult = 0
 			}
-
-			cmp = cmpResult == 0
 		}
 
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -1354,30 +1370,34 @@ func fillDatumRowInt32(t *types.T, datumTuple *tree.DTuple) ([]int32, bool, erro
 func cmpInInt32(
 	targetElem int32, targetCol coldata.Int32s, filterRow []int32, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
 		{
-			var cmpResult int
-
-			{
-				a, b := int64(targetElem), int64(filterRow[i])
-				if a < b {
-					cmpResult = -1
-				} else if a > b {
-					cmpResult = 1
-				} else {
-					cmpResult = 0
-				}
+			a, b := int64(targetElem), int64(filterRow[i])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else {
+				cmpResult = 0
 			}
-
-			cmp = cmpResult == 0
 		}
 
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -1594,30 +1614,34 @@ func fillDatumRowInt64(t *types.T, datumTuple *tree.DTuple) ([]int64, bool, erro
 func cmpInInt64(
 	targetElem int64, targetCol coldata.Int64s, filterRow []int64, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
 		{
-			var cmpResult int
-
-			{
-				a, b := int64(targetElem), int64(filterRow[i])
-				if a < b {
-					cmpResult = -1
-				} else if a > b {
-					cmpResult = 1
-				} else {
-					cmpResult = 0
-				}
+			a, b := int64(targetElem), int64(filterRow[i])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else {
+				cmpResult = 0
 			}
-
-			cmp = cmpResult == 0
 		}
 
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -1834,38 +1858,42 @@ func fillDatumRowFloat64(t *types.T, datumTuple *tree.DTuple) ([]float64, bool, 
 func cmpInFloat64(
 	targetElem float64, targetCol coldata.Float64s, filterRow []float64, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
 		{
-			var cmpResult int
-
-			{
-				a, b := float64(targetElem), float64(filterRow[i])
-				if a < b {
-					cmpResult = -1
-				} else if a > b {
-					cmpResult = 1
-				} else if a == b {
+			a, b := float64(targetElem), float64(filterRow[i])
+			if a < b {
+				cmpResult = -1
+			} else if a > b {
+				cmpResult = 1
+			} else if a == b {
+				cmpResult = 0
+			} else if math.IsNaN(a) {
+				if math.IsNaN(b) {
 					cmpResult = 0
-				} else if math.IsNaN(a) {
-					if math.IsNaN(b) {
-						cmpResult = 0
-					} else {
-						cmpResult = -1
-					}
 				} else {
-					cmpResult = 1
+					cmpResult = -1
 				}
+			} else {
+				cmpResult = 1
 			}
-
-			cmp = cmpResult == 0
 		}
 
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -2082,26 +2110,30 @@ func fillDatumRowTimestamp(t *types.T, datumTuple *tree.DTuple) ([]time.Time, bo
 func cmpInTimestamp(
 	targetElem time.Time, targetCol coldata.Times, filterRow []time.Time, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
-		{
-			var cmpResult int
-
-			if targetElem.Before(filterRow[i]) {
-				cmpResult = -1
-			} else if filterRow[i].Before(targetElem) {
-				cmpResult = 1
-			} else {
-				cmpResult = 0
-			}
-			cmp = cmpResult == 0
+		if targetElem.Before(filterRow[i]) {
+			cmpResult = -1
+		} else if filterRow[i].Before(targetElem) {
+			cmpResult = 1
+		} else {
+			cmpResult = 0
 		}
-
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -2318,19 +2350,23 @@ func fillDatumRowInterval(t *types.T, datumTuple *tree.DTuple) ([]duration.Durat
 func cmpInInterval(
 	targetElem duration.Duration, targetCol coldata.Durations, filterRow []duration.Duration, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
-
-		{
-			var cmpResult int
-			cmpResult = targetElem.Compare(filterRow[i])
-			cmp = cmpResult == 0
-		}
-
-		if cmp {
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+		cmpResult = targetElem.Compare(filterRow[i])
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
@@ -2547,21 +2583,25 @@ func fillDatumRowDatum(t *types.T, datumTuple *tree.DTuple) ([]interface{}, bool
 func cmpInDatum(
 	targetElem interface{}, targetCol coldata.DatumVec, filterRow []interface{}, hasNulls bool,
 ) comparisonResult {
-	for i := range filterRow {
-		var cmp bool
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
 
-		{
-			var cmpResult int
+		cmpResult = targetElem.(*coldataext.Datum).CompareDatum(targetCol, filterRow[i])
 
-			cmpResult = targetElem.(*coldataext.Datum).CompareDatum(targetCol, filterRow[i])
-
-			cmp = cmpResult == 0
-		}
-
-		if cmp {
+		if cmpResult == 0 {
 			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
 		}
 	}
+
 	if hasNulls {
 		return siNull
 	} else {
