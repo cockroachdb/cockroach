@@ -157,12 +157,17 @@ SELECT '5874897-12-31'::date - '4714-11-24 BC'::date
 query T
 SELECT age('2001-04-10 22:06:45', '1957-06-13')
 ----
-384190:06:45
+44 years 5 mons 17 days 22:06:45
 
 query B
 SELECT age('1957-06-13') - age(now(), '1957-06-13') = interval '0s'
 ----
 true
+
+query T
+select age('2017-12-10'::timestamptz, '2017-12-01'::timestamptz)
+----
+9 days
 
 query B
 SELECT now() - timestamp '2015-06-13' > interval '100h'
