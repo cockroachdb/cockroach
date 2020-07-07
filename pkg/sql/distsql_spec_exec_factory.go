@@ -43,23 +43,39 @@ type distSQLSpecExecFactory struct {
 		localPlanCtx *PlanningCtx
 	}
 	singleTenant  bool
+	planningMode  distSQLPlanningMode
 	gatewayNodeID roachpb.NodeID
 }
 
 var _ exec.Factory = &distSQLSpecExecFactory{}
 
-func newDistSQLSpecExecFactory(p *planner) exec.Factory {
+// distSQLPlanningMode indicates the planning mode in which
+// distSQLSpecExecFactory is operating.
+type distSQLPlanningMode int
+
+const (
+	// distSQLDefaultPlanning is the default planning mode in which the factory
+	// can create a physical plan with any plan distribution (local, partially
+	// distributed, or fully distributed).
+	distSQLDefaultPlanning distSQLPlanningMode = iota
+	// distSQLLocalOnlyPlanning is the planning mode in which the factory
+	// only creates local physical plans.
+	distSQLLocalOnlyPlanning
+)
+
+func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exec.Factory {
 	return &distSQLSpecExecFactory{
 		planner:       p,
 		dsp:           p.extendedEvalCtx.DistSQLPlanner,
 		singleTenant:  p.execCfg.Codec.ForSystemTenant(),
+		planningMode:  planningMode,
 		gatewayNodeID: p.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 	}
 }
 
 func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
 	distribute := false
-	if e.singleTenant {
+	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
 		distribute = shouldDistributeGivenRecAndMode(recommendation, e.planner.extendedEvalCtx.SessionData.DistSQLMode)
 	}
 	if distribute {
