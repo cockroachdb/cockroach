@@ -444,7 +444,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		// Until 20.2, --self is not supported.
 		// TODO(knz): Remove this alternative when roachtest does not
 		// test any version lower than 20.2.
-		if strings.Contains(cmdOutput, "ERROR: unknown flag: --self") {
+		if strings.Contains(cmdOutput, ": unknown flag: --self") {
 			t.l.Printf("--self not supported; skipping recommission with --self")
 			selfFlagSupported = false
 		} else {
@@ -708,6 +708,12 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 			{"node_decommissioned", "3"},
 			{"node_recommissioned", "3"},
 			{"node_decommissioned", "1"},
+		}
+
+		if !selfFlagSupported {
+			// If `--self` is not supported then we don't expect to see
+			// node 1 self decommission and recommission (step 3 and 4)
+			expMatrix = append(expMatrix[:2], expMatrix[4:]...)
 		}
 
 		if !reflect.DeepEqual(matrix, expMatrix) {
