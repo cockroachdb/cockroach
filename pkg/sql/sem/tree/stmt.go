@@ -229,6 +229,16 @@ func (*Backup) cclOnlyStatement() {}
 func (*Backup) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*ScheduledBackup) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ScheduledBackup) StatementTag() string { return "SCHEDULED BACKUP" }
+
+func (*ScheduledBackup) cclOnlyStatement() {}
+
+func (*ScheduledBackup) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*BeginTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -987,6 +997,7 @@ func (n *RollbackToSavepoint) String() string            { return AsString(n) }
 func (n *RollbackTransaction) String() string            { return AsString(n) }
 func (n *Savepoint) String() string                      { return AsString(n) }
 func (n *Scatter) String() string                        { return AsString(n) }
+func (n *ScheduledBackup) String() string                { return AsString(n) }
 func (n *Scrub) String() string                          { return AsString(n) }
 func (n *Select) String() string                         { return AsString(n) }
 func (n *SelectClause) String() string                   { return AsString(n) }
