@@ -50,14 +50,14 @@ export const getTimeLabel = (
   const time = windowSize
     ? windowSize
     : currentWindow
-    ? moment.duration(moment(currentWindow.end).diff(currentWindow.start))
+    ? moment.duration(moment.utc(currentWindow.end).diff(currentWindow.start))
     : moment.duration(10, "minutes");
   const seconds = time.asSeconds();
   const minutes = 60;
   const hour = minutes * 60;
   const day = hour * 24;
   const week = day * 7;
-  const month = day * moment().daysInMonth();
+  const month = day * moment.utc().daysInMonth();
   switch (true) {
     case seconds < hour:
       return time.asMinutes().toFixed() + "m";
@@ -77,8 +77,8 @@ export const getTimeRangeTitle = (
   currentScale: timewindow.TimeScale,
 ) => {
   if (currentScale.key === "Custom" && currentWindow) {
-    const isSameStartDay = moment.utc(currentWindow.start).isSame(moment(), "day");
-    const isSameEndDay = moment.utc(currentWindow.end).isSame(moment(), "day");
+    const isSameStartDay = moment.utc(currentWindow.start).isSame(moment.utc(), "day");
+    const isSameEndDay = moment.utc(currentWindow.end).isSame(moment.utc(), "day");
     return {
       dateStart: isSameStartDay
         ? ""
@@ -103,10 +103,10 @@ export const generateDisabledArrows = (
   const disabledArrows = [];
   if (currentWindow) {
     const differenceEndToNow = moment
-      .duration(moment().diff(currentWindow.end))
+      .duration(moment.utc().diff(currentWindow.end))
       .asMinutes();
     const differenceEndToStart = moment
-      .duration(moment(currentWindow.end).diff(currentWindow.start))
+      .duration(moment.utc(currentWindow.end).diff(currentWindow.start))
       .asMinutes();
     if (differenceEndToNow < differenceEndToStart) {
       if (differenceEndToNow < 10) {
@@ -147,14 +147,14 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     const newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
     newSettings.windowEnd = null;
     if (newSettings) {
-      setQueryParamsByDates(newSettings.windowSize, moment());
+      setQueryParamsByDates(newSettings.windowSize, moment.utc());
       setTimeScale({ ...newSettings, key: newTimescaleKey.value });
     }
   };
 
   const arrowClick = (direction: ArrowDirection) => {
     const windowSize: any = moment.duration(
-      moment(currentWindow.end).diff(currentWindow.start),
+      moment.utc(currentWindow.end).diff(currentWindow.start),
     );
     const seconds = windowSize.asSeconds();
     let selected = {};
@@ -181,7 +181,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     }
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
-    if (!windowEnd || windowEnd > moment().subtract(currentScale.windowValid)) {
+    if (!windowEnd || windowEnd > moment.utc().subtract(currentScale.windowValid)) {
       const size = { windowSize: { _data: windowSize._data } };
       if (_.find(timewindow.availableTimeScales, size as any)) {
         const data = {
@@ -237,7 +237,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
   const setQueryParams = (date: moment.Moment, type: DateTypes) => {
     const dataType = type === DateTypes.DATE_FROM ? "start" : "end";
-    const timestamp = moment(date).format("X");
+    const timestamp = moment.utc(date).format("X");
     const query = queryToObj(location, dataType, timestamp);
     history.push({
       pathname: location.pathname,
@@ -266,14 +266,14 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
   const setDatesByQueryParams = (dates?: timewindow.TimeWindow) => {
     const window = _.clone(currentWindow);
-    const end = dates.end || (window && window.end) || moment();
+    const end = dates.end || (window && window.end) || moment.utc();
     const start =
       dates.start ||
       (window && window.start) ||
-      moment().subtract(10, "minutes");
-    const seconds = moment.duration(moment(end).diff(start)).asSeconds();
+      moment.utc().subtract(10, "minutes");
+    const seconds = moment.duration(moment.utc(end).diff(start)).asSeconds();
     const timeScale = timewindow.findClosestTimeScale(seconds);
-    const now = moment();
+    const now = moment.utc();
     if (
       moment.duration(now.diff(end)).asMinutes() >
       timeScale.sampleSize.asMinutes()
@@ -289,9 +289,9 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     const window = _.clone(currentWindow);
     const selected = _.clone(currentScale);
     const end =
-      window.end || moment().utc().set({ hours: 23, minutes: 59, seconds: 0 });
+      window.end.utc() || moment.utc().set({ hours: 23, minutes: 59, seconds: 0 });
     const start =
-      window.start || moment().utc().set({ hours: 0, minutes: 0, seconds: 0 });
+      window.start.utc() || moment.utc().set({ hours: 0, minutes: 0, seconds: 0 });
     switch (type) {
       case DateTypes.DATE_FROM:
         setQueryParams(date, DateTypes.DATE_FROM);
