@@ -240,7 +240,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			TypeDescriptor{Name: "t", ID: 1},
 		},
 		{
-			`enum members are not sorted [{[2] a} {[1] b}]`,
+			`enum members are not sorted [{[2] a ALL} {[1] b ALL}]`,
 			TypeDescriptor{
 				Name:     "t",
 				ID:       1,

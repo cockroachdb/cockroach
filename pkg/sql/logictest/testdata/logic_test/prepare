@@ -1345,3 +1345,27 @@ DEALLOCATE a1
 
 statement ok
 DROP TABLE t3
+
+# Ensure that changes to used types in tables invalidate prepared statements.
+statement ok
+SET experimental_enable_enums = true;
+CREATE TYPE greeting AS ENUM ('hello', 'hi');
+CREATE TABLE greeting_table (x greeting NOT NULL, y INT, INDEX (x, y))
+
+# This query plan emits constrained lookups based on each enum value.
+statement ok
+PREPARE enum_query AS SELECT x, y FROM greeting_table WHERE y = 2
+
+# Now alter the enum to have a new value.
+statement ok
+ALTER TYPE greeting ADD VALUE 'howdy'
+
+# Insert a value of this new enum into the table.
+statement ok
+INSERT INTO greeting_table VALUES ('howdy', 2)
+
+# If the query plan wasn't invalidated, we wouldn't scan the desired row.
+query TI
+EXECUTE enum_query
+----
+howdy 2

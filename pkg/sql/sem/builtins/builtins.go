@@ -2875,7 +2875,7 @@ may increase either contention or retry errors, or both.`,
 					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
 				}
 				arg := args[0].(*tree.DEnum)
-				min, ok := arg.Min(evalCtx)
+				min, ok := arg.MinWriteable()
 				if !ok {
 					return nil, errors.Newf("enum %s contains no values", arg.ResolvedType().Name())
 				}
@@ -2896,7 +2896,7 @@ may increase either contention or retry errors, or both.`,
 					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
 				}
 				arg := args[0].(*tree.DEnum)
-				max, ok := arg.Max(evalCtx)
+				max, ok := arg.MaxWriteable()
 				if !ok {
 					return nil, errors.Newf("enum %s contains no values", arg.ResolvedType().Name())
 				}
@@ -2920,6 +2920,10 @@ may increase either contention or retry errors, or both.`,
 				typ := arg.EnumTyp
 				arr := tree.NewDArray(typ)
 				for i := range typ.TypeMeta.EnumData.LogicalRepresentations {
+					// Read-only members should be excluded.
+					if typ.TypeMeta.EnumData.IsMemberReadOnly[i] {
+						continue
+					}
 					enum := &tree.DEnum{
 						EnumTyp:     typ,
 						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
@@ -2983,6 +2987,10 @@ may increase either contention or retry errors, or both.`,
 				}
 				arr := tree.NewDArray(typ)
 				for i := bottom; i <= top; i++ {
+					// Read-only members should be excluded.
+					if typ.TypeMeta.EnumData.IsMemberReadOnly[i] {
+						continue
+					}
 					enum := &tree.DEnum{
 						EnumTyp:     typ,
 						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],

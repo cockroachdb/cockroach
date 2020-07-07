@@ -145,9 +145,6 @@ true true
 statement error pq: invalid input value for enum greeting: "notagreeting"
 SELECT 'hello'::greeting = 'notagreeting'
 
-statement error pq: unimplemented: ALTER TYPE ADD VALUE unsupported
-ALTER TYPE greeting ADD VALUE 'hola' AFTER 'hello'
-
 statement error pq: unimplemented: ALTER TYPE RENAME VALUE unsupported
 ALTER TYPE greeting RENAME VALUE 'hello' TO 'helloooooo'
 
@@ -465,7 +462,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100064 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100063 time_precision_is_set:false udt_metadata:<stable_type_id:63 stable_array_type_id:64 > > TypeMeta:<> > time_precision_is_set:false udt_metadata:<stable_type_id:64 stable_array_type_id:0 >
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100064 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100063 time_precision_is_set:false udt_metadata:<stable_type_id:63 stable_array_type_id:64 > > TypeMeta:<Version:0 > > time_precision_is_set:false udt_metadata:<stable_type_id:64 stable_array_type_id:0 >
 
 # Test tables using enums in DEFAULT expressions.
 statement ok

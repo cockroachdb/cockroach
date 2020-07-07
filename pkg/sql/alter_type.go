@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,7 +56,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = unimplemented.NewWithIssue(48670, "ALTER TYPE ADD VALUE unsupported")
+		err = params.p.addEnumValue(params, n, t)
 	case *tree.AlterTypeRenameValue:
 		err = unimplemented.NewWithIssue(48697, "ALTER TYPE RENAME VALUE unsupported")
 	case *tree.AlterTypeRename:
@@ -69,6 +70,88 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		return err
 	}
 	return n.desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec)
+}
+
+func (p *planner) addEnumValue(
+	params runParams, n *alterTypeNode, node *tree.AlterTypeAddValue,
+) error {
+	if n.desc.Kind != sqlbase.TypeDescriptor_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	}
+	// See if the value already exists in the enum or not.
+	found := false
+	for _, member := range n.desc.EnumMembers {
+		if member.LogicalRepresentation == node.NewVal {
+			found = true
+			break
+		}
+	}
+	if found {
+		if node.IfNotExists {
+			return nil
+		}
+		return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
+	}
+
+	getPhysicalRep := func(idx int) []byte {
+		if idx < 0 || idx >= len(n.desc.EnumMembers) {
+			return nil
+		}
+		return n.desc.EnumMembers[idx].PhysicalRepresentation
+	}
+
+	// pos represents the spot to insert the new value. The new value will
+	// be inserted between pos and pos+1. By default, values are inserted
+	// at the end of the current list of members.
+	pos := len(n.desc.EnumMembers) - 1
+	if node.Placement != nil {
+		// If the value was requested to be added before or after an existing
+		// value, then find the index of where it should be inserted.
+		foundIndex := -1
+		existing := node.Placement.ExistingVal
+		for i, member := range n.desc.EnumMembers {
+			if member.LogicalRepresentation == existing {
+				foundIndex = i
+			}
+		}
+		if foundIndex == -1 {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "%q is not an existing enum label", existing)
+		}
+
+		pos = foundIndex
+		// If we were requested to insert before the element, shift pos down
+		// one so that the desired element is the upper bound.
+		if node.Placement.Before {
+			pos--
+		}
+	}
+
+	// Construct the new enum member. New enum values are added in the READ_ONLY
+	// capability to ensure that they aren't written before all other nodes know
+	// how to decode the physical representation.
+	newPhysicalRep := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
+	newMember := sqlbase.TypeDescriptor_EnumMember{
+		LogicalRepresentation:  node.NewVal,
+		PhysicalRepresentation: newPhysicalRep,
+		Capability:             sqlbase.TypeDescriptor_EnumMember_READ_ONLY,
+	}
+
+	// Now, insert the new member.
+	if len(n.desc.EnumMembers) == 0 {
+		n.desc.EnumMembers = []sqlbase.TypeDescriptor_EnumMember{newMember}
+	} else {
+		if pos < 0 {
+			// Insert the element in the front of the slice.
+			n.desc.EnumMembers = append([]sqlbase.TypeDescriptor_EnumMember{newMember}, n.desc.EnumMembers...)
+		} else {
+			// Insert the element in front of pos.
+			n.desc.EnumMembers = append(n.desc.EnumMembers, sqlbase.TypeDescriptor_EnumMember{})
+			copy(n.desc.EnumMembers[pos+2:], n.desc.EnumMembers[pos+1:])
+			n.desc.EnumMembers[pos+1] = newMember
+		}
+	}
+
+	return p.writeTypeChange(params.ctx, n.desc, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 func (p *planner) renameType(params runParams, n *alterTypeNode, newName string) error {

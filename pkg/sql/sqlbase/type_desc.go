@@ -377,6 +377,7 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	typ *types.T, name *tree.TypeName, typeLookup TypeLookupFunc,
 ) error {
 	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
+	typ.TypeMeta.Version = uint32(desc.Version)
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
@@ -384,14 +385,17 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 		}
 		logical := make([]string, len(desc.EnumMembers))
 		physical := make([][]byte, len(desc.EnumMembers))
+		isReadOnly := make([]bool, len(desc.EnumMembers))
 		for i := range desc.EnumMembers {
 			member := &desc.EnumMembers[i]
 			logical[i] = member.LogicalRepresentation
 			physical[i] = member.PhysicalRepresentation
+			isReadOnly[i] = member.Capability == TypeDescriptor_EnumMember_READ_ONLY
 		}
 		typ.TypeMeta.EnumData = &types.EnumMetadata{
 			LogicalRepresentations:  logical,
 			PhysicalRepresentations: physical,
+			IsMemberReadOnly:        isReadOnly,
 		}
 		return nil
 	case TypeDescriptor_ALIAS:

@@ -1083,7 +1083,17 @@ message TypeDescriptor {
     option (gogoproto.equal) = true;
     optional bytes physical_representation = 1;
     optional string logical_representation = 2 [(gogoproto.nullable) = false];
-    // TODO (rohany): Add the state here.
+
+    // Represents what operations are allowed on this ENUM member.
+    enum Capability {
+      // A member in the ALL state can be both read and written.
+      ALL = 0;
+      // A member in the READ_ONLY state can be only read from the bytes
+      // representation of the member. Creation of this member from the logical
+      // representation is disallowed, which prevents writes of the member.
+      READ_ONLY = 1;
+    }
+    optional Capability capability = 3 [(gogoproto.nullable) = false];
   }
   // enum_members is the set of values in an enum.
   repeated EnumMember enum_members = 6 [(gogoproto.nullable) = false];
