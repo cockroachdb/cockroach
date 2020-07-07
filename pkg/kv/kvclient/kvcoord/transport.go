@@ -132,14 +132,14 @@ func (gt *grpcTransport) IsExhausted() bool {
 	if gt.clientIndex < len(gt.orderedClients) {
 		return false
 	}
-	return !gt.maybeResurrectRetryablesLocked()
+	return !gt.maybeResurrectRetryables()
 }
 
-// maybeResurrectRetryablesLocked moves already-tried replicas which
+// maybeResurrectRetryables moves already-tried replicas which
 // experienced a retryable error (currently this means a
 // NotLeaseHolderError) into a newly-active state so that they can be
 // retried. Returns true if any replicas were moved to active.
-func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
+func (gt *grpcTransport) maybeResurrectRetryables() bool {
 	var resurrect []batchClient
 	for i := 0; i < gt.clientIndex; i++ {
 		if c := gt.orderedClients[i]; c.retryable && timeutil.Since(c.deadline) >= 0 {
@@ -147,7 +147,7 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 		}
 	}
 	for _, c := range resurrect {
-		gt.moveToFrontLocked(c.replica)
+		gt.moveToFront(c.replica)
 	}
 	return len(resurrect) > 0
 }
@@ -238,10 +238,10 @@ func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-	gt.moveToFrontLocked(replica)
+	gt.moveToFront(replica)
 }
 
-func (gt *grpcTransport) moveToFrontLocked(replica roachpb.ReplicaDescriptor) {
+func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].replica == replica {
 			// Clear the retryable bit as this replica is being made
