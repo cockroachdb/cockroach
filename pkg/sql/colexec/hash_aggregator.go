@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"sort"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -150,7 +151,10 @@ type hashAggregator struct {
 	groupCanonicalTypeFamilies []types.Family
 
 	// hashBuffer stores hash values for each tuple in the buffered batch.
-	hashBuffer []uint64
+	hashBuffer hashBufferWithSel
+	// identitySelection is a "fake" selection vector that contains integers in
+	// [0, colddta.BatchSize()) range.
+	identitySelection []int
 
 	aggFnsAlloc    *aggregateFuncsAlloc
 	hashAlloc      hashAggFuncsAlloc
@@ -221,6 +225,10 @@ func (op *hashAggregator) Init() {
 	op.input.Init()
 	op.output.Batch = op.allocator.NewMemBatch(op.outputTypes)
 
+	op.identitySelection = make([]int, coldata.BatchSize())
+	for i := range op.identitySelection {
+		op.identitySelection[i] = i
+	}
 	op.scratch.sels = make([][]int, coldata.BatchSize())
 	op.scratch.hashCodeForSelsSlot = make([]uint64, coldata.BatchSize())
 	op.scratch.diff = make([]bool, coldata.BatchSize())
@@ -230,7 +238,7 @@ func (op *hashAggregator) Init() {
 	op.keyMapping = newAppendOnlyBufferedBatch(
 		op.allocator, op.groupTypes, coldata.BatchSize(),
 	)
-	op.hashBuffer = make([]uint64, coldata.BatchSize())
+	op.hashBuffer.hashBuffer = make([]uint64, coldata.BatchSize())
 }
 
 func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
@@ -309,13 +317,13 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 
 func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b coldata.Batch) {
 	nKeys := b.Length()
-	hashBuffer := op.hashBuffer[:nKeys]
+	op.hashBuffer.hashBuffer = op.hashBuffer.hashBuffer[:nKeys]
 
-	initHash(hashBuffer, nKeys, defaultInitHashValue)
+	initHash(op.hashBuffer.hashBuffer, nKeys, defaultInitHashValue)
 
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
-			hashBuffer,
+			op.hashBuffer.hashBuffer,
 			b.ColVec(int(colIdx)),
 			nKeys,
 			b.Selection(),
@@ -326,10 +334,55 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context, b c
 	}
 
 	if op.testingKnobs.numOfHashBuckets != 0 {
-		finalizeHash(hashBuffer, nKeys, op.testingKnobs.numOfHashBuckets)
+		finalizeHash(op.hashBuffer.hashBuffer, nKeys, op.testingKnobs.numOfHashBuckets)
 	}
 
-	op.populateSels(b, hashBuffer)
+	op.populateSels(b, op.hashBuffer.hashBuffer)
+}
+
+// populateSels populates intermediate selection vectors (stored in
+// op.scratch.sels) for each hash code present in b.
+// Invariants assumed:
+// - hashBuffer must be of non-zero length
+// - hashBuffer contains the hash codes for all of the tuples in b.
+func (op *hashAggregator) populateSels(b coldata.Batch, hashBuffer []uint64) {
+	// In order to speed up the process of "distributing" tuples into different
+	// sels slots based on the hash codes we will first sort hashBuffer
+	// (updating the selection vector of b accordingly - this is needed because
+	// there is 1-to-1 mapping between hash codes and the tuples in b).
+	batchSelection := b.Selection()
+	if batchSelection == nil {
+		// b currently doesn't use a selection vector, so we populate it with
+		// the "identity" selection vector.
+		b.SetSelection(true)
+		batchSelection = b.Selection()
+		copy(batchSelection[:len(hashBuffer)], op.identitySelection[:len(hashBuffer)])
+	}
+	op.hashBuffer.sel = batchSelection[:len(hashBuffer)]
+	sort.Sort(op.hashBuffer)
+
+	// Note: we don't need to reset any of the slices in op.scratch.sels since
+	// they all are of zero length here (see the comment for op.scratch.sels
+	// for context).
+	op.scratch.hashCodeForSelsSlot = op.scratch.hashCodeForSelsSlot[:0]
+	// The first hashCode is always new to us.
+	op.scratch.hashCodeForSelsSlot = append(op.scratch.hashCodeForSelsSlot, hashBuffer[0])
+	op.scratch.sels[0] = append(op.scratch.sels[0], batchSelection[0])
+	prevHashCode := hashBuffer[0]
+	selsSlot := 0
+	for selIdx := 1; selIdx < len(hashBuffer); selIdx++ {
+		hashCode := hashBuffer[selIdx]
+		// We can take the advantage of the sorted order of hashBuffer to
+		// compare only against the previous hash code.
+		if prevHashCode != hashCode {
+			// This is the first tuple in hashBuffer with this hashCode, so we
+			// will add this tuple to the next available sels slot.
+			selsSlot++
+			op.scratch.hashCodeForSelsSlot = append(op.scratch.hashCodeForSelsSlot, hashCode)
+			prevHashCode = hashCode
+		}
+		op.scratch.sels[selsSlot] = append(op.scratch.sels[selsSlot], batchSelection[selIdx])
+	}
 }
 
 // onlineAgg probes aggFuncMap using the built sels map and lazily creates
@@ -493,4 +546,25 @@ func (a *hashAggFuncsAlloc) newHashAggFuncsSlice() []*hashAggFuncs {
 	ret := a.ptrBuf[0:0:1]
 	a.ptrBuf = a.ptrBuf[1:]
 	return ret
+}
+
+// hashBufferWithSel is a utility struct that facilitates sorting the hash
+// buffer and updating the selection vector accordingly so that both slices
+// could be kept in sync.
+type hashBufferWithSel struct {
+	hashBuffer []uint64
+	sel        []int
+}
+
+func (b hashBufferWithSel) Len() int {
+	return len(b.hashBuffer)
+}
+
+func (b hashBufferWithSel) Swap(i, j int) {
+	b.hashBuffer[i], b.hashBuffer[j] = b.hashBuffer[j], b.hashBuffer[i]
+	b.sel[i], b.sel[j] = b.sel[j], b.sel[i]
+}
+
+func (b hashBufferWithSel) Less(i, j int) bool {
+	return b.hashBuffer[i] < b.hashBuffer[j]
 }
