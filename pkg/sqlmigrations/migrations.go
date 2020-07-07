@@ -333,6 +333,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAddScheduledJobsTable),
 		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
 	},
+	{
+		// Introduced in v20.2.
+		name:   "add new sqlliveness table and claim columns to system.jobs",
+		workFn: alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
+		includedInBootstrap: clusterversion.VersionByKey(
+			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
+	},
 }
 
 func staticIDs(
@@ -1892,4 +1899,21 @@ STORING (status)
 
 func createScheduledJobsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.ScheduledJobsTable)
+}
+
+func alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable(
+	ctx context.Context, r runner,
+) error {
+	addColsStmt := `
+ALTER TABLE system.jobs
+ADD COLUMN IF NOT EXISTS claim_session_id BYTES CREATE FAMILY claim,
+ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
+`
+	asNode := sqlbase.InternalExecutorSessionDataOverride{
+		User: security.NodeUser,
+	}
+	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-claim-cols", nil, asNode, addColsStmt); err != nil {
+		return err
+	}
+	return createSystemTable(ctx, r, sqlbase.SqllivenessTable)
 }
