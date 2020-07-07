@@ -1432,6 +1432,13 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL, CONSTRAINT ALL`},
 
 		{`BACKUP TABLE foo TO 'bar'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo TO 'bar' RECURRING NEVER`},
+		{`CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE foo TO 'bar' RECURRING NEVER`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo TO 'bar' RECURRING '@daily'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz TO 'bar' RECURRING '@daily' FULL BACKUP ALWAYS`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz TO 'bar' RECURRING '@daily' FULL BACKUP '@weekly'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz TO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly'`},
+		{`CREATE SCHEDULE FOR BACKUP TO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH EXPERIMENTAL SCHEDULE OPTIONS foo = 'bar'`},
 		{`EXPLAIN BACKUP TABLE foo TO 'bar'`},
 		{`BACKUP TABLE foo.foo, baz.baz TO 'bar'`},
 
