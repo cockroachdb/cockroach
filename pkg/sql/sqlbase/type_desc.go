@@ -17,6 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -244,6 +247,86 @@ func (desc *MutableTypeDescriptor) IsNew() bool {
 	return desc.ClusterVersion == nil
 }
 
+// AddEnumValue adds an enum member to the type.
+func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) error {
+	if desc.Kind != TypeDescriptor_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
+	}
+	// See if the value already exists in the enum or not.
+	found := false
+	for _, member := range desc.EnumMembers {
+		if member.LogicalRepresentation == node.NewVal {
+			found = true
+			break
+		}
+	}
+	if found {
+		if node.IfNotExists {
+			return nil
+		}
+		return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
+	}
+
+	getPhysicalRep := func(idx int) []byte {
+		if idx < 0 || idx >= len(desc.EnumMembers) {
+			return nil
+		}
+		return desc.EnumMembers[idx].PhysicalRepresentation
+	}
+
+	// pos represents the spot to insert the new value. The new value will
+	// be inserted between pos and pos+1. By default, values are inserted
+	// at the end of the current list of members.
+	pos := len(desc.EnumMembers) - 1
+	if node.Placement != nil {
+		// If the value was requested to be added before or after an existing
+		// value, then find the index of where it should be inserted.
+		foundIndex := -1
+		existing := node.Placement.ExistingVal
+		for i, member := range desc.EnumMembers {
+			if member.LogicalRepresentation == existing {
+				foundIndex = i
+			}
+		}
+		if foundIndex == -1 {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "%q is not an existing enum label", existing)
+		}
+
+		pos = foundIndex
+		// If we were requested to insert before the element, shift pos down
+		// one so that the desired element is the upper bound.
+		if node.Placement.Before {
+			pos--
+		}
+	}
+
+	// Construct the new enum member. New enum values are added in the READ_ONLY
+	// capability to ensure that they aren't written before all other nodes know
+	// how to decode the physical representation.
+	newPhysicalRep := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
+	newMember := TypeDescriptor_EnumMember{
+		LogicalRepresentation:  node.NewVal,
+		PhysicalRepresentation: newPhysicalRep,
+		Capability:             TypeDescriptor_EnumMember_READ_ONLY,
+	}
+
+	// Now, insert the new member.
+	if len(desc.EnumMembers) == 0 {
+		desc.EnumMembers = []TypeDescriptor_EnumMember{newMember}
+	} else {
+		if pos < 0 {
+			// Insert the element in the front of the slice.
+			desc.EnumMembers = append([]TypeDescriptor_EnumMember{newMember}, desc.EnumMembers...)
+		} else {
+			// Insert the element in front of pos.
+			desc.EnumMembers = append(desc.EnumMembers, TypeDescriptor_EnumMember{})
+			copy(desc.EnumMembers[pos+2:], desc.EnumMembers[pos+1:])
+			desc.EnumMembers[pos+1] = newMember
+		}
+	}
+	return nil
+}
+
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
 // physical representation.
 type EnumMembers []TypeDescriptor_EnumMember
@@ -445,6 +528,7 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver,
 ) error {
 	typ.TypeMeta.Name = types.MakeUserDefinedTypeName(name.Catalog(), name.Schema(), name.Object())
+	typ.TypeMeta.Version = uint32(desc.Version)
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
@@ -452,14 +536,17 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 		}
 		logical := make([]string, len(desc.EnumMembers))
 		physical := make([][]byte, len(desc.EnumMembers))
+		isReadOnly := make([]bool, len(desc.EnumMembers))
 		for i := range desc.EnumMembers {
 			member := &desc.EnumMembers[i]
 			logical[i] = member.LogicalRepresentation
 			physical[i] = member.PhysicalRepresentation
+			isReadOnly[i] = member.Capability == TypeDescriptor_EnumMember_READ_ONLY
 		}
 		typ.TypeMeta.EnumData = &types.EnumMetadata{
 			LogicalRepresentations:  logical,
 			PhysicalRepresentations: physical,
+			IsMemberReadOnly:        isReadOnly,
 		}
 		return nil
 	case TypeDescriptor_ALIAS:
