@@ -41,7 +41,7 @@ func Centroid(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (*geo.G
 		return nil, err
 	}
 	if geomRepr.Empty() {
-		return geo.NewGeographyFromGeom(geom.NewGeometryCollection().SetSRID(geomRepr.SRID()))
+		return geo.NewGeographyFromGeomT(geom.NewGeometryCollection().SetSRID(geomRepr.SRID()))
 	}
 	switch geomRepr.(type) {
 	case *geom.Point, *geom.LineString, *geom.Polygon, *geom.MultiPoint, *geom.MultiLineString, *geom.MultiPolygon:
@@ -49,7 +49,7 @@ func Centroid(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (*geo.G
 		return nil, errors.Newf("unhandled geography type %s", g.ShapeType().String())
 	}
 
-	regions, err := geo.S2RegionsFromGeom(geomRepr, geo.EmptyBehaviorOmit)
+	regions, err := geo.S2RegionsFromGeomT(geomRepr, geo.EmptyBehaviorOmit)
 	if err != nil {
 		return nil, err
 	}
@@ -118,5 +118,5 @@ func Centroid(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (*geo.G
 	}
 	latLng := s2.LatLngFromPoint(s2.Point{Vector: centroidVector.Normalize()})
 	centroid := geom.NewPointFlat(geom.XY, []float64{latLng.Lng.Degrees(), latLng.Lat.Degrees()}).SetSRID(int(g.SRID()))
-	return geo.NewGeographyFromGeom(centroid)
+	return geo.NewGeographyFromGeomT(centroid)
 }

@@ -145,7 +145,7 @@ func boundingBoxFromGeomTGeographyType(g geom.T) (s2.Rect, error) {
 	if g.Empty() {
 		return s2.EmptyRect(), nil
 	}
-	regions, err := S2RegionsFromGeom(g, EmptyBehaviorOmit)
+	regions, err := S2RegionsFromGeomT(g, EmptyBehaviorOmit)
 	if err != nil {
 		return s2.EmptyRect(), err
 	}
