@@ -116,6 +116,10 @@ func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
 	return f.replicas[f.numSent].ReplicaDescriptor
 }
 
+func (f *firstNErrorTransport) SkipReplica() bool {
+	panic("SkipReplica not supported")
+}
+
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
 }
 

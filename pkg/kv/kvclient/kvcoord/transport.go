@@ -81,6 +81,13 @@ type Transport interface {
 	// change. Returns a zero value if the transport is exhausted.
 	NextReplica() roachpb.ReplicaDescriptor
 
+	// SkipReplica changes the replica that the next SendNext() call would sent to
+	// - the replica that NextReplica() would return is skipped.
+	//
+	// Returns true if, after skipping the transport is not exhausted. Returns
+	// false if there's no more replicas to try.
+	SkipReplica() bool
+
 	// MoveToFront locates the specified replica and moves it to the
 	// front of the ordering of replicas to try. If the replica has
 	// already been tried, it will be retried. If the specified replica
@@ -237,6 +244,15 @@ func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 	return gt.orderedClients[gt.clientIndex].replica
 }
 
+// SkipReplica is part of the Transport interface.
+func (gt *grpcTransport) SkipReplica() bool {
+	if gt.IsExhausted() {
+		return false
+	}
+	gt.clientIndex++
+	return !gt.IsExhausted()
+}
+
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	gt.moveToFrontLocked(replica)
 }
@@ -375,6 +391,11 @@ func (s *senderTransport) NextReplica() roachpb.ReplicaDescriptor {
 		return roachpb.ReplicaDescriptor{}
 	}
 	return s.replica
+}
+
+func (s *senderTransport) SkipReplica() bool {
+	s.called = true
+	return false
 }
 
 func (s *senderTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
