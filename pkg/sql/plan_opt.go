@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -184,23 +185,36 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// we probably could pool those allocations using sync.Pool. Investigate
 	// this.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
-		bld = execbuilder.New(newDistSQLSpecExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext())
+		bld = execbuilder.New(newDistSQLSpecExecFactory(p, distSQLDefaultPlanning), execMemo, &opc.catalog, root, p.EvalContext())
 		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
-				p.stmt.AST.StatementTag() == "SELECT" {
+				!strings.Contains(p.stmt.AST.StatementTag(), "SET") {
 				// We do not fallback to the old path because experimental
-				// planning is set to 'always' and we have a SELECT statement,
-				// so we return an error.
-				// We use a simple heuristic to check whether the statement is
-				// a SELECT, and the reasoning behind it is that we want to be
-				// able to run certain statement types (e.g. SET) regardless of
-				// whether they are supported by the new factory.
-				// TODO(yuzefovich): update this once we support more than just
-				// SELECT statements (see #47473).
+				// planning is set to 'always' and we don't have a SET
+				// statement, so we return an error. SET statements are
+				// exceptions because we want to be able to execute them
+				// regardless of whether they are supported by the new factory.
+				// TODO(yuzefovich): update this once SET statements are
+				// supported (see #47473).
 				return err
 			}
 			// We will fallback to the old path.
+		}
+		if err == nil {
+			m := plan.(*planTop).main
+			if m.isPartiallyDistributed() && p.SessionData().PartiallyDistributedPlansDisabled {
+				// The planning has succeeded, but we've created a partially
+				// distributed plan yet the session variable prohibits such
+				// plan distribution - we need to replan with a new factory
+				// that forces local planning.
+				// TODO(yuzefovich): remove this logic when deleting old
+				// execFactory.
+				bld = execbuilder.New(newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning), execMemo, &opc.catalog, root, p.EvalContext())
+				plan, err = bld.Build()
+			}
+		}
+		if err != nil {
 			bld = nil
 			// TODO(yuzefovich): make the logging conditional on the verbosity
 			// level once new DistSQL planning is no longer experimental.
