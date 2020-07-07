@@ -673,6 +673,13 @@ func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {
 	return t.replicas[t.idx].ReplicaDescriptor
 }
 
+func (t *multiTestContextKVTransport) SkipReplica() {
+	if t.IsExhausted() {
+		return
+	}
+	t.idx++
+}
+
 func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
