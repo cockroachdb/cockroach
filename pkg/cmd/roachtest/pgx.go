@@ -17,7 +17,7 @@ import (
 )
 
 var pgxReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTag = "v4.6.0"
+var supportedPGXTag = "v4.6.0"
 
 // This test runs pgx's full test suite against a single cockroach node.
 
@@ -47,9 +47,15 @@ func registerPgx(r *testRegistry) {
 		t.Status("setting up go")
 		installLatestGolang(ctx, t, c, node)
 
-		t.Status("installing pgx")
-		if err := repeatRunE(
-			ctx, c, node, "install pgx", fmt.Sprintf("go get -u github.com/jackc/pgx@%s", supportedTag),
+		t.Status("getting pgx")
+		if err := repeatGitCloneE(
+			ctx,
+			t.l,
+			c,
+			"https://github.com/jackc/pgx.git",
+			"/mnt/data1/pgx",
+			supportedPGXTag,
+			node,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -59,11 +65,11 @@ func registerPgx(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest jackc/pgx release is %s.", latestTag)
-		c.l.Printf("Supported release is %s.", supportedTag)
+		c.l.Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
 		if err := repeatRunE(
-			ctx, c, node, "install pgx", "go get -u github.com/jstemmer/go-junit-report",
+			ctx, c, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +109,7 @@ func registerPgx(r *testRegistry) {
 		xmlResults, _ := repeatRunWithBuffer(
 			ctx, c, t.l, node,
 			"run pgx test suite",
-			"cd `go env GOPATH`/src/github.com/jackc/pgx && "+
+			"cd /mnt/data1/pgx && "+
 				"PGX_TEST_DATABASE='postgresql://root:@localhost:26257/pgx_test' go test -v 2>&1 | "+
 				"`go env GOPATH`/bin/go-junit-report",
 		)
@@ -111,7 +117,7 @@ func registerPgx(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
 		results.summarizeAll(
-			t, "pgx", blocklistName, expectedFailures, version, supportedTag,
+			t, "pgx", blocklistName, expectedFailures, version, supportedPGXTag,
 		)
 	}
 
