@@ -24,9 +24,10 @@ type randomLoadBenchSpec struct {
 
 func registerSchemaChangeRandomLoad(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    "schemachange/random-load",
-		Owner:   OwnerSQLSchema,
-		Cluster: makeClusterSpec(3),
+		Name:       "schemachange/random-load",
+		Owner:      OwnerSQLSchema,
+		Cluster:    makeClusterSpec(3),
+		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxOps := 5000
 			concurrency := 20
