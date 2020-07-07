@@ -567,6 +567,12 @@ func (m *pgDumpReader) readFile(
 			if ok && conv == nil {
 				return errors.Errorf("missing schema info for requested table %q", name)
 			}
+			expectedColLen := len(i.Columns)
+			if expectedColLen == 0 {
+				// Case where the targeted columns are not specified in the PGDUMP file, but in
+				// the command "IMPORT INTO table (targetCols) PGDUMP DATA (filename)"
+				expectedColLen = len(conv.VisibleCols)
+			}
 			values, ok := i.Rows.Select.(*tree.ValuesClause)
 			if !ok {
 				return errors.Errorf("unsupported: %s", i.Rows.Select)
@@ -578,11 +584,27 @@ func (m *pgDumpReader) readFile(
 				if count <= resumePos {
 					continue
 				}
-				if expected, got := len(conv.VisibleCols), len(tuple); expected != got {
+				if expected, got := expectedColLen, len(tuple); expected != got {
 					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
 				}
-				for i, expr := range tuple {
-					typed, err := expr.TypeCheck(ctx, &semaCtx, conv.VisibleColTypes[i])
+				conv.IsTargetCol = make(map[int]struct{})
+				colLookup := make(map[string]int, 0)
+				for j, col := range conv.VisibleCols {
+					colLookup[col.Name] = j
+				}
+				for j, expr := range tuple {
+					var colName string
+					if len(i.Columns) == 0 {
+						colName = conv.VisibleCols[j].Name
+					} else {
+						colName = i.Columns[j].String()
+					}
+					ind, ok := colLookup[colName]
+					conv.IsTargetCol[ind] = struct{}{}
+					if !ok {
+						return errors.Newf("targeted column %q not found", colName)
+					}
+					typed, err := expr.TypeCheck(ctx, &semaCtx, conv.VisibleColTypes[ind])
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
@@ -592,7 +614,7 @@ func (m *pgDumpReader) readFile(
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					conv.Datums[i] = converted
+					conv.Datums[ind] = converted
 				}
 				if err := conv.Row(ctx, inputIdx, count); err != nil {
 					return err
