@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -873,6 +875,88 @@ CREATE TABLE system.jobs (
 	require.Equal(t, primaryFamilyName, newJobsTable.Families[0].Name)
 	// Make sure our primary family has new columns added to it.
 	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.Families[0].ColumnNames)
+
+	// Run the migration again -- it should be a no-op.
+	require.NoError(t, mt.runMigration(ctx, migration))
+	newJobsTableAgain := sqlbase.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.True(t, proto.Equal(newJobsTable, newJobsTableAgain))
+}
+
+func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	// oldJobsTableSchema is system.jobs definition prior to 20.2
+
+	oldJobsTableSchema := `
+	CREATE TABLE system.jobs (
+		id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
+		status            STRING    NOT NULL,
+		created           TIMESTAMP NOT NULL DEFAULT now(),
+		payload           BYTES     NOT NULL,
+		progress          BYTES,
+		created_by_type   STRING,
+		created_by_id     INT,
+		INDEX (status, created),
+		INDEX (created_by_type, created_by_id) STORING (status),
+
+		FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
+		FAMILY progress (progress)
+	);`
+
+	oldJobsTable, err := sql.CreateTestTableDescriptor(
+		context.Background(),
+		keys.SystemDatabaseID,
+		keys.JobsTableID,
+		oldJobsTableSchema,
+		sqlbase.JobsTable.Privileges,
+	)
+	require.NoError(t, err)
+
+	oldPrimaryFamilyColumns := []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"}
+
+	// Sanity check oldJobsTable does not have new columns.
+	require.Equal(t, 7, len(oldJobsTable.Columns))
+	require.Equal(t, 2, len(oldJobsTable.Families))
+	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
+
+	jobsTable := sqlbase.JobsTable
+	sqlbase.JobsTable = sqlbase.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
+	defer func() {
+		sqlbase.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add new sqlliveness table and claim columns to system.jobs")
+
+	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
+		true)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Settings = ver201
+	mt.start(t, params)
+
+	// Run migration and verify we have added columns and renamed column family.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	newJobsTable := sqlbase.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.Equal(t, 9, len(newJobsTable.Columns))
+	require.Equal(t, "claim_session_id", newJobsTable.Columns[7].Name)
+	require.Equal(t, "claim_instance_id", newJobsTable.Columns[8].Name)
+	require.Equal(t, 3, len(newJobsTable.Families))
+	// Ensure we keep old family names.
+	require.Equal(t, "fam_0_id_status_created_payload", newJobsTable.Families[0].Name)
+	require.Equal(t, "progress", newJobsTable.Families[1].Name)
+	// ... and that the new one is here.
+	require.Equal(t, "claim", newJobsTable.Families[2].Name)
 
 	// Run the migration again -- it should be a no-op.
 	require.NoError(t, mt.runMigration(ctx, migration))
