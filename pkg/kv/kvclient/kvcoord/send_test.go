@@ -198,23 +198,24 @@ func TestComplexScenarios(t *testing.T) {
 func TestSplitHealthy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	type batchClient struct {
+		replica roachpb.ReplicaDescriptor
+		healthy bool
+	}
+
 	testData := []struct {
 		in       []batchClient
-		out      []batchClient
+		out      []roachpb.ReplicaDescriptor
 		nHealthy int
 	}{
-		{nil, nil, 0},
+		{nil, []roachpb.ReplicaDescriptor{}, 0},
 		{
 			[]batchClient{
 				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
-			},
+			[]roachpb.ReplicaDescriptor{{NodeID: 3}, {NodeID: 1}, {NodeID: 2}},
 			1,
 		},
 		{
@@ -223,11 +224,7 @@ func TestSplitHealthy(t *testing.T) {
 				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
-			},
+			[]roachpb.ReplicaDescriptor{{NodeID: 1}, {NodeID: 3}, {NodeID: 2}},
 			2,
 		},
 		{
@@ -236,23 +233,27 @@ func TestSplitHealthy(t *testing.T) {
 				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-			},
+			[]roachpb.ReplicaDescriptor{{NodeID: 1}, {NodeID: 2}, {NodeID: 3}},
 			3,
 		},
 	}
 
-	for i, td := range testData {
-		nHealthy := splitHealthy(td.in)
-		if nHealthy != td.nHealthy {
-			t.Errorf("%d. splitHealthy(%+v) = %d; not %d", i, td.in, nHealthy, td.nHealthy)
-		}
-		if !reflect.DeepEqual(td.in, td.out) {
-			t.Errorf("%d. splitHealthy(...)\n  = %+v;\nnot %+v", i, td.in, td.out)
-		}
+	for _, td := range testData {
+		t.Run("", func(t *testing.T) {
+			replicas := make([]roachpb.ReplicaDescriptor, len(td.in))
+			health := make(map[roachpb.ReplicaDescriptor]bool)
+			for i, r := range td.in {
+				replicas[i] = r.replica
+				health[replicas[i]] = r.healthy
+			}
+			nHealthy := splitHealthy(replicas, health)
+			if nHealthy != td.nHealthy {
+				t.Errorf("splitHealthy(%+v) = %d; not %d", replicas, nHealthy, td.nHealthy)
+			}
+			if !reflect.DeepEqual(replicas, td.out) {
+				t.Errorf("splitHealthy(...) = %+v not %+v", replicas, td.out)
+			}
+		})
 	}
 }
 

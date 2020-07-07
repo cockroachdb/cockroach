@@ -32,11 +32,6 @@ type SendOptions struct {
 	metrics *DistSenderMetrics
 }
 
-type batchClient struct {
-	replica roachpb.ReplicaDescriptor
-	healthy bool
-}
-
 // TransportFactory encapsulates all interaction with the RPC
 // subsystem, allowing it to be mocked out for testing. The factory
 // function returns a Transport object which is used to send requests
@@ -48,6 +43,8 @@ type batchClient struct {
 //
 // TODO(bdarnell): clean up this crufty interface; it was extracted
 // verbatim from the non-abstracted code.
+// TODO(andrei): This should take just []roachpb.ReplicaDescriptor; ReplicaSlice
+// has unneeded data in it.
 type TransportFactory func(
 	SendOptions, *nodedialer.Dialer, ReplicaSlice,
 ) (Transport, error)
@@ -90,39 +87,39 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
 ) (Transport, error) {
-	clients := make([]batchClient, 0, len(replicas))
-	for _, replica := range replicas {
-		healthy := nodeDialer.ConnHealth(replica.NodeID, opts.class) == nil
-		clients = append(clients, batchClient{
-			replica: replica.ReplicaDescriptor,
-			healthy: healthy,
-		})
+	health := make(map[roachpb.ReplicaDescriptor]bool)
+	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
+	for i, rinfo := range rs {
+		r := rinfo.ReplicaDescriptor
+		replicas[i] = r
+		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
 	}
 
-	// Put known-healthy clients first.
-	splitHealthy(clients)
+	// Put known-healthy clients first, while otherwise respecting the existing
+	// ordering of the replicas.
+	splitHealthy(replicas, health)
 
 	return &grpcTransport{
-		opts:           opts,
-		nodeDialer:     nodeDialer,
-		class:          opts.class,
-		orderedClients: clients,
+		opts:       opts,
+		nodeDialer: nodeDialer,
+		class:      opts.class,
+		replicas:   replicas,
 	}, nil
 }
 
 type grpcTransport struct {
-	opts           SendOptions
-	nodeDialer     *nodedialer.Dialer
-	class          rpc.ConnectionClass
-	clientIndex    int
-	orderedClients []batchClient
+	opts        SendOptions
+	nodeDialer  *nodedialer.Dialer
+	class       rpc.ConnectionClass
+	clientIndex int
+	replicas    []roachpb.ReplicaDescriptor
 }
 
 // IsExhausted returns false if there are any untried replicas remaining.
 func (gt *grpcTransport) IsExhausted() bool {
-	return gt.clientIndex >= len(gt.orderedClients)
+	return gt.clientIndex >= len(gt.replicas)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -131,14 +128,14 @@ func (gt *grpcTransport) IsExhausted() bool {
 func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	client := gt.orderedClients[gt.clientIndex]
+	r := gt.replicas[gt.clientIndex]
 	ctx, iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ba.Replica = client.replica
-	return gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
+	ba.Replica = r
+	return gt.sendBatch(ctx, r.NodeID, iface, ba)
 }
 
 // NB: nodeID is unused, but accessible in stack traces.
@@ -185,16 +182,16 @@ func (gt *grpcTransport) sendBatch(
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
 ) (context.Context, roachpb.InternalClient, error) {
-	client := gt.orderedClients[gt.clientIndex]
+	r := gt.replicas[gt.clientIndex]
 	gt.clientIndex++
-	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID, gt.class)
+	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
 }
 
 func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if gt.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
 	}
-	return gt.orderedClients[gt.clientIndex].replica
+	return gt.replicas[gt.clientIndex]
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
@@ -202,16 +199,15 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 }
 
 func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
-	for i := range gt.orderedClients {
-		if gt.orderedClients[i].replica == replica {
+	for i := range gt.replicas {
+		if gt.replicas[i] == replica {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < gt.clientIndex {
 				gt.clientIndex--
 			}
 			// Swap the client representing this replica to the front.
-			gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
-				gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
+			gt.replicas[i], gt.replicas[gt.clientIndex] = gt.replicas[gt.clientIndex], gt.replicas[i]
 			return
 		}
 	}
@@ -222,11 +218,13 @@ func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 // be rearranged first in the slice, and unhealthy clients will be rearranged
 // last. Within these two groups, the rearrangement will be stable. The function
 // will then return the number of healthy clients.
-func splitHealthy(clients []batchClient) int {
+func splitHealthy(
+	replicas []roachpb.ReplicaDescriptor, health map[roachpb.ReplicaDescriptor]bool,
+) int {
 	var nHealthy int
-	sort.Stable(byHealth(clients))
-	for _, client := range clients {
-		if client.healthy {
+	sort.Stable(byHealth{replicas: replicas, health: health})
+	for _, healthy := range health {
+		if healthy {
 			nHealthy++
 		}
 	}
@@ -234,11 +232,18 @@ func splitHealthy(clients []batchClient) int {
 }
 
 // byHealth sorts a slice of batchClients by their health with healthy first.
-type byHealth []batchClient
+type byHealth struct {
+	replicas []roachpb.ReplicaDescriptor
+	health   map[roachpb.ReplicaDescriptor]bool
+}
 
-func (h byHealth) Len() int           { return len(h) }
-func (h byHealth) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
+func (h byHealth) Len() int { return len(h.replicas) }
+func (h byHealth) Swap(i, j int) {
+	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
+}
+func (h byHealth) Less(i, j int) bool {
+	return h.health[h.replicas[i]] && !h.health[h.replicas[j]]
+}
 
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender
