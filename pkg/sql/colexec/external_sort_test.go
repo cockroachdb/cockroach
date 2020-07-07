@@ -335,7 +335,7 @@ func createDiskBackedSorter(
 			Limit: uint64(k),
 		},
 	}
-	args := NewColOperatorArgs{
+	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              input,
 		StreamingMemAccount: testMemAcc,

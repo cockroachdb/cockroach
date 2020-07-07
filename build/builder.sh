@@ -173,18 +173,24 @@ set +e
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 
+# NB: for some mysterious reason, TMPDIR gets lost if passed via --env into
+# docker run below, hence the workaround to invoke `env` inside of the
+# container. See:
+#
+# https://github.com/cockroachdb/cockroach/issues/50507
+# https://github.com/benesch/autouseradd/issues/2
+#
 # shellcheck disable=SC2086
 docker run --init --privileged -i ${tty-} --rm \
   -u "$uid:$gid" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
-  --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
   --env="TZ=America/New_York" \
   --env=COCKROACH_BUILDER_CCACHE \
   --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
-  "${image}:${version}" "$@"
+  "${image}:${version}" env TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts "$@"
 
 # Build container needs to have at least 4GB of RAM available to compile the project
 # successfully, which is not true in some cases (i.e. Docker for MacOS by default).
