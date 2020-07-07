@@ -1026,6 +1026,7 @@ type connExecutor struct {
 	// safe to use when a statement is not being parallelized. It must be reset
 	// before using.
 	planner planner
+
 	// phaseTimes tracks session- and transaction-level phase times. It is
 	// copied-by-value when resetting statsCollector before executing each
 	// statement.
