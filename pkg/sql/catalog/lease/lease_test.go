@@ -818,6 +818,9 @@ CREATE TABLE t.foo (v INT);
 // a query are properly released before the query is retried.
 func TestDescriptorRefreshOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/50037")
+
 	params, _ := tests.CreateTestServerParams()
 
 	fooAcquiredCount := int32(0)
