@@ -80,6 +80,11 @@ type Overload struct {
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.
 	SpecializedVecBuiltin SpecializedVectorizedBuiltin
+
+	// IgnoreVolatilityCheck ignores checking the functions overload's
+	// volatility against Postgres's volatility at test time.
+	// This should be used with caution.
+	IgnoreVolatilityCheck bool
 }
 
 // params implements the overloadImpl interface.

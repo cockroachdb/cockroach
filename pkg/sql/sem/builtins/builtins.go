@@ -249,11 +249,6 @@ var builtins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		tree.FunctionProperties{
 			NullableArgs: true,
-			// In Postgres concat can take any arguments, converting them to their
-			// text representation. Since the text representation can depend on the
-			// context (e.g. timezone), the function is Stable. In our case, we only
-			// take String inputs so our version is Immutable.
-			IgnoreVolatilityCheck: true,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
@@ -275,17 +270,17 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info:       "Concatenates a comma-separated list of strings.",
 			Volatility: tree.VolatilityImmutable,
+			// In Postgres concat can take any arguments, converting them to
+			// their text representation. Since the text representation can
+			// depend on the context (e.g. timezone), the function is Stable. In
+			// our case, we only take String inputs so our version is Immutable.
+			IgnoreVolatilityCheck: true,
 		},
 	),
 
 	"concat_ws": makeBuiltin(
 		tree.FunctionProperties{
 			NullableArgs: true,
-			// In Postgres concat_ws can take any arguments, converting them to their
-			// text representation. Since the text representation can depend on the
-			// context (e.g. timezone), the function is Stable. In our case, we only
-			// take String inputs so our version is Immutable.
-			IgnoreVolatilityCheck: true,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
@@ -321,11 +316,16 @@ var builtins = map[string]builtinDefinition{
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
 				"returns `wow!great`.",
 			Volatility: tree.VolatilityImmutable,
+			// In Postgres concat_ws can take any arguments, converting them to
+			// their text representation. Since the text representation can
+			// depend on the context (e.g. timezone), the function is Stable. In
+			// our case, we only take String inputs so our version is Immutable.
+			IgnoreVolatilityCheck: true,
 		},
 	),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString, IgnoreVolatilityCheck: true},
+	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.Bytes}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -353,11 +353,12 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Decode the bytes in `str` into a string using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility:            tree.VolatilityImmutable,
+			IgnoreVolatilityCheck: true,
 		}),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString, IgnoreVolatilityCheck: true},
+	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -385,7 +386,8 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Encode the string `str` as a byte array using encoding `enc`. " +
 				"Supports encodings 'UTF8' and 'LATIN1'.",
-			Volatility: tree.VolatilityImmutable,
+			Volatility:            tree.VolatilityImmutable,
+			IgnoreVolatilityCheck: true,
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
@@ -2498,10 +2500,11 @@ may increase either contention or retry errors, or both.`,
 				durationDelta := time.Duration(-beforeOffsetSecs) * time.Second
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
 			},
-			Info: "Treat given time without time zone as located in the specified time zone.",
-			// TODO(mgartner): This overload might be stable, not volatile.
-			// See: https://github.com/cockroachdb/cockroach/pull/48756#issuecomment-627672686
-			Volatility: tree.VolatilityVolatile,
+			Info:       "Treat given time without time zone as located in the specified time zone.",
+			Volatility: tree.VolatilityStable,
+			// This overload's volatility does not match Postgres. See
+			// https://github.com/cockroachdb/cockroach/pull/51037 for details.
+			IgnoreVolatilityCheck: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2523,10 +2526,11 @@ may increase either contention or retry errors, or both.`,
 				tTime := tArg.TimeTZ.ToTime()
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
 			},
-			Info: "Convert given time with time zone to the new time zone.",
-			// TODO(mgartner): This overload might be stable, not volatile.
-			// See: https://github.com/cockroachdb/cockroach/pull/48756#issuecomment-627672686
-			Volatility: tree.VolatilityVolatile,
+			Info:       "Convert given time with time zone to the new time zone.",
+			Volatility: tree.VolatilityStable,
+			// This overload's volatility does not match Postgres. See
+			// https://github.com/cockroachdb/cockroach/pull/51037 for details.
+			IgnoreVolatilityCheck: true,
 		},
 	),
 

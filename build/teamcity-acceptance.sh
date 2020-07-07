@@ -38,8 +38,11 @@ tc_start_block "Run acceptance tests"
 # is the only way to get sane `-json` behavior (test2json has various shortcomings when tests
 # time out, etc). So we have it build `emptypkg` (which has no deps, duh) but really will run
 # the thing we care about, 'acceptance.test'.
+#
+# Note that ./pkg/acceptance without the tag is an empty test package, so it's fine to compile
+# outside of builder.
 run_json_test env TZ=America/New_York stdbuf -eL -oL go test \
   -mod=vendor -json -timeout 30m -v \
-	-exec "../../../build/teamcity-go-test-precompiled.sh ./pkg/acceptance/acceptance.test" ./pkg/testutils/emptypkg \
+	-exec "../../build/teamcity-go-test-precompiled.sh ./pkg/acceptance/acceptance.test" ./pkg/acceptance \
 	-l "$TMPDIR"
 tc_end_block "Run acceptance tests"
