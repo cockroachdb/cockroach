@@ -13,14 +13,12 @@ package kvcoord
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -35,10 +33,8 @@ type SendOptions struct {
 }
 
 type batchClient struct {
-	replica   roachpb.ReplicaDescriptor
-	healthy   bool
-	retryable bool
-	deadline  time.Time
+	replica roachpb.ReplicaDescriptor
+	healthy bool
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -124,32 +120,9 @@ type grpcTransport struct {
 	orderedClients []batchClient
 }
 
-// IsExhausted returns false if there are any untried replicas remaining. If
-// there are none, it attempts to resurrect replicas which were tried but
-// failed with a retryable error. If any where resurrected, returns false;
-// true otherwise.
+// IsExhausted returns false if there are any untried replicas remaining.
 func (gt *grpcTransport) IsExhausted() bool {
-	if gt.clientIndex < len(gt.orderedClients) {
-		return false
-	}
-	return !gt.maybeResurrectRetryables()
-}
-
-// maybeResurrectRetryables moves already-tried replicas which
-// experienced a retryable error (currently this means a
-// NotLeaseHolderError) into a newly-active state so that they can be
-// retried. Returns true if any replicas were moved to active.
-func (gt *grpcTransport) maybeResurrectRetryables() bool {
-	var resurrect []batchClient
-	for i := 0; i < gt.clientIndex; i++ {
-		if c := gt.orderedClients[i]; c.retryable && timeutil.Since(c.deadline) >= 0 {
-			resurrect = append(resurrect, c)
-		}
-	}
-	for _, c := range resurrect {
-		gt.moveToFront(c.replica)
-	}
-	return len(resurrect) > 0
+	return gt.clientIndex >= len(gt.orderedClients)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -165,20 +138,7 @@ func (gt *grpcTransport) SendNext(
 	}
 
 	ba.Replica = client.replica
-	reply, err := gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
-
-	// NotLeaseHolderErrors can be retried.
-	var retryable bool
-	if reply != nil && reply.Error != nil {
-		// TODO(spencer): pass the lease expiration when setting the state
-		// to set a more efficient deadline for retrying this replica.
-		if _, ok := reply.Error.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-			retryable = true
-		}
-	}
-	gt.setState(client.replica, retryable)
-
-	return reply, err
+	return gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
 }
 
 // NB: nodeID is unused, but accessible in stack traces.
@@ -244,10 +204,6 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.orderedClients {
 		if gt.orderedClients[i].replica == replica {
-			// Clear the retryable bit as this replica is being made
-			// available.
-			gt.orderedClients[i].retryable = false
-			gt.orderedClients[i].deadline = time.Time{}
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < gt.clientIndex {
@@ -257,22 +213,6 @@ func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 			gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
 				gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
 			return
-		}
-	}
-}
-
-// NB: this method's callers may have a reference to the client they wish to
-// mutate, but the clients reside in a slice which is shuffled via
-// MoveToFront, making it unsafe to mutate the client through a reference to
-// the slice.
-func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, retryable bool) {
-	for i := range gt.orderedClients {
-		if gt.orderedClients[i].replica == replica {
-			gt.orderedClients[i].retryable = retryable
-			if retryable {
-				gt.orderedClients[i].deadline = timeutil.Now().Add(time.Second)
-			}
-			break
 		}
 	}
 }
