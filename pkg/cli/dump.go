@@ -416,6 +416,7 @@ WHERE
 					// internals expect that there are as many physical representations
 					// as there are logical representations.
 					PhysicalRepresentations: make([][]byte, len(enumMembers)),
+					IsMemberReadOnly:        make([]bool, len(enumMembers)),
 				},
 			}
 			typContext.typMap[*typ.TypeMeta.Name] = typ

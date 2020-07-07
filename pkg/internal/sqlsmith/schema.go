@@ -183,6 +183,7 @@ FROM
 					// enum related code in tree expects that the length of
 					// PhysicalRepresentations is equal to the length of LogicalRepresentations.
 					PhysicalRepresentations: make([][]byte, len(members)),
+					IsMemberReadOnly:        make([]bool, len(members)),
 				},
 			}
 			udtMapping[*typ.TypeMeta.Name] = typ
