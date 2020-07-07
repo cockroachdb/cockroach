@@ -1543,6 +1543,9 @@ message AdminScatterResponse {
     reserved 2;
   }
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
+  // TargetNode is the node ID which holds the lease on this range after the
+  // scatter request.
+  uint32 target_node = 3 [(gogoproto.casttype) = "NodeID"];
 }
 
 // AdminVerifyProtectedTimestampRequest is the argument to the

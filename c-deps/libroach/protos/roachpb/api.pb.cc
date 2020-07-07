@@ -27339,6 +27339,7 @@ void AdminScatterResponse::InitAsDefaultInstance() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AdminScatterResponse::kHeaderFieldNumber;
 const int AdminScatterResponse::kRangesFieldNumber;
+const int AdminScatterResponse::kTargetNodeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AdminScatterResponse::AdminScatterResponse()
@@ -27358,11 +27359,14 @@ AdminScatterResponse::AdminScatterResponse(const AdminScatterResponse& from)
   } else {
     header_ = NULL;
   }
+  target_node_ = from.target_node_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AdminScatterResponse)
 }
 
 void AdminScatterResponse::SharedCtor() {
-  header_ = NULL;
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&target_node_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(target_node_));
 }
 
 AdminScatterResponse::~AdminScatterResponse() {
@@ -27394,6 +27398,7 @@ void AdminScatterResponse::Clear() {
     delete header_;
   }
   header_ = NULL;
+  target_node_ = 0u;
   _internal_metadata_.Clear();
 }
 
@@ -27429,6 +27434,19 @@ bool AdminScatterResponse::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                 input, add_ranges()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &target_node_)));
         } else {
           goto handle_unusual;
         }
@@ -27474,6 +27492,10 @@ void AdminScatterResponse::SerializeWithCachedSizes(
       output);
   }
 
+  if (this->target_node() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(3, this->target_node(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AdminScatterResponse)
@@ -27501,6 +27523,12 @@ size_t AdminScatterResponse::ByteSizeLong() const {
         *header_);
   }
 
+  if (this->target_node() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::UInt32Size(
+        this->target_node());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -27521,6 +27549,9 @@ void AdminScatterResponse::MergeFrom(const AdminScatterResponse& from) {
   ranges_.MergeFrom(from.ranges_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::ResponseHeader::MergeFrom(from.header());
+  }
+  if (from.target_node() != 0) {
+    set_target_node(from.target_node());
   }
 }
 
@@ -27543,6 +27574,7 @@ void AdminScatterResponse::InternalSwap(AdminScatterResponse* other) {
   using std::swap;
   CastToBase(&ranges_)->InternalSwap(CastToBase(&other->ranges_));
   swap(header_, other->header_);
+  swap(target_node_, other->target_node_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
