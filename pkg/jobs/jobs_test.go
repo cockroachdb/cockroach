@@ -2239,7 +2239,6 @@ func TestStartableJob(t *testing.T) {
 // that have not undergone a migration cannot be adopted, canceled, or paused.
 func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.ResetConstructors()()
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
@@ -2261,6 +2260,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	}
 
 	t.Run("job is not adopted", func(t *testing.T) {
+		defer jobs.ResetConstructors()()
 		resuming := make(chan struct{})
 		jobs.RegisterConstructor(jobspb.TypeSchemaChange, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
