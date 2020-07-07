@@ -140,10 +140,10 @@ func TestOverloadsVolatilityMatchesPostgres(t *testing.T) {
 
 	// Check each builtin against Postgres.
 	for name, builtin := range builtins {
-		if builtin.props.IgnoreVolatilityCheck {
-			continue
-		}
 		for idx, overload := range builtin.overloads {
+			if overload.IgnoreVolatilityCheck {
+				continue
+			}
 			postgresVolatility, found := findOverloadVolatility(name, overload)
 			if !found {
 				continue
