@@ -713,6 +713,9 @@ func backupPlanHook(
 			}
 			if len(spans) > 0 {
 				tsToProtect := endTime
+				if !startTime.IsEmpty() {
+					tsToProtect = startTime
+				}
 				rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, *sj.ID(), tsToProtect, spans)
 				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
 			}
