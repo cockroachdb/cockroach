@@ -2407,7 +2407,8 @@ may increase either contention or retry errors, or both.`,
 	),
 
 	// https://www.postgresql.org/docs/9.6/functions-datetime.html
-	"timezone": makeBuiltin(defProps(),
+	"timezone": makeBuiltin(
+		tree.FunctionProperties{IgnoreVolatilityCheck: true},
 		// NOTE(otan): this should be deleted and replaced with the correct
 		// function overload promoting the string to timestamptz.
 		tree.Overload{
@@ -2498,10 +2499,8 @@ may increase either contention or retry errors, or both.`,
 				durationDelta := time.Duration(-beforeOffsetSecs) * time.Second
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
 			},
-			Info: "Treat given time without time zone as located in the specified time zone.",
-			// TODO(mgartner): This overload might be stable, not volatile.
-			// See: https://github.com/cockroachdb/cockroach/pull/48756#issuecomment-627672686
-			Volatility: tree.VolatilityVolatile,
+			Info:       "Treat given time without time zone as located in the specified time zone.",
+			Volatility: tree.VolatilityStable,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -2523,10 +2522,8 @@ may increase either contention or retry errors, or both.`,
 				tTime := tArg.TimeTZ.ToTime()
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
 			},
-			Info: "Convert given time with time zone to the new time zone.",
-			// TODO(mgartner): This overload might be stable, not volatile.
-			// See: https://github.com/cockroachdb/cockroach/pull/48756#issuecomment-627672686
-			Volatility: tree.VolatilityVolatile,
+			Info:       "Convert given time with time zone to the new time zone.",
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
