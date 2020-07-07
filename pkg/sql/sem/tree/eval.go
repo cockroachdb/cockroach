@@ -972,7 +972,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -982,7 +982,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Interval,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -998,7 +998,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityStable,
 		},
@@ -1014,7 +1014,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
-				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
+				return &DInterval{Duration: duration.MakeNormalizedDuration(nanos, 0, 0)}, nil
 			},
 			Volatility: VolatilityStable,
 		},
