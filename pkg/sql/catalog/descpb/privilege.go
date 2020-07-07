@@ -378,4 +378,5 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
 	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
 	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
+	keys.SqllivenessID:                        privilege.ReadWriteData,
 }

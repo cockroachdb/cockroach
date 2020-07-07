@@ -29,6 +29,7 @@ public  role_members                     table
 public  role_options                     table
 public  scheduled_jobs                   table
 public  settings                         table
+public  sqlliveness                      table
 public  statement_bundle_chunks          table
 public  statement_diagnostics            table
 public  statement_diagnostics_requests   table
@@ -71,6 +72,7 @@ SELECT id FROM system.descriptor
 35
 36
 37
+39
 50
 51
 52
@@ -140,13 +142,15 @@ lastUpdated  TIMESTAMP  false  NULL  ·  {}         false
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id               INT8       false  unique_rowid()     ·  {primary,jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}  false
-status           STRING     false  NULL               ·  {jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}          false
-created          TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
-payload          BYTES      false  NULL               ·  {}                                                                        false
-progress         BYTES      true   NULL               ·  {}                                                                        false
-created_by_type  STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
-created_by_id    INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+id                 INT8       false  unique_rowid()     ·  {primary,jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}  false
+status             STRING     false  NULL               ·  {jobs_status_created_idx,jobs_created_by_type_created_by_id_idx}          false
+created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_status_created_idx}                                                 false
+payload            BYTES      false  NULL               ·  {}                                                                        false
+progress           BYTES      true   NULL               ·  {}                                                                        false
+created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx}                                  false
+claim_session_id   BYTES      true   NULL               ·  {}                                                                        false
+claim_instance_id  INT8       true   NULL               ·  {}                                                                        false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
@@ -353,6 +357,16 @@ system  public  settings                         root    GRANT
 system  public  settings                         root    INSERT
 system  public  settings                         root    SELECT
 system  public  settings                         root    UPDATE
+system  public  sqlliveness                      admin   DELETE
+system  public  sqlliveness                      admin   GRANT
+system  public  sqlliveness                      admin   INSERT
+system  public  sqlliveness                      admin   SELECT
+system  public  sqlliveness                      admin   UPDATE
+system  public  sqlliveness                      root    DELETE
+system  public  sqlliveness                      root    GRANT
+system  public  sqlliveness                      root    INSERT
+system  public  sqlliveness                      root    SELECT
+system  public  sqlliveness                      root    UPDATE
 system  public  statement_bundle_chunks          admin   DELETE
 system  public  statement_bundle_chunks          admin   GRANT
 system  public  statement_bundle_chunks          admin   INSERT
