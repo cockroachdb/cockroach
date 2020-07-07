@@ -18,16 +18,18 @@ import "./tooltip.styl";
 export interface TooltipProps {
   children: React.ReactNode;
   theme?: "default" | "blue";
+  visible?: boolean;
 }
 
 export function Tooltip(props: TooltipProps & AntTooltipProps) {
-  const { children, theme, overlayClassName } = props;
+  const { children, theme, overlayClassName, visible } = props;
   const classes = cn("tooltip-overlay", `crl-tooltip--theme-${theme}`, overlayClassName);
   return (
     <AntTooltip
       {...props}
       mouseEnterDelay={0.5}
       overlayClassName={classes}
+      defaultVisible={visible}
     >
       {children}
     </AntTooltip>
@@ -37,4 +39,5 @@ export function Tooltip(props: TooltipProps & AntTooltipProps) {
 Tooltip.defaultProps = {
   theme: "default",
   placement: "top",
+  visible: false,
 };

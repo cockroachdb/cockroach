@@ -18,6 +18,19 @@
       padding $spacing-x-small $spacing-small
       color $colors--white
       background $colors--neutral-8
+      a
+        color $colors--neutral-0
+        text-decoration underline
+        &:hover
+          opacity 0.7
+          color $colors--neutral-0
+      code
+        font-family $font-family--monospace
+        line-height $line-height--medium
+        color $colors--neutral-8
+        background $colors--neutral-4 
+        border-radius 3px
+        padding 2px 5px
     .ant-tooltip-arrow
       color $colors--neutral-8
 
@@ -35,16 +48,3 @@
   line-height $line-height--small
   letter-spacing 0.3px
   color $colors--neutral-0
-  a
-    color $colors--neutral-0
-    text-decoration underline
-    &:hover
-      opacity 0.7
-      color $colors--neutral-0
-  code
-    font-family $font-family--monospace
-    line-height $line-height--medium
-    color $colors--neutral-8
-    background $colors--neutral-4 
-    border-radius 3px
-    padding 2px 5px
