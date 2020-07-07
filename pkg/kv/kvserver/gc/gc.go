@@ -191,12 +191,20 @@ func Run(
 
 	// Process local range key entries (txn records, queue last processed times).
 	if err := processLocalKeyRange(ctx, snap, desc, txnExp, &info, cleanupTxnIntentsAsyncFn, gcer); err != nil {
+		if errors.Is(err, ctx.Err()) {
+			return Info{}, err
+		}
 		log.Warningf(ctx, "while gc'ing local key range: %s", err)
 	}
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info, gcer)
+	if err := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info, gcer); err != nil {
+		if errors.Is(err, ctx.Err()) {
+			return Info{}, err
+		}
+		log.Warningf(ctx, "while gc'ing abort span: %s", err)
+	}
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
@@ -329,6 +337,9 @@ func processReplicatedKeyRange(
 		}
 		if shouldSendBatch {
 			if err := gcer.GC(ctx, batchGCKeys); err != nil {
+				if errors.Is(err, ctx.Err()) {
+					return err
+				}
 				// Even though we are batching the GC process, it's
 				// safe to continue because we bumped the GC
 				// thresholds. We may leave some inconsistent history
@@ -491,13 +502,13 @@ func processAbortSpan(
 	threshold hlc.Timestamp,
 	info *Info,
 	gcer PureGCer,
-) {
+) error {
 	b := makeBatchingInlineGCer(gcer, func(err error) {
 		log.Warningf(ctx, "unable to GC from abort span: %s", err)
 	})
 	defer b.Flush(ctx)
 	abortSpan := abortspan.New(rangeID)
-	err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
+	return abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
 		info.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			info.AbortSpanGCNum++
@@ -505,9 +516,6 @@ func processAbortSpan(
 		}
 		return nil
 	})
-	if err != nil {
-		log.Warningf(ctx, "%v", err)
-	}
 }
 
 // batchingInlineGCer is a helper to paginate the GC of inline (i.e. zero
