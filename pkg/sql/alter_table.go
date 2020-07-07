@@ -50,12 +50,12 @@ type alterTableNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
-		ctx, n.Table, !n.IfExists, resolver.ResolveRequireTableDesc,
+		ctx, n.Table, !n.IfExists, tree.ResolveRequireTableDesc,
 	)
 	if errors.Is(err, resolver.ErrNoPrimaryKey) {
 		if len(n.Cmds) > 0 && isAlterCmdValidWithoutPrimaryKey(n.Cmds[0]) {
 			tableDesc, err = p.ResolveMutableTableDescriptorExAllowNoPrimaryKey(
-				ctx, n.Table, !n.IfExists, resolver.ResolveRequireTableDesc,
+				ctx, n.Table, !n.IfExists, tree.ResolveRequireTableDesc,
 			)
 		}
 	}

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -39,11 +38,11 @@ type renameTableNode struct {
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	oldTn := n.Name.ToTableName()
 	newTn := n.NewName.ToTableName()
-	toRequire := resolver.ResolveRequireTableOrViewDesc
+	toRequire := tree.ResolveRequireTableOrViewDesc
 	if n.IsView {
-		toRequire = resolver.ResolveRequireViewDesc
+		toRequire = tree.ResolveRequireViewDesc
 	} else if n.IsSequence {
-		toRequire = resolver.ResolveRequireSequenceDesc
+		toRequire = tree.ResolveRequireSequenceDesc
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)

@@ -37,7 +37,8 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireSequenceDesc)
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
+	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -93,7 +94,8 @@ func boundsExceededError(descriptor *sqlbase.ImmutableTableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireSequenceDesc)
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
+	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -116,7 +118,8 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireSequenceDesc)
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
+	descriptor, err := resolver.ResolveExistingTableObject(ctx, p, seqName, flags)
 	if err != nil {
 		return err
 	}
@@ -376,7 +379,7 @@ func resolveColumnItemToDescriptors(
 		tableName = columnItem.TableName.ToTableName()
 	}
 
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, resolver.ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -437,13 +440,13 @@ func maybeAddSequenceDependencies(
 		var seqDesc *MutableTableDescriptor
 		p, ok := sc.(*planner)
 		if ok {
-			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, resolver.ResolveRequireSequenceDesc)
+			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
 		} else {
 			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, resolver.ResolveRequireSequenceDesc)
+			seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
