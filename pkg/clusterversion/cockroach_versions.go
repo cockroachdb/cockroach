@@ -69,6 +69,7 @@ const (
 	VersionAddScheduledJobsTable
 	VersionUserDefinedSchemas
 	VersionNoOriginFKIndexes
+	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 
 	// Add new versions here (step one of two).
 )
@@ -523,6 +524,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// indexes on the origin side of the relationship.
 		Key:     VersionNoOriginFKIndexes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionAlterSystemJobsTableAddLeaseColumn is a version which modified system.jobs table.
+		Key:     VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
 	},
 
 	// Add new versions here (step two of two).

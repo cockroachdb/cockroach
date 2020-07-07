@@ -213,6 +213,7 @@ public       statement_bundle_chunks          table
 public       statement_diagnostics_requests   table
 public       statement_diagnostics            table
 public       scheduled_jobs                   table
+public       sqlliveness                      table
 
 query TTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
@@ -246,6 +247,7 @@ public       statement_bundle_chunks          table  ·
 public       statement_diagnostics_requests   table  ·
 public       statement_diagnostics            table  ·
 public       scheduled_jobs                   table  ·
+public       sqlliveness                      table  ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
