@@ -34,6 +34,12 @@ var Projections = map[geopb.SRID]ProjInfo{
     Proj4Text: MakeProj4Text(`{{ .Proj4Text }}`),
     IsLatLng: {{ .IsLatLng }},
     Spheroid: {{ .SpheroidVarName }},
+    {{ if .Bounds }}Bounds: &Bounds{
+      MinLat: {{ .Bounds.MinLat }},
+      MaxLat: {{ .Bounds.MaxLat }},
+      MinLng: {{ .Bounds.MinLng }},
+      MaxLng: {{ .Bounds.MaxLng }},
+    },{{ end }}
   },
   {{ end }}
 }
