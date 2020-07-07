@@ -58,8 +58,18 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   exit_status=$?
 fi
 
-# TODO(peter):
-# - Collect the artifacts. Add them to a branch of the Pebble repo.
-# - Process the artifacts into a static site served by Github pages.
+# mkbench expects artifacts to be gzip compressed.
+find $artifacts -name '*.log' | xargs gzip -9
+
+# mkbench expects the benchmark data to be stored in data/YYYYMMDD.
+mkdir data
+ln -sf $PWD/artifacts data/$(date +"%Y%m%d")
+
+go build -o mkbench github.com/cockroachdb/pebble/internal/mkbench
+aws s3 cp s3://pebble-benchmarks/data.js data.js
+./mkbench
+
+aws s3 cp data.js s3://pebble-benchmarks/data.js
+aws s3 sync --exclude "*/_runner-logs/*"  data/ s3://pebble-benchmarks/data/
 
 exit "$exit_status"
