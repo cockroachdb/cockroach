@@ -117,7 +117,8 @@ func newCopyMachine(
 	}()
 	c.parsingEvalCtx = c.p.EvalContext()
 
-	tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, tree.ObjectLookupFlagsWithRequired(), resolver.ResolveRequireTableDesc)
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
 	if err != nil {
 		return nil, err
 	}

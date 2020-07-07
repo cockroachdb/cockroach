@@ -78,16 +78,12 @@ func GetObjectNames(
 // resolution, if successful. It is not modified in case of error or
 // if no object is found.
 func ResolveExistingTableObject(
-	ctx context.Context,
-	sc SchemaResolver,
-	tn *tree.TableName,
-	lookupFlags tree.ObjectLookupFlags,
-	requiredType ResolveRequiredType,
+	ctx context.Context, sc SchemaResolver, tn *tree.TableName, lookupFlags tree.ObjectLookupFlags,
 ) (res *sqlbase.ImmutableTableDescriptor, err error) {
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
 	//  passed as an argument to this function.
 	un := tn.ToUnresolvedObjectName()
-	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags, requiredType)
+	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -107,16 +103,18 @@ func ResolveMutableExistingTableObject(
 	sc SchemaResolver,
 	tn *tree.TableName,
 	required bool,
-	requiredType ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (res *sqlbase.MutableTableDescriptor, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
-		RequireMutable:    true,
+		CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+		RequireMutable:       true,
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: requiredType,
 	}
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
 	// passed as an argument to this function.
 	un := tn.ToUnresolvedObjectName()
-	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags, requiredType)
+	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -130,7 +128,6 @@ func ResolveExistingObject(
 	sc SchemaResolver,
 	un *tree.UnresolvedObjectName,
 	lookupFlags tree.ObjectLookupFlags,
-	requiredType ResolveRequiredType,
 ) (res tree.NameResolutionResult, prefix tree.ObjectNamePrefix, err error) {
 	found, prefix, descI, err := tree.ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
@@ -160,18 +157,18 @@ func ResolveExistingObject(
 			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
 		}
 		goodType := true
-		switch requiredType {
-		case ResolveRequireTableDesc:
+		switch lookupFlags.DesiredTableDescKind {
+		case tree.ResolveRequireTableDesc:
 			goodType = obj.TableDesc().IsTable()
-		case ResolveRequireViewDesc:
+		case tree.ResolveRequireViewDesc:
 			goodType = obj.TableDesc().IsView()
-		case ResolveRequireTableOrViewDesc:
+		case tree.ResolveRequireTableOrViewDesc:
 			goodType = obj.TableDesc().IsTable() || obj.TableDesc().IsView()
-		case ResolveRequireSequenceDesc:
+		case tree.ResolveRequireSequenceDesc:
 			goodType = obj.TableDesc().IsSequence()
 		}
 		if !goodType {
-			return nil, prefix, sqlbase.NewWrongObjectTypeError(&resolvedTn, requiredTypeNames[requiredType])
+			return nil, prefix, sqlbase.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
 		}
 
 		// If the table does not have a primary key, return an error
@@ -219,26 +216,6 @@ func ResolveTargetObject(
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
 	return descI.(*sqlbase.ImmutableDatabaseDescriptor), prefix, nil
-}
-
-// ResolveRequiredType can be passed to the ResolveExistingTableObject function to
-// require the returned descriptor to be of a specific type.
-type ResolveRequiredType int
-
-// ResolveRequiredType options have descriptive names.
-const (
-	ResolveAnyDescType ResolveRequiredType = iota
-	ResolveRequireTableDesc
-	ResolveRequireViewDesc
-	ResolveRequireTableOrViewDesc
-	ResolveRequireSequenceDesc
-)
-
-var requiredTypeNames = [...]string{
-	ResolveRequireTableDesc:       "table",
-	ResolveRequireViewDesc:        "view",
-	ResolveRequireTableOrViewDesc: "table or view",
-	ResolveRequireSequenceDesc:    "sequence",
 }
 
 var staticSchemaIDMap = map[sqlbase.ID]string{
