@@ -86,20 +86,14 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 
 	c.Init()
 
+	// If the metadata is obtained through this Next call, the Columnarizer still
+	// returns it in DrainMeta.
+	_ = c.Next(ctx)
+
 	// Calling DrainMeta from the vectorized execution engine should propagate to
 	// non-vectorized components as calling ConsumerDone and then draining their
 	// metadata.
-	metaCh := make(chan []execinfrapb.ProducerMetadata)
-	go func() {
-		metaCh <- c.DrainMeta(ctx)
-	}()
-
-	// Make Next race with DrainMeta, this should be supported by the
-	// Columnarizer. If the metadata is obtained through this Next call, the
-	// Columnarizer still returns it in DrainMeta.
-	_ = c.Next(ctx)
-
-	meta := <-metaCh
+	meta := c.DrainMeta(ctx)
 	require.True(t, len(meta) == 1)
 	require.True(t, testutils.IsError(meta[0].Err, errMsg))
 	require.True(t, rb.Done)
