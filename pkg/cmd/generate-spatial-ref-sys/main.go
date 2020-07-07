@@ -18,11 +18,15 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -62,6 +66,7 @@ type projection struct {
 	AuthSRID  string
 	SRText    string
 	Proj4Text string
+	Bounds    *geoprojbase.Bounds
 
 	IsLatLng        bool
 	SpheroidVarName string
@@ -136,6 +141,68 @@ func getTemplateVars() templateVars {
 			spheroidVarName = fmt.Sprintf(`spheroid%d`, foundCounter)
 		}
 
+		var bounds *geoprojbase.Bounds
+		if record[1] == "EPSG" {
+			var results struct {
+				Results []struct {
+					BBox []float64 `json:"bbox"`
+				} `json:"results"`
+			}
+			for _, searchArgs := range []string{
+				record[2],
+				fmt.Sprintf("%s%%20deprecated%%3A1", record[2]), // some may be deprecated.
+			} {
+				resp, err := http.Get(fmt.Sprintf("http://epsg.io/?q=%s&format=json", searchArgs))
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				body, err := ioutil.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if err := json.Unmarshal([]byte(body), &results); err != nil {
+					log.Fatal(err)
+				}
+				if len(results.Results) == 1 {
+					break
+				}
+			}
+
+			if len(results.Results) != 1 {
+				log.Fatalf("WARNING: expected 1 result for %s, found %#v", record[2], results.Results)
+			}
+			bbox := results.Results[0].BBox
+			// The bounds seem inconsistently ordered. reorder them.
+			x := []float64{bbox[1], bbox[3]}
+			sort.Slice(x, func(i, j int) bool {
+				return x[i] < x[j]
+			})
+			y := []float64{bbox[0], bbox[2]}
+			sort.Slice(y, func(i, j int) bool {
+				return y[i] < y[j]
+			})
+			if !isLatLng {
+				if err := geoproj.Project(
+					geoprojbase.MakeProj4Text("+proj=longlat +datum=WGS84 +no_defs"),
+					geoprojbase.MakeProj4Text(proj4text),
+					x,
+					y,
+					[]float64{0, 0},
+				); err != nil {
+					log.Fatal(err)
+				}
+			}
+			bounds = &geoprojbase.Bounds{
+				MinX: x[0],
+				MaxX: x[1],
+				MinY: y[0],
+				MaxY: y[1],
+			}
+		}
+
 		projections = append(
 			projections,
 			projection{
@@ -145,6 +212,7 @@ func getTemplateVars() templateVars {
 				SRText:    record[3],
 				Proj4Text: proj4text,
 
+				Bounds:          bounds,
 				IsLatLng:        isLatLng,
 				SpheroidVarName: spheroidVarName,
 			},

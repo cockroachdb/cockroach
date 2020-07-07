@@ -47,8 +47,17 @@ func (p *Proj4Text) Equal(o Proj4Text) bool {
 	return bytes.Equal(p.cStr, o.cStr)
 }
 
+// Bounds represet the lat/lng bounds.
+type Bounds struct {
+	MinX float64
+	MaxX float64
+	MinY float64
+	MaxY float64
+}
+
 // ProjInfo is a struct containing metadata related to a given SRID.
 type ProjInfo struct {
+	// SRID is the SRID of the projection.
 	SRID geopb.SRID
 	// AuthName is the authority who has provided this projection (e.g. ESRI, EPSG).
 	AuthName string
@@ -61,6 +70,9 @@ type ProjInfo struct {
 
 	// Denormalized fields.
 
+	// Bounds defines the bounds (in lat lng) of the given coordinate system.
+	// If nil, no bounds were defined for the given projection.
+	Bounds *Bounds
 	// IsLatLng stores whether the projection is a LatLng based projection (denormalized from above)
 	IsLatLng bool
 	// The spheroid represented by the SRID.
