@@ -1792,6 +1792,23 @@ func TestImportCSVStmt(t *testing.T) {
 			)
 		})
 	})
+
+	// Test userfile import CSV.
+	t.Run("userfile-simple", func(t *testing.T) {
+		userfileURI := "userfile://defaultdb.public.root/test.csv"
+		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
+			ExternalStorageFromURI(ctx, userfileURI, security.RootUser)
+		require.NoError(t, err)
+
+		data := []byte("1,2")
+		require.NoError(t, userfileStorage.WriteFile(ctx, "", bytes.NewReader(data)))
+
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE foo (id INT PRIMARY KEY, "+
+			"id2 INT) CSV DATA ('%s')", userfileURI))
+		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", sqlDB.QueryStr(t, "SELECT 1, 2"))
+
+		require.NoError(t, userfileStorage.Delete(ctx, ""))
+	})
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
@@ -2774,9 +2791,39 @@ func TestImportIntoCSV(t *testing.T) {
 			t.Fatal("FK and CHECK constraints not unvalidated after IMPORT INTO\n")
 		}
 	})
+
+	// Test userfile IMPORT INTO CSV.
+	t.Run("import-into-userfile-simple", func(t *testing.T) {
+		userfileURI := "userfile://defaultdb.public.root/test.csv"
+		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
+			ExternalStorageFromURI(ctx, userfileURI, security.RootUser)
+		require.NoError(t, err)
+
+		data := []byte("1,2")
+		require.NoError(t, userfileStorage.WriteFile(ctx, "", bytes.NewReader(data)))
+
+		sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, id2 INT)")
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO foo (id, id2) CSV DATA ('%s')", userfileURI))
+		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", sqlDB.QueryStr(t, "SELECT 1, 2"))
+
+		require.NoError(t, userfileStorage.Delete(ctx, ""))
+	})
 }
 
-func BenchmarkImport(b *testing.B) {
+// goos: darwin
+// goarch: amd64
+// pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
+// BenchmarkNodelocalImport-16    	1000000000	         0.0795 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0864 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0819 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0812 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0812 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0797 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0812 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0825 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0815 ns/op
+// BenchmarkNodelocalImport-16    	1000000000	         0.0826 ns/op
+func BenchmarkNodelocalImport(b *testing.B) {
 	const (
 		nodes    = 3
 		numFiles = nodes + 2
@@ -2796,6 +2843,57 @@ func BenchmarkImport(b *testing.B) {
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
 			CSV DATA (%s)`,
 			strings.Join(testFiles.files, ","),
+		))
+}
+
+// goos: darwin
+// goarch: amd64
+// pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
+// BenchmarkUserfileImport-16    	1000000000	         0.128 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.129 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.135 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.123 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.126 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.124 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.130 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.129 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.128 ns/op
+// BenchmarkUserfileImport-16    	1000000000	         0.124 ns/op
+func BenchmarkUserfileImport(b *testing.B) {
+	const (
+		nodes    = 3
+		numFiles = nodes + 2
+	)
+	baseDir := filepath.Join("testdata", "csv")
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	testFiles := makeCSVData(b, numFiles, b.N*100, nodes, 16)
+
+	// Write CSV files to UserFileTableStorage.
+	for _, file := range testFiles.userscopedFiles {
+		trimmedFile := strings.TrimPrefix(file, "'")
+		trimmedFile = strings.TrimSuffix(trimmedFile, "'")
+		userfileURL, err := url.ParseRequestURI(trimmedFile)
+		require.NoError(b, err)
+		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
+			ExternalStorageFromURI(ctx, userfileURL.String(), security.RootUser)
+		require.NoError(b, err)
+
+		// Extract filename from URI.
+		content, err := getCSVDataFromFile(userfileURL.Path)
+		require.NoError(b, userfileStorage.WriteFile(ctx, "", bytes.NewReader(content)))
+	}
+
+	b.ResetTimer()
+
+	sqlDB.Exec(b,
+		fmt.Sprintf(
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
+			CSV DATA (%s)`,
+			strings.Join(testFiles.userscopedFiles, ","),
 		))
 }
 

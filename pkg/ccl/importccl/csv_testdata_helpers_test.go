@@ -12,6 +12,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,8 +27,9 @@ import (
 var rewriteCSVTestData = envutil.EnvOrDefaultBool("COCKROACH_REWRITE_CSV_TESTDATA", false)
 
 type csvTestFiles struct {
-	files, gzipFiles, bzipFiles, filesWithOpts, filesWithDups, fileWithShadowKeys, fileWithDupKeySameValue []string
-	filesUsingWildcard, gzipFilesUsingWildcard, bzipFilesUsingWildcard                                     []string
+	files, userscopedFiles, gzipFiles, bzipFiles, filesWithOpts, filesWithDups, fileWithShadowKeys,
+	fileWithDupKeySameValue []string
+	filesUsingWildcard, gzipFilesUsingWildcard, bzipFilesUsingWildcard []string
 }
 
 // Returns a single CSV file with a previously imported key sandiwched between
@@ -105,6 +107,9 @@ func getTestFiles(numFiles int) csvTestFiles {
 		testFiles.bzipFiles = append(testFiles.bzipFiles, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d%s.bz2", i, suffix)))
 		testFiles.filesWithOpts = append(testFiles.filesWithOpts, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d-opts%s", i, suffix)))
 		testFiles.filesWithDups = append(testFiles.filesWithDups, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("data-%d-dup%s", i, suffix)))
+
+		testFiles.userscopedFiles = append(testFiles.userscopedFiles,
+			fmt.Sprintf(`'userfile://defaultdb.public.root/%s'`, fmt.Sprintf("data-%d%s", i, suffix)))
 	}
 
 	testFiles.fileWithDupKeySameValue = append(testFiles.fileWithDupKeySameValue, fmt.Sprintf(`'nodelocal://0/%s'`, fmt.Sprintf("dup-key-same-value%s", suffix)))
@@ -214,6 +219,16 @@ func makeCSVData(
 		return getTestFiles(numRaceFiles)
 	}
 	return getTestFiles(numFiles)
+}
+
+func getCSVDataFromFile(filename string) ([]byte, error) {
+	fullpath := filepath.Join("testdata", "csv", filename)
+	f, err := os.Open(fullpath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return ioutil.ReadAll(f)
 }
 
 func gzipFile(t testing.TB, in string) string {
