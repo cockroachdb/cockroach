@@ -10,13 +10,13 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -285,12 +285,6 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "BACKUP",
-		); err != nil {
-			return err
-		}
-
 		if err := p.RequireAdminRole(ctx, "BACKUP"); err != nil {
 			return err
 		}
@@ -299,13 +293,29 @@ func backupPlanHook(
 			return errors.Errorf("BACKUP cannot be used inside a transaction without DETACHED option")
 		}
 
+		var isEnterprise bool
+		requireEnterprise := func(feature string) error {
+			if isEnterprise {
+				return nil
+			}
+			if err := utilccl.CheckEnterpriseEnabled(
+				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+				fmt.Sprintf("BACKUP with %s", feature),
+			); err != nil {
+				return err
+			}
+			isEnterprise = true
+			return nil
+		}
+
 		to, err := toFn()
 		if err != nil {
 			return err
 		}
-		if len(to) > 1 &&
-			!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPartitionedBackup) {
-			return errors.Errorf("partitioned backups can only be made on a cluster that has been fully upgraded to version 19.2")
+		if len(to) > 1 {
+			if err := requireEnterprise("partitoned destinations"); err != nil {
+				return err
+			}
 		}
 
 		incrementalFrom, err := incrementalFromFn()
@@ -323,6 +333,9 @@ func backupPlanHook(
 
 		mvccFilter := MVCCFilter_Latest
 		if backupStmt.Options.CaptureRevisionHistory {
+			if err := requireEnterprise("revision_history"); err != nil {
+				return err
+			}
 			mvccFilter = MVCCFilter_All
 		}
 
@@ -365,6 +378,9 @@ func backupPlanHook(
 		if pwFn != nil {
 			pw, err := pwFn()
 			if err != nil {
+				return err
+			}
+			if err := requireEnterprise("encryption"); err != nil {
 				return err
 			}
 			encryptionPassphrase = []byte(pw)
@@ -506,6 +522,9 @@ func backupPlanHook(
 		var startTime hlc.Timestamp
 		var newSpans roachpb.Spans
 		if len(prevBackups) > 0 {
+			if err := requireEnterprise("incremental"); err != nil {
+				return err
+			}
 			startTime = prevBackups[len(prevBackups)-1].EndTime
 		}
 
@@ -659,6 +678,18 @@ func backupPlanHook(
 
 		collectTelemetry := func() {
 			telemetry.Count("backup.total.started")
+			if isEnterprise {
+				telemetry.Count("backup.licensed")
+				telemetry.Count("backup.using-enterprise-features")
+			} else {
+				if err := utilccl.CheckEnterpriseEnabled(
+					p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+				); err == nil {
+					telemetry.Count("backup.licensed")
+				} else {
+					telemetry.Count("backup.free")
+				}
+			}
 			if startTime.IsEmpty() {
 				telemetry.Count("backup.span.full")
 			} else {
