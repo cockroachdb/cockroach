@@ -1148,7 +1148,7 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	verMap := map[string]string{
 		"20.2": "20.1.3",
 		"20.1": "19.2.9",
-		"19.2": "19.1.10",
+		"19.2": "19.1.11",
 		"19.1": "2.1.9",
 		"2.2":  "2.1.9",
 		"2.1":  "2.0.7",
