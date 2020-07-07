@@ -1180,7 +1180,7 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 						return tree.DNull, nil
 					}
 					coord := t.Coord(0)
-					retG, err := geo.NewGeometryFromGeom(
+					retG, err := geo.NewGeometryFromGeomT(
 						geom.NewPointFlat(geom.XY, []float64{coord.X(), coord.Y()}).SetSRID(t.SRID()),
 					)
 					if err != nil {
@@ -1270,7 +1270,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 						return tree.DNull, nil
 					}
 					coord := t.Coord(t.NumCoords() - 1)
-					retG, err := geo.NewGeometryFromGeom(
+					retG, err := geo.NewGeometryFromGeomT(
 						geom.NewPointFlat(geom.XY, []float64{coord.X(), coord.Y()}).SetSRID(t.SRID()),
 					)
 					if err != nil {
@@ -1352,7 +1352,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 						ring := t.LinearRing(0)
 						lineString = geom.NewLineStringFlat(t.Layout(), ring.FlatCoords())
 					}
-					ret, err := geo.NewGeometryFromGeom(lineString.SetSRID(t.SRID()))
+					ret, err := geo.NewGeometryFromGeomT(lineString.SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1387,7 +1387,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					}
 					ring := t.LinearRing(n)
 					lineString := geom.NewLineStringFlat(t.Layout(), ring.FlatCoords()).SetSRID(t.SRID())
-					ret, err := geo.NewGeometryFromGeom(lineString)
+					ret, err := geo.NewGeometryFromGeomT(lineString)
 					if err != nil {
 						return nil, err
 					}
@@ -1421,7 +1421,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumCoords() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeom(geom.NewPointFlat(t.Layout(), t.Coord(n)).SetSRID(t.SRID()))
+					g, err := geo.NewGeometryFromGeomT(geom.NewPointFlat(t.Layout(), t.Coord(n)).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1460,7 +1460,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumPoints() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeom(t.Point(n).SetSRID(t.SRID()))
+					g, err := geo.NewGeometryFromGeomT(t.Point(n).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1469,7 +1469,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumLineStrings() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeom(t.LineString(n).SetSRID(t.SRID()))
+					g, err := geo.NewGeometryFromGeomT(t.LineString(n).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1478,7 +1478,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumPolygons() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeom(t.Polygon(n).SetSRID(t.SRID()))
+					g, err := geo.NewGeometryFromGeomT(t.Polygon(n).SetSRID(t.SRID()))
 					if err != nil {
 						return nil, err
 					}
@@ -1487,7 +1487,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 					if n >= t.NumGeoms() {
 						return tree.DNull, nil
 					}
-					g, err := geo.NewGeometryFromGeom(t.Geom(n))
+					g, err := geo.NewGeometryFromGeomT(t.Geom(n))
 					if err != nil {
 						return nil, err
 					}
