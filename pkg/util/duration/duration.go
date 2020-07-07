@@ -102,6 +102,15 @@ func MakeDuration(nanos, days, months int64) Duration {
 	}
 }
 
+// MakeNormalizedDuration returns a normalized Duration.
+func MakeNormalizedDuration(nanos, days, months int64) Duration {
+	return Duration{
+		Months: months,
+		Days:   days,
+		nanos:  rounded(nanos),
+	}.normalize()
+}
+
 // DecodeDuration returns a Duration without rounding nanos.
 func DecodeDuration(months, days, nanos int64) Duration {
 	return Duration{
