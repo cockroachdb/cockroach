@@ -2605,6 +2605,13 @@ func TestImportIntoCSV(t *testing.T) {
 				fmt.Sprintf(`non-constant default expression .* for non-targeted column "b" is not supported by IMPORT INTO`),
 				fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL))
 		})
+		t.Run("pgdump", func(t *testing.T) {
+			data = "INSERT INTO t VALUES (1, 2), (3, 4)"
+			sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT DEFAULT 42, c INT)`)
+			sqlDB.Exec(t, "IMPORT INTO t (c, a) PGDUMP DATA ($1)", srv.URL)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+			sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
+		})
 	})
 
 	t.Run("import-not-targeted-not-null", func(t *testing.T) {
@@ -4029,6 +4036,21 @@ func TestImportPgDump(t *testing.T) {
 			}
 		})
 	}
+	t.Run("target-cols-reordered", func(t *testing.T) {
+		data := `
+				CREATE TABLE "t" ("a" INT, "b" INT DEFAULT 42, "c" INT);
+				INSERT INTO "t" ("c", "a") VALUES ('1', '2'), ('3', '4');
+			`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+		defer sqlDB.Exec(t, "DROP TABLE t")
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1)", srv.URL)
+		sqlDB.CheckQueryResults(t, `SELECT * from t`, [][]string{{"2", "42", "1"}, {"4", "42", "3"}})
+	})
 }
 
 // TestImportPgDumpGeo tests that a file with SQLFn classes can be

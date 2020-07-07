@@ -313,17 +313,6 @@ func NewDatumRowConverter(
 			c.Datums = append(c.Datums, nil)
 		} else {
 			if !isTargetCol(col) && col.DefaultExpr != nil {
-				// Check if the default expression is a constant expression as we do not
-				// support non-constant default expressions for non-target columns in IMPORT INTO.
-				//
-				// TODO (anzoteh96): add support to non-constant default expressions. Perhaps
-				// we can start with those with Stable volatility, like now().
-				if !tree.IsConst(evalCtx, defaultExprs[i]) {
-					return nil, errors.Newf(
-						"non-constant default expression %s for non-targeted column %q is not supported by IMPORT INTO",
-						defaultExprs[i].String(),
-						col.Name)
-				}
 				// Placeholder for columns with default values that will be evaluated when
 				// each import row is being created.
 				c.Datums = append(c.Datums, nil)
@@ -385,6 +374,17 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	for i := range c.cols {
 		col := &c.cols[i]
 		if _, ok := c.IsTargetCol[i]; !ok && !col.Hidden && col.DefaultExpr != nil {
+			if !tree.IsConst(c.EvalCtx, c.defaultExprs[i]) {
+				// Check if the default expression is a constant expression as we do not
+				// support non-constant default expressions for non-target columns in IMPORT INTO.
+				//
+				// TODO (anzoteh96): add support to non-constant default expressions. Perhaps
+				// we can start with those with Stable volatility, like now().
+				return errors.Newf(
+					"non-constant default expression %s for non-targeted column %q is not supported by IMPORT INTO",
+					c.defaultExprs[i].String(),
+					col.Name)
+			}
 			datum, err := c.defaultExprs[i].Eval(c.EvalCtx)
 			if err != nil {
 				return errors.Wrapf(err, "error evaluating default expression for IMPORT INTO")
