@@ -498,7 +498,11 @@ func newPgDumpReader(
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			conv, err := row.NewDatumRowConverter(ctx, table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+			targetCols := make(tree.NameList, len(table.TargetCols))
+			for i, colName := range table.TargetCols {
+				targetCols[i] = tree.Name(colName)
+			}
+			conv, err := row.NewDatumRowConverter(ctx, table.Desc, targetCols, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
@@ -579,19 +583,19 @@ func (m *pgDumpReader) readFile(
 			}
 			inserts++
 			startingCount := count
+			colLookup := make(map[string]int, 0)
+			for j, col := range conv.VisibleCols {
+				colLookup[col.Name] = j
+			}
 			for _, tuple := range values.Rows {
 				count++
 				if count <= resumePos {
 					continue
 				}
-				if expected, got := expectedColLen, len(tuple); expected != got {
-					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
+				if got := len(tuple); expectedColLen != got {
+					return errors.Errorf("expected %d values, got %d: %v", expectedColLen, got, tuple)
 				}
 				conv.IsTargetCol = make(map[int]struct{})
-				colLookup := make(map[string]int, 0)
-				for j, col := range conv.VisibleCols {
-					colLookup[col.Name] = j
-				}
 				for j, expr := range tuple {
 					var colName string
 					if len(i.Columns) == 0 {
