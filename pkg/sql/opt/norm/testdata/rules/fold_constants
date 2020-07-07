@@ -366,7 +366,7 @@ values
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── ('-24:00:00',) [type=tuple{interval}]
+ └── ('-1 days',) [type=tuple{interval}]
 
 # Fold constant.
 opt expect=FoldBinary
