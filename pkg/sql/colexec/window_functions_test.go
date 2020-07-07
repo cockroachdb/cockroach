@@ -295,7 +295,7 @@ func TestWindowFunctions(t *testing.T) {
 						},
 					}
 					sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
-					args := NewColOperatorArgs{
+					args := &NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              inputs,
 						StreamingMemAccount: testMemAcc,

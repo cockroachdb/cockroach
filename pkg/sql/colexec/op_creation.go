@@ -25,7 +25,7 @@ import (
 // TestNewColOperator is a test helper that's always aliased to builder.NewColOperator.
 // We inject this at test time, so tests can use NewColOperator from colexec
 // package.
-var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
+var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
 ) (r NewColOperatorResult, err error)
 
 // NewColOperatorArgs is a helper struct that encompasses all of the input

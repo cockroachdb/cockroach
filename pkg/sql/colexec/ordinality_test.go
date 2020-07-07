@@ -110,7 +110,7 @@ func createTestOrdinalityOperator(
 			Ordinality: &execinfrapb.OrdinalitySpec{},
 		},
 	}
-	args := NewColOperatorArgs{
+	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              []colexecbase.Operator{input},
 		StreamingMemAccount: testMemAcc,

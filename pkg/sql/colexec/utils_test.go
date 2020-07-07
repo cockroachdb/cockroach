@@ -1607,7 +1607,7 @@ func createTestProjectingOperator(
 			RenderExprs: renderExprs,
 		},
 	}
-	args := NewColOperatorArgs{
+	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              []colexecbase.Operator{input},
 		StreamingMemAccount: testMemAcc,
