@@ -483,6 +483,7 @@ type pgDumpReader struct {
 	descs  map[string]*execinfrapb.ReadImportDataSpec_ImportTable
 	kvCh   chan row.KVBatch
 	opts   roachpb.PgDumpOptions
+	colMap map[*row.DatumRowConverter](map[string]int)
 }
 
 var _ inputConverter = &pgDumpReader{}
@@ -496,13 +497,23 @@ func newPgDumpReader(
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*row.DatumRowConverter, len(descs))
+	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			conv, err := row.NewDatumRowConverter(ctx, table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+			colSubMap := make(map[string]int, len(table.TargetCols))
+			targetCols := make(tree.NameList, len(table.TargetCols))
+			for i, colName := range table.TargetCols {
+				targetCols[i] = tree.Name(colName)
+			}
+			for i, col := range table.Desc.VisibleColumns() {
+				colSubMap[col.Name] = i
+			}
+			conv, err := row.NewDatumRowConverter(ctx, table.Desc, targetCols, evalCtx, kvCh)
 			if err != nil {
 				return nil, err
 			}
 			converters[name] = conv
+			colMap[conv] = colSubMap
 		}
 	}
 	return &pgDumpReader{
@@ -510,6 +521,7 @@ func newPgDumpReader(
 		tables: converters,
 		descs:  descs,
 		opts:   opts,
+		colMap: colMap,
 	}, nil
 }
 
@@ -567,22 +579,46 @@ func (m *pgDumpReader) readFile(
 			if ok && conv == nil {
 				return errors.Errorf("missing schema info for requested table %q", name)
 			}
+			expectedColLen := len(i.Columns)
+			if expectedColLen == 0 {
+				// Case where the targeted columns are not specified in the PGDUMP file, but in
+				// the command "IMPORT INTO table (targetCols) PGDUMP DATA (filename)"
+				expectedColLen = len(conv.VisibleCols)
+			}
 			values, ok := i.Rows.Select.(*tree.ValuesClause)
 			if !ok {
 				return errors.Errorf("unsupported: %s", i.Rows.Select)
 			}
 			inserts++
 			startingCount := count
+			var targetColMapInd []int
+			if len(i.Columns) != 0 {
+				targetColMapInd = make([]int, len(i.Columns))
+				conv.IsTargetCol = make(map[int]struct{}, len(i.Columns))
+				for j := range i.Columns {
+					colName := i.Columns[j].String()
+					ind, ok := m.colMap[conv][colName]
+					if !ok {
+						return errors.Newf("targeted column %q not found", colName)
+					}
+					conv.IsTargetCol[ind] = struct{}{}
+					targetColMapInd[j] = ind
+				}
+			}
 			for _, tuple := range values.Rows {
 				count++
 				if count <= resumePos {
 					continue
 				}
-				if expected, got := len(conv.VisibleCols), len(tuple); expected != got {
-					return errors.Errorf("expected %d values, got %d: %v", expected, got, tuple)
+				if got := len(tuple); expectedColLen != got {
+					return errors.Errorf("expected %d values, got %d: %v", expectedColLen, got, tuple)
 				}
-				for i, expr := range tuple {
-					typed, err := expr.TypeCheck(ctx, &semaCtx, conv.VisibleColTypes[i])
+				for j, expr := range tuple {
+					ind := j
+					if len(i.Columns) != 0 {
+						ind = targetColMapInd[j]
+					}
+					typed, err := expr.TypeCheck(ctx, &semaCtx, conv.VisibleColTypes[ind])
 					if err != nil {
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
@@ -592,7 +628,7 @@ func (m *pgDumpReader) readFile(
 						return errors.Wrapf(err, "reading row %d (%d in insert statement %d)",
 							count, count-startingCount, inserts)
 					}
-					conv.Datums[i] = converted
+					conv.Datums[ind] = converted
 				}
 				if err := conv.Row(ctx, inputIdx, count); err != nil {
 					return err
