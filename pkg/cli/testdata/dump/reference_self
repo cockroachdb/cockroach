@@ -114,6 +114,7 @@ ALTER TABLE "table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES
 ALTER TABLE "table" VALIDATE CONSTRAINT fk_next_id_ref_t;
 ----
 ----
+
 # Dumping only the data shouldn't have the ALTER stuff either.
 
 dump d --dump-mode=data

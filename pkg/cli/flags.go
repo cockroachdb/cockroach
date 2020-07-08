@@ -289,6 +289,10 @@ func init() {
 			// it doesn't show up in the output or it will confuse tests.
 			flag.Hidden = true
 		}
+		if strings.HasPrefix(flag.Name, "datadriven-") {
+			// Same as httptest, but for the datadriven package.
+			flag.Hidden = true
+		}
 		switch flag.Name {
 		case logflags.DeprecatedLogFilesCombinedMaxSizeName:
 			flag.Deprecated = "use --" + logflags.LogFilesCombinedMaxSizeName + " instead"
