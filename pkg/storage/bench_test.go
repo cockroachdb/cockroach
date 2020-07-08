@@ -47,7 +47,13 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 	keySizes := []int{128}
 	valSizes := []int{128}
 	numKeys := []int{1, 1024}
-	versions := []int{2, 1024}
+	versionConfigs := []struct {
+		total    int
+		toDelete []int
+	}{
+		{2, []int{1}},
+		{1024, []int{1, 16, 32, 512, 1015, 1023}},
+	}
 	engineMakers := []struct {
 		name   string
 		create engineMaker
@@ -65,18 +71,22 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 						b.Run(fmt.Sprintf("valSize=%d", valSize), func(b *testing.B) {
 							for _, numKeys := range numKeys {
 								b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
-									for _, numVersions := range versions {
-										b.Run(fmt.Sprintf("numVersions=%d", numVersions), func(b *testing.B) {
-											runMVCCGarbageCollect(ctx, b, engineImpl.create,
-												benchGarbageCollectOptions{
-													benchDataOptions: benchDataOptions{
-														numKeys:     numKeys,
-														numVersions: numVersions,
-														valueBytes:  valSize,
-													},
-													keyBytes:       keySize,
-													deleteVersions: numVersions - 1,
+									for _, versions := range versionConfigs {
+										b.Run(fmt.Sprintf("numVersions=%d", versions.total), func(b *testing.B) {
+											for _, toDelete := range versions.toDelete {
+												b.Run(fmt.Sprintf("deleteVersions=%d", toDelete), func(b *testing.B) {
+													runMVCCGarbageCollect(ctx, b, engineImpl.create,
+														benchGarbageCollectOptions{
+															benchDataOptions: benchDataOptions{
+																numKeys:     numKeys,
+																numVersions: versions.total,
+																valueBytes:  valSize,
+															},
+															keyBytes:       keySize,
+															deleteVersions: toDelete,
+														})
 												})
+											}
 										})
 									}
 								})
