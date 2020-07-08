@@ -820,13 +820,25 @@ func (r *testRunner) runTest(
 		}
 	}
 
-	// Detect replica divergence (i.e. ranges in which replicas have arrived
-	// at the same log position with different states).
-	c.FailOnReplicaDivergence(ctx, t)
 	// Detect dead nodes in an inner defer. Note that this will call
 	// t.printfAndFail() when appropriate, which will cause the code below to
 	// enter the t.Failed() branch.
 	c.FailOnDeadNodes(ctx, t)
+
+	if !t.Failed() {
+		// Detect replica divergence (i.e. ranges in which replicas have arrived
+		// at the same log position with different states).
+		//
+		// We avoid trying to do this when t.Failed() (and in particular when there
+		// are dead nodes) because for reasons @tbg does not understand this gets
+		// stuck occasionally, which really ruins the roachtest run. The method
+		// below already uses a ctx timeout and SQL statement_timeout, but it does
+		// not seem to be enough.
+		//
+		// TODO(testinfra): figure out why this can still get stuck despite the
+		// above.
+		c.FailOnReplicaDivergence(ctx, t)
+	}
 
 	if t.Failed() {
 		r.collectClusterLogs(ctx, c, t.l)
