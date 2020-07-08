@@ -1289,5 +1289,8 @@ project
  └── scan partial_index
       ├── columns: k:1!null u:2 v:3
       └── partial index predicates
-           ├── u: u:2 = 1
-           └── v: ((v:3 > 100) AND (v:3 < 200)) AND (u:2 > 50)
+           ├── u: filters
+           │    └── u:2 = 1
+           └── v: filters
+                ├── (v:3 > 100) AND (v:3 < 200)
+                └── u:2 > 50
