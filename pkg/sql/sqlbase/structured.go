@@ -1354,6 +1354,8 @@ func (desc *TableDescriptor) GetAllReferencedTypeIDs(
 	for id := range ids {
 		result = append(result, id)
 	}
+	// Sort the output so that the order is deterministic.
+	sort.Sort(result)
 	return result, nil
 }
 

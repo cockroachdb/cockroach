@@ -422,6 +422,11 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Add all newly created type back references.
+	if err := params.p.addBackRefsToAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+		return err
+	}
+
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.

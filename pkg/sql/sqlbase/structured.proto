@@ -1065,6 +1065,13 @@ message TypeDescriptor {
   optional uint32 array_type_id = 8
     [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "ID"];
 
+  // State is set if this TypeDescriptor is in the process of being deleted.
+  enum State {
+    PUBLIC = 0;
+    DROP = 1;
+  }
+  optional State state = 13 [(gogoproto.nullable) = false];
+
   // Represents the kind of type that this type descriptor represents.
   enum Kind {
     // Represents a user defined enum type.
@@ -1075,6 +1082,10 @@ message TypeDescriptor {
     // Add more entries as we support more user defined types.
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];
+
+  // referencing_descriptor_ids is a set of descriptors that reference this type.
+  repeated uint32 referencing_descriptor_ids = 12
+    [(gogoproto.casttype) = "ID", (gogoproto.customname) = "ReferencingDescriptorIDs"];
 
   // The fields below are used only when this type is an ENUM type.
 
