@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,12 +55,143 @@ var geoRelationshipMap = map[string]geoindex.RelationshipType{
 	"st_within":           geoindex.CoveredBy,
 }
 
+// geoRelationshipReverseMap contains a default function for each of the
+// possible geospatial relationships.
+var geoRelationshipReverseMap = map[geoindex.RelationshipType]string{
+	geoindex.Covers:       "st_covers",
+	geoindex.CoveredBy:    "st_coveredby",
+	geoindex.DWithin:      "st_dwithin",
+	geoindex.DFullyWithin: "st_dfullywithin",
+	geoindex.Intersects:   "st_intersects",
+}
+
+// commuteGeoRelationshipMap is used to determine how the geospatial
+// relationship changes if the arguments to the index-accelerated function are
+// commuted.
+//
+// The relationships in the geoRelationshipMap map above only apply when the
+// second argument to the function is the indexed column. If the arguments are
+// commuted so that the first argument is the indexed column, the relationship
+// may change.
+var commuteGeoRelationshipMap = map[geoindex.RelationshipType]geoindex.RelationshipType{
+	geoindex.Covers:       geoindex.CoveredBy,
+	geoindex.CoveredBy:    geoindex.Covers,
+	geoindex.DWithin:      geoindex.DWithin,
+	geoindex.DFullyWithin: geoindex.DFullyWithin,
+	geoindex.Intersects:   geoindex.Intersects,
+}
+
 // IsGeoIndexFunction returns true if the given function is a geospatial
 // function that can be index-accelerated.
 func IsGeoIndexFunction(fn opt.ScalarExpr) bool {
 	function := fn.(*memo.FunctionExpr)
 	_, ok := geoRelationshipMap[function.Name]
 	return ok
+}
+
+// TryGetInvertedJoinCondFromGeoFunc tries to extract an inverted join
+// condition from the given geospatial function. If commuteArgs is true,
+// TryGetInvertedJoinCondFromGeoFunc tries to extract an inverted join
+// condition from an equivalent version of the given function in which the
+// first two arguments are swapped.
+//
+// Returns the original function if commuteArgs is false, or a new function
+// representing the same relationship but with commuted arguments if
+// commuteArgs is true. For example:
+//
+//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
+//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
+//
+// See commuteGeoRelationshipMap for the full list of mappings.
+//
+// Also returns the column ID corresponding to the input geospatial column
+// as well as the column ID corresponding to the inverted index key column,
+// which are the two columns relevant for the join condition. Returns ok=true
+// if a join condition was successfully extracted or ok=false otherwise.
+//
+// The given function must be a valid geospatial function that can be index-
+// accelerated, and must contain two variable arguments. Otherwise,
+// TryGetInvertedJoinCondFromGeoFunc will panic.
+func TryGetInvertedJoinCondFromGeoFunc(
+	factory *norm.Factory, fn opt.ScalarExpr, commuteArgs bool, inputProps *props.Relational,
+) (_ opt.ScalarExpr, inputGeoCol, indexGeoCol opt.ColumnID, ok bool) {
+	if !IsGeoIndexFunction(fn) {
+		panic(errors.AssertionFailedf(
+			"TryGetInvertedJoinCondFromGeoFunc called on a function that cannot be index-accelerated",
+		))
+	}
+	function := fn.(*memo.FunctionExpr)
+
+	// Extract the the variable inputs to the geospatial function.
+	if function.Args.ChildCount() < 2 {
+		panic(errors.AssertionFailedf(
+			"all index-accelerated geospatial functions should have at least two arguments",
+		))
+	}
+
+	arg1, arg2 := function.Args.Child(0), function.Args.Child(1)
+	if commuteArgs {
+		arg1, arg2 = arg2, arg1
+	}
+
+	// The first argument should come from the input.
+	variable, ok := arg1.(*memo.VariableExpr)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"TryGetInvertedJoinCondFromGeoFunc called on function containing non-variable inputs",
+		))
+	}
+	if !inputProps.OutputCols.Contains(variable.Col) {
+		return nil, 0, 0, false
+	}
+	inputGeoCol = variable.Col
+
+	// The second argument should be a variable corresponding to the index
+	// column. The caller must verify that this column is actually the key column
+	// of an inverted geospatial index.
+	variable, ok = arg2.(*memo.VariableExpr)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"TryGetInvertedJoinCondFromGeoFunc called on function containing non-variable inputs",
+		))
+	}
+	indexGeoCol = variable.Col
+
+	if commuteArgs {
+		// Get the geospatial relationship that is equivalent to this one with the
+		// arguments commuted, and construct a new function that represents that
+		// relationship.
+		rel := geoRelationshipMap[function.Name]
+		commutedRel, ok := commuteGeoRelationshipMap[rel]
+		if !ok {
+			// It's not possible to commute this relationship.
+			return nil, 0, 0, false
+		}
+		if rel != commutedRel {
+			// If the commuted relationship is not the same as the original
+			// relationship, we can't use the same function overload.
+			name := geoRelationshipReverseMap[commutedRel]
+
+			// Copy the original arguments into a new list, and swap the first two
+			// arguments.
+			args := make(memo.ScalarListExpr, len(function.Args))
+			copy(args, function.Args)
+			args[0], args[1] = args[1], args[0]
+
+			props, overload, ok := memo.FindFunction(&args, name)
+			if !ok {
+				panic(errors.AssertionFailedf("could not find overload for %s", name))
+			}
+			fn = factory.ConstructFunction(args, &memo.FunctionPrivate{
+				Name:       name,
+				Typ:        function.Typ,
+				Properties: props,
+				Overload:   overload,
+			})
+		}
+	}
+
+	return fn, inputGeoCol, indexGeoCol, true
 }
 
 // getSpanExprForGeoIndexFn is a function that returns a SpanExpression that
@@ -265,8 +398,7 @@ func constrainGeoIndex(
 	tabID opt.TableID,
 	index cat.Index,
 	getSpanExpr getSpanExprForGeoIndexFn,
-) (_ invertedexpr.InvertedExpression) {
-	var fn *memo.FunctionExpr
+) invertedexpr.InvertedExpression {
 	switch t := expr.(type) {
 	case *memo.AndExpr:
 		return invertedexpr.And(
@@ -281,12 +413,43 @@ func constrainGeoIndex(
 		)
 
 	case *memo.FunctionExpr:
-		fn = t
+		// Try to constrain the index with the given function. If the resulting
+		// inverted expression is not a SpanExpression, try constraining the index
+		// with an equivalent function in which the arguments are commuted. For
+		// example:
+		//
+		//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
+		//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
+		//
+		// See commuteGeoRelationshipMap for the full list of mappings.
+		invertedExpr := constrainGeoIndexFromFunction(
+			ctx, t, false /* commuteArgs */, tabID, index, getSpanExpr,
+		)
+		if _, ok := invertedExpr.(invertedexpr.NonInvertedColExpression); ok {
+			invertedExpr = constrainGeoIndexFromFunction(
+				ctx, t, true /* commuteArgs */, tabID, index, getSpanExpr,
+			)
+		}
+		return invertedExpr
 
 	default:
 		return invertedexpr.NonInvertedColExpression{}
 	}
+}
 
+// constrainGeoIndexFromFunction returns an InvertedExpression representing a
+// constraint of the given geospatial index, based on the given function.
+// If commuteArgs is true, constrainGeoIndexFromFunction constrains the index
+// based on an equivalent version of the given function in which the first two
+// arguments are swapped.
+func constrainGeoIndexFromFunction(
+	ctx context.Context,
+	fn *memo.FunctionExpr,
+	commuteArgs bool,
+	tabID opt.TableID,
+	index cat.Index,
+	getSpanExpr getSpanExprForGeoIndexFn,
+) invertedexpr.InvertedExpression {
 	if !IsGeoIndexFunction(fn) {
 		return invertedexpr.NonInvertedColExpression{}
 	}
@@ -297,27 +460,28 @@ func constrainGeoIndex(
 		))
 	}
 
+	arg1, arg2 := fn.Args.Child(0), fn.Args.Child(1)
+	if commuteArgs {
+		arg1, arg2 = arg2, arg1
+	}
+
 	// The first argument should be a constant.
-	if !memo.CanExtractConstDatum(fn.Args.Child(0)) {
+	if !memo.CanExtractConstDatum(arg1) {
 		return invertedexpr.NonInvertedColExpression{}
 	}
-	d := memo.ExtractConstDatum(fn.Args.Child(0))
+	d := memo.ExtractConstDatum(arg1)
 
 	// The second argument should be a variable corresponding to the index
 	// column.
-	variable, ok := fn.Args.Child(1).(*memo.VariableExpr)
+	variable, ok := arg2.(*memo.VariableExpr)
 	if !ok {
-		// TODO(rytaft): Commute the geospatial function in this case.
-		//   Covers       <->  CoveredBy
-		//   DWithin      <->  DWithin
-		//   DFullyWithin <->  DFullyWithin
-		//   Intersects   <->  Intersects
 		return invertedexpr.NonInvertedColExpression{}
 	}
 	if variable.Col != tabID.ColumnID(index.Column(0).Ordinal) {
 		// The column in the function does not match the index column.
 		return invertedexpr.NonInvertedColExpression{}
 	}
+
 	// Any additional params must be constant.
 	var additionalParams []tree.Datum
 	for i := 2; i < fn.Args.ChildCount(); i++ {
@@ -326,7 +490,16 @@ func constrainGeoIndex(
 		}
 		additionalParams = append(additionalParams, memo.ExtractConstDatum(fn.Args.Child(i)))
 	}
+
 	relationship := geoRelationshipMap[fn.Name]
+	if commuteArgs {
+		relationship, ok = commuteGeoRelationshipMap[relationship]
+		if !ok {
+			// It's not possible to commute this relationship.
+			return invertedexpr.NonInvertedColExpression{}
+		}
+	}
+
 	return getSpanExpr(ctx, d, additionalParams, relationship, index.GeoConfig())
 }
 
