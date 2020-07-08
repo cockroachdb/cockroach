@@ -1259,3 +1259,27 @@ case [type=oid]
       │    └── null [type=unknown]
       └── cast: OID [type=oid]
            └── null [type=unknown]
+
+# Make sure NULL arguments for AND/OR/NOT are typed as boolean.
+build-scalar
+NULL AND true
+----
+and [type=bool]
+ ├── cast: BOOL [type=bool]
+ │    └── null [type=unknown]
+ └── true [type=bool]
+
+build-scalar
+false OR NULL
+----
+or [type=bool]
+ ├── false [type=bool]
+ └── cast: BOOL [type=bool]
+      └── null [type=unknown]
+
+build-scalar
+NOT NULL
+----
+not [type=bool]
+ └── cast: BOOL [type=bool]
+      └── null [type=unknown]
