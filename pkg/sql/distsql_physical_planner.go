@@ -1122,7 +1122,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			spans:                  n.spans,
 			reverse:                n.reverse,
 			scanVisibility:         n.colCfg.visibility,
-			maxResults:             n.maxResults,
+			parallelize:            n.parallelize,
 			estimatedRowCount:      n.estimatedRowCount,
 			reqOrdering:            n.reqOrdering,
 			cols:                   n.cols,
@@ -1142,7 +1142,7 @@ type tableReaderPlanningInfo struct {
 	spans                  []roachpb.Span
 	reverse                bool
 	scanVisibility         execinfrapb.ScanVisibility
-	maxResults             uint64
+	parallelize            bool
 	estimatedRowCount      uint64
 	reqOrdering            ReqOrdering
 	cols                   []*sqlbase.ColumnDescriptor
@@ -1198,7 +1198,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			tr.Spans = append(tr.Spans, execinfrapb.TableReaderSpan{Span: sp.Spans[j]})
 		}
 
-		tr.MaxResults = info.maxResults
+		tr.Parallelize = info.parallelize
 		p.TotalEstimatedScannedRows += info.estimatedRowCount
 		if info.estimatedRowCount > p.MaxEstimatedRowCount {
 			p.MaxEstimatedRowCount = info.estimatedRowCount

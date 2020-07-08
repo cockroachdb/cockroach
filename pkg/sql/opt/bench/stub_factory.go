@@ -40,7 +40,7 @@ func (f *stubFactory) ConstructScan(
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
-	maxResults uint64,
+	parallelize bool,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
 	locking *tree.LockingItem,

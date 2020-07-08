@@ -79,14 +79,14 @@ func (ef *execFactory) ConstructScan(
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
-	maxResults uint64,
+	parallelize bool,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return ef.constructVirtualScan(
-			table, index, needed, indexConstraint, hardLimit, softLimit, reverse, maxResults,
+			table, index, needed, indexConstraint, hardLimit, softLimit, reverse,
 			reqOrdering, rowCount, locking,
 		)
 	}
@@ -119,8 +119,7 @@ func (ef *execFactory) ConstructScan(
 	scan.softLimit = softLimit
 
 	scan.reverse = reverse
-	scan.maxResults = maxResults
-	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
+	scan.parallelize = parallelize
 	var err error
 	if invertedConstraint != nil {
 		scan.spans, err = GenerateInvertedSpans(invertedConstraint, sb)
@@ -154,7 +153,6 @@ func (ef *execFactory) constructVirtualScan(
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
-	maxResults uint64,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
 	locking *tree.LockingItem,

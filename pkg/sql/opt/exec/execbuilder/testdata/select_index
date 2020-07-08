@@ -1485,7 +1485,6 @@ render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
-·          parallel      ·
 
 statement ok
 SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1510,7 +1509,6 @@ render     ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
-·          parallel      ·
 
 # Optimization should also be applied for updates.
 query TTT
