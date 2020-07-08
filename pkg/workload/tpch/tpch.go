@@ -61,9 +61,10 @@ type tpch struct {
 	scaleFactor int
 	fks         bool
 
-	disableChecks bool
-	vectorize     string
-	verbose       bool
+	disableChecks              bool
+	vectorize                  string
+	useClusterVectorizeSetting bool
+	verbose                    bool
 
 	queriesRaw      string
 	selectedQueries []int
@@ -107,6 +108,8 @@ var tpchMeta = workload.Meta{
 				"Note that the checks are only supported for scale factor 1")
 		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
 			`Set vectorize session variable`)
+		g.flags.BoolVar(&g.useClusterVectorizeSetting, `default-vectorize`, false,
+			`Ignore vectorize option and use the current cluster setting sql.defaults.vectorize`)
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -332,7 +335,11 @@ func (w *worker) run(ctx context.Context) error {
 	queryNum := w.config.selectedQueries[w.ops%len(w.config.selectedQueries)]
 	w.ops++
 
-	query := fmt.Sprintf("SET vectorize = '%s'; %s", w.config.vectorize, QueriesByNumber[queryNum])
+	var prefix string
+	if !w.config.useClusterVectorizeSetting {
+		prefix = fmt.Sprintf("SET vectorize = '%s';", w.config.vectorize)
+	}
+	query := fmt.Sprintf("%s %s", prefix, QueriesByNumber[queryNum])
 
 	vals := make([]interface{}, maxCols)
 	for i := range vals {
