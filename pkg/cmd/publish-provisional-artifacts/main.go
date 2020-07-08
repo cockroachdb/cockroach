@@ -316,16 +316,15 @@ type opts struct {
 }
 
 func putNonRelease(svc s3I, o opts) {
-	crdbPath := filepath.Join(o.PkgDir, o.Base)
-	files := []release.NonReleaseFile{
-		release.MakeCRDBBinaryNonReleaseFile(o.Base, crdbPath, o.VersionStr),
-	}
 	release.PutNonRelease(
 		svc,
 		release.PutNonReleaseOptions{
 			Branch:     o.Branch,
 			BucketName: o.BucketName,
-			Files:      files,
+			Files: append(
+				[]release.NonReleaseFile{release.MakeCRDBBinaryNonReleaseFile(o.Base, filepath.Join(o.PkgDir, o.Base), o.VersionStr)},
+				release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.BuildType, o.VersionStr, o.Suffix)...,
+			),
 		},
 	)
 }
@@ -341,17 +340,16 @@ func s3KeyArchive(o opts) (string, string) {
 }
 
 func putRelease(svc s3I, o opts) {
-	crdbPath := filepath.Join(o.PkgDir, o.Base)
-	files := []release.ArchiveFile{
-		release.MakeCRDBBinaryArchiveFile(o.Base, crdbPath),
-	}
 	release.PutRelease(svc, release.PutReleaseOptions{
 		BucketName: o.BucketName,
 		NoCache:    false,
 		Suffix:     o.Suffix,
 		BuildType:  o.BuildType,
 		VersionStr: o.VersionStr,
-		Files:      files,
+		Files: append(
+			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.Base, filepath.Join(o.PkgDir, o.Base))},
+			release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.BuildType)...,
+		),
 	})
 }
 

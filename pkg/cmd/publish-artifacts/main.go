@@ -250,7 +250,7 @@ func buildOneCockroach(svc s3putter, o opts) {
 	o.AbsolutePath = filepath.Join(o.PkgDir, o.Base)
 
 	if !*isRelease {
-		putNonRelease(svc, o)
+		putNonRelease(svc, o, release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.BuildType, o.VersionStr, o.Suffix)...)
 	} else {
 		putRelease(svc, o)
 	}
@@ -290,32 +290,32 @@ type opts struct {
 	PkgDir       string
 }
 
-func putNonRelease(svc s3putter, o opts) {
-	files := []release.NonReleaseFile{
-		release.MakeCRDBBinaryNonReleaseFile(o.Base, o.AbsolutePath, o.VersionStr),
-	}
+func putNonRelease(svc s3putter, o opts, additionalNonReleaseFiles ...release.NonReleaseFile) {
 	release.PutNonRelease(
 		svc,
 		release.PutNonReleaseOptions{
 			Branch:     o.Branch,
 			BucketName: o.BucketName,
-			Files:      files,
+			Files: append(
+				[]release.NonReleaseFile{release.MakeCRDBBinaryNonReleaseFile(o.Base, o.AbsolutePath, o.VersionStr)},
+				additionalNonReleaseFiles...,
+			),
 		},
 	)
 }
 
 func putRelease(svc s3putter, o opts) {
 	for _, releaseVersionStr := range o.ReleaseVersionStrs {
-		files := []release.ArchiveFile{
-			release.MakeCRDBBinaryArchiveFile(o.Base, o.AbsolutePath),
-		}
 		release.PutRelease(svc, release.PutReleaseOptions{
 			BucketName: o.BucketName,
 			NoCache:    releaseVersionStr == latestStr,
 			Suffix:     o.Suffix,
 			BuildType:  o.BuildType,
 			VersionStr: releaseVersionStr,
-			Files:      files,
+			Files: append(
+				[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.Base, o.AbsolutePath)},
+				release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.BuildType)...,
+			),
 		})
 	}
 }
