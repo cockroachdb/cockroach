@@ -1720,6 +1720,124 @@ FROM (VALUES
 2  1     1     SRID=4326;LINESTRING (0 0, 1 0, 1 1, 0 0)  NULL  SRID=4326;LINESTRING (0.1 0.1, 0.9 0.1, 0.9 0.9, 0.1 0.1)  NULL
 0  NULL  NULL  NULL                                       NULL  NULL                                                       NULL
 
+statement error argument must be LINESTRING geometries
+SELECT ST_MakePolygon('MULTIPOINT(0 0, 1 1)')
+
+statement error unknown signature: st_makepolygon\(string\)
+SELECT ST_MakePolygon('abc')
+
+statement error argument must be LINESTRING geometries
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+    ARRAY[
+      ST_GeomFromText('MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)')
+    ]);
+
+statement error argument must be LINESTRING geometries
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+    ARRAY[
+      'MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)'
+    ]);
+
+statement error argument must be LINESTRING geometries
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+    ARRAY['abc']);
+
+# SRID set on shell but not interior rings
+statement error mixed SRIDs are not allowed
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
+    ARRAY[
+      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')
+    ]);
+
+# SRIDs on shell and interior ring are unmatched
+statement error mixed SRIDs are not allowed
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
+    ARRAY[
+      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 3857)
+    ]);
+
+# SRIDs on interior rings are unmatched
+statement error mixed SRIDs are not allowed
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
+    ARRAY[
+      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 4326),
+      ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)', 3857)
+    ]);
+
+statement error shell must be closed
+SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 70)'));
+
+statement error shell must have at least 4 points
+SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 40 80)'));
+
+statement error shell must have at least 4 points
+SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 40 80)'));
+
+statement error holes must be closed
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+    ARRAY[
+      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 60)')
+    ]);
+
+statement error holes must have at least 4 points
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+    ARRAY[
+      ST_GeomFromText('LINESTRING(50 70, 70 70, 50 70)')
+    ]);
+
+statement error holes must have at least 4 points
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+    ARRAY[
+      ST_GeomFromText('LINESTRING(50 70, 50 70)')
+    ]);
+
+query T
+SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)')));
+----
+POLYGON ((75 29, 77 29, 77 29, 75 29))
+
+query T
+SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)', 4326)));
+----
+SRID=4326;POLYGON ((75 29, 77 29, 77 29, 75 29))
+
+query T
+SELECT ST_AsEWKT(ST_MakePolygon(
+      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+      ARRAY[
+        ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')
+      ]));
+----
+POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
+
+query T
+SELECT ST_AsEWKT(ST_MakePolygon(
+      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
+      ARRAY[
+        ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)'),
+        ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)')
+      ]));
+----
+POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70), (60 60, 75 60, 75 45, 60 45, 60 60))
+
+query T
+SELECT ST_AsEWKT(ST_MakePolygon(
+      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326),
+      ARRAY[
+        ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 4326)
+      ]));
+----
+SRID=4326;POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
+
 # Multi-Geometry related operations.
 query ITTT
 SELECT
@@ -2577,120 +2695,5 @@ SELECT ST_Azimuth(ST_Point(0, 0)::geography, ST_Point(0, 0)::geography)
 ----
 NULL
 
-statement error argument must be LINESTRING geometries
-SELECT ST_MakePolygon('MULTIPOINT(0 0, 1 1)')
-
-statement error unknown signature: st_makepolygon\(string\)
-SELECT ST_MakePolygon('abc')
-
-statement error argument must be LINESTRING geometries
-SELECT ST_MakePolygon( 
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), 
-    ARRAY[
-      ST_GeomFromText('MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)')
-    ]);
-
-statement error argument must be LINESTRING geometries
-SELECT ST_MakePolygon( 
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), 
-    ARRAY[
-      'MULTIPOINT(50 70, 70 70, 70 50, 50 50, 50 70)'
-    ]);
-
-statement error argument must be LINESTRING geometries
-SELECT ST_MakePolygon( 
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), 
-    ARRAY['abc']);
-
-# SRID set on shell but not interior rings
-statement error mixed SRIDs are not allowed
-SELECT ST_MakePolygon( 
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326), 
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')
-    ]);
-
-# SRIDs on shell and interior ring are unmatched
-statement error mixed SRIDs are not allowed
-SELECT ST_MakePolygon( 
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326), 
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 3857)
-    ]);
-
-# SRIDs on interior rings are unmatched
-statement error mixed SRIDs are not allowed
-SELECT ST_MakePolygon( 
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326), 
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 4326), 
-      ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)', 3857)
-    ]);
-
-statement error shell must be closed
-SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 70)'));
-
-statement error shell must have at least 4 points
-SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 80 80, 40 80)'));
-
-statement error shell must have at least 4 points
-SELECT ST_MakePolygon(ST_GeomFromText('LINESTRING(40 80, 40 80)'));
-
-statement error holes must be closed
-SELECT ST_MakePolygon(
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 60)')
-    ]);
-
-statement error holes must have at least 4 points
-SELECT ST_MakePolygon(
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 70 70, 50 70)')
-    ]);
-
-statement error holes must have at least 4 points
-SELECT ST_MakePolygon(
-    ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'),
-    ARRAY[
-      ST_GeomFromText('LINESTRING(50 70, 50 70)')
-    ]);
-
-query T 
-SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)')));
-----
-POLYGON ((75 29, 77 29, 77 29, 75 29))
-
-query T 
-SELECT ST_AsEWKT(ST_MakePolygon( ST_GeomFromText('LINESTRING(75 29,77 29,77 29, 75 29)', 4326)));
-----
-SRID=4326;POLYGON ((75 29, 77 29, 77 29, 75 29))
-
-query T 
-SELECT ST_AsEWKT(ST_MakePolygon( 
-      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), 
-      ARRAY[
-        ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)')
-      ]));
-----
-POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
-
-query T 
-SELECT ST_AsEWKT(ST_MakePolygon( 
-      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)'), 
-      ARRAY[
-        ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)'), 
-        ST_GeomFromText('LINESTRING(60 60, 75 60, 75 45, 60 45, 60 60)')
-      ]));
-----
-POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70), (60 60, 75 60, 75 45, 60 45, 60 60))
-
-query T 
-SELECT ST_AsEWKT(ST_MakePolygon( 
-      ST_GeomFromText('LINESTRING(40 80, 80 80, 80 40, 40 40, 40 80)', 4326), 
-      ARRAY[
-        ST_GeomFromText('LINESTRING(50 70, 70 70, 70 50, 50 50, 50 70)', 4326)
-      ]));
-----
-SRID=4326;POLYGON ((40 80, 80 80, 80 40, 40 40, 40 80), (50 70, 70 70, 70 50, 50 50, 50 70))
+statement error POINT EMPTY
+SELECT st_azimuth('0101000020E6100000000000000000F87F000000000000F87F':::GEOGRAPHY::GEOGRAPHY, '0101000020E6100000000000000000F03F000000000000F03F':::GEOGRAPHY::GEOGRAPHY)::FLOAT8
