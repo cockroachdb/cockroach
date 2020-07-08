@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -61,13 +62,20 @@ type templateVars struct {
 	Spheroids   []spheroid
 }
 
+type projectionBounds struct {
+	MinX string
+	MaxX string
+	MinY string
+	MaxY string
+}
+
 type projection struct {
 	SRID      string
 	AuthName  string
 	AuthSRID  string
 	SRText    string
 	Proj4Text string
-	Bounds    *geoprojbase.Bounds
+	Bounds    *projectionBounds
 
 	IsLatLng        bool
 	SpheroidVarName string
@@ -75,8 +83,8 @@ type projection struct {
 
 type spheroid struct {
 	VarName    string
-	MajorAxis  float64
-	Flattening float64
+	MajorAxis  string
+	Flattening string
 }
 
 func main() {
@@ -133,8 +141,8 @@ func getTemplateVars() templateVars {
 				spheroids,
 				spheroid{
 					VarName:    spheroidVarName,
-					MajorAxis:  s.Radius,
-					Flattening: s.Flattening,
+					MajorAxis:  strconv.FormatFloat(s.Radius, 'f', -1, 64),
+					Flattening: strconv.FormatFloat(s.Flattening, 'f', -1, 64),
 				},
 			)
 			counter++
@@ -142,7 +150,7 @@ func getTemplateVars() templateVars {
 			spheroidVarName = fmt.Sprintf(`spheroid%d`, foundCounter)
 		}
 
-		var bounds *geoprojbase.Bounds
+		var bounds *projectionBounds
 		if record[1] == "EPSG" {
 			var results struct {
 				Results []struct {
@@ -197,11 +205,11 @@ func getTemplateVars() templateVars {
 			sort.Slice(yCoords, func(i, j int) bool {
 				return yCoords[i] < yCoords[j]
 			})
-			bounds = &geoprojbase.Bounds{
-				MinX: xCoords[0],
-				MaxX: xCoords[3],
-				MinY: yCoords[0],
-				MaxY: yCoords[3],
+			bounds = &projectionBounds{
+				MinX: strconv.FormatFloat(xCoords[0], 'f', -1, 64),
+				MaxX: strconv.FormatFloat(xCoords[3], 'f', -1, 64),
+				MinY: strconv.FormatFloat(yCoords[0], 'f', -1, 64),
+				MaxY: strconv.FormatFloat(yCoords[3], 'f', -1, 64),
 			}
 		}
 
