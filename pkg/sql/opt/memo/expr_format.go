@@ -1220,6 +1220,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *ScanPrivate:
 		// Don't output name of index if it's the primary index.
 		tab := f.Memo.metadata.Table(t.Table)
+		tabMeta := f.Memo.metadata.TableMeta(t.Table)
 		if t.Index == cat.PrimaryIndex {
 			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
 		} else {
@@ -1228,7 +1229,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if ScanIsReverseFn(f.Memo.Metadata(), t, &physProps.Ordering) {
 			f.Buffer.WriteString(",rev")
 		}
-		if _, ok := tab.Index(t.Index).Predicate(); ok {
+		if IsPartialIndex(tabMeta, t.Index) {
 			f.Buffer.WriteString(",partial")
 		}
 
