@@ -645,6 +645,7 @@ func (s *Server) newConnExecutor(
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 	ex.statsCollector = ex.newStatsCollector()
+
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex
@@ -1047,6 +1048,10 @@ type connExecutor struct {
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
+
+		// IdleInSessionTimeout is returned by the AfterFunc call that cancels the
+		// session if the idle time exceeds the idle_in_session_timeout.
+		IdleInSessionTimeout *time.Timer
 	}
 
 	// curStmt is the statement that's currently being prepared or executed, if
