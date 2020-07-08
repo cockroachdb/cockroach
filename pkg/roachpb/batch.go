@@ -53,6 +53,26 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	return nil
 }
 
+// EarliestActiveTimestamp returns the earliest timestamp at which the batch
+// would operate, which is nominally ba.Timestamp but could be earlier if a
+// request in the batch operates on a time span such as ExportRequest or
+// RevertRangeRequest, which both specify the start of that span in their
+// arguments while using ba.Timestamp to indicate the upper bound of that span.
+func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
+	ts := ba.Timestamp
+	for _, ru := range ba.Requests {
+		switch t := ru.GetInner().(type) {
+		case *ExportRequest:
+			if !t.StartTime.IsEmpty() {
+				ts.Backward(t.StartTime)
+			}
+		case *RevertRangeRequest:
+			ts.Backward(t.TargetTime)
+		}
+	}
+	return ts
+}
+
 // UpdateTxn updates the batch transaction from the supplied one in
 // a copy-on-write fashion, i.e. without mutating an existing
 // Transaction struct.

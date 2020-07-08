@@ -1102,7 +1102,9 @@ func (r *Replica) checkExecutionCanProceed(
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp, st, ba.IsAdmin()); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(
+		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
+	); err != nil {
 		return err
 	} else if g.HoldingLatches() && st != nil {
 		// Only check for a pending merge if latches are held and the Range

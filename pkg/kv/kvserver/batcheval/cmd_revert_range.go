@@ -76,10 +76,6 @@ func RevertRange(
 	reply := resp.(*roachpb.RevertRangeResponse)
 	var pd result.Result
 
-	if gc := cArgs.EvalCtx.GetGCThreshold(); args.TargetTime.LessEq(gc) {
-		return result.Result{}, errors.Errorf("cannot revert before replica GC threshold %v", gc)
-	}
-
 	if empty, err := isEmptyKeyTimeRange(
 		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
 	); err != nil {

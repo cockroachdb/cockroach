@@ -187,18 +187,6 @@ func TestCmdRevertRange(t *testing.T) {
 				})
 			}
 
-			t.Run("checks gc threshold", func(t *testing.T) {
-				batch := &wrappedBatch{Batch: eng.NewBatch()}
-				defer batch.Close()
-				evalCtx.GCThreshold = tsB
-				cArgs.Args = &roachpb.RevertRangeRequest{
-					RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey}, TargetTime: tsB,
-				}
-				if _, err := RevertRange(ctx, batch, cArgs, &roachpb.RevertRangeResponse{}); !testutils.IsError(err, "replica GC threshold") {
-					t.Fatal(err)
-				}
-			})
-
 			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1)
 			if err := storage.MVCCPut(
 				ctx, eng, &stats, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), &txn,
