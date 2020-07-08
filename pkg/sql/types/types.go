@@ -883,6 +883,15 @@ func (t *T) GeoMetadata() (*GeoMetadata, error) {
 	return t.InternalType.GeoMetadata, nil
 }
 
+// GeoSRIDOrZero returns the geo SRID of the type object if it exists.
+// This should only exist on a subset of Geometry and Geography types.
+func (t *T) GeoSRIDOrZero() geopb.SRID {
+	if t.InternalType.GeoMetadata != nil {
+		return t.InternalType.GeoMetadata.SRID
+	}
+	return 0
+}
+
 var (
 	// DefaultIntervalTypeMetadata returns a duration field that is unset,
 	// using INTERVAL or INTERVAL ( iconst32 ) syntax instead of INTERVAL

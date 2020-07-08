@@ -47,7 +47,7 @@ func (p *Proj4Text) Equal(o Proj4Text) bool {
 	return bytes.Equal(p.cStr, o.cStr)
 }
 
-// Bounds represents the lat/lng bounds.
+// Bounds represents the projected or lat/lng bounds.
 type Bounds struct {
 	MinX float64
 	MaxX float64
@@ -70,7 +70,7 @@ type ProjInfo struct {
 
 	// Denormalized fields.
 
-	// Bounds defines the bounds (in lat lng) of the given coordinate system.
+	// Bounds defines the bounds (projected or lat/lng) of the given coordinate system.
 	// If nil, no bounds were defined for the given projection.
 	Bounds *Bounds
 	// IsLatLng stores whether the projection is a LatLng based projection (denormalized from above)
