@@ -154,7 +154,7 @@ func (desc *TypeDescriptor) Adding() bool {
 
 // Dropped implements the BaseDescriptorInterface interface.
 func (desc *TypeDescriptor) Dropped() bool {
-	return false
+	return desc.State == TypeDescriptor_DROP
 }
 
 // Offline implements the BaseDescriptorInterface interface.
@@ -242,6 +242,28 @@ func (desc *MutableTypeDescriptor) Immutable() DescriptorInterface {
 // IsNew implements the MutableDescriptor interface.
 func (desc *MutableTypeDescriptor) IsNew() bool {
 	return desc.ClusterVersion == nil
+}
+
+// AddReferencingDescriptorID adds a new referencing descriptor ID to the
+// TypeDescriptor. It ensures that duplicates are not added.
+func (desc *MutableTypeDescriptor) AddReferencingDescriptorID(new ID) {
+	for _, id := range desc.ReferencingDescriptorIDs {
+		if new == id {
+			return
+		}
+	}
+	desc.ReferencingDescriptorIDs = append(desc.ReferencingDescriptorIDs, new)
+}
+
+// RemoveReferencingDescriptorID removes the desired referencing descriptor ID
+// from the TypeDescriptor. It has no effect if the requested ID is not present.
+func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove ID) {
+	for i, id := range desc.ReferencingDescriptorIDs {
+		if id == remove {
+			desc.ReferencingDescriptorIDs = append(desc.ReferencingDescriptorIDs[:i], desc.ReferencingDescriptorIDs[i+1:]...)
+			return
+		}
+	}
 }
 
 // EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
@@ -336,6 +358,19 @@ func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec key
 	case TypeDescriptor_ALIAS:
 		if desc.ArrayTypeID != InvalidID {
 			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
+		}
+	}
+
+	// Validate that all of the referencing descriptors exist.
+	if !desc.Dropped() {
+		for _, id := range desc.ReferencingDescriptorIDs {
+			b.Get(MakeDescMetadataKey(codec, id))
+			opChecks = append(opChecks, func(k kv.KeyValue) error {
+				if !k.Exists() {
+					return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
+				}
+				return nil
+			})
 		}
 	}
 

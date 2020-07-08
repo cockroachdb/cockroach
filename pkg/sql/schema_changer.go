@@ -762,6 +762,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// We make a call to PublishMultiple to handle the situation to add Foreign Key backreferences.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
 	var interleaveParents map[sqlbase.ID]struct{}
+	var referencedTypeIDs []sqlbase.ID
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		interleaveParents = make(map[sqlbase.ID]struct{})
@@ -770,6 +771,18 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		referencedTypeIDs, err = desc.GetAllReferencedTypeIDs(func(id sqlbase.ID) (*sqlbase.TypeDescriptor, error) {
+			desc, err := sqlbase.GetTypeDescFromID(ctx, txn, sc.execCfg.Codec, id)
+			if err != nil {
+				return nil, err
+			}
+			return desc.TypeDesc(), nil
+		})
+		if err != nil {
+			return err
+		}
+
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				break
@@ -979,10 +992,32 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				break
 			}
 		}
+
+		// Now that all mutations have been applied, find the new set of referenced
+		// type descriptors. If this table has been dropped in the mean time, then
+		// don't install any backreferences.
+		if !scTable.Dropped() {
+			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id sqlbase.ID) (*TypeDescriptor, error) {
+				return descs[id].(*sqlbase.MutableTypeDescriptor).TypeDesc(), nil
+			})
+			if err != nil {
+				return err
+			}
+
+			// Update the set of back references.
+			for _, id := range referencedTypeIDs {
+				descs[id].(*sqlbase.MutableTypeDescriptor).RemoveReferencingDescriptorID(scTable.ID)
+			}
+			for _, id := range newReferencedTypeIDs {
+				descs[id].(*sqlbase.MutableTypeDescriptor).AddReferencingDescriptorID(scTable.ID)
+			}
+		}
+
 		return nil
 	}
 
-	_, err = sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *kv.Txn) error {
+	descsToUpdate := append(tableIDsToUpdate, referencedTypeIDs...)
+	_, err = sc.leaseMgr.PublishMultiple(ctx, descsToUpdate, update, func(txn *kv.Txn) error {
 		schemaChangeEventType := EventLogFinishSchemaChange
 		if isRollback {
 			schemaChangeEventType = EventLogFinishSchemaRollback
