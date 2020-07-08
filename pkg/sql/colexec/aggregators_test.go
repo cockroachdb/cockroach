@@ -522,6 +522,31 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			aggCols: [][]uint32{{1}, {2}, {3}, {4}, {5}, {6}},
 			name:    "AVG on all types",
 		},
+		{
+			input: tuples{
+				{1, "1"},
+				{1, "2"},
+				{1, "3"},
+				{2, nil},
+				{2, "1"},
+				{2, "2"},
+				{3, "1"},
+				{3, nil},
+				{3, "2"},
+				{4, nil},
+				{4, nil},
+			},
+			expected: tuples{
+				{"123"},
+				{"12"},
+				{"12"},
+				{nil},
+			},
+			typs:      []*types.T{types.Int, types.Bytes},
+			aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_CONCAT_AGG},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{1}},
+		},
 	}
 
 	for _, agg := range aggTypes {
@@ -555,8 +580,9 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_MAX,
 				execinfrapb.AggregatorSpec_BOOL_AND,
 				execinfrapb.AggregatorSpec_BOOL_OR,
+				execinfrapb.AggregatorSpec_CONCAT_AGG,
 			},
-			aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {3}, {3}, {4}},
 			typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
 			input: tuples{
 				{0, 3.1, 2, true, "zero"},
@@ -568,10 +594,10 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				{3, 5.1, 0, true, "three"},
 			},
 			expected: tuples{
-				{0, "zero", 2.1, 2, 2, 4.2, 5, 2, 3, false, true},
-				{1, "one", 2.6, 2, 2, 5.2, 1, 0, 1, false, false},
-				{2, "two", 1.1, 1, 1, 1.1, 1, 1, 1, true, true},
-				{3, "three", 4.6, 2, 2, 9.2, 0, 0, 0, false, true},
+				{0, "zero", 2.1, 2, 2, 4.2, 5, 2, 3, false, true, "zerozero"},
+				{1, "one", 2.6, 2, 2, 5.2, 1, 0, 1, false, false, "oneone"},
+				{2, "two", 1.1, 1, 1, 1.1, 1, 1, 1, true, true, "two"},
+				{3, "three", 4.6, 2, 2, 9.2, 0, 0, 0, false, true, "threethree"},
 			},
 			convToDecimal: true,
 		},
@@ -590,20 +616,21 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_AVG,
 				execinfrapb.AggregatorSpec_BOOL_AND,
 				execinfrapb.AggregatorSpec_BOOL_OR,
+				execinfrapb.AggregatorSpec_CONCAT_AGG,
 			},
-			aggCols: [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}},
-			typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool},
+			aggCols: [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}, {4}},
+			typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
 			input: tuples{
-				{nil, 1.1, 4, true},
-				{0, nil, nil, nil},
-				{0, 3.1, 5, nil},
-				{1, nil, nil, nil},
-				{1, nil, nil, false},
+				{nil, 1.1, 4, true, "a"},
+				{0, nil, nil, nil, nil},
+				{0, 3.1, 5, nil, "b"},
+				{1, nil, nil, nil, nil},
+				{1, nil, nil, false, nil},
 			},
 			expected: tuples{
-				{nil, 1.1, 1, 1, 1.1, 4, 4, 4, 1.1, true, true},
-				{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1, nil, nil},
-				{1, nil, 2, 0, nil, nil, nil, nil, nil, false, false},
+				{nil, 1.1, 1, 1, 1.1, 4, 4, 4, 1.1, true, true, "a"},
+				{0, 3.1, 2, 1, 3.1, 5, 5, 5, 3.1, nil, nil, "b"},
+				{1, nil, 2, 0, nil, nil, nil, nil, nil, false, false, nil},
 			},
 			convToDecimal: true,
 		},
@@ -862,9 +889,14 @@ func BenchmarkAggregator(b *testing.B) {
 func BenchmarkAllAggregateFunctions(b *testing.B) {
 	for _, aggFn := range SupportedAggFns {
 		for _, agg := range aggTypes {
-			typ := types.Int
-			if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
+			var typ *types.T
+			switch aggFn {
+			case execinfrapb.AggregatorSpec_BOOL_AND, execinfrapb.AggregatorSpec_BOOL_OR:
 				typ = types.Bool
+			case execinfrapb.AggregatorSpec_CONCAT_AGG:
+				typ = types.Bytes
+			default:
+				typ = types.Int
 			}
 			for _, groupSize := range []int{1, coldata.BatchSize()} {
 				benchmarkAggregateFunction(b, agg, aggFn, typ, groupSize, nullProbability)

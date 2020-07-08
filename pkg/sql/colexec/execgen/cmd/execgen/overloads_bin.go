@@ -261,8 +261,15 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 		var result string
 		if op.overloadBase.BinOp == tree.Concat {
 			caller, idx, err := parseNonIndexableTargetElem(targetElem)
-			if err != nil {
+			var setStatement string
+			if err != nil && idx == "-1" {
+				// in this case targetElem is not a value reference from Vec, it may
+				// be a single value of type byte[]
+				setStatement = fmt.Sprintf("%s = r", targetElem)
+			} else if err != nil {
 				return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
+			} else {
+				setStatement = set(types.BytesFamily, caller, idx, "r")
 			}
 			result = fmt.Sprintf(`
 			{
@@ -271,7 +278,7 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 				r = append(r, %s...)
 				%s
 			}
-			`, leftElem, rightElem, set(types.BytesFamily, caller, idx, "r"))
+			`, leftElem, rightElem, setStatement)
 		} else {
 			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -841,9 +848,13 @@ func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 // Some target element has form "caller[index]", however, types like Bytes and datumVec
 // don't support indexing, we need to translate that into a set operation.This method
 // is used to extract caller and index value from targetElem.
+// index with value "-1" together with an error is returned if target element does not have
+// form "caller[index]", other failed situation simply returned an error and leave caller
+// and index empty
 func parseNonIndexableTargetElem(targetElem string) (caller string, index string, err error) {
 	if !regexp.MustCompile(`.*\[.*]`).MatchString(targetElem) {
 		err = fmt.Errorf("couldn't translate indexing on target element: %s", targetElem)
+		index = "-1"
 		return
 	}
 	// Next, we separate the target into two tokens preemptively removing

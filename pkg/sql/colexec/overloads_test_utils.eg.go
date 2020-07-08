@@ -3300,7 +3300,14 @@ func performConcatBytesBytes(a []byte, b []byte) []byte {
 	// However, the scratch is not used in all of the functions, so we add this
 	// to go around "unused" error.
 	_ = _overloadHelper
-	colexecerror.InternalError("couldn't translate indexing on target element: r")
+
+	{
+		var r = []byte{}
+		r = append(r, a...)
+		r = append(r, b...)
+		r = r
+	}
+
 	return r
 }
 

@@ -37,6 +37,7 @@ var (
 	zeroFloat64Value  float64
 	zeroInt64Value    int64
 	zeroIntervalValue duration.Duration
+	zeroBytesValue    []byte
 )
 
 // overloadHelper is a utility struct that helps us avoid allocations
