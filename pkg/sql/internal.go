@@ -93,12 +93,25 @@ func MakeInternalExecutor(
 }
 
 // SetSessionData binds the session variables that will be used by queries
-// performed through this executor from now on.
+// performed through this executor from now on. sessionData can be nil. If
+// sessionData is not nil, it will be populated with the minimum values needed
+// in order to not crash.
 //
 // SetSessionData cannot be called concurently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
-	ie.s.populateMinimalSessionData(sessionData)
+	if sessionData != nil {
+		ie.s.populateMinimalSessionData(sessionData)
+	}
 	ie.sessionData = sessionData
+}
+
+// GetSessionData returns a copy of the InternalExecutor's SessionData. If nil,
+// an unitialized SessionData object and false is returned.
+func (ie *InternalExecutor) GetSessionData() (sessiondata.SessionData, bool) {
+	if ie.sessionData == nil {
+		return sessiondata.SessionData{}, false
+	}
+	return *ie.sessionData, true
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
