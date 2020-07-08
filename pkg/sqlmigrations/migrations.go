@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -773,6 +774,9 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 			migrateCtx, _ := m.stopper.WithCancelOnQuiesce(context.Background())
 			migrateCtx = logtags.AddTag(migrateCtx, "schema-change-job-migration", nil)
 			if err := migrateSchemaChangeJobs(migrateCtx, r, m.jobRegistry); err != nil {
+				// TODO(lucy): Should we rate-limit Sentry reports in case we get
+				// infinite retries?
+				errorutil.SendReport(ctx, &m.settings.SV, err)
 				log.Errorf(ctx, "error attempting running schema change job migration, will retry: %s %s", err.Error(), startTime)
 				continue
 			}
