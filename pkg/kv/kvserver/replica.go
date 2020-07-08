@@ -1143,7 +1143,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 }
 
 // checkSpanInRangeRLocked returns an error if a request (identified by its
-// key span) can be run on the replica.
+// key span) can not be run on the replica.
 func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
 	desc := r.mu.state.Desc
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
