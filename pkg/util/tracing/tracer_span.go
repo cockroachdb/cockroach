@@ -49,9 +49,14 @@ type spanContext struct {
 	shadowTr  *shadowTracer
 	shadowCtx opentracing.SpanContext
 
-	// If set, all spans derived from this context are being recorded as a group.
-	recordingGroup *spanGroup
-	recordingType  RecordingType
+	// If set, all spans derived from this context are being recorded.
+	recordingType RecordingType
+	// span is set if this context corresponds to a local span. If so, pointing
+	// back to the span is used for registering child spans with their parent.
+	// Children of remote spans act as roots when it comes to recordings - someone
+	// is responsible for calling GetRecording() on them and marshaling the
+	// recording back to the parent (generally an RPC handler does this).
+	span *span
 
 	// The span's associated baggage.
 	Baggage map[string]string
@@ -130,9 +135,17 @@ type span struct {
 		// duration is initialized to -1 and set on Finish().
 		duration time.Duration
 
-		recordingGroup *spanGroup
-		recordingType  RecordingType
-		recordedLogs   []opentracing.LogRecord
+		// recording maintains state once StartRecording() is called.
+		recording struct {
+			recordingType RecordingType
+			recordedLogs  []opentracing.LogRecord
+			// children contains the list of child spans started after this span
+			// started recording.
+			children []*span
+			// remoteSpan contains the list of remote child spans manually imported.
+			remoteSpans []RecordedSpan
+		}
+
 		// tags are only set when recording. These are tags that have been added to
 		// this span, and will be appended to the tags in logTags when someone
 		// needs to actually observe the total set of tags that is a part of this
@@ -162,22 +175,30 @@ func IsRecording(s opentracing.Span) bool {
 	return s.(*span).isRecording()
 }
 
-func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
-	if group == nil {
-		panic("no spanGroup")
-	}
+// enableRecording start recording on the span. From now on, log events and child spans
+// will be stored.
+//
+// If parent != nil, the span will be registered as a child of the respective
+// parent.
+// If separate recording is specified, the child is not registered with the
+// parent. Thus, the parent's recording will not include this child.
+func (s *span) enableRecording(parent *span, recType RecordingType, separateRecording bool) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	atomic.StoreInt32(&s.recording, 1)
-	s.mu.recordingGroup = group
-	s.mu.recordingType = recType
+	s.mu.recording.recordingType = recType
+	if parent != nil && !separateRecording {
+		parent.addChild(s)
+	}
 	if recType == SnowballRecording {
 		s.setBaggageItemLocked(Snowball, "1")
 	}
-	// Clear any previously recorded logs.
-	s.mu.recordedLogs = nil
-	s.mu.Unlock()
-
-	group.addSpan(s)
+	// Clear any previously recorded info. This is needed by SQL SessionTracing,
+	// who likes to start and stop recording repeatedly on the same span, and
+	// collect the (separate) recordings every time.
+	s.mu.recording.recordedLogs = nil
+	s.mu.recording.children = nil
+	s.mu.recording.remoteSpans = nil
 }
 
 // StartRecording enables recording on the span. Events from this point forward
@@ -196,7 +217,12 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 	if _, noop := os.(*noopSpan); noop {
 		panic("StartRecording called on NoopSpan; use the Recordable option for StartSpan")
 	}
-	os.(*span).enableRecording(new(spanGroup), recType)
+
+	// If we're already recording (perhaps because the parent was recording when
+	// this span was created), there's nothing to do.
+	if sp := os.(*span); !sp.isRecording() {
+		sp.enableRecording(nil /* parent */, recType, false /* separateRecording */)
+	}
 }
 
 // StopRecording disables recording on this span. Child spans that were created
@@ -213,11 +239,10 @@ func StopRecording(os opentracing.Span) {
 func (s *span) disableRecording() {
 	s.mu.Lock()
 	atomic.StoreInt32(&s.recording, 0)
-	s.mu.recordingGroup = nil
 	// We test the duration as a way to check if the span has been finished. If it
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
-	if (s.mu.duration == -1) && (s.mu.recordingType == SnowballRecording) {
+	if (s.mu.duration == -1) && (s.mu.recording.recordingType == SnowballRecording) {
 		// Clear the Snowball baggage item, assuming that it was set by
 		// enableRecording().
 		s.setBaggageItemLocked(Snowball, "")
@@ -240,7 +265,7 @@ func IsRecordable(os opentracing.Span) bool {
 type Recording []RecordedSpan
 
 // GetRecording retrieves the current recording, if the span has recording
-// enabled. This can be called while spans that are part of the record are
+// enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
 func GetRecording(os opentracing.Span) Recording {
 	if _, noop := os.(*noopSpan); noop {
@@ -251,12 +276,26 @@ func GetRecording(os opentracing.Span) Recording {
 		return nil
 	}
 	s.mu.Lock()
-	group := s.mu.recordingGroup
+	// The capacity here is approximate since we don't know how many grandchildren
+	// there are.
+	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
+	// Shallow-copy the children so we can process them without the lock.
+	children := s.mu.recording.children
+	result = append(result, s.getRecordingLocked())
+	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
-	if group == nil {
-		return nil
+
+	for _, child := range children {
+		result = append(result, GetRecording(child)...)
 	}
-	return group.getSpans()
+
+	// Sort the spans by StartTime, except the first span (the root of this
+	// recording) which stays in place.
+	toSort := result[1:]
+	sort.Slice(toSort, func(i, j int) bool {
+		return toSort[i].StartTime.Before(toSort[j].StartTime)
+	})
+	return result
 }
 
 type traceLogData struct {
@@ -292,17 +331,12 @@ type traceLogData struct {
 // TODO(andrei): this should be unified with
 // SessionTracing.generateSessionTraceVTable().
 func (r Recording) String() string {
-	var logs []traceLogData
-	var start time.Time
-	for _, sp := range r {
-		if sp.ParentSpanID == 0 {
-			if start == (time.Time{}) {
-				start = sp.StartTime
-			}
-			logs = append(logs, r.visitSpan(sp, 0 /* depth */)...)
-		}
+	if len(r) == 0 {
+		return "<empty recording>"
 	}
+	logs := r.visitSpan(r[0], 0 /* depth */)
 
+	start := r[0].StartTime
 	var buf strings.Builder
 	for _, entry := range logs {
 		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
@@ -552,15 +586,12 @@ type TraceCollection struct {
 // recorded traces from other nodes.
 func ImportRemoteSpans(os opentracing.Span, remoteSpans []RecordedSpan) error {
 	s := os.(*span)
-	s.mu.Lock()
-	group := s.mu.recordingGroup
-	s.mu.Unlock()
-	if group == nil {
+	if !s.isRecording() {
 		return errors.New("adding Raw Spans to a span that isn't recording")
 	}
-	group.Lock()
-	group.remoteSpans = append(group.remoteSpans, remoteSpans...)
-	group.Unlock()
+	s.mu.Lock()
+	s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
+	s.mu.Unlock()
 	return nil
 }
 
@@ -633,6 +664,7 @@ func (s *span) Context() opentracing.SpanContext {
 	}
 	sc := &spanContext{
 		spanMeta: s.spanMeta,
+		span:     s,
 		Baggage:  baggageCopy,
 	}
 	if s.shadowTr != nil {
@@ -641,8 +673,7 @@ func (s *span) Context() opentracing.SpanContext {
 	}
 
 	if s.isRecording() {
-		sc.recordingGroup = s.mu.recordingGroup
-		sc.recordingType = s.mu.recordingType
+		sc.recordingType = s.mu.recording.recordingType
 	}
 	return sc
 }
@@ -707,8 +738,8 @@ func (s *span) LogFields(fields ...otlog.Field) {
 	}
 	if s.isRecording() {
 		s.mu.Lock()
-		if len(s.mu.recordedLogs) < maxLogsPerSpan {
-			s.mu.recordedLogs = append(s.mu.recordedLogs, opentracing.LogRecord{
+		if len(s.mu.recording.recordedLogs) < maxLogsPerSpan {
+			s.mu.recording.recordedLogs = append(s.mu.recording.recordedLogs, opentracing.LogRecord{
 				Timestamp: time.Now(),
 				Fields:    fields,
 			})
@@ -779,11 +810,9 @@ func (s *span) Log(data opentracing.LogData) {
 	panic("unimplemented")
 }
 
-// getRecording returns the span's recording.
-func (s *span) getRecording() RecordedSpan {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+// getRecordingLocked returns the span's recording. This does not include
+// children.
+func (s *span) getRecordingLocked() RecordedSpan {
 	rs := RecordedSpan{
 		TraceID:      s.TraceID,
 		SpanID:       s.SpanID,
@@ -836,8 +865,8 @@ func (s *span) getRecording() RecordedSpan {
 			addTag(k, fmt.Sprint(v))
 		}
 	}
-	rs.Logs = make([]LogRecord, len(s.mu.recordedLogs))
-	for i, r := range s.mu.recordedLogs {
+	rs.Logs = make([]LogRecord, len(s.mu.recording.recordedLogs))
+	for i, r := range s.mu.recording.recordedLogs {
 		rs.Logs[i].Time = r.Timestamp
 		rs.Logs[i].Fields = make([]LogRecord_Field, len(r.Fields))
 		for j, f := range r.Fields {
@@ -851,47 +880,10 @@ func (s *span) getRecording() RecordedSpan {
 	return rs
 }
 
-// spanGroup keeps track of all the spans that are being recorded as a group (i.e.
-// the span for which recording was enabled and all direct or indirect child
-// spans since then).
-type spanGroup struct {
-	syncutil.Mutex
-	// spans keeps track of all the local spans. A span is inserted in this slice
-	// as soon as it is opened; the first element is the span passed to
-	// StartRecording().
-	spans []*span
-	// remoteSpans stores spans obtained from another host that we want to associate
-	// with the record for this group.
-	remoteSpans Recording
-}
-
-func (ss *spanGroup) addSpan(s *span) {
-	ss.Lock()
-	ss.spans = append(ss.spans, s)
-	ss.Unlock()
-}
-
-// getSpans returns all the local and remote spans accumulated in this group.
-// The spans are sorted by StartTime; the first result is naturally the first
-// local span - i.e. the span originally passed to StartRecording().
-func (ss *spanGroup) getSpans() Recording {
-	ss.Lock()
-	spans := ss.spans
-	remoteSpans := ss.remoteSpans
-	ss.Unlock()
-
-	result := make([]RecordedSpan, 0, len(spans)+len(remoteSpans))
-	for _, s := range spans {
-		rs := s.getRecording()
-		result = append(result, rs)
-	}
-	result = append(result, remoteSpans...)
-	// Sort the spans by StartTime. ss.spans were already naturally sorted, but
-	// ss.remoteSpans weren't.
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].StartTime.Before(result[j].StartTime)
-	})
-	return result
+func (s *span) addChild(child *span) {
+	s.mu.Lock()
+	s.mu.recording.children = append(s.mu.recording.children, child)
+	s.mu.Unlock()
 }
 
 type noopSpanContext struct{}

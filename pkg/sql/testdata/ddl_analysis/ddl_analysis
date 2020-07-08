@@ -17,7 +17,7 @@ CREATE TABLE t0()
 count
 GRANT ALL ON * TO TEST
 ----
-10
+13
 
 
 exec
@@ -36,9 +36,9 @@ CREATE TABLE t10();
 count
 GRANT ALL ON * TO TEST
 ----
-50
+53
 
 count
 CREATE ROLE rolea
 ----
-6
+16

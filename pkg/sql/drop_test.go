@@ -15,7 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,10 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1295,11 +1293,19 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 
 	ctx := context.Background()
 	rf := newDynamicRequestFilter()
+	dropIndexPlanningDoneCh := make(chan struct{})
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: rf.filter,
+				},
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					BeforeExecute: func(ctx context.Context, stmt string) {
+						if strings.Contains(stmt, "DROP INDEX") {
+							close(dropIndexPlanningDoneCh)
+						}
+					},
 				},
 			},
 		},
@@ -1325,11 +1331,7 @@ WHERE
     name = $1 AND database_name = current_database();`,
 		"foo").Scan(&tableID)
 
-	// Start the user transaction and enable tracing as we'll use the trace
-	// to determine when planning has concluded.
 	txn, err := tc.ServerConn(0).Begin()
-	require.NoError(t, err)
-	_, err = txn.Exec("SET TRACING = on")
 	require.NoError(t, err)
 	// Let's find out our transaction ID for our transaction by running a query.
 	// We'll also use this query to install a refresh span over the table data.
@@ -1382,12 +1384,11 @@ WHERE
 	afterInsert, err := sql.ParseHLC(afterInsertStr)
 	require.NoError(t, err)
 
-	// Now set up a filter to detect when the DROP INDEX execution will begin
-	// and inject an error forcing a refresh above the conflicting write which
-	// will fail. We'll want to ensure that we get a retriable error.
-	// Use the below pattern to detect when the user transaction has finished
-	// planning and is now executing.
-	dropIndexPlanningEndsRE := regexp.MustCompile("(?s)planning starts: DROP INDEX.*planning ends")
+	// Now set up a filter to detect when the DROP INDEX execution will begin and
+	// inject an error forcing a refresh above the conflicting write which will
+	// fail. We'll want to ensure that we get a retriable error. Use the below
+	// pattern to detect when the user transaction has finished planning and is
+	// now executing: we don't want to inject the error during planning.
 	rf.setFilter(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 		if request.Txn == nil {
 			return nil
@@ -1397,9 +1398,9 @@ WHERE
 		if filterState.txnID != request.Txn.ID {
 			return nil
 		}
-		sp := opentracing.SpanFromContext(ctx)
-		rec := tracing.GetRecording(sp)
-		if !dropIndexPlanningEndsRE.MatchString(rec.String()) {
+		select {
+		case <-dropIndexPlanningDoneCh:
+		default:
 			return nil
 		}
 		if getRequest, ok := request.GetArg(roachpb.Get); ok {
