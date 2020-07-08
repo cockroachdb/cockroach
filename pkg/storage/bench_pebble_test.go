@@ -91,37 +91,6 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkExportToSst(b *testing.B) {
-	numKeys := []int{64, 512, 1024, 8192, 65536}
-	numRevisions := []int{1, 10, 100}
-	exportAllRevisions := []bool{false, true}
-	engineMakers := []struct {
-		name   string
-		create engineMaker
-	}{
-		{"rocksdb", setupMVCCRocksDB},
-		{"pebble", setupMVCCPebble},
-	}
-
-	for _, engineImpl := range engineMakers {
-		b.Run(engineImpl.name, func(b *testing.B) {
-			for _, numKey := range numKeys {
-				b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
-					for _, numRevision := range numRevisions {
-						b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
-							for _, exportAllRevisionsVal := range exportAllRevisions {
-								b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-									runExportToSst(b, engineImpl.create, numKey, numRevision, exportAllRevisionsVal)
-								})
-							}
-						})
-					}
-				})
-			}
-		})
-	}
-}
-
 func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 	if testing.Short() {
 		b.Skip("TODO: fix benchmark")
@@ -361,40 +330,6 @@ func BenchmarkClearIterRange_Pebble(b *testing.B) {
 		defer iter.Close()
 		return batch.ClearIterRange(iter, start.Key, end.Key)
 	})
-}
-
-func BenchmarkMVCCGarbageCollect_Pebble(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
-
-	// NB: To debug #16068, test only 128-128-15000-6.
-	ctx := context.Background()
-	for _, keySize := range []int{128} {
-		b.Run(fmt.Sprintf("keySize=%d", keySize), func(b *testing.B) {
-			for _, valSize := range []int{128} {
-				b.Run(fmt.Sprintf("valSize=%d", valSize), func(b *testing.B) {
-					for _, numKeys := range []int{1, 1024} {
-						b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
-							for _, numVersions := range []int{2, 1024} {
-								b.Run(fmt.Sprintf("numVersions=%d", numVersions), func(b *testing.B) {
-									runMVCCGarbageCollect(ctx, b, setupMVCCInMemPebble, benchGarbageCollectOptions{
-										benchDataOptions: benchDataOptions{
-											numKeys:     numKeys,
-											numVersions: numVersions,
-											valueBytes:  valSize,
-										},
-										keyBytes:       keySize,
-										deleteVersions: numVersions - 1,
-									})
-								})
-							}
-						})
-					}
-				})
-			}
-		})
-	}
 }
 
 func BenchmarkBatchApplyBatchRepr_Pebble(b *testing.B) {
