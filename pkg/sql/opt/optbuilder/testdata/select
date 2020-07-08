@@ -175,7 +175,7 @@ project
  ├── scan kv
  │    └── columns: k:1!null v:2
  └── projections
-      └── v:2 || 'foo' [as=r:3]
+      └── v:2::STRING || 'foo' [as=r:3]
 
 build
 SELECT lower(v) FROM kv

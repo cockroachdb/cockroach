@@ -1018,9 +1018,9 @@ sort
       │    │    └── filters
       │    │         └── id:20 = transactiondetails.cardid:4 [outer=(4,20), constraints=(/4: (/NULL - ]; /20: (/NULL - ]), fd=(4)==(20), (20)==(4)]
       │    └── projections
-      │         ├── transactiondetails.sellprice:6 * quantity:5 [as=column39:39, outer=(5,6), immutable]
-      │         ├── transactiondetails.buyprice:7 * quantity:5 [as=column41:41, outer=(5,7), immutable]
-      │         ├── quantity:5 * (transactiondetails.sellprice:6 - transactiondetails.buyprice:7) [as=column43:43, outer=(5-7), immutable]
+      │         ├── quantity:5 * transactiondetails.sellprice:6::DECIMAL [as=column39:39, outer=(5,6), immutable]
+      │         ├── quantity:5 * transactiondetails.buyprice:7::DECIMAL [as=column41:41, outer=(5,7), immutable]
+      │         ├── quantity:5 * (transactiondetails.sellprice:6::DECIMAL - transactiondetails.buyprice:7::DECIMAL) [as=column43:43, outer=(5-7), immutable]
       │         └── extract('day', transactiondate:3) [as=column45:45, outer=(3), stable]
       └── aggregations
            ├── sum [as=sum:40, outer=(39)]
@@ -1578,7 +1578,7 @@ update ci
       │         └── const-agg [as=q:33, outer=(33)]
       │              └── q:33
       └── projections
-           ├── crdb_internal.round_decimal_values(buyprice:21 - discount:23, 4) [as=discountbuyprice:47, outer=(21,23), immutable]
+           ├── crdb_internal.round_decimal_values(buyprice:21::DECIMAL - discount:23::DECIMAL, 4) [as=discountbuyprice:47, outer=(21,23), immutable]
            ├── CAST(NULL AS STRING) [as=column44:44]
            ├── 0 [as=column45:45]
            └── COALESCE(sum_int:41, 0) [as=actualinventory_new:43, outer=(41)]

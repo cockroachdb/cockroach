@@ -981,7 +981,7 @@ func init() {
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
 func ReType(expr TypedExpr, wantedType *types.T) TypedExpr {
-	if expr.ResolvedType().Equivalent(wantedType) {
+	if wantedType.Family() == types.AnyFamily || expr.ResolvedType().Identical(wantedType) {
 		return expr
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}
