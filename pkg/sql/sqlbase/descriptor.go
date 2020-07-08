@@ -62,6 +62,9 @@ type BaseDescriptorInterface interface {
 	GetAuditMode() TableDescriptor_AuditMode
 
 	Adding() bool
+	// Note: Implementers of Dropped() should also update the implementation
+	// (*sqlbase.Descriptor).Dropped(). These implementations are not shared
+	// behind this interface.
 	Dropped() bool
 	Offline() bool
 	GetOfflineReason() string

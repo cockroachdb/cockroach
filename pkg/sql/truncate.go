@@ -263,6 +263,16 @@ func (p *planner) truncateTable(
 		return err
 	}
 
+	// Remove back references from types to the original table descriptor.
+	if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
+		return err
+	}
+
+	// Add all of the references to the new table descriptor.
+	if err := p.addBackRefsFromAllTypesInTable(ctx, newTableDesc); err != nil {
+		return err
+	}
+
 	// Copy the zone config, if this is for the system tenant. Secondary tenants
 	// do not have zone configs for individual objects.
 	if p.ExecCfg().Codec.ForSystemTenant() {

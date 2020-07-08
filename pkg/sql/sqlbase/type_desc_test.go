@@ -337,6 +337,18 @@ func TestValidateTypeDesc(t *testing.T) {
 				ArrayTypeID:    500,
 			},
 		},
+		{
+			"referencing descriptor 500 does not exist",
+			TypeDescriptor{
+				Name:                     "t",
+				ID:                       1,
+				ParentID:                 100,
+				ParentSchemaID:           101,
+				Kind:                     TypeDescriptor_ENUM,
+				ArrayTypeID:              102,
+				ReferencingDescriptorIDs: []ID{500},
+			},
+		},
 	}
 
 	for _, test := range testData {

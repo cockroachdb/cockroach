@@ -318,6 +318,11 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
+	// Remove any references to types that this table has.
+	if err := p.removeBackRefsFromAllTypesInTable(ctx, tableDesc); err != nil {
+		return droppedViews, err
+	}
+
 	err = p.initiateDropTable(ctx, tableDesc, queueJob, jobDesc, true /* drain name */)
 	return droppedViews, err
 }
