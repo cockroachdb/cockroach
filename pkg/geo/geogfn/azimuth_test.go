@@ -107,4 +107,18 @@ func TestAzimuth(t *testing.T) {
 		_, err := Azimuth(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB)
 		requireMismatchingSRIDError(t, err)
 	})
+
+	t.Run("errors on POINT EMPTY", func(t *testing.T) {
+		_, err := Azimuth(
+			geo.MustParseGeography("POINT EMPTY"),
+			geo.MustParseGeography("POINT(1 0)"),
+		)
+		require.EqualError(t, err, "cannot call ST_Azimuth with POINT EMPTY")
+
+		_, err = Azimuth(
+			geo.MustParseGeography("POINT(1 0)"),
+			geo.MustParseGeography("POINT EMPTY"),
+		)
+		require.EqualError(t, err, "cannot call ST_Azimuth with POINT EMPTY")
+	})
 }

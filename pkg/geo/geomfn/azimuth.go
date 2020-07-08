@@ -50,6 +50,10 @@ func Azimuth(a *geo.Geometry, b *geo.Geometry) (*float64, error) {
 		return nil, errors.Newf("arguments must be POINT geometries")
 	}
 
+	if aPoint.Empty() || bPoint.Empty() {
+		return nil, errors.Newf("cannot call ST_Azimuth with POINT EMPTY")
+	}
+
 	if aPoint.X() == bPoint.X() && aPoint.Y() == bPoint.Y() {
 		return nil, nil
 	}
