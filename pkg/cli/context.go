@@ -259,6 +259,9 @@ var dumpCtx struct {
 
 	// dumpAll determines whenever we going to dump all databases
 	dumpAll bool
+
+	// dumpPublic determines whether to skip non-public schema
+	dumpPublic bool
 }
 
 // setDumpContextDefaults set the default values in dumpCtx.  This
@@ -268,6 +271,7 @@ func setDumpContextDefaults() {
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
 	dumpCtx.dumpAll = false
+	dumpCtx.dumpPublic = false
 }
 
 // authCtx captures the command-line parameters of the `auth-session`

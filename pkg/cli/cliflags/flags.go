@@ -235,6 +235,12 @@ What to dump. "schema" dumps the schema only. "data" dumps the data only.
 "both" (default) dumps the schema then the data.`,
 	}
 
+	DumpPublic = FlagInfo{
+		Name: "dump-public",
+		Description: `
+Dump *only* public schema, skipping e.g. temp tables and sequences`,
+	}
+
 	DumpTime = FlagInfo{
 		Name: "as-of",
 		Description: `

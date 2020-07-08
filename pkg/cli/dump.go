@@ -464,7 +464,7 @@ func getDumpMetadata(
 	for i, tableName := range tableNames {
 		basicMD, err := getBasicMetadata(conn, dbName, tableName, clusterTS)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("getBasicMetadata: %v (db: %s, table: %s)", err, dbName, tableName)
 		}
 		mds[i] = basicMD
 	}
@@ -474,12 +474,16 @@ func getDumpMetadata(
 
 // getTableNames retrieves all tables names in the given database.
 func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string, err error) {
+	var clause = ""
+	if dumpCtx.dumpPublic {
+		clause = "AND schema_name = 'public'"
+	}
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT descriptor_name
 		FROM "".crdb_internal.create_statements
 		AS OF SYSTEM TIME %s
-		WHERE database_name = $1
-		`, lex.EscapeSQLString(ts)), []driver.Value{dbName})
+		WHERE database_name = $1 %s
+		`, lex.EscapeSQLString(ts), clause), []driver.Value{dbName})
 	if err != nil {
 		return nil, err
 	}
@@ -507,6 +511,10 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 }
 
 func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basicMetadata, error) {
+	var clause = ""
+	if dumpCtx.dumpPublic {
+		clause = "AND schema_name = 'public'"
+	}
 	name := tree.NewTableName(tree.Name(dbName), tree.Name(tableName))
 
 	// Fetch table ID.
@@ -521,8 +529,8 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 		FROM %s.crdb_internal.create_statements
 		AS OF SYSTEM TIME %s
 		WHERE database_name = $1
-			AND descriptor_name = $2
-	`, dbNameEscaped, lex.EscapeSQLString(ts)), []driver.Value{dbName, tableName})
+			AND descriptor_name = $2 %s
+	`, dbNameEscaped, lex.EscapeSQLString(ts), clause), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
 			return basicMetadata{}, errors.Wrap(
