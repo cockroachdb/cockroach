@@ -31,7 +31,7 @@ type defaultBuiltinFuncOperator struct {
 	outputIdx           int
 	outputType          *types.T
 	toDatumConverter    *vecToDatumConverter
-	datumToVecConverter func(tree.Datum) (interface{}, error)
+	datumToVecConverter func(tree.Datum) interface{}
 
 	row tree.Datums
 }
@@ -93,10 +93,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 				if res == tree.DNull {
 					output.Nulls().SetNull(rowIdx)
 				} else {
-					converted, err := b.datumToVecConverter(res)
-					if err != nil {
-						colexecerror.InternalError(err)
-					}
+					converted := b.datumToVecConverter(res)
 					coldata.SetValueAt(output, converted, rowIdx)
 				}
 			}

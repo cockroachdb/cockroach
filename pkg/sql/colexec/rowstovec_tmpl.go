@@ -20,12 +20,7 @@
 package colexec
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,20 +29,11 @@ import (
 
 // {{/*
 
-// _CANONICAL_TYPE_FAMILY is the template variable.
-const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
-
-// _TYPE_WIDTH is the template variable.
-const _TYPE_WIDTH = 0
-
-type _GOTYPE interface{}
-
 func _ROWS_TO_COL_VEC(
 	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
-) error { // */}}
+) { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
-	datumToPhysicalFn := GetDatumToPhysicalFn(t)
 	var v interface{}
 	for i := range rows {
 		row := rows[i]
@@ -60,13 +46,10 @@ func _ROWS_TO_COL_VEC(
 		if datum == tree.DNull {
 			vec.Nulls().SetNull(i)
 		} else {
-			v, err = datumToPhysicalFn(datum)
-			if err != nil {
-				return
-			}
-
+			_PRELUDE(datum)
+			v = _CONVERT(datum)
 			castV := v.(_GOTYPE)
-			execgen.SET(col, i, castV)
+			_SET(col, i, castV)
 		}
 	}
 	// {{end}}
@@ -89,18 +72,16 @@ func EncDatumRowsToColVec(
 	allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+			switch t.Family() {
 			// {{range .}}
-			case _CANONICAL_TYPE_FAMILY:
+			case _TYPE_FAMILY:
 				switch t.Width() {
-				// {{range .WidthOverloads}}
+				// {{range .Widths}}
 				case _TYPE_WIDTH:
 					_ROWS_TO_COL_VEC(rows, vec, columnIdx, t, alloc)
 					// {{end}}
 				}
-			// {{end}}
-			default:
-				colexecerror.InternalError(fmt.Sprintf("unsupported type %s", t))
+				// {{end}}
 			}
 		},
 	)
