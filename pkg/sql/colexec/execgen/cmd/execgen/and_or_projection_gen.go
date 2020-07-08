@@ -30,18 +30,11 @@ func genAndOrProjectionOps(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
 		"_OP_LOWER", "{{.Lower}}",
 		"_OP_TITLE", "{{.Title}}",
-		"_IS_OR_OP", ".IsOr",
+		"_IS_OR_OP", "{{.IsOr}}",
 		"_L_HAS_NULLS", "$.lHasNulls",
 		"_R_HAS_NULLS", "$.rHasNulls",
 	)
 	s := r.Replace(inputFileContents)
-
-	addTupleForRight := makeFunctionRegex("_ADD_TUPLE_FOR_RIGHT", 1)
-	s = addTupleForRight.ReplaceAllString(s, `{{template "addTupleForRight" buildDict "Global" $ "lHasNulls" $1}}`)
-	setValues := makeFunctionRegex("_SET_VALUES", 3)
-	s = setValues.ReplaceAllString(s, `{{template "setValues" buildDict "Global" $ "IsOr" $1 "lHasNulls" $2 "rHasNulls" $3}}`)
-	setSingleValue := makeFunctionRegex("_SET_SINGLE_VALUE", 3)
-	s = setSingleValue.ReplaceAllString(s, `{{template "setSingleValue" buildDict "Global" $ "IsOr" $1 "lHasNulls" $2 "rHasNulls" $3}}`)
 
 	tmpl, err := template.New("and").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {

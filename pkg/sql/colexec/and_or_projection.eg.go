@@ -119,34 +119,49 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 	// knownResult indicates the boolean value which if present on the left side
 	// fully determines the result of the logical operation.
 	var (
-		knownResult             bool
-		isLeftNull, isRightNull bool
+		knownResult bool
 	)
 	leftCol := batch.ColVec(o.leftIdx)
 	leftColVals := leftCol.Bool()
+	leftNulls := leftCol.Nulls()
 	var curIdx int
 	if usesSel {
 		sel := batch.Selection()
 		origSel := o.origSel[:origLen]
 		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
 			for _, i := range origSel {
-				isLeftNull = leftNulls.NullAt(i)
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (true && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		} else {
 			for _, i := range origSel {
-				isLeftNull = false
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (false && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		}
@@ -154,24 +169,39 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetSelection(true)
 		sel := batch.Selection()
 		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
 			for i := 0; i < origLen; i++ {
-				isLeftNull = leftNulls.NullAt(i)
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (true && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		} else {
 			for i := 0; i < origLen; i++ {
-				isLeftNull = false
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (false && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		}
@@ -199,10 +229,12 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 	var (
 		rightCol     coldata.Vec
 		rightColVals []bool
+		rightNulls   *coldata.Nulls
 	)
 	if ranRightSide {
 		rightCol = batch.ColVec(o.rightIdx)
 		rightColVals = rightCol.Bool()
+		rightNulls = rightCol.Nulls()
 	}
 	outputCol := batch.ColVec(o.outputIdx)
 	outputColVals := outputCol.Bool()
@@ -215,243 +247,16 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftCol.MaybeHasNulls() {
-		leftNulls := leftCol.Nulls()
 		if rightCol != nil && rightCol.MaybeHasNulls() {
-			rightNulls := rightCol.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_false_true_true(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		} else {
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_false_true_false(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		}
 	} else {
 		if rightCol != nil && rightCol.MaybeHasNulls() {
-			rightNulls := rightCol.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_false_false_true(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		} else {
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for AND'ing two booleans are:
-						// 1. if at least one of the values is FALSE, then the result is also FALSE
-						// 2. if both values are TRUE, then the result is also TRUE
-						// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is FALSE.
-							outputColVals[idx] = false
-						} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
-							// Rule 2: both booleans are TRUE.
-							outputColVals[idx] = true
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_false_false_false(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		}
 	}
 
@@ -557,35 +362,50 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 	// knownResult indicates the boolean value which if present on the left side
 	// fully determines the result of the logical operation.
 	var (
-		knownResult             bool
-		isLeftNull, isRightNull bool
+		knownResult bool
 	)
 	knownResult = true
 	leftCol := batch.ColVec(o.leftIdx)
 	leftColVals := leftCol.Bool()
+	leftNulls := leftCol.Nulls()
 	var curIdx int
 	if usesSel {
 		sel := batch.Selection()
 		origSel := o.origSel[:origLen]
 		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
 			for _, i := range origSel {
-				isLeftNull = leftNulls.NullAt(i)
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (true && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		} else {
 			for _, i := range origSel {
-				isLeftNull = false
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (false && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		}
@@ -593,24 +413,39 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetSelection(true)
 		sel := batch.Selection()
 		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
 			for i := 0; i < origLen; i++ {
-				isLeftNull = leftNulls.NullAt(i)
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (true && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		} else {
 			for i := 0; i < origLen; i++ {
-				isLeftNull = false
-				if isLeftNull || leftColVals[i] != knownResult {
-					// We add the tuple into the selection vector if the left value is NULL or
-					// it is different from knownResult.
-					sel[curIdx] = i
-					curIdx++
+				{
+					var __retval_0 int
+					{
+						if (false && leftNulls.NullAt(i)) || leftColVals[i] != knownResult {
+							// We add the tuple into the selection vector if the left value is NULL or
+							// it is different from knownResult.
+							sel[curIdx] = i
+							curIdx++
+						}
+						{
+							__retval_0 = curIdx
+						}
+					}
+					curIdx = __retval_0
 				}
 			}
 		}
@@ -638,10 +473,12 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 	var (
 		rightCol     coldata.Vec
 		rightColVals []bool
+		rightNulls   *coldata.Nulls
 	)
 	if ranRightSide {
 		rightCol = batch.ColVec(o.rightIdx)
 		rightColVals = rightCol.Bool()
+		rightNulls = rightCol.Nulls()
 	}
 	outputCol := batch.ColVec(o.outputIdx)
 	outputColVals := outputCol.Bool()
@@ -654,245 +491,664 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftCol.MaybeHasNulls() {
-		leftNulls := leftCol.Nulls()
 		if rightCol != nil && rightCol.MaybeHasNulls() {
-			rightNulls := rightCol.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_true_true_true(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		} else {
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = leftNulls.NullAt(idx)
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_true_true_false(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		}
 	} else {
 		if rightCol != nil && rightCol.MaybeHasNulls() {
-			rightNulls := rightCol.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = rightNulls.NullAt(idx)
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_true_false_true(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		} else {
-			if sel := batch.Selection(); sel != nil {
-				for _, idx := range sel[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			} else {
-				if ranRightSide {
-					_ = rightColVals[origLen-1]
-				}
-				_ = outputColVals[origLen-1]
-				for idx := range leftColVals[:origLen] {
-					isLeftNull = false
-					leftVal := leftColVals[idx]
-					if !isLeftNull && leftVal == knownResult {
-						outputColVals[idx] = leftVal
-					} else {
-						isRightNull = false
-						rightVal := rightColVals[idx]
-						// The rules for OR'ing two booleans are:
-						// 1. if at least one of the values is TRUE, then the result is also TRUE
-						// 2. if both values are FALSE, then the result is also FALSE
-						// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
-						//    the result is NULL.
-						if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
-							// Rule 1: at least one boolean is TRUE.
-							outputColVals[idx] = true
-						} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
-							// Rule 2: both booleans are FALSE.
-							outputColVals[idx] = false
-						} else {
-							// Rule 3.
-							outputNulls.SetNull(idx)
-						}
-					}
-				}
-			}
+			setValues_true_false_false(batch, knownResult, leftNulls, rightNulls, outputNulls, leftColVals, rightColVals, outputColVals, ranRightSide, origLen)
 		}
 	}
 
 	return batch
 }
+
+// This code snippet decides whether to include the tuple with index i into
+// the selection vector to be used by the right side projection. The tuple is
+// excluded if we already know the result of logical operation (i.e. we do the
+// short-circuiting for it).
+// execgen:inline
+const _ = "template_addTupleForRight"
+
+// execgen:inline
+const _ = "inlined_addTupleForRight_false"
+
+// execgen:inline
+const _ = "inlined_addTupleForRight_true"
+
+// This code snippet sets the result of applying a logical operation AND or OR
+// to two boolean vectors while paying attention to null values.
+const _ = "template_setValues"
+
+func setValues_false_false_false(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_true_false_false(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_false_true_false(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_true_true_false(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := false && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_false_false_true(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_true_false_true(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := false && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_false_true_true(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for AND'ing two booleans are:
+					// 1. if at least one of the values is FALSE, then the result is also FALSE
+					// 2. if both values are TRUE, then the result is also TRUE
+					// 3. in all other cases (one is TRUE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (!leftVal && !isLeftNull) || (!rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is FALSE.
+						outputColVals[idx] = false
+					} else if (leftVal && !isLeftNull) && (rightVal && !isRightNull) {
+						// Rule 2: both booleans are TRUE.
+						outputColVals[idx] = true
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+func setValues_true_true_true(
+	batch coldata.Batch,
+	knownResult bool,
+	leftNulls *coldata.Nulls,
+	rightNulls *coldata.Nulls,
+	outputNulls *coldata.Nulls,
+	leftColVals coldata.Bools,
+	rightColVals coldata.Bools,
+	outputColVals coldata.Bools,
+	ranRightSide bool,
+	origLen int,
+) {
+	if sel := batch.Selection(); sel != nil {
+		for _, idx := range sel[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	} else {
+		if ranRightSide {
+			_ = rightColVals[origLen-1]
+		}
+		_ = outputColVals[origLen-1]
+		for idx := range leftColVals[:origLen] {
+			{
+				isLeftNull := true && leftNulls.NullAt(idx)
+				leftVal := leftColVals[idx]
+				if !isLeftNull && leftVal == knownResult {
+					outputColVals[idx] = leftVal
+				} else {
+					isRightNull := true && rightNulls.NullAt(idx)
+					rightVal := rightColVals[idx]
+					// The rules for OR'ing two booleans are:
+					// 1. if at least one of the values is TRUE, then the result is also TRUE
+					// 2. if both values are FALSE, then the result is also FALSE
+					// 3. in all other cases (one is FALSE and the other is NULL or both are NULL),
+					//    the result is NULL.
+					if (leftVal && !isLeftNull) || (rightVal && !isRightNull) {
+						// Rule 1: at least one boolean is TRUE.
+						outputColVals[idx] = true
+					} else if (!leftVal && !isLeftNull) && (!rightVal && !isRightNull) {
+						// Rule 2: both booleans are FALSE.
+						outputColVals[idx] = false
+					} else {
+						// Rule 3.
+						outputNulls.SetNull(idx)
+					}
+				}
+			}
+		}
+	}
+}
+
+// This code snippet sets the result of applying a logical operation AND or OR
+// to two boolean values which can be null.
+// execgen:inline
+const _ = "template_setSingleValue"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_false_false_false"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_true_false_false"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_false_true_false"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_true_true_false"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_false_false_true"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_true_false_true"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_false_true_true"
+
+// execgen:inline
+const _ = "inlined_setSingleValue_true_true_true"
