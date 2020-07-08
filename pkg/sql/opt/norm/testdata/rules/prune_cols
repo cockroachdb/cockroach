@@ -1956,8 +1956,11 @@ delete partial_indexes
       ├── scan partial_indexes
       │    ├── columns: a:4!null b:5 c:6
       │    ├── partial index predicates
-      │    │    ├── secondary: c:6 = 'foo'
-      │    │    └── secondary: (a:4 > b:5) AND (c:6 = 'bar')
+      │    │    ├── secondary: filters
+      │    │    │    └── c:6 = 'foo' [outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+      │    │    └── secondary: filters
+      │    │         ├── a:4 > b:5 [outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ])]
+      │    │         └── c:6 = 'bar' [outer=(6), constraints=(/6: [/'bar' - /'bar']; tight), fd=()-->(6)]
       │    ├── key: (4)
       │    └── fd: (4)-->(5,6)
       └── projections
