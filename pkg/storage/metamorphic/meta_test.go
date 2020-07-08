@@ -154,7 +154,7 @@ func runMetaTest(run testRun) {
 // TestRocksPebbleEquivalence runs the MVCC Metamorphic test suite, and checks
 // for matching outputs by the test suite between RocksDB and Pebble.
 func TestRocksPebbleEquivalence(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	if util.RaceEnabled {
 		// This test times out with the race detector enabled.
@@ -187,7 +187,7 @@ func TestRocksPebbleEquivalence(t *testing.T) {
 // enabled, and ensures that the output remains the same across different
 // engine sequences with restarts in between.
 func TestRocksPebbleRestarts(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	if util.RaceEnabled {
 		// This test times out with the race detector enabled.
@@ -219,7 +219,7 @@ func TestRocksPebbleRestarts(t *testing.T) {
 // TestRocksPebbleCheck checks whether the output file specified with --check has
 // matching behavior across rocks/pebble.
 func TestRocksPebbleCheck(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	if *check != "" {
