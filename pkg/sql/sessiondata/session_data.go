@@ -74,6 +74,9 @@ type SessionData struct {
 	// StmtTimeout is the duration a query is permitted to run before it is
 	// canceled by the session. If set to 0, there is no timeout.
 	StmtTimeout time.Duration
+	// IdleInSessionTimeout is the duration a session is permitted to idle before
+	// the session is canceled. If set to 0, there is no timeout.
+	IdleInSessionTimeout time.Duration
 	// User is the name of the user logged into the session.
 	User string
 	// SafeUpdates causes errors when the client

@@ -67,6 +67,9 @@ func (ex *connExecutor) execStmt(
 		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
 	}
 
+	// Stop the session idle timeout when a new statement is executed.
+	ex.mu.IdleInSessionTimeout.Stop()
+
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
@@ -112,6 +115,14 @@ func (ex *connExecutor) execStmt(
 		panic(fmt.Sprintf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
 
+	if ex.sessionData.IdleInSessionTimeout > 0 {
+		// Cancel the session if the idle time exceeds the idle in session timeout.
+		ex.mu.IdleInSessionTimeout = timeout{time.AfterFunc(
+			ex.sessionData.IdleInSessionTimeout,
+			ex.cancelSession,
+		)}
+	}
+
 	return ev, payload, err
 }
 
@@ -141,6 +152,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			ex.incrementExecutedStmtCounter(stmt)
 		}
 	}()
+
 	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer

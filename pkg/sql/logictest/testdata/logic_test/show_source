@@ -52,6 +52,7 @@ experimental_partial_indexes                   off
 extra_float_digits                             0
 force_savepoint_restart                        off
 foreign_key_cascades_limit                     10000
+idle_in_session_timeout                        0
 idle_in_transaction_session_timeout            0
 integer_datetimes                              on
 intervalstyle                                  postgres
