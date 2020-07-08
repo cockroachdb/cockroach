@@ -39,14 +39,12 @@ import (
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
 	colexecbase.ZeroInputNode
-	spans     roachpb.Spans
-	flowCtx   *execinfra.FlowCtx
-	rf        *cFetcher
-	limitHint int64
-	ctx       context.Context
-	// maxResults is non-zero if there is a limit on the total number of rows
-	// that the colBatchScan will read.
-	maxResults uint64
+	spans       roachpb.Spans
+	flowCtx     *execinfra.FlowCtx
+	rf          *cFetcher
+	limitHint   int64
+	parallelize bool
+	ctx         context.Context
 	// init is true after Init() has been called.
 	init bool
 }
@@ -57,8 +55,7 @@ func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
 	s.init = true
 
-	limitBatches := execinfra.ScanShouldLimitBatches(s.maxResults, s.limitHint, s.flowCtx)
-
+	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
 		s.ctx, s.flowCtx.Txn, s.spans,
 		limitBatches, s.limitHint, s.flowCtx.TraceKV,
@@ -153,11 +150,13 @@ func NewColBatchScan(
 		spans[i] = spec.Spans[i].Span
 	}
 	return &colBatchScan{
-		spans:      spans,
-		flowCtx:    flowCtx,
-		rf:         &fetcher,
-		limitHint:  limitHint,
-		maxResults: spec.MaxResults,
+		spans:     spans,
+		flowCtx:   flowCtx,
+		rf:        &fetcher,
+		limitHint: limitHint,
+		// Parallelize shouldn't be set when there's a limit hint, but double-check
+		// just in case.
+		parallelize: spec.Parallelize && limitHint == 0,
 	}, nil
 }
 
