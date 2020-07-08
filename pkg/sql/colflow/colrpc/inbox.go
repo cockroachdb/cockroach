@@ -315,6 +315,12 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				if !ok {
 					continue
 				}
+				if meta.Err != nil {
+					// If an error was encountered, it needs to be propagated immediately.
+					// All other metadata will simply be buffered and returned in
+					// DrainMeta.
+					colexecerror.ExpectedError(meta.Err)
+				}
 				i.stateMu.bufferedMeta = append(i.stateMu.bufferedMeta, meta)
 			}
 			// Continue until we get the next batch or EOF.
