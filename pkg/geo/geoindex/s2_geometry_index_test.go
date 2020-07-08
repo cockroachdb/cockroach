@@ -16,9 +16,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func TestS2GeometryIndexBasic(t *testing.T) {
@@ -112,4 +114,32 @@ func TestClipEWKBByRect(t *testing.T) {
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
 	})
+}
+
+func TestNoClippingAtSRIDBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test that indexes that use the SRID bounds don't clip shapes that touch
+	// those bounds. This test uses point shapes representing the four corners
+	// of the bounds.
+	for srid, projInfo := range geoprojbase.Projections {
+		if projInfo.Bounds == nil {
+			continue
+		}
+		b := projInfo.Bounds
+		index := NewS2GeometryIndex(*GeometryIndexConfigForSRID(srid).S2Geometry)
+		// Four corners of the bounds, proceeding clockwise from the lower-left.
+		xCorners := []float64{b.MinX, b.MinX, b.MaxX, b.MaxX}
+		yCorners := []float64{b.MinY, b.MaxY, b.MaxY, b.MinY}
+		for i := range xCorners {
+			g, err := geo.NewGeometryFromPointCoords(xCorners[i], yCorners[i])
+			require.NoError(t, err)
+			keys, err := index.InvertedIndexKeys(context.Background(), g)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(keys))
+			require.NotEqual(t, Key(exceedsBoundsCellID), keys[0],
+				"SRID: %d, Point: %f, %f", srid, xCorners[i], yCorners[i])
+		}
+	}
+
 }
