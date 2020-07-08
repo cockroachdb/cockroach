@@ -11,9 +11,15 @@
 package sqlbase
 
 import (
+	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -192,6 +198,153 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 			if !testutils.IsError(err, test.err) {
 				t.Errorf("expected error %s, but found %s", test.err, err)
 			}
+		}
+	}
+}
+
+func TestValidateTypeDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Write some existing descriptors into the kvDB.
+	writeDesc := func(d *Descriptor, id ID) {
+		var v roachpb.Value
+		if err := v.SetProto(d); err != nil {
+			t.Fatal(err)
+		}
+		if err := kvDB.Put(ctx, MakeDescMetadataKey(keys.SystemSQLCodec, id), &v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeDesc(&Descriptor{Union: &Descriptor_Database{}}, 100)
+	writeDesc(&Descriptor{Union: &Descriptor_Schema{}}, 101)
+	writeDesc(&Descriptor{Union: &Descriptor_Type{}}, 102)
+
+	testData := []struct {
+		err  string
+		desc TypeDescriptor
+	}{
+		{
+			`empty type name`,
+			TypeDescriptor{},
+		},
+		{
+			`invalid ID 0`,
+			TypeDescriptor{Name: "t"},
+		},
+		{
+			`invalid parentID 0`,
+			TypeDescriptor{Name: "t", ID: 1},
+		},
+		{
+			`enum members are not sorted [{[2] a} {[1] b}]`,
+			TypeDescriptor{
+				Name:     "t",
+				ID:       1,
+				ParentID: 1,
+				Kind:     TypeDescriptor_ENUM,
+				EnumMembers: []TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{2},
+					},
+					{
+						LogicalRepresentation:  "b",
+						PhysicalRepresentation: []byte{1},
+					},
+				},
+			},
+		},
+		{
+			`duplicate enum physical rep [1]`,
+			TypeDescriptor{
+				Name:     "t",
+				ID:       1,
+				ParentID: 1,
+				Kind:     TypeDescriptor_ENUM,
+				EnumMembers: []TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{1},
+					},
+					{
+						LogicalRepresentation:  "b",
+						PhysicalRepresentation: []byte{1},
+					},
+				},
+			},
+		},
+		{
+			`duplicate enum member "a"`,
+			TypeDescriptor{
+				Name:     "t",
+				ID:       1,
+				ParentID: 1,
+				Kind:     TypeDescriptor_ENUM,
+				EnumMembers: []TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{1},
+					},
+					{
+						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{2},
+					},
+				},
+			},
+		},
+		{
+			`ALIAS type desc has nil alias type`,
+			TypeDescriptor{
+				Name:     "t",
+				ID:       1,
+				ParentID: 1,
+				Kind:     TypeDescriptor_ALIAS,
+			},
+		},
+		{
+			`parentID 500 does not exist`,
+			TypeDescriptor{
+				Name:     "t",
+				ID:       1,
+				ParentID: 500,
+				Kind:     TypeDescriptor_ALIAS,
+				Alias:    types.Int,
+			},
+		},
+		{
+			`parentSchemaID 500 does not exist`,
+			TypeDescriptor{
+				Name:           "t",
+				ID:             1,
+				ParentID:       100,
+				ParentSchemaID: 500,
+				Kind:           TypeDescriptor_ALIAS,
+				Alias:          types.Int,
+			},
+		},
+		{
+			"arrayTypeID 500 does not exist",
+			TypeDescriptor{
+				Name:           "t",
+				ID:             1,
+				ParentID:       100,
+				ParentSchemaID: 101,
+				Kind:           TypeDescriptor_ENUM,
+				ArrayTypeID:    500,
+			},
+		},
+	}
+
+	for _, test := range testData {
+		txn := kvDB.NewTxn(ctx, "test")
+		if err := test.desc.Validate(ctx, txn, keys.SystemSQLCodec); err == nil {
+			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
+		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
+			t.Errorf("expected err: %s but found: %s", test.err, err)
 		}
 	}
 }

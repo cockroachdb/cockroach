@@ -141,6 +141,12 @@ func (p *planner) createDescriptorWithID(
 		return err
 	}
 
+	if mutType, ok := descriptor.(*sqlbase.MutableTypeDescriptor); ok {
+		if err := mutType.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+			return err
+		}
+	}
+
 	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
 	if isTable {
 		if err := mutDesc.ValidateTable(); err != nil {
