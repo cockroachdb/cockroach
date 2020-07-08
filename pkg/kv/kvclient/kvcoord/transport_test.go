@@ -31,19 +31,14 @@ func TestTransportMoveToFront(t *testing.T) {
 	rd1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
-	clients := []batchClient{
-		{replica: rd1},
-		{replica: rd2},
-		{replica: rd3},
-	}
-	gt := grpcTransport{orderedClients: clients}
+	gt := grpcTransport{replicas: []roachpb.ReplicaDescriptor{rd1, rd2, rd3}}
 
 	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {
 		file, line, _ := caller.Lookup(1)
-		for i, bc := range gt.orderedClients {
-			if bc.replica != replicas[i] {
+		for i, r := range gt.replicas {
+			if r != replicas[i] {
 				t.Fatalf("%s:%d: expected order %+v; got mismatch at index %d: %+v",
-					file, line, replicas, i, bc.replica)
+					file, line, replicas, i, r)
 			}
 		}
 	}

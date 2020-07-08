@@ -12,15 +12,14 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -34,13 +33,6 @@ type SendOptions struct {
 	metrics *DistSenderMetrics
 }
 
-type batchClient struct {
-	replica   roachpb.ReplicaDescriptor
-	healthy   bool
-	retryable bool
-	deadline  time.Time
-}
-
 // TransportFactory encapsulates all interaction with the RPC
 // subsystem, allowing it to be mocked out for testing. The factory
 // function returns a Transport object which is used to send requests
@@ -52,6 +44,8 @@ type batchClient struct {
 //
 // TODO(bdarnell): clean up this crufty interface; it was extracted
 // verbatim from the non-abstracted code.
+// TODO(andrei): This should take just []roachpb.ReplicaDescriptor; ReplicaSlice
+// has unneeded data in it.
 type TransportFactory func(
 	SendOptions, *nodedialer.Dialer, ReplicaSlice,
 ) (Transport, error)
@@ -98,62 +92,39 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
 ) (Transport, error) {
-	clients := make([]batchClient, 0, len(replicas))
-	for _, replica := range replicas {
-		healthy := nodeDialer.ConnHealth(replica.NodeID, opts.class) == nil
-		clients = append(clients, batchClient{
-			replica: replica.ReplicaDescriptor,
-			healthy: healthy,
-		})
+	health := make(map[roachpb.ReplicaDescriptor]bool)
+	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
+	for i, rinfo := range rs {
+		r := rinfo.ReplicaDescriptor
+		replicas[i] = r
+		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
 	}
 
-	// Put known-healthy clients first.
-	splitHealthy(clients)
+	// Put known-healthy clients first, while otherwise respecting the existing
+	// ordering of the replicas.
+	splitHealthy(replicas, health)
 
 	return &grpcTransport{
-		opts:           opts,
-		nodeDialer:     nodeDialer,
-		class:          opts.class,
-		orderedClients: clients,
+		opts:       opts,
+		nodeDialer: nodeDialer,
+		class:      opts.class,
+		replicas:   replicas,
 	}, nil
 }
 
 type grpcTransport struct {
-	opts           SendOptions
-	nodeDialer     *nodedialer.Dialer
-	class          rpc.ConnectionClass
-	clientIndex    int
-	orderedClients []batchClient
+	opts        SendOptions
+	nodeDialer  *nodedialer.Dialer
+	class       rpc.ConnectionClass
+	clientIndex int
+	replicas    []roachpb.ReplicaDescriptor
 }
 
-// IsExhausted returns false if there are any untried replicas remaining. If
-// there are none, it attempts to resurrect replicas which were tried but
-// failed with a retryable error. If any where resurrected, returns false;
-// true otherwise.
+// IsExhausted returns false if there are any untried replicas remaining.
 func (gt *grpcTransport) IsExhausted() bool {
-	if gt.clientIndex < len(gt.orderedClients) {
-		return false
-	}
-	return !gt.maybeResurrectRetryablesLocked()
-}
-
-// maybeResurrectRetryablesLocked moves already-tried replicas which
-// experienced a retryable error (currently this means a
-// NotLeaseHolderError) into a newly-active state so that they can be
-// retried. Returns true if any replicas were moved to active.
-func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
-	var resurrect []batchClient
-	for i := 0; i < gt.clientIndex; i++ {
-		if c := gt.orderedClients[i]; c.retryable && timeutil.Since(c.deadline) >= 0 {
-			resurrect = append(resurrect, c)
-		}
-	}
-	for _, c := range resurrect {
-		gt.moveToFrontLocked(c.replica)
-	}
-	return len(resurrect) > 0
+	return gt.clientIndex >= len(gt.replicas)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -162,27 +133,14 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	client := gt.orderedClients[gt.clientIndex]
+	r := gt.replicas[gt.clientIndex]
 	ctx, iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ba.Replica = client.replica
-	reply, err := gt.sendBatch(ctx, client.replica.NodeID, iface, ba)
-
-	// NotLeaseHolderErrors can be retried.
-	var retryable bool
-	if reply != nil && reply.Error != nil {
-		// TODO(spencer): pass the lease expiration when setting the state
-		// to set a more efficient deadline for retrying this replica.
-		if _, ok := reply.Error.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-			retryable = true
-		}
-	}
-	gt.setState(client.replica, retryable)
-
-	return reply, err
+	ba.Replica = r
+	return gt.sendBatch(ctx, r.NodeID, iface, ba)
 }
 
 // NB: nodeID is unused, but accessible in stack traces.
@@ -229,16 +187,16 @@ func (gt *grpcTransport) sendBatch(
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
 ) (context.Context, roachpb.InternalClient, error) {
-	client := gt.orderedClients[gt.clientIndex]
+	r := gt.replicas[gt.clientIndex]
 	gt.clientIndex++
-	return gt.nodeDialer.DialInternalClient(ctx, client.replica.NodeID, gt.class)
+	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
 }
 
 func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if gt.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
 	}
-	return gt.orderedClients[gt.clientIndex].replica
+	return gt.replicas[gt.clientIndex]
 }
 
 // SkipReplica is part of the Transport interface.
@@ -250,41 +208,20 @@ func (gt *grpcTransport) SkipReplica() {
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-	gt.moveToFrontLocked(replica)
+	gt.moveToFront(replica)
 }
 
-func (gt *grpcTransport) moveToFrontLocked(replica roachpb.ReplicaDescriptor) {
-	for i := range gt.orderedClients {
-		if gt.orderedClients[i].replica == replica {
-			// Clear the retryable bit as this replica is being made
-			// available.
-			gt.orderedClients[i].retryable = false
-			gt.orderedClients[i].deadline = time.Time{}
+func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
+	for i := range gt.replicas {
+		if gt.replicas[i] == replica {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
 			if i < gt.clientIndex {
 				gt.clientIndex--
 			}
 			// Swap the client representing this replica to the front.
-			gt.orderedClients[i], gt.orderedClients[gt.clientIndex] =
-				gt.orderedClients[gt.clientIndex], gt.orderedClients[i]
+			gt.replicas[i], gt.replicas[gt.clientIndex] = gt.replicas[gt.clientIndex], gt.replicas[i]
 			return
-		}
-	}
-}
-
-// NB: this method's callers may have a reference to the client they wish to
-// mutate, but the clients reside in a slice which is shuffled via
-// MoveToFront, making it unsafe to mutate the client through a reference to
-// the slice.
-func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, retryable bool) {
-	for i := range gt.orderedClients {
-		if gt.orderedClients[i].replica == replica {
-			gt.orderedClients[i].retryable = retryable
-			if retryable {
-				gt.orderedClients[i].deadline = timeutil.Now().Add(time.Second)
-			}
-			break
 		}
 	}
 }
@@ -294,23 +231,31 @@ func (gt *grpcTransport) setState(replica roachpb.ReplicaDescriptor, retryable b
 // be rearranged first in the slice, and unhealthy clients will be rearranged
 // last. Within these two groups, the rearrangement will be stable. The function
 // will then return the number of healthy clients.
-func splitHealthy(clients []batchClient) int {
-	var nHealthy int
-	sort.Stable(byHealth(clients))
-	for _, client := range clients {
-		if client.healthy {
-			nHealthy++
-		}
-	}
-	return nHealthy
+func splitHealthy(replicas []roachpb.ReplicaDescriptor, health map[roachpb.ReplicaDescriptor]bool) {
+	sort.Stable(byHealth{replicas: replicas, health: health})
 }
 
 // byHealth sorts a slice of batchClients by their health with healthy first.
-type byHealth []batchClient
+type byHealth struct {
+	replicas []roachpb.ReplicaDescriptor
+	health   map[roachpb.ReplicaDescriptor]bool
+}
 
-func (h byHealth) Len() int           { return len(h) }
-func (h byHealth) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
+func (h byHealth) Len() int { return len(h.replicas) }
+func (h byHealth) Swap(i, j int) {
+	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
+}
+func (h byHealth) Less(i, j int) bool {
+	ih, ok := h.health[h.replicas[i]]
+	if !ok {
+		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
+	}
+	jh, ok := h.health[h.replicas[j]]
+	if !ok {
+		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
+	}
+	return ih && !jh
+}
 
 // SenderTransportFactory wraps a client.Sender for use as a KV
 // Transport. This is useful for tests that want to use DistSender
