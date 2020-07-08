@@ -358,6 +358,11 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	// Install back references to types used by this table.
+	if err := params.p.addBackRefsToAllTypesInTable(params.ctx, &desc); err != nil {
+		return err
+	}
+
 	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
 		return err
 	}

@@ -158,6 +158,20 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		return err
 	}
 
+	// TODO (rohany): Not sure if this needs to be done before or after
+	//  lease draining.
+	// If the type is being dropped, remove the descriptor here.
+	if typeDesc.State == sqlbase.TypeDescriptor_DROP {
+		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// TODO (rohany): Do we need to set the systemConfigTrigger here?
+			b := txn.NewBatch()
+			b.Del(sqlbase.MakeDescMetadataKey(codec, typeDesc.ID))
+			return txn.Run(ctx, b)
+		}); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

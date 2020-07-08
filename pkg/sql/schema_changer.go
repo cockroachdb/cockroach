@@ -463,7 +463,43 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	if tableDesc.Dropped() && sc.droppedDatabaseID == sqlbase.InvalidID {
-		// We've dropped this table, let's kick off a GC job.
+		// If this table is being dropped, remove all back references from
+		// types that this table uses. First collect all types referenced
+		// by the table.
+		// TODO (rohany): Do we need to delay the back reference removal until
+		//  the schema change job execution? Doing it here leads means that we
+		//  can't drop a table and then drop a type that it references in the
+		//  same transaction.
+		var typeIDs []sqlbase.ID
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			getType := func(id sqlbase.ID) (*sqlbase.TypeDescriptor, error) {
+				// TODO (rohany): cache this?
+				desc, err := sqlbase.GetTypeDescFromID(ctx, txn, sc.execCfg.Codec, id)
+				if err != nil {
+					return nil, err
+				}
+				return desc.TypeDesc(), nil
+			}
+			var err error
+			typeIDs, err = tableDesc.GetAllReferencedTypeIDs(getType)
+			return err
+		}); err != nil {
+			return err
+		}
+
+		// Next, update all of the referenced types to remove the back reference.
+		update := func(txn *kv.Txn, descs map[sqlbase.ID]catalog.MutableDescriptor) error {
+			for _, desc := range descs {
+				typeDesc := desc.(*sqlbase.MutableTypeDescriptor)
+				typeDesc.RemoveReferencingDescriptorID(tableDesc.ID)
+			}
+			return nil
+		}
+		if _, err := sc.leaseMgr.PublishMultiple(ctx, typeIDs, update, func(txn *kv.Txn) error { return nil }); err != nil {
+			return err
+		}
+
+		// Now kick off a GC job for the table.
 		dropTime := timeutil.Now().UnixNano()
 		if tableDesc.DropTime > 0 {
 			dropTime = tableDesc.DropTime
@@ -762,6 +798,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// We make a call to PublishMultiple to handle the situation to add Foreign Key backreferences.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
 	var interleaveParents map[sqlbase.ID]struct{}
+	var referencedTypeIDs []sqlbase.ID
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		interleaveParents = make(map[sqlbase.ID]struct{})
@@ -770,6 +807,18 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		referencedTypeIDs, err = desc.GetAllReferencedTypeIDs(func(id sqlbase.ID) (*sqlbase.TypeDescriptor, error) {
+			desc, err := sqlbase.GetTypeDescFromID(ctx, txn, sc.execCfg.Codec, id)
+			if err != nil {
+				return nil, err
+			}
+			return desc.TypeDesc(), nil
+		})
+		if err != nil {
+			return err
+		}
+
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				break
@@ -979,10 +1028,32 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				break
 			}
 		}
+
+		// Now that all mutations have been applied, find the new set of referenced
+		// type descriptors. If this table has been dropped in the mean time, then
+		// don't install any backreferences.
+		if !scTable.Dropped() {
+			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id sqlbase.ID) (*TypeDescriptor, error) {
+				return descs[id].(*sqlbase.MutableTypeDescriptor).TypeDesc(), nil
+			})
+			if err != nil {
+				return err
+			}
+
+			// Update the set of back references.
+			for _, id := range referencedTypeIDs {
+				descs[id].(*sqlbase.MutableTypeDescriptor).RemoveReferencingDescriptorID(scTable.ID)
+			}
+			for _, id := range newReferencedTypeIDs {
+				descs[id].(*sqlbase.MutableTypeDescriptor).AddReferencingDescriptorID(scTable.ID)
+			}
+		}
+
 		return nil
 	}
 
-	_, err = sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, func(txn *kv.Txn) error {
+	descsToUpdate := append(tableIDsToUpdate, referencedTypeIDs...)
+	_, err = sc.leaseMgr.PublishMultiple(ctx, descsToUpdate, update, func(txn *kv.Txn) error {
 		schemaChangeEventType := EventLogFinishSchemaChange
 		if isRollback {
 			schemaChangeEventType = EventLogFinishSchemaRollback

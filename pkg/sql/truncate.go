@@ -263,6 +263,12 @@ func (p *planner) truncateTable(
 		return err
 	}
 
+	// The process of dropping the original table will remove back references
+	// to the old table, so we just need to add back references to the new table.
+	if err := p.addBackRefsToAllTypesInTable(ctx, newTableDesc); err != nil {
+		return err
+	}
+
 	// Copy the zone config, if this is for the system tenant. Secondary tenants
 	// do not have zone configs for individual objects.
 	if p.ExecCfg().Codec.ForSystemTenant() {
