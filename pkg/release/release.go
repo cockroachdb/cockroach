@@ -241,6 +241,46 @@ func MakeCRDBBinaryNonReleaseFile(
 	}
 }
 
+// SharedLibraryExtensionFromBuildType returns the extensions for a given buildType.
+func SharedLibraryExtensionFromBuildType(buildType string) string {
+	switch buildType {
+	case "windows":
+		return ".dll"
+	case "linux-gnu", "linux":
+		return ".so"
+	case "darwin":
+		return ".dylib"
+	}
+	panic(errors.Newf("unknown build type: %s", buildType))
+}
+
+// CRDBSharedLibraries are all the shared libraries for CRDB, without the extension.
+var CRDBSharedLibraries = []string{"libgeos", "libgeos_c"}
+
+// MakeCRDBLibraryNonReleaseFiles creates the NonReleaseFile objects for relevant
+// CRDB shipped libraries.
+func MakeCRDBLibraryNonReleaseFiles(
+	localAbsoluteBasePath string, buildType string, versionStr string, suffix string,
+) []NonReleaseFile {
+	files := []NonReleaseFile{}
+	ext := SharedLibraryExtensionFromBuildType(buildType)
+	for _, localFileName := range CRDBSharedLibraries {
+		remoteFileNameBase, _ := TrimDotExe(osVersionRe.ReplaceAllLiteralString(fmt.Sprintf("%s%s", localFileName, suffix), ""))
+		remoteFileName := fmt.Sprintf("%s.%s", remoteFileNameBase, versionStr)
+
+		files = append(
+			files,
+			NonReleaseFile{
+				S3FileName:           fmt.Sprintf("%s%s", remoteFileName, ext),
+				S3FilePath:           fmt.Sprintf("lib/%s%s", remoteFileName, ext),
+				S3RedirectPathPrefix: fmt.Sprintf("lib/%s%s", remoteFileNameBase, ext),
+				LocalAbsolutePath:    filepath.Join(localAbsoluteBasePath, "lib", localFileName+ext),
+			},
+		)
+	}
+	return files
+}
+
 // PutNonReleaseOptions are options to pass into PutNonRelease.
 type PutNonReleaseOptions struct {
 	// Branch is the branch from which the release is being uploaded from.
@@ -253,6 +293,9 @@ type PutNonReleaseOptions struct {
 }
 
 // PutNonRelease uploads non-release related files to S3.
+// Files are uploaded to /cockroach/<S3FilePath> for each non release file.
+// A latest key is then put at cockroach/<S3RedirectPrefix>.<BranchName> that redirects
+// to the above file.
 func PutNonRelease(svc S3Putter, o PutNonReleaseOptions) {
 	const repoName = "cockroach"
 	for _, f := range o.Files {
@@ -316,6 +359,23 @@ func MakeCRDBBinaryArchiveFile(base string, localAbsolutePath string) ArchiveFil
 		LocalAbsolutePath: localAbsolutePath,
 		ArchiveFilePath:   path,
 	}
+}
+
+// MakeCRDBLibraryArchiveFiles generates the ArchiveFile object for relevant CRDB helper libraries.
+func MakeCRDBLibraryArchiveFiles(localBasePath string, buildType string) []ArchiveFile {
+	files := []ArchiveFile{}
+	ext := SharedLibraryExtensionFromBuildType(buildType)
+	for _, lib := range CRDBSharedLibraries {
+		localFileName := lib + ext
+		files = append(
+			files,
+			ArchiveFile{
+				LocalAbsolutePath: filepath.Join(localBasePath, "lib", localFileName),
+				ArchiveFilePath:   "lib/" + localFileName,
+			},
+		)
+	}
+	return files
 }
 
 // PutReleaseOptions are options to for the PutRelease function.
