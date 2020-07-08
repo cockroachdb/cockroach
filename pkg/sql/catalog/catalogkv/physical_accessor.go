@@ -245,6 +245,9 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		}
 		return nil, nil
 	case *sqlbase.ImmutableTypeDescriptor:
+		if desc.Dropped() {
+			return nil, nil
+		}
 		if flags.RequireMutable {
 			return sqlbase.NewMutableExistingTypeDescriptor(*desc.TypeDesc()), nil
 		}

@@ -410,6 +410,9 @@ func (m *Manager) PublishMultiple(
 				if err != nil {
 					return err
 				}
+				if descsToUpdate[id] == nil {
+					return sqlbase.ErrDescriptorNotFound
+				}
 
 				if expectedVersions[id] != descsToUpdate[id].GetVersion() {
 					// The version changed out from under us. Someone else must be
