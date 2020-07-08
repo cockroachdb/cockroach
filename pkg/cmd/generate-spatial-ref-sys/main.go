@@ -17,17 +17,22 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoproj"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -62,6 +67,7 @@ type projection struct {
 	AuthSRID  string
 	SRText    string
 	Proj4Text string
+	Bounds    *geoprojbase.Bounds
 
 	IsLatLng        bool
 	SpheroidVarName string
@@ -136,6 +142,69 @@ func getTemplateVars() templateVars {
 			spheroidVarName = fmt.Sprintf(`spheroid%d`, foundCounter)
 		}
 
+		var bounds *geoprojbase.Bounds
+		if record[1] == "EPSG" {
+			var results struct {
+				Results []struct {
+					BBox []float64 `json:"bbox"`
+				} `json:"results"`
+			}
+			for _, searchArgs := range []string{
+				record[2],
+				fmt.Sprintf("%s%%20deprecated%%3A1", record[2]), // some may be deprecated.
+			} {
+				resp, err := httputil.Get(context.Background(), fmt.Sprintf("http://epsg.io/?q=%s&format=json", searchArgs))
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				body, err := ioutil.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if err := json.Unmarshal(body, &results); err != nil {
+					log.Fatal(err)
+				}
+				if len(results.Results) == 1 {
+					break
+				}
+			}
+
+			if len(results.Results) != 1 {
+				log.Fatalf("WARNING: expected 1 result for %s, found %#v", record[2], results.Results)
+			}
+			bbox := results.Results[0].BBox
+			// We need to try against all 4 points of the polygon, as lat or lngs may stretch out
+			// differently at the corners.
+			xCoords := []float64{bbox[1], bbox[1], bbox[3], bbox[3]}
+			yCoords := []float64{bbox[0], bbox[2], bbox[0], bbox[2]}
+			if !isLatLng {
+				if err := geoproj.Project(
+					geoprojbase.MakeProj4Text("+proj=longlat +datum=WGS84 +no_defs"),
+					geoprojbase.MakeProj4Text(proj4text),
+					xCoords,
+					yCoords,
+					[]float64{0, 0, 0, 0},
+				); err != nil {
+					log.Fatal(err)
+				}
+			}
+			sort.Slice(xCoords, func(i, j int) bool {
+				return xCoords[i] < xCoords[j]
+			})
+			sort.Slice(yCoords, func(i, j int) bool {
+				return yCoords[i] < yCoords[j]
+			})
+			bounds = &geoprojbase.Bounds{
+				MinX: xCoords[0],
+				MaxX: xCoords[3],
+				MinY: yCoords[0],
+				MaxY: yCoords[3],
+			}
+		}
+
 		projections = append(
 			projections,
 			projection{
@@ -145,6 +214,7 @@ func getTemplateVars() templateVars {
 				SRText:    record[3],
 				Proj4Text: proj4text,
 
+				Bounds:          bounds,
 				IsLatLng:        isLatLng,
 				SpheroidVarName: spheroidVarName,
 			},
