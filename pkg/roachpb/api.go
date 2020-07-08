@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -195,6 +196,28 @@ func NeedsRefresh(args Request) bool {
 // when waiting for a Range to split after it has grown too large.
 func CanBackpressure(args Request) bool {
 	return (args.flags() & canBackpressure) != 0
+}
+
+// EarliestTimestamp returns the earliest timestamp at which the batch would
+// operate, which is nominally ba.Timestamp but could be earlier if a request in
+// the batch operates on a time span such as ExportRequest or RevertRangeRequest
+// which both specify the start of that span in their arguments.
+func (ba BatchRequest) EarliestTimestamp() hlc.Timestamp {
+	ts := ba.Timestamp
+
+	for i := range ba.Requests {
+		var start hlc.Timestamp
+		if req := ba.Requests[i].GetExport(); req != nil {
+			start = req.StartTime
+		} else if req := ba.Requests[i].GetRevertRange(); req != nil {
+			start = req.TargetTime
+		}
+		if !start.IsEmpty() && start.Less(ts) {
+			ts = start
+		}
+	}
+
+	return ts
 }
 
 // Request is an interface for RPC requests.
