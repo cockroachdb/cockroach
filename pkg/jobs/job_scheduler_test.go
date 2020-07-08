@@ -104,6 +104,56 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 	}
 }
 
+func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// If all of the previous runs are in a terminal state, the waiting policy
+	// should not matter, so ensure that the behavior is the same for them all.
+	for _, wait := range []jobspb.ScheduleDetails_WaitBehavior{
+		jobspb.ScheduleDetails_WAIT,
+		jobspb.ScheduleDetails_SKIP,
+	} {
+		t.Run(wait.String(), func(t *testing.T) {
+			// Create job that waits for the previous runs to finish.
+			j := h.newScheduledJob(t, "j", "SELECT 42 AS meaning_of_life;")
+			j.SetScheduleDetails(jobspb.ScheduleDetails{Wait: wait})
+			require.NoError(t, j.SetSchedule("@hourly"))
+
+			require.NoError(t,
+				h.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					require.NoError(t, j.Create(ctx, h.ex, txn))
+
+					// Let's add few fake runs for this schedule which are in every
+					// terminal state.
+					for _, status := range []Status{StatusFailed, StatusCanceled, StatusSucceeded} {
+						addFakeJob(t, h, j.ScheduleID(), status, txn)
+					}
+					return nil
+				}))
+
+			// Verify the job has expected nextRun time.
+			expectedRunTime := cronexpr.MustParse("@hourly").Next(h.env.Now())
+			loaded := h.loadJob(t, j.ScheduleID())
+			require.Equal(t, expectedRunTime, loaded.NextRun())
+
+			// Advance time past the expected start time.
+			h.env.SetTime(expectedRunTime.Add(time.Second))
+
+			// Execute the job and verify it has the next run scheduled.
+			s := newJobScheduler(h.env, h.ex)
+			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+
+			expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
+			loaded = h.loadJob(t, j.ScheduleID())
+			require.Equal(t, expectedRunTime, loaded.NextRun())
+		})
+	}
+}
+
 func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	h, cleanup := newTestHelper(t)
