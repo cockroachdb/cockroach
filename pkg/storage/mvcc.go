@@ -17,6 +17,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -3151,6 +3152,8 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // keys slice. The iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration. The
 // timestamp parameter is used to compute the intent age on GC.
+//
+// Note that this method will be sorting the keys.
 func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
@@ -3158,16 +3161,33 @@ func MVCCGarbageCollect(
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
 ) error {
-	// We're allowed to use a prefix iterator because we always Seek() the
-	// iterator when handling a new user key.
-	iter := rw.NewIterator(IterOptions{Prefix: true})
-	defer iter.Close()
 
 	var count int64
 	defer func(begin time.Time) {
 		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
 			len(keys), float64(len(keys))*1e9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
+
+	// If there are no keys then there is no work.
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// Sort the slice to both determine the bounds and ensure that we're seeking
+	// in increasing order.
+	sort.Slice(keys, func(i, j int) bool {
+		iKey := MVCCKey{Key: keys[i].Key, Timestamp: keys[i].Timestamp}
+		jKey := MVCCKey{Key: keys[j].Key, Timestamp: keys[j].Timestamp}
+		return iKey.Less(jKey)
+	})
+
+	// Bound the iterator appropriately for the set of keys we'll be garbage
+	// collecting.
+	iter := rw.NewIterator(IterOptions{
+		LowerBound: keys[0].Key,
+		UpperBound: keys[len(keys)-1].Key.Next(),
+	})
+	defer iter.Close()
 
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
@@ -3222,19 +3242,63 @@ func MVCCGarbageCollect(
 			iter.Next()
 		}
 
-		// TODO(tschottdorf): Can't we just Seek() to a key with timestamp
-		// gcKey.Timestamp to avoid potentially cycling through a large prefix
-		// of versions we can't GC? The batching mechanism in the GC queue sends
-		// requests susceptible to that happening when there are lots of versions.
-		// A minor complication there will be that we need to know the first non-
-		// deletable value's timestamp (for prevNanos).
-
-		// Now, iterate through all values, GC'ing ones which have expired.
 		// For GCBytesAge, this requires keeping track of the previous key's
 		// timestamp (prevNanos). See ComputeStatsGo for a more easily digested
 		// and better commented version of this logic.
-
 		prevNanos := timestamp.WallTime
+		{
+			// If there are a large number of versions which are not garbage,
+			// iterating through all of them is very inefficient. However, if there
+			// are few, SeekLT is inefficient. Try to step the iterator a few times
+			// to find the predecessor of gcKey before resorting to seeking.
+			//
+			// In a synthetic benchmark where there is one version of garbage and one
+			// not, this optimization showed a 50% improvement. More importantly,
+			// this optimization mitigated the overhead of the Seek approach when
+			// almost all of the versions are garbage.
+			var foundPrevNanos bool
+			{
+				const nextsBeforeSeek = 4
+				for i := 0; i < nextsBeforeSeek; i++ {
+					if ok, err := iter.Valid(); err != nil {
+						return err
+					} else if !ok {
+						break
+					}
+					unsafeIterKey := iter.UnsafeKey()
+					if !unsafeIterKey.Key.Equal(encKey.Key) {
+						break
+					}
+					if unsafeIterKey.Timestamp.LessEq(gcKey.Timestamp) {
+						foundPrevNanos = true
+						break
+					}
+					prevNanos = unsafeIterKey.Timestamp.WallTime
+					iter.Next()
+				}
+			}
+
+			// Stepping with the iterator did not get us to our target garbage key or
+			// its predecessor. Seek to the predecessor to find the right value for
+			// prevNanos and position the iterator on the gcKey.
+			if !foundPrevNanos {
+				gcKeyMVCC := MVCCKey{Key: gcKey.Key, Timestamp: gcKey.Timestamp}
+				iter.SeekLT(gcKeyMVCC)
+				if ok, err := iter.Valid(); err != nil {
+					return err
+				} else if ok {
+					// Use the previous version's timestamp if it's for this key.
+					if iter.UnsafeKey().Key.Equal(gcKey.Key) {
+						prevNanos = iter.UnsafeKey().Timestamp.WallTime
+					}
+					// Seek to the first version for deletion.
+					iter.Next()
+				}
+			}
+		}
+
+		// Iterate through the garbage versions, accumulating their stats and
+		// issuing clear operations.
 		for ; ; iter.Next() {
 			if ok, err := iter.Valid(); err != nil {
 				return err
@@ -3248,26 +3312,24 @@ func MVCCGarbageCollect(
 			if !unsafeIterKey.IsValue() {
 				break
 			}
-			if unsafeIterKey.Timestamp.LessEq(gcKey.Timestamp) {
-				if ms != nil {
-					// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
-					// when it's a deletion.
-					valSize := int64(len(iter.UnsafeValue()))
+			if ms != nil {
+				// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
+				// when it's a deletion.
+				valSize := int64(len(iter.UnsafeValue()))
 
-					// A non-deletion becomes non-live when its newer neighbor shows up.
-					// A deletion tombstone becomes non-live right when it is created.
-					fromNS := prevNanos
-					if valSize == 0 {
-						fromNS = unsafeIterKey.Timestamp.WallTime
-					}
+				// A non-deletion becomes non-live when its newer neighbor shows up.
+				// A deletion tombstone becomes non-live right when it is created.
+				fromNS := prevNanos
+				if valSize == 0 {
+					fromNS = unsafeIterKey.Timestamp.WallTime
+				}
 
-					ms.Add(updateStatsOnGC(gcKey.Key, MVCCVersionTimestampSize,
-						valSize, nil, fromNS))
-				}
-				count++
-				if err := rw.Clear(unsafeIterKey); err != nil {
-					return err
-				}
+				ms.Add(updateStatsOnGC(gcKey.Key, MVCCVersionTimestampSize,
+					valSize, nil, fromNS))
+			}
+			count++
+			if err := rw.Clear(unsafeIterKey); err != nil {
+				return err
 			}
 			prevNanos = unsafeIterKey.Timestamp.WallTime
 		}
