@@ -702,16 +702,36 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 		}
 
 		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+
 		var scalar opt.ScalarExpr
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
 		})
-		// Check if the expression contains non-immutable operators.
-		var sharedProps props.Shared
-		memo.BuildSharedProps(scalar, &sharedProps)
-		if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
-			tabMeta.AddPartialIndexPredicate(indexOrd, scalar)
+
+		// Wrap the scalar in a FiltersItem.
+		filter := b.factory.ConstructFiltersItem(scalar)
+
+		// If the expression contains non-immutable operators, do not add it to
+		// the table metadata.
+		if filter.ScalarProps().VolatilitySet.HasStable() || filter.ScalarProps().VolatilitySet.HasVolatile() {
+			return
 		}
+
+		// Wrap the filter in a FiltersExpr.
+		//
+		// Run SimplifyFilters so that adjacent top-level AND expressions are
+		// flattened into individual FiltersItems, like they would be during
+		// normalization of a SELECT query.
+		//
+		// Run ConsolidateFilters so that adjacent top-level FiltersItems that
+		// constrain a single variable are combined into a RangeExpr, like they
+		// would be during normalization of a SELECT query.
+		filters := memo.FiltersExpr{filter}
+		filters = b.factory.CustomFuncs().SimplifyFilters(filters)
+		filters = b.factory.CustomFuncs().ConsolidateFilters(filters)
+
+		// Add the filters to the table metadata.
+		tabMeta.AddPartialIndexPredicate(indexOrd, &filters)
 	}
 }
 
