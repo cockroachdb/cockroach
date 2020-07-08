@@ -492,10 +492,11 @@ func (p *planner) LookupTableByID(
 	}
 	// TODO (rohany): This shouldn't be needed once the descs.Collection always
 	//  returns descriptors with hydrated types.
-	if err := p.maybeHydrateTypesInDescriptor(ctx, table); err != nil {
+	hydratedDesc, err := p.maybeHydrateTypesInDescriptor(ctx, table)
+	if err != nil {
 		return catalog.TableEntry{}, err
 	}
-	return catalog.TableEntry{Desc: table}, nil
+	return catalog.TableEntry{Desc: hydratedDesc.(*sqlbase.ImmutableTableDescriptor)}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a
