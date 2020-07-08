@@ -4031,9 +4031,10 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	// A sketch of the test is as follows:
 	//
 	//  * Create a table foo to backup.
+	//  * Create an initial BACKUP of foo.
 	//  * Set a 1 second gcttl for foo.
-	//  * Start a BACKUP which blocks after setup (after time of backup is
-	//    decided), until it is signaled.
+	//  * Start a BACKUP incremental from that base backup which blocks after
+	//	  setup (after time of backup is decided), until it is signaled.
 	//  * Manually enqueue the ranges for GC and ensure that at least one
 	//    range ran the GC.
 	//  * Unblock the backup.
@@ -4069,6 +4070,9 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	conn := tc.ServerConn(0)
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	close(allowResponse)
+	runner.Exec(t, `BACKUP TABLE FOO TO 'nodelocal://0/foo'`) // create a base backup.
+	allowResponse = make(chan struct{})
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
 	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	rRand, _ := randutil.NewPseudoRand()
@@ -4088,7 +4092,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		// backup fails. This test does not particularly care if the BACKUP
 		// completes with a success or failure, as long as the timestamp is released
 		// shortly after the BACKUP is unblocked.
-		_, _ = conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://1/foo'`) // ignore error.
+		_, _ = conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://0/foo-inc' INCREMENTAL FROM 'nodelocal://0/foo'`) // ignore error.
 	}()
 
 	var jobID string
