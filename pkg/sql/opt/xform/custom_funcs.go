@@ -1917,46 +1917,29 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		return
 	}
 
-	if !invertedidx.IsGeoIndexFunction(fn) {
-		panic(errors.AssertionFailedf(
-			"GenerateGeoLookupJoins called on a function that cannot be index-accelerated",
-		))
-	}
-
-	function := fn.(*memo.FunctionExpr)
 	inputProps := input.Relational()
+	function := fn.(*memo.FunctionExpr)
 
-	// Extract the the variable inputs to the geospatial function.
-	if function.Args.ChildCount() < 2 {
-		panic(errors.AssertionFailedf(
-			"all index-accelerated geospatial functions should have at least two arguments",
-		))
-	}
-
-	// The first argument should come from the input.
-	variable, ok := function.Args.Child(0).(*memo.VariableExpr)
+	// Try to extract an inverted join condition from the given function. If
+	// unsuccessful, try to extract a join condition from an equivalent function
+	// in which the arguments are commuted. For example:
+	//
+	//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
+	//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
+	//
+	// See TryGetInvertedJoinCondFromGeoFunc for more details.
+	fn, inputGeoCol, indexGeoCol, ok := invertedidx.TryGetInvertedJoinCondFromGeoFunc(
+		c.e.f, function, false /* commuteArgs */, inputProps,
+	)
 	if !ok {
-		panic(errors.AssertionFailedf(
-			"GenerateGeoLookupJoins called on function containing non-variable inputs",
-		))
+		fn, inputGeoCol, indexGeoCol, ok = invertedidx.TryGetInvertedJoinCondFromGeoFunc(
+			c.e.f, function, true /* commuteArgs */, inputProps,
+		)
+		if !ok {
+			// This function cannot serve as a join condition.
+			return
+		}
 	}
-	if !inputProps.OutputCols.Contains(variable.Col) {
-		// TODO(rytaft): Commute the geospatial function in this case.
-		//   Covers      <->  CoveredBy
-		//   Intersects  <->  Intersects
-		return
-	}
-	inputGeoCol := variable.Col
-
-	// The second argument should be a variable corresponding to the index
-	// column.
-	variable, ok = function.Args.Child(1).(*memo.VariableExpr)
-	if !ok {
-		panic(errors.AssertionFailedf(
-			"GenerateGeoLookupJoins called on function containing non-variable inputs",
-		))
-	}
-	indexGeoCol := variable.Col
 
 	var pkCols opt.ColList
 
@@ -1987,7 +1970,7 @@ func (c *CustomFuncs) GenerateGeoLookupJoins(
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.IndexOrdinal()
-		lookupJoin.InvertedExpr = function
+		lookupJoin.InvertedExpr = fn
 		lookupJoin.InvertedCol = indexGeoCol
 		lookupJoin.InputCol = inputGeoCol
 		lookupJoin.Cols = indexCols.Union(inputProps.OutputCols)
@@ -2653,11 +2636,11 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 	}
 
 	return &memo.LookupJoinPrivate{
-		JoinType:              opt.InnerJoinOp,
-		Table:                 indexPrivate.Table,
-		Index:                 cat.PrimaryIndex,
-		KeyCols:               lookupCols,
-		Cols:                  outCols,
+		JoinType: opt.InnerJoinOp,
+		Table:    indexPrivate.Table,
+		Index:    cat.PrimaryIndex,
+		KeyCols:  lookupCols,
+		Cols:     outCols,
 		LookupColsAreTableKey: true,
 		ConstFilters:          nil,
 		JoinPrivate:           memo.JoinPrivate{},

@@ -1892,6 +1892,82 @@ project
       └── filters
            └── st_dwithin(c.geom:10, n.geom:14, 50.0) [outer=(10,14), immutable]
 
+# Same test as above, but with arguments commuted.
+opt expect=GenerateGeoLookupJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_DWithin(n.geom, c.geom, 50)
+----
+project
+ ├── columns: name:13 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:13 n.geom:14
+      ├── key columns: [11] = [11]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:11!null
+      │    ├── inverted-expr
+      │    │    └── st_dwithin(c.geom:10, n.geom:14, 50.0)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_dwithin(n.geom:14, c.geom:10, 50.0) [outer=(10,14), immutable]
+
+opt expect=GenerateGeoLookupJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_Covers(c.geom, n.geom)
+----
+project
+ ├── columns: name:13 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:13 n.geom:14
+      ├── key columns: [11] = [11]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:11!null
+      │    ├── inverted-expr
+      │    │    └── st_covers(c.geom:10, n.geom:14)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_covers(c.geom:10, n.geom:14) [outer=(10,14), immutable]
+
+# Same test as above, but with arguments commuted.
+opt expect=GenerateGeoLookupJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_Covers(n.geom, c.geom)
+----
+project
+ ├── columns: name:13 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:13 n.geom:14
+      ├── key columns: [11] = [11]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:11!null
+      │    ├── inverted-expr
+      │    │    └── st_coveredby(c.geom:10, n.geom:14)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_covers(n.geom:14, c.geom:10) [outer=(10,14), immutable]
 
 # --------------------------------------------------
 # GenerateZigZagJoins
