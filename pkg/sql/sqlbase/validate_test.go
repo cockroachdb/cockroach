@@ -153,25 +153,19 @@ var validationMap = []struct {
 	{
 		obj: ColumnDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name": {status: thisFieldReferencesNoObjects},
-			"ID":   {status: thisFieldReferencesNoObjects},
-			"Type": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(rohan): add validation for custom types"},
-			"Nullable": {status: thisFieldReferencesNoObjects},
-			"DefaultExpr": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
-			"Hidden": {status: thisFieldReferencesNoObjects},
+			"Name":        {status: thisFieldReferencesNoObjects},
+			"ID":          {status: thisFieldReferencesNoObjects},
+			"Type":        {status: iSolemnlySwearThisFieldIsValidated},
+			"Nullable":    {status: thisFieldReferencesNoObjects},
+			"DefaultExpr": {status: iSolemnlySwearThisFieldIsValidated},
+			"Hidden":      {status: thisFieldReferencesNoObjects},
 			"UsesSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"OwnsSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"ComputeExpr": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
+			"ComputeExpr": {status: iSolemnlySwearThisFieldIsValidated},
 			"LogicalColumnID": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
