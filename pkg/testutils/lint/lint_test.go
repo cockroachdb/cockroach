@@ -127,7 +127,7 @@ func TestLint(t *testing.T) {
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
 
 	t.Run("TestLowercaseFunctionNames", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		reSkipCasedFunction, err := regexp.Compile(`^(Binary file.*|[^:]+:\d+:(` +
 			`query error .*` + // OK when in logic tests
 			`|` +
@@ -183,7 +183,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestCopyrightHeaders", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 
 		bslHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
 //
@@ -266,7 +266,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestMissingLeakTest", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(pkgDir, "util/leaktest/check-leaktest.sh")
 		if err != nil {
 			t.Fatal(err)
@@ -290,7 +290,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestNoContextTODOInTests", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -322,7 +322,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestTabsInShellScripts", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", "^ *\t", "--", "*.sh")
 		if err != nil {
 			t.Fatal(err)
@@ -346,7 +346,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestOptfmt", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
 			t.Skip("PKG specified")
 		}
@@ -386,7 +386,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestHttputil", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		for _, tc := range []struct {
 			re       string
 			excludes []string
@@ -427,7 +427,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestEnvutil", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		for _, tc := range []struct {
 			re       string
 			excludes []string
@@ -484,7 +484,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestSyncutil", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -519,7 +519,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestSQLTelemetryDirectCount", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -551,7 +551,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestSQLTelemetryGetCounter", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -584,7 +584,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestCBOPanics", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -619,7 +619,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestInternalErrorCodes", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -649,7 +649,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestTodoStyle", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		// TODO(tamird): enforce presence of name.
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\sTODO\([^)]+\)[^:]`, "--", "*.go")
 		if err != nil {
@@ -674,7 +674,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestNonZeroOffsetInTests", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `hlc\.NewClock\([^)]+, 0\)`, "--", "*_test.go")
 		if err != nil {
 			t.Fatal(err)
@@ -698,7 +698,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestTimeutil", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -736,7 +736,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestContext", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -775,7 +775,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGrpc", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -812,7 +812,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestProtoClone", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -849,7 +849,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestTParallel", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -885,7 +885,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestProtoMarshal", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -924,7 +924,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestProtoUnmarshal", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -962,7 +962,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestProtoMessage", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -1005,7 +1005,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestYaml", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `\byaml\.Unmarshal\(`, "--", "*.go")
 		if err != nil {
 			t.Fatal(err)
@@ -1029,7 +1029,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestImportNames", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `^(import|\s+)(\w+ )?"database/sql"$`, "--", "*.go")
 		if err != nil {
 			t.Fatal(err)
@@ -1056,7 +1056,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestMisspell", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
 			t.Skip("PKG specified")
 		}
@@ -1100,7 +1100,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGofmtSimplify", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
 			t.Skip("PKG specified")
 		}
@@ -1140,7 +1140,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		if pkgSpecified {
 			t.Skip("PKG specified")
 		}
@@ -1186,7 +1186,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestAuthorTags", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-lE", "^// Author:")
 		if err != nil {
 			t.Fatal(err)
@@ -1216,7 +1216,7 @@ func TestLint(t *testing.T) {
 	}
 
 	t.Run("TestForbiddenImports", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 
 		// forbiddenImportPkg -> permittedReplacementPkg
 		forbiddenImports := map[string]string{
@@ -1383,7 +1383,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGolint", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgScope)
 		if err != nil {
 			t.Fatal(err)
@@ -1467,7 +1467,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVectorizedPanics", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -1511,7 +1511,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVectorizedAllocator", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -1553,7 +1553,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVectorizedAppendColumn", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -1590,7 +1590,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVectorizedTypeSchemaCopy", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
@@ -1624,7 +1624,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGCAssert", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		var buf strings.Builder
 		if err := gcassert.GCAssert(&buf, "../../col/coldata", "../../sql/colexec"); err != nil {
 			t.Fatal(err)
@@ -1636,7 +1636,7 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestTypesSlice", func(t *testing.T) {
-		t.Parallel()
+		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
 			"git",
