@@ -110,6 +110,29 @@ func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 	return false
 }
 
+// FindFunction returns the function properties and overload of the function
+// with the given name and argument types matching the given inputs.
+func FindFunction(
+	args ScalarListExpr, name string,
+) (props *tree.FunctionProperties, overload *tree.Overload, ok bool) {
+	props, overloads := builtins.GetBuiltinProperties(name)
+	for o := range overloads {
+		overload = &overloads[o]
+		matches := true
+		for i := 0; i < len(args); i++ {
+			typ := args[i].DataType()
+			if !overload.Types.MatchAt(typ, i) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return props, overload, true
+		}
+	}
+	return nil, nil, false
+}
+
 func findOverload(e opt.ScalarExpr, name string) (overload *tree.Overload, ok bool) {
 	_, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
