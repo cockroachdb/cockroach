@@ -35,7 +35,13 @@ func registerAcceptance(r *testRegistry) {
 		{name: "build-info", fn: runBuildInfo},
 		{name: "build-analyze", fn: runBuildAnalyze},
 		{name: "cli/node-status", fn: runCLINodeStatus},
-		{name: "decommission", fn: runDecommissionAcceptance},
+		{
+			name: "decommission", fn: runDecommissionAcceptance,
+			skip: `https://github.com/cockroachdb/cockroach/issues/50919
+https://github.com/cockroachdb/cockroach/issues/50861
+https://github.com/cockroachdb/cockroach/issues/50640
+https://github.com/cockroachdb/cockroach/issues/48676`,
+		},
 		{name: "cluster-init", fn: runClusterInit},
 		{name: "event-log", fn: runEventLog},
 		{name: "gossip/peerings", fn: runGossipPeerings},
