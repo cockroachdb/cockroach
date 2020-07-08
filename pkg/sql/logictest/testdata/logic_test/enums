@@ -3,12 +3,6 @@
 statement ok
 SET experimental_enable_enums=true;
 
-statement error pq: unimplemented: DROP TYPE
-DROP TYPE mytype
-
-statement error pq: unimplemented: DROP TYPE
-DROP TYPE IF EXISTS mytype
-
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -805,9 +799,11 @@ SELECT * from enum_ctas
 ----
 hi howdy {hello}
 
+statement ok
+DROP TABLE enum_ctas
+
 # Test basic CTAS in a transaction.
 statement ok
-DROP TABLE enum_ctas;
 BEGIN;
 CREATE TABLE enum_ctas AS TABLE enum_ctas_base
 

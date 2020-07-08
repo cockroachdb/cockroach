@@ -410,6 +410,11 @@ func (m *Manager) PublishMultiple(
 				if err != nil {
 					return err
 				}
+				// Due to details in #51417, it is possible for a user to request a
+				// descriptor which no longer exists. In that case, just return an error.
+				if descsToUpdate[id] == nil {
+					return sqlbase.ErrDescriptorNotFound
+				}
 
 				if expectedVersions[id] != descsToUpdate[id].GetVersion() {
 					// The version changed out from under us. Someone else must be

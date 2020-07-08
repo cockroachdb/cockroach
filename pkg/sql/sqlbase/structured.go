@@ -1355,6 +1355,8 @@ func (desc *TableDescriptor) GetAllReferencedTypeIDs(
 	for id := range ids {
 		result = append(result, id)
 	}
+	// Sort the output so that the order is deterministic.
+	sort.Sort(result)
 	return result, nil
 }
 
@@ -3910,7 +3912,9 @@ func (desc *Descriptor) Dropped() bool {
 	switch t := desc.Union.(type) {
 	case *Descriptor_Table:
 		return t.Table.Dropped()
-	case *Descriptor_Database, *Descriptor_Type, *Descriptor_Schema:
+	case *Descriptor_Type:
+		return t.Type.Dropped()
+	case *Descriptor_Database, *Descriptor_Schema:
 		return false
 	default:
 		debug.PrintStack()

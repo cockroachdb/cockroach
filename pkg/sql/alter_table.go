@@ -749,6 +749,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Add all newly created type back references.
+	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+		return err
+	}
+
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
