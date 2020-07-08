@@ -225,6 +225,11 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
+	// Remove any references to types that this view has.
+	if err := p.removeBackRefsFromAllTypesInTable(ctx, viewDesc); err != nil {
+		return cascadeDroppedViews, err
+	}
+
 	if err := p.initiateDropTable(ctx, viewDesc, queueJob, jobDesc, true /* drainName */); err != nil {
 		return cascadeDroppedViews, err
 	}
