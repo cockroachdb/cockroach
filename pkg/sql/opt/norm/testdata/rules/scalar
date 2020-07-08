@@ -136,7 +136,7 @@ project
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── COALESCE(i:2, NULL, NULL) [as=coalesce:7, outer=(2)]
+      └── COALESCE(i:2, CAST(NULL AS INT8), CAST(NULL AS INT8)) [as=coalesce:7, outer=(2)]
 
 norm expect=SimplifyCoalesce
 SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a

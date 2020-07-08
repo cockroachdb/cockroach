@@ -253,8 +253,13 @@ func (b *Builder) buildScalar(
 
 	case *tree.CoalesceExpr:
 		args := make(memo.ScalarListExpr, len(t.Exprs))
+		typ := t.ResolvedType()
 		for i := range args {
-			args[i] = b.buildScalar(t.TypedExprAt(i), inScope, nil, nil, colRefs)
+			// The type of the CoalesceExpr might be different than the inputs (e.g.
+			// when they are NULL). Force all inputs to be the same type, so that we
+			// build coalesce operator with the correct type.
+			expr := tree.ReType(t.TypedExprAt(i), typ)
+			args[i] = b.buildScalar(expr, inScope, nil, nil, colRefs)
 		}
 		out = b.factory.ConstructCoalesce(args)
 
