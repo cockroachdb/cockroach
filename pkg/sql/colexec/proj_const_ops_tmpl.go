@@ -231,18 +231,12 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var (
-		c   interface{}
-		err error
-	)
+	var c interface{}
 	// {{if _IS_CONST_LEFT}}
-	c, err = GetDatumToPhysicalFn(leftType)(constArg)
+	c = GetDatumToPhysicalFn(leftType)(constArg)
 	// {{else}}
-	c, err = GetDatumToPhysicalFn(rightType)(constArg)
+	c = GetDatumToPhysicalFn(rightType)(constArg)
 	// {{end}}
-	if err != nil {
-		return nil, err
-	}
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {

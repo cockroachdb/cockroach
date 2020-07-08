@@ -75,7 +75,6 @@ func GetInProjectionOperator(
 	negate bool,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
-	var err error
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -89,10 +88,7 @@ func GetInProjectionOperator(
 				outputIdx:    resultIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -104,7 +100,6 @@ func GetInProjectionOperator(
 func GetInOperator(
 	t *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (colexecbase.Operator, error) {
-	var err error
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -116,10 +111,7 @@ func GetInOperator(
 				colIdx:       colIdx,
 				negate:       negate,
 			}
-			obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(t, datumTuple)
-			if err != nil {
-				return nil, err
-			}
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -153,7 +145,7 @@ type projectInOp_TYPE struct {
 
 var _ colexecbase.Operator = &projectInOp_TYPE{}
 
-func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool) {
 	conv := GetDatumToPhysicalFn(t)
 	var result []_GOTYPE
 	hasNulls := false
@@ -161,15 +153,12 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, er
 		if d == tree.DNull {
 			hasNulls = true
 		} else {
-			convRaw, err := conv(d)
-			if err != nil {
-				return nil, false, err
-			}
+			convRaw := conv(d)
 			converted := convRaw.(_GOTYPE)
 			result = append(result, converted)
 		}
 	}
-	return result, hasNulls, nil
+	return result, hasNulls
 }
 
 func cmpIn_TYPE(

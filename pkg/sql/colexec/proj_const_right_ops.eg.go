@@ -49144,14 +49144,8 @@ func GetProjectionRConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var (
-		c   interface{}
-		err error
-	)
-	c, err = GetDatumToPhysicalFn(rightType)(constArg)
-	if err != nil {
-		return nil, err
-	}
+	var c interface{}
+	c = GetDatumToPhysicalFn(rightType)(constArg)
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
