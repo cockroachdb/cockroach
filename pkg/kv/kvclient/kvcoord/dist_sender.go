@@ -1944,12 +1944,11 @@ func (ds *DistSender) sendToReplicas(
 		// and bubble up a SendError, which will cause a cache eviction and a new
 		// descriptor lookup potentially unnecessarily.
 		ds.metrics.NextReplicaErrCount.Inc(1)
+		lastErr := err
+		if err == nil {
+			lastErr = br.Error.GoError()
+		}
 		for {
-			lastErr := err
-			if err == nil {
-				lastErr = br.Error.GoError()
-			}
-
 			if transport.IsExhausted() {
 				return nil, noMoreReplicasErr(ambiguousError, lastErr)
 			}
@@ -1968,6 +1967,8 @@ func (ds *DistSender) sendToReplicas(
 			curReplica = transport.NextReplica()
 			if _, ok := routing.entry.Desc.GetReplicaDescriptorByID(curReplica.ReplicaID); ok {
 				break
+			} else {
+				transport.SkipReplica()
 			}
 		}
 		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica.String())
