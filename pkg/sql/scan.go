@@ -85,8 +85,8 @@ type scanNode struct {
 
 	disableBatchLimits bool
 
-	// Should be set to true if sqlbase.ParallelScans is true.
-	parallelScansEnabled bool
+	// See exec.Factory.ConstructScan.
+	parallelize bool
 
 	// Is this a full scan of an index?
 	isFull bool
@@ -179,20 +179,6 @@ func (n *scanNode) disableBatchLimit() {
 	n.disableBatchLimits = true
 	n.hardLimit = 0
 	n.softLimit = 0
-}
-
-// canParallelize returns true if this scanNode can be parallelized at the
-// distSender level safely.
-func (n *scanNode) canParallelize() bool {
-	// We choose only to parallelize if we are certain that no more than
-	// ParallelScanResultThreshold results will be returned, to prevent potential
-	// memory blowup.
-	// We can't parallelize if we have a non-zero limit hint, since DistSender
-	// is limited to running limited batches serially.
-	return n.maxResults != 0 &&
-		n.maxResults < execinfra.ParallelScanResultThreshold &&
-		n.limitHint() == 0 &&
-		n.parallelScansEnabled
 }
 
 func (n *scanNode) limitHint() int64 {

@@ -1336,21 +1336,6 @@ render           ·             ·
 ·                table         a@p
 ·                spans         /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
 
-statement ok
-SET CLUSTER SETTING sql.parallel_scans.enabled = false
-
-query TTT
-EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
-----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         a@primary
-·     spans         /10-/10/# /20-/20/#
-
-statement ok
-SET CLUSTER SETTING sql.parallel_scans.enabled = true
-
 query TTT
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 ----

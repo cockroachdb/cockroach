@@ -35,12 +35,9 @@ import (
 type tableReader struct {
 	execinfra.ProcessorBase
 
-	spans     roachpb.Spans
-	limitHint int64
-
-	// maxResults is non-zero if there is a limit on the total number of rows
-	// that the tableReader will read.
-	maxResults uint64
+	spans       roachpb.Spans
+	limitHint   int64
+	parallelize bool
 
 	// See TableReaderSpec.MaxTimestampAgeNanos.
 	maxTimestampAge time.Duration
@@ -86,7 +83,7 @@ func newTableReader(
 	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
-	tr.maxResults = spec.MaxResults
+	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
@@ -157,7 +154,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
 
-	limitBatches := execinfra.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
+	limitBatches := !tr.parallelize
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
