@@ -196,6 +196,22 @@ var validationMap = []struct {
 			"Match":             {status: thisFieldReferencesNoObjects},
 		},
 	},
+	{
+		obj: TypeDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":             {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":               {status: iSolemnlySwearThisFieldIsValidated},
+			"Version":          {status: thisFieldReferencesNoObjects},
+			"ModificationTime": {status: thisFieldReferencesNoObjects},
+			"DrainingNames":    {status: thisFieldReferencesNoObjects},
+			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
+			"ParentSchemaID":   {status: iSolemnlySwearThisFieldIsValidated},
+			"Kind":             {status: thisFieldReferencesNoObjects},
+			"ArrayTypeID":      {status: iSolemnlySwearThisFieldIsValidated},
+			"EnumMembers":      {status: iSolemnlySwearThisFieldIsValidated},
+			"Alias":            {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
 }
 
 type validationStatusInfo struct {

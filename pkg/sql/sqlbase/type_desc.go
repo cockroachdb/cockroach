@@ -13,8 +13,10 @@ package sqlbase
 import (
 	"bytes"
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -186,6 +188,120 @@ func (desc *MutableTypeDescriptor) Immutable() DescriptorInterface {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*TypeDescriptor))
+}
+
+// EnumMembers is a sortable list of TypeDescriptor_EnumMember, sorted by the
+// physical representation.
+type EnumMembers []TypeDescriptor_EnumMember
+
+func (e EnumMembers) Len() int { return len(e) }
+func (e EnumMembers) Less(i, j int) bool {
+	return bytes.Compare(e[i].PhysicalRepresentation, e[j].PhysicalRepresentation) < 0
+}
+func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+
+// Validate performs validation on the TypeDescriptor.
+func (desc *TypeDescriptor) Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error {
+	// Validate local properties of the descriptor.
+	if err := validateName(desc.Name, "type"); err != nil {
+		return err
+	}
+
+	if desc.ID == InvalidID {
+		return errors.AssertionFailedf("invalid ID %d", errors.Safe(desc.ID))
+	}
+	if desc.ParentID == InvalidID {
+		return errors.AssertionFailedf("invalid parentID %d", errors.Safe(desc.ParentID))
+	}
+
+	switch desc.Kind {
+	case TypeDescriptor_ENUM:
+		// All of the enum members should be in sorted order.
+		if !sort.IsSorted(EnumMembers(desc.EnumMembers)) {
+			return errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers)
+		}
+		// Ensure there are no duplicate enum physical reps.
+		for i := 0; i < len(desc.EnumMembers)-1; i++ {
+			if bytes.Equal(desc.EnumMembers[i].PhysicalRepresentation, desc.EnumMembers[i+1].PhysicalRepresentation) {
+				return errors.AssertionFailedf("duplicate enum physical rep %v", desc.EnumMembers[i].PhysicalRepresentation)
+			}
+		}
+		// Ensure there are no duplicate enum labels.
+		members := make(map[string]struct{}, len(desc.EnumMembers))
+		for i := range desc.EnumMembers {
+			_, ok := members[desc.EnumMembers[i].LogicalRepresentation]
+			if ok {
+				return errors.AssertionFailedf("duplicate enum member %q", desc.EnumMembers[i].LogicalRepresentation)
+			}
+			members[desc.EnumMembers[i].LogicalRepresentation] = struct{}{}
+		}
+	case TypeDescriptor_ALIAS:
+		if desc.Alias == nil {
+			return errors.AssertionFailedf("ALIAS type desc has nil alias type")
+		}
+	default:
+		return errors.AssertionFailedf("invalid desc kind %s", desc.Kind.String())
+	}
+
+	// Validate all cross references on the descriptor.
+
+	// Buffer all the requested requests and error checks together to run at once.
+	b := txn.NewBatch()
+	var opChecks []func(kv.KeyValue) error
+
+	// Validate the parentID.
+	b.Get(MakeDescMetadataKey(codec, desc.ParentID))
+	opChecks = append(opChecks, func(k kv.KeyValue) error {
+		if !k.Exists() {
+			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+		}
+		return nil
+	})
+
+	// Validate the parentSchemaID.
+	if desc.ParentSchemaID != keys.PublicSchemaID {
+		b.Get(MakeDescMetadataKey(codec, desc.ParentSchemaID))
+		opChecks = append(opChecks, func(k kv.KeyValue) error {
+			if !k.Exists() {
+				return errors.AssertionFailedf("parentSchemaID %d does not exist", errors.Safe(desc.ParentSchemaID))
+			}
+			return nil
+		})
+	}
+
+	switch desc.Kind {
+	case TypeDescriptor_ENUM:
+		// Ensure that the referenced array type exists.
+		b.Get(MakeDescMetadataKey(codec, desc.ArrayTypeID))
+		opChecks = append(opChecks, func(k kv.KeyValue) error {
+			if !k.Exists() {
+				return errors.AssertionFailedf("arrayTypeID %d does not exist", errors.Safe(desc.ArrayTypeID))
+			}
+			return nil
+		})
+	case TypeDescriptor_ALIAS:
+		if desc.ArrayTypeID != InvalidID {
+			return errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.ArrayTypeID)
+		}
+	}
+
+	if err := txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	// For each result in the batch, apply the corresponding check.
+	for i := range opChecks {
+		check := opChecks[i]
+		res := b.Results[i]
+		if res.Err != nil {
+			return res.Err
+		}
+		if err := check(res.Rows[0]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // MakeTypesT creates a types.T from the input type descriptor.
