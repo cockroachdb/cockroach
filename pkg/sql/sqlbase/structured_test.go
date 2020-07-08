@@ -654,6 +654,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	pointer := func(s string) *string {
+		return &s
+	}
+
 	tests := []struct {
 		err        string
 		desc       TableDescriptor
@@ -831,6 +835,81 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					Name: "qux",
 				},
 			}},
+		},
+		{
+			err: `type ID 500 in descriptor not found: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				PrimaryIndex: IndexDescriptor{
+					ID:          1,
+					Name:        "bar",
+					ColumnIDs:   []ColumnID{1},
+					ColumnNames: []string{"a"},
+				},
+				Columns: []ColumnDescriptor{
+					{
+						Name: "a",
+						ID:   1,
+						Type: types.MakeEnum(500, 500),
+					},
+				},
+			},
+		},
+		// Add some expressions with invalid type references.
+		{
+			err: `type ID 500 in descriptor not found: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				PrimaryIndex: IndexDescriptor{
+					ID:          1,
+					Name:        "bar",
+					ColumnIDs:   []ColumnID{1},
+					ColumnNames: []string{"a"},
+				},
+				Columns: []ColumnDescriptor{
+					{
+						Name:        "a",
+						ID:          1,
+						Type:        types.Int,
+						DefaultExpr: pointer("a::@500"),
+					},
+				},
+			},
+		},
+		{
+			err: `type ID 500 in descriptor not found: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				PrimaryIndex: IndexDescriptor{
+					ID:          1,
+					Name:        "bar",
+					ColumnIDs:   []ColumnID{1},
+					ColumnNames: []string{"a"},
+				},
+				Columns: []ColumnDescriptor{
+					{
+						Name:        "a",
+						ID:          1,
+						Type:        types.Int,
+						ComputeExpr: pointer("a:::@500"),
+					},
+				},
+			},
+		},
+		{
+			err: `type ID 500 in descriptor not found: descriptor not found`,
+			desc: TableDescriptor{
+				ID:   51,
+				Name: "foo",
+				Checks: []*TableDescriptor_CheckConstraint{
+					{
+						Expr: "a::@500",
+					},
+				},
+			},
 		},
 	}
 

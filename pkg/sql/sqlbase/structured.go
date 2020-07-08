@@ -1291,7 +1291,7 @@ func (desc *TableDescriptor) GetAllReferencedTypeIDs(
 		if err != nil {
 			return err
 		}
-		expr.Walk(visitor)
+		tree.WalkExpr(visitor, expr)
 		return nil
 	}
 
@@ -1868,6 +1868,30 @@ func (desc *TableDescriptor) validateCrossReferences(
 		}
 	}
 	// TODO(dan): Also validate SharedPrefixLen in the interleaves.
+
+	// Validate the all types present in the descriptor exist.
+	typeMap := make(map[ID]*TypeDescriptor)
+	getType := func(id ID) (*TypeDescriptor, error) {
+		if typeDesc, ok := typeMap[id]; ok {
+			return typeDesc, nil
+		}
+		typeDesc, err := GetTypeDescFromID(ctx, txn, codec, id)
+		if err != nil {
+			return nil, errors.Wrapf(err, "type ID %d in descriptor not found", id)
+		}
+		typeMap[id] = typeDesc.TypeDesc()
+		return typeDesc.TypeDesc(), nil
+	}
+	typeIDs, err := desc.GetAllReferencedTypeIDs(getType)
+	if err != nil {
+		return err
+	}
+	for _, id := range typeIDs {
+		if _, err := getType(id); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
