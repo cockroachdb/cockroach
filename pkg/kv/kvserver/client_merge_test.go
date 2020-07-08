@@ -92,6 +92,7 @@ func createSplitRanges(
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -145,6 +146,7 @@ func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -221,6 +223,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, retries := range []int64{0, 3} {
 		t.Run(fmt.Sprintf("retries=%d", retries), func(t *testing.T) {
@@ -406,6 +409,7 @@ func mergeWithData(t *testing.T, retries int64) {
 // LHS is properly updated after a merge.
 func TestStoreRangeMergeTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "disjoint-leaseholders", mergeCheckingTimestampCaches)
 }
@@ -567,6 +571,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 // practice, but is subtle enough to warrant a test.
 func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
@@ -672,6 +677,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 // TestStoreRangeMergeLastRange verifies that merging the last range fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	mtc := multiTestContext{
@@ -693,6 +699,7 @@ func TestStoreRangeMergeLastRange(t *testing.T) {
 
 func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -784,6 +791,7 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 // the comment on the RangeDescriptor.Generation field.
 func TestStoreRangeSplitMergeGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "rhsHasHigherGen", func(t *testing.T, rhsHasHigherGen bool) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -870,6 +878,7 @@ func TestStoreRangeSplitMergeGeneration(t *testing.T) {
 // merged range has stats consistent with recomputations.
 func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -968,6 +977,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -1187,6 +1197,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 // ten seconds of stress on an eight core laptop).
 func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -1269,6 +1280,7 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 // local descriptor is updated while the merge transaction is executing.
 func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -1322,6 +1334,7 @@ func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 // does not incorrectly serve traffic before the merge completes.
 func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -1517,6 +1530,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 // other traffic concurrently.
 func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/50795")
@@ -1663,6 +1677,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 // TestReplicaGCRace.
 func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -1805,6 +1820,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 // changed" CPut error.
 func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -1857,6 +1873,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 // always increment the generation counter.
 func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -1884,6 +1901,7 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 
 func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -1945,6 +1963,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 
 func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -2011,6 +2030,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 
 func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -2094,6 +2114,7 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 
 func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -2198,6 +2219,7 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 // had already been garbage collected.
 func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -2266,6 +2288,7 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 
 func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var mtc *multiTestContext
@@ -2295,6 +2318,7 @@ func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 
 func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var mtc *multiTestContext
@@ -2328,6 +2352,7 @@ func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
 
 func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	run := func(t *testing.T, withMerge bool) {
 		ctx := context.Background()
@@ -2469,6 +2494,7 @@ func (h *slowSnapRaftHandler) HandleSnapshot(
 // range can be GC'd.
 func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -2604,6 +2630,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 // RHS does not erroneously permit traffic after the merge commits.
 func TestStoreRangeMergeWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "inject-failures", testMergeWatcher)
 }
@@ -2740,6 +2767,7 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 // descriptor for the merged range ABC is stored at /Meta2/Max, not /Meta2/c.
 func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	aKey, bKey, cKey := roachpb.RKey("a"), roachpb.RKey("b"), roachpb.RKey("c")
@@ -2873,6 +2901,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We will be testing the SSTs written on store2's engine.
 	var receivingEng, sendingEng storage.Engine
@@ -3168,6 +3197,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 // a fatal error (#27552).
 func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
@@ -3256,6 +3286,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	manualClock := hlc.NewManualClock(123)
@@ -3461,6 +3492,7 @@ func TestMergeQueue(t *testing.T) {
 
 func TestInvalidSubsumeRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var mtc multiTestContext

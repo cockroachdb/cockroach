@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -30,6 +31,7 @@ import (
 // ChangeReplicas triggers.
 func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "add replica", func(t *testing.T, add bool) {
 		testutils.RunTrueAndFalse(t, "deprecated", func(t *testing.T, deprecated bool) {
 			tc := testContext{}

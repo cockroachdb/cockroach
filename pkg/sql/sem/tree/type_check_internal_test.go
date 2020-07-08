@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func BenchmarkTypeCheck(b *testing.B) {
@@ -47,6 +48,7 @@ func BenchmarkTypeCheck(b *testing.B) {
 
 func TestTypeCheckNormalize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		expr     string
 		expected string
@@ -205,6 +207,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 
 func TestTypeCheckSameTypedExprs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for i, d := range []sameTypedExprsTestCase{
 		// Constants.
 		{nil, nil, exprs(intConst("1")), types.Int, nil},
@@ -267,6 +270,7 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 
 func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for i, d := range []sameTypedExprsTestCase{
 		// // Constants.
 		{nil, nil, exprs(tuple(intConst("1"))), ttuple(types.Int), nil},
@@ -302,6 +306,7 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 
 func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	decimalIntMismatchErr := `expected .* to be of type (decimal|int), found type (decimal|int)`
 	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
@@ -354,6 +359,7 @@ func annot(p *tree.Placeholder, typ *types.T) tree.Expr {
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	intType := types.Int
 	boolType := types.Bool
 	semaCtx := tree.MakeSemaContext()
@@ -533,6 +539,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	intType := types.Int
 	floatType := types.Float
 	semaCtx := tree.MakeSemaContext()

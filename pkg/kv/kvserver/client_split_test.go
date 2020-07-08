@@ -76,6 +76,7 @@ func adminSplitArgs(splitKey roachpb.Key) *roachpb.AdminSplitRequest {
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -104,6 +105,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // into the right hand side of the split.
 func TestStoreSplitAbortSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	manualClock := hlc.NewManualClock(2400 * time.Hour.Nanoseconds())
 	clock := hlc.NewClock(manualClock.UnixNano, time.Millisecond)
@@ -237,6 +239,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 // UserTableDataMin and still gossip the SystemConfig properly.
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -293,6 +296,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 // a table row will cause a split at a boundary between rows.
 func TestStoreRangeSplitInsideRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -353,6 +357,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 // that all intents are cleared and the transaction record cleaned up.
 func TestStoreRangeSplitIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -425,6 +430,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 // at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -472,6 +478,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // truncations don't cause any Raft snapshots in this test.
 func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	const numNodes = 3
@@ -533,6 +540,7 @@ SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
 // can't be replayed.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -692,6 +700,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	manual := hlc.NewManualClock(123)
 	storeCfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
@@ -819,6 +828,7 @@ func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
 // accordingly.
 func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -893,6 +903,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 // requests' impact on MVCCStats are only estimated. See updateStatsOnMerge.
 func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	manual := hlc.NewManualClock(123)
 	storeCfg := kvserver.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
@@ -1005,6 +1016,7 @@ func fillRange(
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
@@ -1065,6 +1077,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // split.
 func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
@@ -1108,6 +1121,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 // backpressure threshold.
 func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Backpressured writes react differently depending on whether there is an
 	// ongoing split or not. If there is an ongoing split then the writes wait
@@ -1270,6 +1284,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 // the system.descriptor table.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	// Intentionally leave the merge queue enabled. This indirectly tests that the
@@ -1525,6 +1540,7 @@ func runSetupSplitSnapshotRace(
 // the more common outcome in practice.
 func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
 		// Bring the left range up first so that the split happens before it sees a snapshot.
 		for i := 1; i <= 3; i++ {
@@ -1557,6 +1573,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 // split, so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
@@ -1609,6 +1626,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 // for writes which invalidated reads previously served by the pre-split lease.
 func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -1768,6 +1786,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 // before each iteration.
 func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("b")
@@ -1876,6 +1895,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 
 func TestStoreSplitGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -1932,6 +1952,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 // and the uninitialized replica reacting to messages.
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/50809")
@@ -2067,6 +2088,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 // elects a leader without waiting for an election timeout.
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeConfig := kvserver.TestStoreConfig(nil)
 	storeConfig.TestingKnobs.DisableMergeQueue = true
 	storeConfig.RaftElectionTimeoutTicks = 1000000
@@ -2193,6 +2215,7 @@ func writeRandomTimeSeriesDataToRange(
 // split range doesn't exceed GossipWhenCapacityDeltaExceedsFraction.
 func TestStoreRangeGossipOnSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.GossipWhenCapacityDeltaExceedsFraction = 0.5 // 50% for testing
 	// We can't properly test how frequently changes in the number of ranges
@@ -2276,6 +2299,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 // the right hand side of the split range is enabled after a split.
 func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -2299,6 +2323,7 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 // cleanup their txn records after commit or abort.
 func TestDistributedTxnCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -2400,6 +2425,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 // 5. makes sure a purgatory run succeeds and the range leaves purgatory
 func TestUnsplittableRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	ttl := 1 * time.Hour
@@ -2486,6 +2512,7 @@ func TestUnsplittableRange(t *testing.T) {
 // relocate to the appropriate new range.
 func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "read2ndPass", func(t *testing.T, read2ndPass bool) {
 		var pushCount int32
@@ -2596,6 +2623,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 
 func TestStoreCapacityAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	manualClock := hlc.NewManualClock(123)
@@ -2709,6 +2737,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 // includes an initial forward scan).
 func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -2779,6 +2808,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 // that spans multiple ranges to completely miss its desired descriptor.
 func TestStoreSplitRangeLookupRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The scenario is modeled after:
 	// https://github.com/cockroachdb/cockroach/issues/19147#issuecomment-336741791
@@ -2919,6 +2949,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 // #17760.
 func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	blockPushTxn := make(chan struct{})
 	defer close(blockPushTxn)
@@ -3004,6 +3035,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 // the splits. See #29144.
 func TestStoreSplitDisappearingReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, stopper)
@@ -3054,6 +3086,7 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 // be tolerated.
 func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	blockPromoteCh := make(chan struct{})
@@ -3205,6 +3238,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 // the split.
 func TestSplitBlocksReadsToRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	keyLHS, keySplit, keyRHS := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 	splitBlocked := make(chan struct{})

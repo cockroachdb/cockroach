@@ -16,10 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestReplicaGCShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ts := func(t time.Duration) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: t.Nanoseconds()}

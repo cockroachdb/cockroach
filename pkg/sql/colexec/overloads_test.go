@@ -18,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIntegerAddition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The addition overload is the same for all integer widths, so we only test
 	// one of them.
 	require.True(t, errors.Is(colexecerror.CatchVectorizedRuntimeError(func() { performPlusInt64Int64(1, math.MaxInt64) }), tree.ErrIntOutOfRange))
@@ -44,6 +46,7 @@ func TestIntegerAddition(t *testing.T) {
 
 func TestIntegerSubtraction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The subtraction overload is the same for all integer widths, so we only
 	// test one of them.
 	require.True(t, errors.Is(colexecerror.CatchVectorizedRuntimeError(func() { performMinusInt64Int64(1, -math.MaxInt64) }), tree.ErrIntOutOfRange))
@@ -64,6 +67,7 @@ func TestIntegerSubtraction(t *testing.T) {
 
 func TestIntegerDivision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	d := &apd.Decimal{}
 	var res apd.Decimal
 
@@ -92,6 +96,7 @@ func TestIntegerDivision(t *testing.T) {
 
 func TestIntegerMultiplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	require.Equal(t, 100*(int64(math.MaxInt16)-1), performMultInt16Int16(math.MaxInt16-1, 100))
 	require.Equal(t, 3*(int64(math.MaxInt16)-1), performMultInt16Int16(math.MaxInt16-1, 3))
 	require.Equal(t, 3*(int64(math.MinInt16)+1), performMultInt16Int16(math.MinInt16+1, 3))
@@ -126,6 +131,7 @@ func TestIntegerMultiplication(t *testing.T) {
 
 func TestMixedTypeInteger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	require.Equal(t, int64(22), performPlusInt16Int32(10, 12))
 	require.Equal(t, int64(-22), performPlusInt16Int64(-10, -12))
 	require.Equal(t, int64(2), performPlusInt64Int32(-10, 12))
@@ -156,6 +162,7 @@ func TestMixedTypeInteger(t *testing.T) {
 
 func TestDecimalDivByZero(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	nonZeroDec, zeroDec := apd.Decimal{}, apd.Decimal{}
 	nonZeroDec.SetInt64(4)
 	zeroDec.SetInt64(0)
@@ -173,6 +180,7 @@ func TestDecimalDivByZero(t *testing.T) {
 
 func TestDecimalComparison(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	d := apd.Decimal{}
 	if _, err := d.SetFloat64(1.234); err != nil {
 		t.Error(err)
@@ -198,6 +206,7 @@ func TestDecimalComparison(t *testing.T) {
 
 func TestFloatComparison(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	f := 1.234
 	d := apd.Decimal{}
 	if _, err := d.SetFloat64(f); err != nil {
@@ -224,6 +233,7 @@ func TestFloatComparison(t *testing.T) {
 
 func TestIntComparison(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	i := int64(2)
 	d := apd.Decimal{}
 	if _, err := d.SetFloat64(1.234); err != nil {

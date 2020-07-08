@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,7 @@ import (
 
 func TestCleanupSchemaObjects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -140,6 +142,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 
 func TestTemporaryObjectCleaner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	numNodes := 3
 	ch := make(chan time.Time)
@@ -221,6 +224,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 // succeed.
 func TestTemporarySchemaDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	numNodes := 3
 	tc := serverutils.StartTestCluster(

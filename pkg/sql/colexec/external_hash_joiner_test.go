@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
@@ -34,6 +35,7 @@ import (
 
 func TestExternalHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -62,7 +64,8 @@ func TestExternalHashJoiner(t *testing.T) {
 		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
 				delegateFDAcquisitions := rng.Float64() < 0.5
-				t.Run(fmt.Sprintf("spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions), func(t *testing.T) {
+				func(t *testing.T) {
+					t.Logf("spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions)
 					var semsToCheck []semaphore.Semaphore
 					if !tc.onExpr.Empty() {
 						// When we have ON expression, there might be other operators (like
@@ -100,7 +103,7 @@ func TestExternalHashJoiner(t *testing.T) {
 					for i, sem := range semsToCheck {
 						require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 					}
-				})
+				}(t)
 			}
 		}
 	}
@@ -118,6 +121,7 @@ func TestExternalHashJoiner(t *testing.T) {
 // the same tuple many times.
 func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

@@ -67,6 +67,7 @@ import (
 // complaining that the stmtBuf has an unexpected entry in it.
 func TestConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The test server is used only incidentally by this test: this is not the
 	// server that the client will connect to; we just use it on the side to
@@ -651,6 +652,7 @@ var _ pgx.Logger = pgxTestLogger{}
 // and release their locks.
 func TestConnCloseReleasesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// We're going to test closing the connection in both the Open and Aborted
 	// state.
 	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
@@ -722,6 +724,7 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 // network errors.
 func TestConnCloseWhileProducingRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -783,6 +786,7 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 // a v3Conn don't crash the server.
 func TestMaliciousInputs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -865,6 +869,7 @@ func TestMaliciousInputs(t *testing.T) {
 // and exits with an appropriate error when exit conditions are satisfied.
 func TestReadTimeoutConnExits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Cannot use net.Pipe because deadlines are not supported.
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	if err != nil {
@@ -931,6 +936,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 
 func TestConnResultsBufferSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1002,6 +1008,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 // connection closing.
 func TestConnCloseCancelsAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	authBlocked := make(chan struct{})
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{

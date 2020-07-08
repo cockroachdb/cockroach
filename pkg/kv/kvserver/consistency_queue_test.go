@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -43,6 +44,8 @@ import (
 // process ranges whose replicas are not all live.
 func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	manualClock := hlc.NewManualClock(timeutil.Now().UnixNano())
 	clock := hlc.NewClock(manualClock.UnixNano, 10)
 	interval := time.Second * 5
@@ -88,6 +91,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 // consistency check is run.
 func TestCheckConsistencyMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
@@ -135,6 +139,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 // retries the request.
 func TestCheckConsistencyReplay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type applyKey struct {
 		checksumID uuid.UUID
@@ -219,6 +224,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numStores = 3
 	testKnobs := kvserver.StoreTestingKnobs{
@@ -458,6 +464,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 // The upreplication here is immaterial and serves only to add realism to the test.
 func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "hadEstimates", testConsistencyQueueRecomputeStatsImpl)
 }
 

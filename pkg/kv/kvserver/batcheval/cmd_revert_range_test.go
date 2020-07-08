@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
@@ -73,6 +74,7 @@ var engineImpls = []struct {
 
 func TestCmdRevertRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	startKey := roachpb.Key("0000")
 	endKey := roachpb.Key("9999")

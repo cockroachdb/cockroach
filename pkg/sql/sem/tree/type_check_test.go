@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // The following tests need both the type checking infrastructure and also
@@ -28,6 +29,7 @@ import (
 
 func TestTypeCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	typeMap := map[string]*types.T{
 		"d.t1":   types.Int,
@@ -217,6 +219,7 @@ func TestTypeCheck(t *testing.T) {
 
 func TestTypeCheckError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	typeMap := map[string]*types.T{
 		"d.t1":   types.Int,

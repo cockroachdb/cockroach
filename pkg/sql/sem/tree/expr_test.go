@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 // TestUnresolvedNameString tests the string representation of tree.UnresolvedName and thus tree.Name.
 func TestUnresolvedNameString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out string
 	}{
@@ -58,6 +60,7 @@ func TestUnresolvedNameString(t *testing.T) {
 // TestCastFromNull checks every type can be cast from NULL.
 func TestCastFromNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		castExpr := tree.CastExpr{Expr: tree.DNull, Type: typ}
 		res, err := castExpr.Eval(nil)
@@ -70,6 +73,7 @@ func TestCastFromNull(t *testing.T) {
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer tree.MockNameTypes(map[string]*types.T{
 		"a": types.Bool,
 		"b": types.Bool,
@@ -158,6 +162,7 @@ func TestExprString(t *testing.T) {
 
 func TestStripParens(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testExprs := []struct {
 		in, out string
 	}{

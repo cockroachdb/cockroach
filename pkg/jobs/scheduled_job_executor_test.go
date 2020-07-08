@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,6 +46,7 @@ func newStatusTrackingExecutor() *statusTrackingExecutor {
 
 func TestNotifyJobTerminationExpectsTerminalState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, s := range []Status{
 		StatusPending, StatusRunning, StatusPaused, StatusReverting,
@@ -60,6 +62,7 @@ func TestNotifyJobTerminationExpectsTerminalState(t *testing.T) {
 
 func TestScheduledJobExecutorRegistration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const executorName = "test-executor"
 	instance := newStatusTrackingExecutor()
@@ -72,6 +75,7 @@ func TestScheduledJobExecutorRegistration(t *testing.T) {
 
 func TestJobTerminationNotification(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 

@@ -23,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -75,6 +77,7 @@ func TestInitInsecure(t *testing.T) {
 
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	// In addition to the usual initCLIDefaults, we need to reset
@@ -127,6 +130,7 @@ func TestStartArgChecking(t *testing.T) {
 
 func TestGCProfiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, err := ioutil.TempDir("", "TestGCProfile.")
 	if err != nil {
@@ -173,6 +177,7 @@ func TestGCProfiles(t *testing.T) {
 
 func TestAddrWithDefaultHost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testData := []struct {
 		inAddr  string

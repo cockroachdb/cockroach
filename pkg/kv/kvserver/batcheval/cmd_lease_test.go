@@ -33,6 +33,7 @@ import (
 // after table creation with high probability.
 func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -109,6 +110,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 
 func TestLeaseCommandLearnerReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	const voterStoreID, learnerStoreID roachpb.StoreID = 1, 2

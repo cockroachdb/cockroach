@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSimpleProjectOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tcs := []struct {
 		tuples     tuples
 		expected   tuples
@@ -94,6 +96,7 @@ func TestSimpleProjectOp(t *testing.T) {
 // batches. See #45686 for detailed discussion.
 func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	inputTypes := []*types.T{types.Bytes, types.Float}
 	constVal := int64(42)
 	var wg sync.WaitGroup

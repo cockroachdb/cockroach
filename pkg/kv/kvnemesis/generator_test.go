@@ -63,6 +63,7 @@ func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 // types.
 func TestRandStep(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const minEachType = 5
 	config := newAllOperationsConfig()

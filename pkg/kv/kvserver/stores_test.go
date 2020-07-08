@@ -36,6 +36,7 @@ func newStores(ambientCtx log.AmbientContext, clock *hlc.Clock) *Stores {
 
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	store := Store{
 		Ident: &roachpb.StoreIdent{StoreID: 123},
@@ -51,6 +52,7 @@ func TestStoresAddStore(t *testing.T) {
 
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 
 	storeID := roachpb.StoreID(89)
@@ -66,6 +68,7 @@ func TestStoresRemoveStore(t *testing.T) {
 
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
@@ -82,6 +85,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
@@ -110,6 +114,7 @@ func TestStoresVisitStores(t *testing.T) {
 
 func TestStoresGetReplicaForRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -185,6 +190,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	store := Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
@@ -232,6 +238,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 // TestStoresGossipStorage verifies reading and writing of bootstrap info.
 func TestStoresGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop(context.Background())
 	ls.AddStore(stores[0])
@@ -281,6 +288,7 @@ func TestStoresGossipStorage(t *testing.T) {
 // bootstrap info from multiple stores is returned on Read.
 func TestStoresGossipStorageReadLatest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	manual, stores, ls, stopper := createStores(2, t)
 	defer stopper.Stop(context.Background())
 	ls.AddStore(stores[0])
@@ -334,6 +342,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 // written to all stores and that missing versions are filled in appropriately.
 func TestClusterVersionWriteSynthesize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	_, stores, _, stopper := createStores(3, t)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -464,6 +473,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 // running binary.
 func TestStoresClusterVersionIncompatible(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 

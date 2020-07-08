@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
@@ -39,6 +40,7 @@ func makeMockTxnCommitter() (txnCommitter, *mockLockedSender) {
 // other requests and the case where it is alone in its batch.
 func TestTxnCommitterElideEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc, mockSender := makeMockTxnCommitter()
 	defer tc.stopper.Stop(ctx)
@@ -101,6 +103,7 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 // transaction key to committing and aborting EndTxn requests.
 func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc, mockSender := makeMockTxnCommitter()
 	defer tc.stopper.Stop(ctx)
@@ -159,6 +162,7 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 // writes attached to the EndTxn request when a parallel commit is desired.
 func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, mockSender := makeMockTxnCommitter()
@@ -331,6 +335,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 // it launches an async task to make the transaction commit explicit.
 func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc, mockSender := makeMockTxnCommitter()
 	defer tc.stopper.Stop(ctx)
@@ -407,6 +412,7 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 // to a timestamp above the staging timestamp.
 func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	testutils.RunTrueAndFalse(t, "WriteTooOld", func(t *testing.T, writeTooOld bool) {
 		tc, mockSender := makeMockTxnCommitter()
@@ -465,6 +471,7 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 // about why this is necessary.
 func TestTxnCommitterNoParallelCommitsOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc, mockSender := makeMockTxnCommitter()
 	defer tc.stopper.Stop(ctx)

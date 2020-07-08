@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func assertStmt(t *testing.T, cmd Command, exp string) {
@@ -51,6 +52,7 @@ func mustPush(ctx context.Context, t *testing.T, buf *StmtBuf, cmd Command) {
 
 func TestStmtBuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s1, err := parser.ParseOne("SELECT 1")
@@ -139,6 +141,7 @@ func TestStmtBuf(t *testing.T) {
 // statement arrives.
 func TestStmtBufSignal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	buf := NewStmtBuf()
@@ -163,6 +166,7 @@ func TestStmtBufSignal(t *testing.T) {
 
 func TestStmtBufLtrim(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	buf := NewStmtBuf()
@@ -191,6 +195,7 @@ func TestStmtBufLtrim(t *testing.T) {
 // there were commands queued up.
 func TestStmtBufClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	buf := NewStmtBuf()
@@ -210,6 +215,7 @@ func TestStmtBufClose(t *testing.T) {
 // Test that a call to Close() unblocks a CurCmd() call.
 func TestStmtBufCloseUnblocksReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
 
@@ -227,6 +233,7 @@ func TestStmtBufCloseUnblocksReader(t *testing.T) {
 // with ExecStmt.
 func TestStmtBufPreparedStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
 	ctx := context.Background()
@@ -270,6 +277,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 
 func TestStmtBufBatching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
 	ctx := context.Background()

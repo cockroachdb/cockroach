@@ -47,6 +47,7 @@ import (
 // protocol command.
 func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	buf, syncResults, finished, stopper, err := startConnExecutor(ctx)

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/assert"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -45,6 +46,7 @@ func (td *testMsgAppDropper) ShouldDrop(startKey roachpb.RKey) (fmt.Stringer, bo
 
 func TestMaybeDropMsgApp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := map[testMsgAppDropper]bool{
 		// Already load'ed.
@@ -84,6 +86,7 @@ func TestMaybeDropMsgApp(t *testing.T) {
 // nil byte slices correctly.
 func TestProtoZeroNilSlice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "isNil", func(t *testing.T, isNil bool) {
 		msg := &RaftMessageRequest{}

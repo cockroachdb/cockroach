@@ -45,6 +45,7 @@ import (
 // plan; planning will be performed outside of the transaction.
 func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -181,6 +182,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 // come along.
 func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test goes through the trouble of creating a server because it wants to
 	// create a txn. It creates the txn because it wants to test an interaction

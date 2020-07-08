@@ -1265,6 +1265,7 @@ func Example_sql_table() {
 
 func TestRenderHTML(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cols := []string{"colname"}
 	align := "d"
@@ -1393,6 +1394,7 @@ func Example_cert() {
 // help template does not break.
 func TestFlagUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	expUsage := `Usage:
   cockroach [command]
@@ -1520,7 +1522,7 @@ func Example_node() {
 func TestCLITimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{})
+	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
 	// Wrap the meat of the test in a retry loop. Setting a timeout like this is
@@ -1794,6 +1796,7 @@ func extractFields(line string) ([]string, error) {
 
 func TestGenMan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Generate man pages in a temp directory.
 	manpath, err := ioutil.TempDir("", "TestGenMan")
@@ -1827,6 +1830,7 @@ func TestGenMan(t *testing.T) {
 
 func TestGenAutocomplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Get a unique path to which we can write our autocomplete files.
 	acdir, err := ioutil.TempDir("", "TestGenAutoComplete")

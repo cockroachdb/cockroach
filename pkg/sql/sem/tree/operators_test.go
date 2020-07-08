@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +36,7 @@ import (
 // ) TO STDOUT WITH CSV DELIMITER '|' HEADER;
 func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	csvPath := filepath.Join("testdata", "pg_operator_provolatile_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)

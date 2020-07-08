@@ -776,6 +776,7 @@ func hadJobInOldVersion(schemaChangeType SchemaChangeType) bool {
 
 func TestMigrateSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 
 	blockStates := []BlockState{
@@ -861,6 +862,7 @@ func TestMigrateSchemaChanges(t *testing.T) {
 // running job has a GC job created for it.
 func TestGCJobCreated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
@@ -913,6 +915,7 @@ func TestGCJobCreated(t *testing.T) {
 // error. Regression test for #48786.
 func TestMissingMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 	schemaChangeBlocked, descriptorUpdated := make(chan struct{}), make(chan struct{})
 	migratedJob := false

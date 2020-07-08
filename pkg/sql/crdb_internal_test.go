@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lib/pq"
@@ -47,6 +48,7 @@ import (
 // entries.
 func TestGetAllNamesInternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -74,6 +76,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 // is in the replicas column
 func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -125,6 +128,7 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 
 func TestGossipAlertsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -163,6 +167,7 @@ func TestGossipAlertsTable(t *testing.T) {
 // shows up properly in metadata post-2.1.
 func TestOldBitColumnMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
@@ -300,6 +305,7 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 
 func TestClusterQueriesTxnData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -377,6 +383,7 @@ WHERE
 // crdb_internal.jobs.
 func TestCrdbInternalJobsOOM(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The budget needs to be large enough to establish the initial database
 	// connection, but small enough to overflow easily. It's set to be comfortably

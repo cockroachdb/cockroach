@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -98,6 +99,7 @@ func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -228,6 +230,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 // Test that an empty, dropped database's zone config gets deleted immediately.
 func TestDropDatabaseEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -271,6 +274,7 @@ CREATE DATABASE t;
 // Test that a dropped database's data gets deleted properly.
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
@@ -446,6 +450,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 // during the time the underlying tables are still being deleted.
 func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	// Turn off the application of schema changes so that tables do not
 	// get completely dropped.
@@ -489,6 +494,7 @@ SHOW TABLES;
 
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const chunkSize = 200
 	params, _ := tests.CreateTestServerParams()
 	emptySpan := true
@@ -601,6 +607,7 @@ func TestDropIndex(t *testing.T) {
 
 func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const chunkSize = 200
 	const numRows = 2*chunkSize + 1
@@ -664,6 +671,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 
 func TestDropIndexInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const chunkSize = 200
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -698,6 +706,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 // via the synchronous path.
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -784,6 +793,7 @@ func TestDropTable(t *testing.T) {
 // Test that after a DROP TABLE the table eventually gets deleted.
 func TestDropTableDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
@@ -937,6 +947,7 @@ func writeTableDesc(
 // true in general.
 func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
@@ -1005,6 +1016,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 // another table.
 func TestDropTableInterleavedDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
@@ -1045,6 +1057,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 
 func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1083,6 +1096,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 // recycle.
 func TestDropDatabaseAfterDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Disable schema change execution so that the dropped table name
 	// doesn't get recycled.
 	params, _ := tests.CreateTestServerParams()
@@ -1129,6 +1143,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = "test"
 	s, db, _ := serverutils.StartServer(t, params)
@@ -1153,6 +1168,7 @@ func TestDropAndCreateTable(t *testing.T) {
 
 func TestDropAndCreateDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
@@ -1170,6 +1186,7 @@ func TestDropAndCreateDatabase(t *testing.T) {
 // Test commands while a table is being dropped.
 func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	// Block schema changers so that the table we're about to DROP is not
@@ -1227,6 +1244,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 // exist?
 func TestDropNameReuse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -1273,6 +1291,7 @@ CREATE VIEW test.acol(a) AS SELECT a FROM test.t;
 // treated as assertion failures.
 func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	rf := newDynamicRequestFilter()

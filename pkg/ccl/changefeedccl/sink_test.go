@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -50,6 +51,7 @@ func (p asyncProducerMock) Close() error {
 
 func TestKafkaSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	table := func(name string) *sqlbase.TableDescriptor {
 		return &sqlbase.TableDescriptor{Name: name}
@@ -139,6 +141,7 @@ func TestKafkaSink(t *testing.T) {
 
 func TestKafkaSinkEscaping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	table := func(name string) *sqlbase.TableDescriptor {
 		return &sqlbase.TableDescriptor{Name: name}
@@ -177,6 +180,7 @@ func (testEncoder) EncodeResolvedTimestamp(
 
 func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	table := func(name string) *sqlbase.TableDescriptor {
 		return &sqlbase.TableDescriptor{Name: name}

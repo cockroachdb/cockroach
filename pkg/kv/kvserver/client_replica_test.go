@@ -64,6 +64,7 @@ import (
 // in the future.
 func TestRangeCommandClockUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numNodes = 3
 	var manuals []*hlc.ManualClock
@@ -124,6 +125,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 // would cause a large time jump.
 func TestRejectFutureCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, 100*time.Millisecond)
@@ -202,6 +204,7 @@ func TestRejectFutureCommand(t *testing.T) {
 //    again at a new epoch timestamp T+200, which will finally succeed.
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// key is selected to fall within the meta range in order for the later
 	// routing of requests to range 1 to work properly. Removing the routing
@@ -372,6 +375,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -722,6 +726,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 
 func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	l := setupLeaseTransferTest(t)
 	defer l.mtc.Stop()
@@ -784,6 +789,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 // extension is done).
 func TestLeaseExpirationBasedRangeTransferWithExtension(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	l := setupLeaseTransferTest(t)
 	defer l.mtc.Stop()
@@ -836,6 +842,7 @@ func TestLeaseExpirationBasedRangeTransferWithExtension(t *testing.T) {
 // range leases owned by its replicas.
 func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	l := setupLeaseTransferTest(t)
 	defer l.mtc.Stop()
@@ -867,6 +874,7 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 // complete before transferring away the new lease.
 func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	l := setupLeaseTransferTest(t)
 	defer l.mtc.Stop()
@@ -918,6 +926,7 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 // clock time.
 func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cfg := kvserver.TestStoreConfig(nil)
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
@@ -989,6 +998,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 // and one failing lease transfer.
 func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var injectLeaseTransferError atomic.Value
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableSplitQueue = true
@@ -1098,6 +1108,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 // See replica.mu.minLeaseProposedTS for the reasons why this isn't allowed.
 func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -1176,6 +1187,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // range, and thus don't conflict through the command queue with other reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	readBlocked := make(chan struct{})
 	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
@@ -1300,6 +1312,7 @@ func LeaseInfo(
 
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -1417,6 +1430,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 // swallowed.
 func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
 			return roachpb.NewErrorf("injected error")
@@ -1456,6 +1470,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 
 func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.Clock = nil // manual clock
@@ -1642,6 +1657,7 @@ func TestRangeInfo(t *testing.T) {
 // draining store fails.
 func TestDrainRangeRejection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -1665,6 +1681,7 @@ func TestDrainRangeRejection(t *testing.T) {
 
 func TestChangeReplicasGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
@@ -1700,6 +1717,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 func TestSystemZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test is relatively slow and resource intensive. When run under
 	// stressrace on a loaded machine (as in the nightly tests), sometimes the
@@ -1815,6 +1833,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 
 func TestClearRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -1889,6 +1908,7 @@ func TestClearRange(t *testing.T) {
 // make sure to apply the lease-related side-effects to its in-memory state.
 func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	sc := kvserver.TestStoreConfig(nil)
@@ -2025,6 +2045,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 // change replicas for a range race, only one will succeed.
 func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// With 5 nodes the test is set up to have 2 actors trying to change the
 	// replication concurrently. The first one attempts to change the replication
 	// from [1] to [1, 2, 3, 4] and the second one starts by assuming that the
@@ -2104,6 +2125,7 @@ func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
 // and verifies that at most one actor succeeds in making all of its changes.
 func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numNodes = 6
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -2188,6 +2210,7 @@ func TestReplicaTombstone(t *testing.T) {
 
 	t.Run("(1) ChangeReplicasTrigger", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
@@ -2224,6 +2247,7 @@ func TestReplicaTombstone(t *testing.T) {
 	})
 	t.Run("(2) ReplicaTooOldError", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
@@ -2291,6 +2315,7 @@ func TestReplicaTombstone(t *testing.T) {
 	})
 	t.Run("(3) ReplicaGCQueue", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
@@ -2327,6 +2352,7 @@ func TestReplicaTombstone(t *testing.T) {
 	// This case also detects the tombstone for nodes which processed the merge.
 	t.Run("(3.1) (5) replica GC queue and merge", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
@@ -2376,6 +2402,7 @@ func TestReplicaTombstone(t *testing.T) {
 	})
 	t.Run("(4) (4.1) raft messages to newer replicaID ", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
@@ -2489,6 +2516,7 @@ func TestReplicaTombstone(t *testing.T) {
 	})
 	t.Run("(6) subsumption via snapshot", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
 
 		ctx := context.Background()
 		var proposalFilter atomic.Value
@@ -2584,6 +2612,7 @@ func TestReplicaTombstone(t *testing.T) {
 // that such races do not leave the range in an under-replicated state.
 func TestAdminRelocateRangeSafety(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The test is going to verify that when a replica removal due to a
 	// Replica.ChangeReplicas call coincides with the removal phase of an
@@ -2706,6 +2735,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 // See https://github.com/cockroachdb/cockroach/issues/40877.
 func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "resplit", func(t *testing.T, resplit bool) {
 		const numNodes = 4
 		var stopAfterJointConfig atomic.Value
@@ -2876,6 +2906,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 // due to NotLeaseHolderError prior to application.
 func TestTransferLeaseBlocksWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We want to verify that we will not propose a TransferLeaseRequest while
 	// there is an outstanding proposal.
@@ -2951,6 +2982,7 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 // to the zone configs.
 func TestStrictGCEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The unfortunate thing about this test is that the gcttl is in seconds and
 	// we need to wait for the replica's lease start time to be sufficiently old.
@@ -3145,6 +3177,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 // overhead due to the logical op log.
 func TestProposalOverhead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var overhead uint32
 	var key atomic.Value

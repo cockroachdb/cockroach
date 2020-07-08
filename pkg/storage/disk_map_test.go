@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
@@ -188,6 +189,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
@@ -197,6 +199,7 @@ func TestRocksDBMap(t *testing.T) {
 
 func TestRocksDBMultiMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
@@ -206,6 +209,7 @@ func TestRocksDBMultiMap(t *testing.T) {
 
 func TestRocksDBMapClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	e := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
@@ -392,6 +396,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 
 func TestPebbleMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -408,6 +413,7 @@ func TestPebbleMap(t *testing.T) {
 
 func TestPebbleMultiMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -424,6 +430,7 @@ func TestPebbleMultiMap(t *testing.T) {
 
 func TestPebbleMapClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()

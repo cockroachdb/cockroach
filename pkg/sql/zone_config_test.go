@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -87,6 +88,7 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 // TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
@@ -323,6 +325,7 @@ func TestGetZoneConfig(t *testing.T) {
 // hierarchies.
 func TestCascadingZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	defaultZoneConfig := zonepb.DefaultZoneConfig()
@@ -637,6 +640,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 func BenchmarkGetZoneConfig(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	params, _ := tests.CreateTestServerParams()
 	srv, _, _ := serverutils.StartServer(b, params)

@@ -42,6 +42,7 @@ func constantTimeoutFunc(d time.Duration) func(*cluster.Settings, replicaInQueue
 // impl, which are defined at the end of the file.
 func TestBaseQueueConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()

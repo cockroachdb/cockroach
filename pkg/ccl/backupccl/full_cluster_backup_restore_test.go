@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,6 +30,7 @@ import (
 // the new cluster. Ensures that all the moving pieces are working together.
 func TestFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -220,6 +222,7 @@ func TestFullClusterBackup(t *testing.T) {
 
 func TestFullClusterBackupDroppedTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -240,6 +243,7 @@ func TestFullClusterBackupDroppedTables(t *testing.T) {
 
 func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	const incrementalBackupLocation = "nodelocal://0/inc-full-backup"
@@ -262,6 +266,7 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 // cluster backup with only metadata (no user data). Regression test for #49573.
 func TestEmptyFullClusterRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
 	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
@@ -280,6 +285,7 @@ func TestEmptyFullClusterRestore(t *testing.T) {
 // Regression test for #50561.
 func TestClusterRestoreEmptyDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -298,6 +304,7 @@ func TestClusterRestoreEmptyDB(t *testing.T) {
 
 func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -315,6 +322,7 @@ func TestDisallowFullClusterRestoreOnNonFreshCluster(t *testing.T) {
 
 func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -331,6 +339,7 @@ func TestDisallowFullClusterRestoreOfNonFullBackup(t *testing.T) {
 
 func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -346,6 +355,7 @@ func TestAllowNonFullClusterRestoreOfFullBackup(t *testing.T) {
 
 func TestRestoreFromFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
@@ -383,6 +393,7 @@ func TestRestoreFromFullClusterBackup(t *testing.T) {
 
 func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
 	defer cleanupFn()
@@ -398,6 +409,7 @@ func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 // TestClusterRestoreFailCleanup tests that a failed RESTORE is cleaned up.
 func TestClusterRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params := base.TestServerArgs{}
 	// Disable GC job so that the final check of crdb_internal.tables is

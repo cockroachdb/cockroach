@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 )
@@ -134,6 +135,7 @@ func timeSeriesColumnAsValue(
 // integration with the storage engines. For that, see the engine tests.
 func TestGoMergeCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	badCombinations := []struct {
 		existing, update []byte
 	}{
@@ -194,6 +196,7 @@ func TestGoMergeCorruption(t *testing.T) {
 // engine tests.
 func TestGoMergeAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	gibber1, gibber2 := gibberishString(100), gibberishString(200)
 
 	testCasesAppender := []struct {
@@ -274,6 +277,7 @@ func mergeInternalTimeSeriesDataPebble(
 // the engine tests.
 func TestGoMergeTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Each time series test case is a list of byte slice. The last byte slice
 	// is the expected result; all preceding slices will be merged together
 	// to generate the actual result.

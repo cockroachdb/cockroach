@@ -53,6 +53,7 @@ func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFee
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -127,6 +128,7 @@ func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -201,6 +203,7 @@ func TestComplexScenarios(t *testing.T) {
 // nodes before unhealthy nodes.
 func TestSplitHealthy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testData := []struct {
 		in       []batchClient

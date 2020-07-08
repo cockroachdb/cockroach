@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -131,6 +132,7 @@ func init() {
 
 func TestBelowRaftProtos(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Enable the additional checks in TestMain. NB: running this test by itself
 	// will fail those extra checks - such failures are safe to ignore, so long

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -103,6 +104,7 @@ func createReplicaSlice() ReplicaSlice {
 
 func TestReplicaSliceMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rs := createReplicaSlice()
 	rs.MoveToFront(0)
 	exp := []roachpb.StoreID{1, 2, 3, 4, 5}
@@ -163,6 +165,7 @@ func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []strin
 
 func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		name       string
 		node       *roachpb.NodeDescriptor

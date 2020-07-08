@@ -15,10 +15,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestUnescapePattern(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		pattern     string
 		expected    string
@@ -58,6 +60,7 @@ func TestUnescapePattern(t *testing.T) {
 
 func TestUnescapePatternError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		pattern     string
 		escapeToken string
@@ -88,6 +91,7 @@ func TestUnescapePatternError(t *testing.T) {
 
 func TestReplaceUnescaped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		pattern     string
 		old         string
@@ -125,6 +129,7 @@ func TestReplaceUnescaped(t *testing.T) {
 // EvalContext.
 func TestEvalContextCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Note: the test relies on "parent" EvalContext having non-nil and non-empty
 	// iVarContainerStack.
 	ctx := EvalContext{iVarContainerStack: make([]IndexedVarContainer, 1)}

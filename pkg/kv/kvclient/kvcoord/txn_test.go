@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +40,7 @@ import (
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	value := []byte("value")
@@ -129,6 +131,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 //   R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
 func TestLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	var key = roachpb.Key("a")
@@ -197,6 +200,7 @@ func TestLostUpdate(t *testing.T) {
 // concurrent reader pushes an intent.
 func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -274,6 +278,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 // original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -311,6 +316,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -371,6 +377,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
@@ -451,6 +458,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 // with the original timestamp of a restarted transaction.
 func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -514,6 +522,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 // from earlier epochs are cleaned up on transaction commit.
 func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 	ctx := context.Background()
@@ -603,6 +612,7 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 // Test that txn.CommitTimestamp() reflects refreshes.
 func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// We're going to inject an uncertainty error, expect the refresh to succeed,
@@ -654,6 +664,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 // properly left behind.
 func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s := createTestDB(t)
 	defer s.Stop()
@@ -696,6 +707,7 @@ func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
 // ConditionFailedError is special.
 func TestTxnContinueAfterCputError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s := createTestDB(t)
 	defer s.Stop()

@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func TestSpanSetBatchBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
@@ -272,6 +274,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 
 func TestSpanSetBatchTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
@@ -379,6 +382,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 
 func TestSpanSetIteratorTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
@@ -472,6 +476,7 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 
 func TestSpanSetNonMVCCBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 
@@ -520,6 +525,7 @@ func TestSpanSetNonMVCCBatch(t *testing.T) {
 // See #20894.
 func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	eng := storage.NewDefaultInMem()
 	defer eng.Close()
 

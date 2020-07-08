@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -36,6 +37,7 @@ import (
 // ) TO STDOUT WITH CSV DELIMITER '|' HEADER;
 func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	csvPath := filepath.Join("testdata", "pg_cast_provolatile_dump.csv")
 	f, err := os.Open(csvPath)
 	require.NoError(t, err)
@@ -135,6 +137,7 @@ func TestCastsVolatilityMatchesPostgres(t *testing.T) {
 // all type families.
 func TestCastsFromUnknown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for v := range types.Family_name {
 		switch fam := types.Family(v); fam {

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // genAs returns num random distinct ordered values in [0, valRange).
@@ -123,6 +124,7 @@ func testScanBatchQuery(t *testing.T, db *gosql.DB, numSpans, numAs, numBs int, 
 // particular values and performing queries.
 func TestScanBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The test will screw around with KVBatchSize; make sure to restore it at the end.
 	restore := row.TestingSetKVBatchSize(10)
@@ -185,6 +187,7 @@ func TestScanBatches(t *testing.T) {
 
 func TestKVLimitHint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		hardLimit int64

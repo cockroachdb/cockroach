@@ -66,6 +66,7 @@ func trivialQuery(pgURL url.URL) error {
 // new connections and allows sessions with ongoing transactions to finish.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
 
@@ -135,6 +136,7 @@ func TestPGWireDrainClient(t *testing.T) {
 // canceled when they go on for too long.
 func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -237,6 +239,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 // pq.Error.
 func TestPGUnwrapError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -264,6 +267,7 @@ func TestPGUnwrapError(t *testing.T) {
 
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -315,6 +319,7 @@ func TestPGPrepareFail(t *testing.T) {
 // transaction.
 func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -427,6 +432,7 @@ func (p preparedQueryTest) PreparedError(err string) preparedQueryTest {
 
 func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var baseTest preparedQueryTest
 
 	queryTests := []struct {
@@ -986,6 +992,7 @@ func (p preparedExecTest) RowsAffectedErr(err string) preparedExecTest {
 // Verify that bound dates are evaluated using session timezone.
 func TestPGPrepareDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1024,6 +1031,7 @@ func TestPGPrepareDate(t *testing.T) {
 
 func TestPGPreparedExec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var baseTest preparedExecTest
 	execTests := []struct {
 		query string
@@ -1290,6 +1298,7 @@ func TestPGPreparedExec(t *testing.T) {
 // was given in the connection string.
 func TestPGPrepareNameQual(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1341,6 +1350,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 // of a prepared query.
 func TestPGPrepareInvalidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1406,6 +1416,7 @@ func TestPGPrepareInvalidate(t *testing.T) {
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1450,6 +1461,7 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 // the methods where it depends on their values (Begin, Commit, RowsAffected for INSERTs).
 func TestPGCommandTags(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1570,6 +1582,7 @@ func checkSQLNetworkMetrics(
 
 func TestSQLNetworkMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -1639,6 +1652,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 
 func TestPGWireOverUnixSocket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if runtime.GOOS == "windows" {
 		t.Skip("unix sockets not support on windows")
@@ -1685,6 +1699,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 
 func TestPGWireResultChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1748,6 +1763,7 @@ func TestPGWireResultChange(t *testing.T) {
 
 func TestSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
@@ -1866,6 +1882,7 @@ var _ pgx.Logger = pgxTestLogger{}
 
 func TestCancelRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		params := base.TestServerArgs{Insecure: insecure}
@@ -1906,6 +1923,7 @@ func TestCancelRequest(t *testing.T) {
 
 func TestFailPrepareFailsTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

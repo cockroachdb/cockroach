@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var (
@@ -155,6 +156,8 @@ func runMetaTest(run testRun) {
 // for matching outputs by the test suite between RocksDB and Pebble.
 func TestRocksPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	if util.RaceEnabled {
 		// This test times out with the race detector enabled.
@@ -188,6 +191,8 @@ func TestRocksPebbleEquivalence(t *testing.T) {
 // engine sequences with restarts in between.
 func TestRocksPebbleRestarts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	if util.RaceEnabled {
 		// This test times out with the race detector enabled.
@@ -220,6 +225,8 @@ func TestRocksPebbleRestarts(t *testing.T) {
 // matching behavior across rocks/pebble.
 func TestRocksPebbleCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	if *check != "" {

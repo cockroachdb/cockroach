@@ -19,6 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestPrettyData reads in a single SQL statement from a file, formats it at
@@ -27,6 +28,7 @@ import (
 // and should be used to compare and verify the changed output.
 func TestPrettyData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	matches, err := filepath.Glob(filepath.Join("testdata", "pretty", "*.sql"))
 	if err != nil {
 		t.Fatal(err)

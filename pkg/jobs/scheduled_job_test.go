@@ -16,12 +16,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCreateScheduledJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -33,6 +35,7 @@ func TestCreateScheduledJob(t *testing.T) {
 
 func TestCreatePausedScheduledJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -46,6 +49,7 @@ func TestCreatePausedScheduledJob(t *testing.T) {
 
 func TestSetsSchedule(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -68,6 +72,7 @@ func TestSetsSchedule(t *testing.T) {
 
 func TestCreateOneOffJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -84,6 +89,7 @@ func TestCreateOneOffJob(t *testing.T) {
 
 func TestPauseUnpauseJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 

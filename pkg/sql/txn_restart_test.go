@@ -205,6 +205,7 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //
 //	func TestTxnAutoRetry(t *testing.T) {
 //		defer leaktest.AfterTest(t)()
+//		defer log.Scope(t).Close(t)
 //		aborter := NewTxnAborter()
 //		defer aborter.Close(t)
 //		params, cmdFilters := tests.CreateTestServerParams()
@@ -442,6 +443,7 @@ func (ri *restartInfo) Verify() error {
 // retriable errors.
 func TestTxnAutoRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
@@ -619,6 +621,7 @@ BEGIN;
 // Prevents regressions of #8456.
 func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
@@ -752,6 +755,7 @@ func runTestTxn(
 // and checks that we still manage to run a txn despite them.
 func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Set up error injection that causes retries.
 	testCases := []struct {
@@ -855,6 +859,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // Test that rando commands while in COMMIT_WAIT return a particular error.
 func TestCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -888,6 +893,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // txn, where we retry the txn (not tested here).
 func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
@@ -974,6 +980,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // RetryWait state works.
 func TestRollbackInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
@@ -1036,6 +1043,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // #15412, whereby the server would crash in this situation.
 func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -1086,6 +1094,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 // TestNonRetryableError verifies that a non-retryable error is propagated to the client.
 func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, cmdFilters := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -1129,6 +1138,7 @@ SELECT * from t.test WHERE k = 'test_key';
 // timestamp exceeds the deadline of the EndTxnRequest.
 func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	advancement := 2 * base.DefaultDescriptorLeaseDuration
 
@@ -1230,6 +1240,7 @@ SELECT * from t.test WHERE k = 'test_key';
 // ReadWithinUncertaintyIntervalError on the first transaction attempt.
 func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var cmdFilters tests.CommandFilters
 	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
@@ -1296,6 +1307,7 @@ COMMIT;
 // Test that retryable errors are handled properly through DistSQL.
 func TestDistSQLRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// One of the rows in the table.
 	targetKey := roachpb.Key("\275\211\212")
@@ -1429,6 +1441,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 // opens has the same attributes as the existing one.
 func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -1491,6 +1504,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 // auto-restart.
 func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)

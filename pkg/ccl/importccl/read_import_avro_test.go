@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -315,6 +316,7 @@ func (th *testHelper) genRecordsData(
 
 func TestReadsAvroRecords(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	th := newTestHelper(t)
 
 	formats := []roachpb.AvroOptions_Format{
@@ -351,6 +353,7 @@ func TestReadsAvroRecords(t *testing.T) {
 
 func TestReadsAvroOcf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	th := newTestHelper(t)
 
 	for _, skip := range []bool{false, true} {
@@ -376,6 +379,7 @@ func TestReadsAvroOcf(t *testing.T) {
 
 func TestRelaxedAndStrictImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		name         string
@@ -420,6 +424,7 @@ func TestRelaxedAndStrictImport(t *testing.T) {
 
 func TestHandlesArrayData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	th := newTestHelper(t, &intArrGen{namedField{
 		name: "arr_of_ints",
 	}})

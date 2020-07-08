@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -43,6 +44,7 @@ import (
 
 func TestClosedTimestampCanServe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work
@@ -104,6 +106,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 // previously readable.
 func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work
@@ -181,6 +184,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 // are cleaned up if necessary to allow the read to proceed.
 func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
@@ -256,6 +260,7 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 // of the split.
 func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work
@@ -334,6 +339,7 @@ func getTableID(db *gosql.DB, dbName, tableName string) (tableID sqlbase.ID, err
 
 func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work
@@ -374,6 +380,7 @@ func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 
 func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work
@@ -408,6 +415,7 @@ func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 
 func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work

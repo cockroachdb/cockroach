@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -328,6 +329,7 @@ func doLookupWithToken(
 // TestDescriptorDBGetDescriptors verifies that getDescriptors returns correct descriptors.
 func TestDescriptorDBGetDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 
 	key := roachpb.RKey("k")
@@ -371,6 +373,7 @@ func TestDescriptorDBGetDescriptors(t *testing.T) {
 
 func TestRangeCacheAssumptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	expKeyMin := keys.RangeMetaKey(keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKey("test"))))
 	if !bytes.Equal(expKeyMin, roachpb.RKeyMin) {
 		t.Fatalf("RangeCache relies on RangeMetaKey returning KeyMin after two levels, but got %s", expKeyMin)
@@ -383,6 +386,7 @@ func TestRangeCacheAssumptions(t *testing.T) {
 // lookuped when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 	ctx := context.Background()
 
@@ -470,6 +474,7 @@ func TestRangeCache(t *testing.T) {
 // the same key will be coalesced onto the same database lookup.
 func TestRangeCacheCoalescedRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 	ctx := context.Background()
 
@@ -526,6 +531,7 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 // flight are unaffected by the ctx cancelation.
 func TestRangeCacheContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 
 	// lookupAndWaitUntilJoin performs a RangeDescriptor lookup in a new
@@ -591,6 +597,7 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 // will prefetch the left half of the split.
 func TestRangeCacheDetectSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 	ctx := context.Background()
 
@@ -660,6 +667,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 // when the request is for the reverse scan.
 func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 	ctx := context.Background()
 
@@ -725,6 +733,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 // around.
 func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The tests starts with the descriptor [a-an) in the cache.
 	// There are 3 ranges of interest: [a-an)[an-at)[at-b).
@@ -912,6 +921,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 
 func TestRangeCacheUseIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	db := initTestDescriptorDB(t)
 	ctx := context.Background()
 
@@ -945,6 +955,7 @@ func TestRangeCacheUseIntents(t *testing.T) {
 // cached entries are cleared when adding a new entry.
 func TestRangeCacheClearOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	defDesc := &roachpb.RangeDescriptor{
@@ -1026,6 +1037,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 // simply to increment the meta key for StartKey, not StartKey itself.
 func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	firstDesc := roachpb.RangeDescriptor{
@@ -1062,6 +1074,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 // that is returned by getCachedRangeDescriptor with inverted=true.
 func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testData := []roachpb.RangeDescriptor{
 		{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
@@ -1136,6 +1149,7 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 
 func TestRangeCacheGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	descAM1 := &roachpb.RangeDescriptor{

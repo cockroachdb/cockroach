@@ -45,6 +45,7 @@ import (
 // transaction has been cleaned up by that point.
 func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var cleanupSeen int64
 	key := roachpb.Key("a")
@@ -142,6 +143,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 // times a heartbeat loop was started.
 func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
