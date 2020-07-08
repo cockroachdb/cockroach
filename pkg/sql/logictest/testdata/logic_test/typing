@@ -243,3 +243,16 @@ query T
 SELECT CASE WHEN true THEN 1234:::OID ELSE COALESCE(NULL, NULL) END
 ----
 1234
+
+# Regression test for #51099.
+query B rowsort
+SELECT CASE WHEN x > 1 THEN true ELSE NULL AND true END FROM (VALUES (1), (2)) AS v(x)
+----
+NULL
+true
+
+query B rowsort
+SELECT CASE WHEN x > 1 THEN true ELSE NULL OR false END FROM (VALUES (1), (2)) AS v(x)
+----
+NULL
+true

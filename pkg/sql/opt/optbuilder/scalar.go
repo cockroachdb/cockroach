@@ -113,8 +113,8 @@ func (b *Builder) buildScalar(
 		return b.finishBuildScalarRef(t.col, inScope, outScope, outCol, colRefs)
 
 	case *tree.AndExpr:
-		left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
-		right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
+		left := b.buildScalar(tree.ReType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
+		right := b.buildScalar(tree.ReType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructAnd(left, right)
 
 	case *tree.Array:
@@ -311,7 +311,7 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
 
 	case *tree.NotExpr:
-		input := b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
+		input := b.buildScalar(tree.ReType(t.TypedInnerExpr(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructNot(input)
 
 	case *tree.IsNullExpr:
@@ -345,8 +345,8 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructCase(input, whens, input)
 
 	case *tree.OrExpr:
-		left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
-		right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
+		left := b.buildScalar(tree.ReType(t.TypedLeft(), types.Bool), inScope, nil, nil, colRefs)
+		right := b.buildScalar(tree.ReType(t.TypedRight(), types.Bool), inScope, nil, nil, colRefs)
 		out = b.factory.ConstructOr(left, right)
 
 	case *tree.ParenExpr:
