@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -52,6 +53,7 @@ func addFakeJob(t *testing.T, h *testHelper, id int64, status Status, txn *kv.Tx
 
 func TestJobSchedulerReschedulesRunning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -106,6 +108,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 
 func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -140,6 +143,7 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 
 func TestJobSchedulerDaemonInitialScanDelay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for i := 0; i < 100; i++ {
 		require.Greater(t, int64(getInitialScanDelay()), int64(time.Minute))
@@ -154,6 +158,7 @@ func getScopedSettings() (*settings.Values, func()) {
 
 func TestJobSchedulerDaemonGetWaitPeriod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sv, cleanup := getScopedSettings()
 	defer cleanup()
@@ -201,6 +206,7 @@ func scanImmediately() func() {
 
 func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
@@ -301,6 +307,7 @@ func overridePaceSetting(d time.Duration) func() {
 
 func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -345,6 +352,7 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 
 func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -391,6 +399,7 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer settings.TestingSaveRegistry()()
 
 	// Make daemon run quickly.

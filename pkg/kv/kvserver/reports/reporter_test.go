@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -36,6 +37,7 @@ import (
 // Test the constraint conformance report in a real cluster.
 func TestConstraintConformanceReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	if testing.Short() {
 		// This test takes seconds because of replication vagaries.
 		t.Skip("short flag")
@@ -121,6 +123,7 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 // Test the critical localities report in a real cluster.
 func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	// 2 regions, 3 dcs per region.
 	tc := serverutils.StartTestCluster(t, 6, base.TestClusterArgs{
@@ -303,6 +306,7 @@ func checkCritical(db *gosql.DB, zoneID int, locs ...string) error {
 // Test the replication status report in a real cluster.
 func TestReplicationStatusReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := serverutils.StartTestCluster(t, 4, base.TestClusterArgs{
 		// We're going to do our own replication.
@@ -381,6 +385,7 @@ func checkZoneReplication(db *gosql.DB, zoneID, total, under, over, unavailable 
 
 func TestMeta2RangeIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -416,6 +421,7 @@ func TestMeta2RangeIter(t *testing.T) {
 // handled by resetting the report.
 func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -473,6 +479,7 @@ func (it *erroryRangeIterator) Close(ctx context.Context) {
 
 func TestZoneChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	type tc struct {
@@ -578,6 +585,7 @@ func TestZoneChecker(t *testing.T) {
 // visitors whether ranges fall in the same zone vs a new zone.
 func TestRangeIteration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	schema := baseReportTestCase{

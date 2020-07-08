@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestLike(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		expr      string
 		pattern   string
@@ -61,6 +63,7 @@ func TestLike(t *testing.T) {
 
 func TestLikeEscape(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		expr      string
 		pattern   string
@@ -106,6 +109,7 @@ func TestLikeEscape(t *testing.T) {
 
 func TestSimilarEscape(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		expr     string
 		expected string

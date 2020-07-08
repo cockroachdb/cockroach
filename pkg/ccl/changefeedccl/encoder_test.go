@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -37,6 +38,7 @@ import (
 
 func TestEncoders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	require.NoError(t, err)
@@ -332,6 +334,7 @@ func (r *testSchemaRegistry) encodedAvroToNative(b []byte) (interface{}, error) 
 
 func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
@@ -387,6 +390,7 @@ func TestAvroEncoder(t *testing.T) {
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()
@@ -417,6 +421,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 
 func TestAvroLedger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()

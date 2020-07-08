@@ -167,6 +167,7 @@ func prev(version roachpb.Version) roachpb.Version {
 
 func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var newVersion = clusterversion.TestingBinaryVersion
 	var oldVersion = prev(newVersion)
@@ -209,6 +210,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 
 func TestClusterVersionUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	var newVersion = clusterversion.TestingBinaryVersion
@@ -343,6 +345,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 // version all agree.
 func TestAllVersionsAgree(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	tcRaw := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
@@ -390,6 +393,7 @@ func v0v1() (roachpb.Version, roachpb.Version) {
 
 func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// Prevent node crashes from generating several megabytes of stacks when

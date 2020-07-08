@@ -28,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 )
 
 func TestEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
@@ -107,6 +109,7 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, err
 
 func TestTimeConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tests := []struct {
 		start     string
 		format    string
@@ -254,6 +257,7 @@ func TestTimeConversion(t *testing.T) {
 
 func TestEvalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		expr     string
 		expected string

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,6 +95,7 @@ func makeTxnProto() roachpb.Transaction {
 // which are attached to the EndTxn request separately.
 func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -155,6 +157,7 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 // requests chain on to all existing requests.
 func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -307,6 +310,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 // batches will still chain on to in-flight writes, if necessary.
 func TestTxnPipelinerReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -410,6 +414,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 // writes will correctly chain on to existing in-flight writes.
 func TestTxnPipelinerRangedWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -493,6 +498,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 // cause the txnPipeliner to stall its entire pipeline.
 func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -557,6 +563,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 // when its in-flight write tree grows to a very large size.
 func TestTxnPipelinerManyWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -654,6 +661,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 // also tests that the interceptor attaches lock spans to these EndTxnRequests.
 func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -746,6 +754,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 // to the lock footprint so they will be removed when the transaction finishes.
 func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tp, _ := makeMockTxnPipeliner()
 
 	tp.ifWrites.insert(roachpb.Key("b"), 10)
@@ -763,6 +772,7 @@ func TestTxnPipelinerEpochIncrement(t *testing.T) {
 // fixes the errors index.
 func TestTxnPipelinerIntentMissingError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -822,6 +832,7 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 // correctly if pipelining is enabled or disabled midway through a transaction.
 func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -949,6 +960,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 // setting.
 func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -1125,6 +1137,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 // will not be pipelined.
 func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -1203,6 +1216,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 // to acquire are added to the lock footprint.
 func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
@@ -1295,6 +1309,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 // Test that the pipeliners knows how to save and restore its state.
 func TestTxnPipelinerSavepoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 

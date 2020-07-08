@@ -132,6 +132,7 @@ type rangeAndKT struct {
 // spans) tolerates concurrent splits and merges.
 func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const n = 100
 	const numNodes = 1
@@ -253,6 +254,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 // RangeDescriptorCache.
 func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
@@ -317,6 +319,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 // this range information is used to update caches on the gateway.
 func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to setup a cluster with 4 nodes. The last one will not be a
 	// target of any replication so that its caches stay virgin.
@@ -429,6 +432,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 
 func TestDistSQLDeadHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("#49843. test is too slow; we need to tweak timeouts so connections die faster (see #14376)")
 
@@ -511,6 +515,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 func TestDistSQLDrainingHosts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numNodes = 2
 	tc := serverutils.StartTestCluster(
@@ -680,6 +685,7 @@ func (it *testSpanResolverIterator) ReplicaInfo(
 
 func TestPartitionSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		ranges    []testSpanResolverRange
@@ -874,6 +880,7 @@ func TestPartitionSpans(t *testing.T) {
 // plan's version will be planned on the gateway.
 func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The spans that we're going to plan for.
 	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
@@ -1053,6 +1060,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 // guess, is also a type of decomissioning).
 func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The spans that we're going to plan for.
 	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
@@ -1149,6 +1157,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 func TestCheckNodeHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())

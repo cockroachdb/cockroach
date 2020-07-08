@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	typs := []*types.T{types.Int}
 	// There will be at least two batches of rows so that we can see whether the
 	// internal batch is reset.
@@ -70,6 +72,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 
 func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()

@@ -334,6 +334,7 @@ func enumeratePriorities(numTxns int, priorities []enginepb.TxnPriority) [][]eng
 
 func TestEnumeratePriorities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	p1 := enginepb.TxnPriority(1)
 	p2 := enginepb.TxnPriority(2)
 	expPriorities := [][]enginepb.TxnPriority{
@@ -398,6 +399,7 @@ func enumerateHistories(txns [][]*cmd, equal bool) [][]*cmd {
 
 func TestEnumerateHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txns := parseHistories([]string{"I(A) C", "I(A) C"}, t)
 	enum := enumerateHistories(txns, false)
 	enumStrs := make([]string, len(enum))
@@ -476,6 +478,7 @@ func enumerateHistoriesAfterRetry(err *retryError, h []*cmd) [][]*cmd {
 
 func TestEnumerateHistoriesAfterRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txns := parseHistories([]string{"R(A) W(B,A) C", "D(A) D(B) C"}, t)
 	enum := enumerateHistories(txns, false)
 	for i, e := range enum {
@@ -873,6 +876,7 @@ func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T
 //    R1(A) R2(B) I2(B) R2(A) I2(A) R1(B) C1 C2
 func TestTxnDBReadSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if testing.Short() {
 		t.Skip("short flag")
@@ -910,6 +914,7 @@ func TestTxnDBReadSkewAnomaly(t *testing.T) {
 //   R1(A) R2(A) I1(A) C1 I2(A) C2
 func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn := "R(A) I(A) C"
 	verify := &verifier{
 		history: "R(A)",
@@ -938,6 +943,7 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 //   D2(A) R1(A) D2(B) C2 W1(B,A) C1
 func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// B must not exceed A.
 	txn1 := "R(A) W(B,A) C"
@@ -973,6 +979,7 @@ func TestTxnDBLostDeleteAnomaly(t *testing.T) {
 //   D2(A) DR2(B-C) R1(A) C2 W1(B,A) C1
 func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// B must not exceed A.
 	txn1 := "R(A) W(B,A) C"
@@ -1004,6 +1011,7 @@ func TestTxnDBLostDeleteRangeAnomaly(t *testing.T) {
 //   R2(B) SC1(A-C) I2(B) C2 SC1(A-C) C1
 func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn1 := "SC(A-C) W(D,A+B) SC(A-C) W(E,A+B) C"
 	txn2 := "R(B) I(B) C"
 	verify := &verifier{
@@ -1027,6 +1035,7 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 //   R2(B) DR1(A-C) I2(B) C2 SC1(A-C) W1(D,A+B) C1
 func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn1 := "DR(A-C) SC(A-C) W(D,A+B) C"
 	txn2 := "R(B) I(B) C"
 	verify := &verifier{
@@ -1063,6 +1072,7 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 // history above) and may set A=1, B=1.
 func TestTxnDBWriteSkewAnomaly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	txn1 := "SC(A-C) W(A,A+B+1) C"
 	txn2 := "SC(A-C) W(B,A+B+1) C"
 	verify := &verifier{

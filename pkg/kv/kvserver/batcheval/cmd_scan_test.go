@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,6 +52,7 @@ func testScanReverseScanInner(
 	t *testing.T, tb int64, sf roachpb.ScanFormat, reverse bool, expBoth bool,
 ) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	k1, k2 := roachpb.Key("a"), roachpb.Key("b")

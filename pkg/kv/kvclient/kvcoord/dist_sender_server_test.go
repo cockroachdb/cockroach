@@ -66,6 +66,7 @@ func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -321,6 +322,7 @@ func checkReverseScanResults(
 // bounds.
 func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -512,6 +514,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 // responses can contain partial responses.
 func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -756,6 +759,7 @@ func checkResumeSpanDelRangeResults(
 // Tests multiple delete range requests across many ranges with multiple bounds.
 func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -817,6 +821,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 // batch responses can contain partial responses.
 func TestMultiRangeBoundedBatchDelRangePartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1005,6 +1010,7 @@ func TestMultiRangeBoundedBatchDelRangePartialResponses(t *testing.T) {
 // boundary uses the range boundary as the start key in the response ResumeSpan.
 func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1051,6 +1057,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1074,6 +1081,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 // TestMultiRequestBatchWithFwdAndReverseRequests are disallowed.
 func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1096,6 +1104,7 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 // DeleteRange and ResolveIntentRange work across ranges.
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1154,6 +1163,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, rc := range []roachpb.ReadConsistencyType{
 		roachpb.READ_UNCOMMITTED,
@@ -1247,6 +1257,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 // dist sender.
 func TestParallelSender(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -1316,6 +1327,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
@@ -1361,6 +1373,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
@@ -1391,6 +1404,7 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // #12603 for more details.
 func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1447,6 +1461,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
 	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
@@ -1478,6 +1493,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("TODO(andreimatei): This last assertion in this test was broken by #33150. " +
 		"I suspect the reason is that there is no longer a single Range " +
 		"that spans [KeyMin, z), so we're not hitting the error.")
@@ -1512,6 +1528,7 @@ func TestBadRequest(t *testing.T) {
 // to verify that.
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Inject these two observed timestamps into the parts of the batch's
 	// response that does not result in an error. Even though the batch as a
@@ -1630,6 +1647,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 // retry.
 func TestTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1685,6 +1703,7 @@ func TestTxnStarvation(t *testing.T) {
 // miss their writes).
 func TestAsyncAbortPoisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Add a testing request filter which pauses a get request for the
 	// key until after the signal channel is closed.
@@ -1752,6 +1771,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 // but still fail in others, depending on different conditions.
 func TestTxnCoordSenderRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var filterFn atomic.Value
 	var storeKnobs kvserver.StoreTestingKnobs
@@ -2932,6 +2952,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 // first attempt). See subtests for more details.
 func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var filterFn atomic.Value
 	var storeKnobs kvserver.StoreTestingKnobs
@@ -3108,6 +3129,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 //   that was refreshed before), we're good.
 func TestRefreshNoFalsePositive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)

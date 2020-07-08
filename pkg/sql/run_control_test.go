@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -36,6 +37,7 @@ import (
 
 func TestCancelSelectQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const queryToCancel = "SELECT * FROM generate_series(1,20000000)"
 
@@ -92,6 +94,7 @@ func TestCancelSelectQuery(t *testing.T) {
 // various points of execution.
 func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
 	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s'", queryToCancel)
 
@@ -275,6 +278,7 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 func TestCancelMultipleSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
@@ -318,16 +322,19 @@ func TestCancelMultipleSessions(t *testing.T) {
 
 func TestIdleCancelSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCancelSession(t, false /* hasActiveSession */)
 }
 
 func TestActiveCancelSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCancelSession(t, true /* hasActiveSession */)
 }
 
 func TestCancelIfExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := serverutils.StartTestCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{

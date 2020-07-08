@@ -30,11 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -278,6 +280,7 @@ func verifyTables(
 // correctly filled.
 func TestParallelCreateTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This number has to be around 10 or else testrace will take too long to
 	// finish.
@@ -333,6 +336,7 @@ func TestParallelCreateTables(t *testing.T) {
 // and is designed to specifically test the IF NOT EXIST clause.
 func TestParallelCreateConflictingTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numberOfTables = 30
 	const numberOfNodes = 3
@@ -384,6 +388,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 // Test that the modification time on a table descriptor is initialized.
 func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -443,6 +448,7 @@ SELECT * FROM t.kv%d
 
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -486,6 +492,7 @@ func TestCreateStatementType(t *testing.T) {
 // Test that the user's password cannot be set in insecure mode.
 func TestSetUserPasswordInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop(context.Background())

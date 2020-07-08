@@ -83,6 +83,7 @@ func getStatusJSONProtoWithAdminOption(
 // via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -104,6 +105,7 @@ func TestStatusLocalStacks(t *testing.T) {
 // The content type of the responses is always httputil.JSONContentType.
 func TestStatusJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.(*TestServer)
@@ -157,6 +159,7 @@ func TestStatusJson(t *testing.T) {
 // feature telemetry counters.
 func TestHealthTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -231,6 +234,7 @@ func TestHealthTelemetry(t *testing.T) {
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -256,6 +260,7 @@ func TestStatusGossipJson(t *testing.T) {
 // stats contains the required fields.
 func TestStatusEngineStatsJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -364,6 +369,7 @@ func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
 // TestStatusGetFiles tests the GetFiles endpoint.
 func TestStatusGetFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tempDir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -778,6 +784,7 @@ func TestStatusLogRedaction(t *testing.T) {
 // results.
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -812,6 +819,7 @@ func TestNodeStatusResponse(t *testing.T) {
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -843,6 +851,7 @@ func TestMetricsRecording(t *testing.T) {
 // in other tests.
 func TestMetricsEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -855,6 +864,7 @@ func TestMetricsEndpoint(t *testing.T) {
 // that each metric has a Name, Help, Unit, and DisplayUnit defined.
 func TestMetricsMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -883,6 +893,7 @@ func TestMetricsMetadata(t *testing.T) {
 // TestChartCatalog ensures that the server successfully generates the chart catalog.
 func TestChartCatalogGen(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -958,6 +969,7 @@ func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metad
 // registry.
 func TestChartCatalogMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -999,6 +1011,7 @@ func TestChartCatalogMetrics(t *testing.T) {
 
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
@@ -1042,6 +1055,7 @@ func TestHotRangesResponse(t *testing.T) {
 
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer kvserver.EnableLeaseHistory(100)()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
@@ -1086,6 +1100,7 @@ func TestRangesResponse(t *testing.T) {
 
 func TestRaftDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1137,6 +1152,7 @@ func TestRaftDebug(t *testing.T) {
 // /_status/vars endpoint.
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1149,6 +1165,7 @@ func TestStatusVars(t *testing.T) {
 
 func TestSpanStatsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
@@ -1179,6 +1196,7 @@ func TestSpanStatsResponse(t *testing.T) {
 
 func TestSpanStatsGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(ctx)
@@ -1215,6 +1233,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 func TestNodesGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
@@ -1242,6 +1261,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 
 func TestCertificatesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 
@@ -1291,6 +1311,7 @@ func TestCertificatesResponse(t *testing.T) {
 
 func TestDiagnosticsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -1309,6 +1330,7 @@ func TestDiagnosticsResponse(t *testing.T) {
 
 func TestRangeResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer kvserver.EnableLeaseHistory(100)()
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
@@ -1367,6 +1389,7 @@ func TestRangeResponse(t *testing.T) {
 
 func TestRemoteDebugModeSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
@@ -1519,6 +1542,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 
 func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -1586,6 +1610,7 @@ func TestStatusAPIStatements(t *testing.T) {
 
 func TestListSessionsSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*TestServer)
 	defer ts.Stopper().Stop(context.Background())
@@ -1662,6 +1687,7 @@ func TestListSessionsSecurity(t *testing.T) {
 
 func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -1686,6 +1712,7 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 
 func TestStatementDiagnosticsCompleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -1733,6 +1760,7 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 
 func TestJobStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.Background())
 

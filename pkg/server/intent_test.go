@@ -33,6 +33,7 @@ import (
 // TODO(benesch): move this test to somewhere more specific than package server.
 func TestIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		keys   []string

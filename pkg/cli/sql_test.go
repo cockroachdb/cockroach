@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -124,6 +125,7 @@ select '''
 
 func TestIsEndOfStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		in         string
@@ -192,6 +194,7 @@ func TestIsEndOfStatement(t *testing.T) {
 // statements.
 func TestHandleCliCmdSqlAlias(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	clientSideCommandTestsTable := []struct {
 		commandString string
 		wantSQLStmt   string
@@ -216,6 +219,7 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
 

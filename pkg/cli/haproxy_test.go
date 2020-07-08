@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		input    serverpb.NodesResponse
@@ -153,6 +155,7 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 
 func TestMatchLocalityRegexp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		locality string // The locality as passed to `start --locality=xx`

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -103,6 +104,7 @@ func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue, ingestion bool) []b
 // concen (though we will likely want testing of things like prop collectors).
 func TestPebbleWritesSameSSTs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	r, _ := randutil.NewPseudoRand()
 	const numKeys, valueSize, revisions = 5000, 100, 100

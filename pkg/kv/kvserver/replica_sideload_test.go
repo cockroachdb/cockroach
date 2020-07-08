@@ -84,6 +84,7 @@ func mkEnt(
 
 func TestSideloadingSideloadedStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Run("Mem", func(t *testing.T) {
 		testSideloadingSideloadedStorage(t, newInMemSideloadStorage)
 	})
@@ -386,6 +387,7 @@ func testSideloadingSideloadedStorage(
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v1, v2 := raftVersionStandard, raftVersionSideloaded
 	rangeID := roachpb.RangeID(1)
@@ -499,6 +501,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 
 func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	addSST := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		Data: []byte("foo"), CRC32: 0, // not checked
@@ -604,6 +607,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloaded bool) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
 	dir, cleanup := testutils.TempDir(t)
@@ -769,6 +773,7 @@ func newEngine(t *testing.T) (func(), storage.Engine) {
 // inlined.
 func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
 	ctx := context.Background()
@@ -958,6 +963,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
 	tc := testContext{}

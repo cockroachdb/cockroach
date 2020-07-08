@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	yaml "gopkg.in/yaml.v2"
 )
 
 func TestValidateNoRepeatKeysInZone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		constraint    string
 		expectSuccess bool
@@ -60,6 +62,7 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 
 func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stores := []struct {
 		nodeAttrs     []string

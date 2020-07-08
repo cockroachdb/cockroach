@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,6 +89,7 @@ func runCopyFile(t *testing.T, db *gosql.DB, testSendFile string) error {
 
 func TestFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
@@ -119,6 +121,7 @@ func TestFileUpload(t *testing.T) {
 
 func TestUploadEmptyFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
@@ -149,6 +152,7 @@ func TestUploadEmptyFile(t *testing.T) {
 
 func TestFileNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
@@ -166,6 +170,7 @@ func TestFileNotExist(t *testing.T) {
 
 func TestFileExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)
@@ -186,6 +191,7 @@ func TestFileExist(t *testing.T) {
 
 func TestNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)

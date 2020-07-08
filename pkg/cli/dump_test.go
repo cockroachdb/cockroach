@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -85,7 +87,8 @@ func TestDumpData(t *testing.T) {
 				if out, err := c.RunWithCaptureArgs([]string{"sql", "-d", "tmp", "-e", s}); err != nil {
 					d.Fatalf(t, "%v", err)
 				} else {
-					t.Logf("executed SQL: %s\nresult: %s", s, out)
+					log.Infof(context.Background(),
+						"TestDumpData: executed SQL: %s\nresult: %s", s, out)
 				}
 				args[1] = "tmp"
 				roundtrip, err := c.RunWithCaptureArgs(args)

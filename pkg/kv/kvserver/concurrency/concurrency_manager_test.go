@@ -77,6 +77,7 @@ import (
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
 		c := newCluster()

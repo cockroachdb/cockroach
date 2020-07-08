@@ -17,12 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestVirtualTableGenerators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Run("test cleanup", func(t *testing.T) {
 		ctx := context.Background()
 		worker := func(pusher rowPusher) error {
@@ -126,6 +128,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 
 func BenchmarkVirtualTableGenerators(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	worker := func(pusher rowPusher) error {
 		for {

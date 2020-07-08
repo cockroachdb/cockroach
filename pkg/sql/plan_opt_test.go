@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -91,6 +92,7 @@ func (h *queryCacheTestHelper) AssertStats(tb *testing.T, expHits, expMisses int
 
 func TestQueryCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Grouping the parallel subtests into a non-parallel subtest allows the defer
 	// call above to work as expected.
@@ -526,6 +528,7 @@ SELECT cte.x, cte.y FROM cte LEFT JOIN cte as cte2 on cte.y = cte2.x`, j)
 // package.
 func BenchmarkQueryCache(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	workloads := []string{"small", "large"}
 	methods := []string{"simple", "prepare-once", "prepare-each"}

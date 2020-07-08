@@ -24,11 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestUpsertFastPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This filter increments scans and endTxn for every ScanRequest and
 	// EndTxnRequest that hits user table data.
@@ -131,6 +133,7 @@ func TestUpsertFastPath(t *testing.T) {
 
 func TestConcurrentUpsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

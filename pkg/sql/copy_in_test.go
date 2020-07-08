@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/lib/pq"
@@ -36,6 +37,7 @@ import (
 
 func TestCopyNullInfNaN(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -135,6 +137,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 // data is the same.
 func TestCopyRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -274,6 +277,7 @@ func TestCopyRandom(t *testing.T) {
 
 func TestCopyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -327,6 +331,7 @@ func TestCopyError(t *testing.T) {
 // TestCopyOne verifies that only one COPY can run at once.
 func TestCopyOne(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("#18352")
 
@@ -361,6 +366,7 @@ func TestCopyOne(t *testing.T) {
 // cannot run.
 func TestCopyInProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("#18352")
 
@@ -396,6 +402,7 @@ func TestCopyInProgress(t *testing.T) {
 // within a transaction.
 func TestCopyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -449,6 +456,7 @@ func TestCopyTransaction(t *testing.T) {
 // TestCopyFKCheck verifies that foreign keys are checked during COPY.
 func TestCopyFKCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)

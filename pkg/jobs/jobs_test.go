@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -124,6 +125,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 
 func TestJobsTableProgressFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -301,6 +303,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Run("normal success", func(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
@@ -807,6 +810,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
@@ -1366,6 +1370,7 @@ func TestJobLifecycle(t *testing.T) {
 // crdb_internal.jobs.
 func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
@@ -1510,6 +1515,7 @@ func TestShowJobs(t *testing.T) {
 
 func TestShowAutomaticJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
@@ -1602,6 +1608,7 @@ func TestShowAutomaticJobs(t *testing.T) {
 
 func TestShowJobsWithError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -1751,6 +1758,7 @@ func TestShowJobsWithError(t *testing.T) {
 
 func TestShowJobWhenComplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Canceling a job relies on adopt daemon to move the job to state
 	// reverting.
 	defer func(oldInterval time.Duration) {
@@ -1885,6 +1893,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 
 func TestJobInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 
 	defer func(oldInterval time.Duration) {
@@ -2037,6 +2046,7 @@ func TestJobInTxn(t *testing.T) {
 // CleanupOnRollback.
 func TestStartableJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
@@ -2239,6 +2249,7 @@ func TestStartableJob(t *testing.T) {
 // that have not undergone a migration cannot be adopted, canceled, or paused.
 func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer jobs.ResetConstructors()()
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval

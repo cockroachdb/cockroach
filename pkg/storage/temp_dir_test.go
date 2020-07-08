@@ -20,11 +20,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestCreateTempDir(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -59,6 +61,7 @@ func TestCreateTempDir(t *testing.T) {
 
 func TestRecordTempDir(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	recordFile := "foobar"
 
 	f, err := ioutil.TempFile("", "record-file")
@@ -93,6 +96,7 @@ func TestRecordTempDir(t *testing.T) {
 
 func TestCleanupTempDirs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	recordFile, err := ioutil.TempFile("", "record-file")
 	if err != nil {

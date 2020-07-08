@@ -1558,6 +1558,7 @@ func pushTxnArgs(
 
 func TestSortRangeDescByAge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var replicaDescs []roachpb.ReplicaDescriptor
 	var rangeDescs []*roachpb.RangeDescriptor
 

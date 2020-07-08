@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,7 @@ import (
 // TestNumBatches is a unit test for NumBatches field of VectorizedStats.
 func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
 	vsc := NewVectorizedStatsCollector(
@@ -48,6 +50,7 @@ func TestNumBatches(t *testing.T) {
 // TestNumTuples is a unit test for NumTuples field of VectorizedStats.
 func TestNumTuples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
@@ -72,6 +75,7 @@ func TestNumTuples(t *testing.T) {
 // expected.
 func TestVectorizedStatsCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	for nBatches := 1; nBatches < 5; nBatches++ {

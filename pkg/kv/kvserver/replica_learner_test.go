@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -135,6 +136,7 @@ func getFirstStoreMetric(t *testing.T, s serverutils.TestServerInterface, name s
 
 func TestAddReplicaViaLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The happy case! \o/
 
 	blockUntilSnapshotCh := make(chan struct{})
@@ -192,6 +194,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 
 func TestLearnerRaftConfState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	verifyLearnerInRaftOnNodes := func(
 		key roachpb.Key, id roachpb.ReplicaID, servers []*server.TestServer,
@@ -275,6 +278,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 
 func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var rejectSnapshots int64
 	knobs, ltk := makeReplicationTestKnobs()
@@ -309,6 +313,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 
 func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	knobs, ltk := makeReplicationTestKnobs()
@@ -359,6 +364,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 
 func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
 
 	ctx := context.Background()
@@ -418,6 +424,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -461,6 +468,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
@@ -522,6 +530,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 // while an AdminChangeReplicas is adding a replica.
 func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
@@ -580,6 +589,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 // leadership changes.
 func TestLearnerReplicateQueueRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var skipReceiveSnapshotKnobAtomic int64 = 1
 	blockUntilSnapshotCh := make(chan struct{}, 2)
@@ -660,6 +670,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 
 func TestLearnerNoAcceptLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -686,6 +697,7 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 // lease transferred to them.
 func TestJointConfigLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -715,6 +727,7 @@ func TestJointConfigLease(t *testing.T) {
 
 func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if util.RaceEnabled {
 		// Limiting how long transactions can run does not work well with race
@@ -798,6 +811,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 
 func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -853,6 +867,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 
 func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -939,6 +954,7 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 
 func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{

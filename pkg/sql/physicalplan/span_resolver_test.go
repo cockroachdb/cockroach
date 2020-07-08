@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,6 +39,7 @@ import (
 // state of caches.
 func TestSpanResolverUsesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -184,6 +186,7 @@ func splitRangeAtVal(
 
 func TestSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
@@ -279,6 +282,7 @@ func TestSpanResolver(t *testing.T) {
 
 func TestMixedDirections(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})

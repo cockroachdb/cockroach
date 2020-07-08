@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
@@ -32,6 +33,7 @@ import (
 // as each of these types will all succeed with an expected tree.Datum result.
 func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	wantInt := tree.NumValAvailInteger
 	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
 	wantDec := tree.NumValAvailDecimalWithFraction
@@ -147,6 +149,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 // as each of these types will either succeed or return a parse error.
 func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	wantStringButCanBeAll := tree.StrValAvailAllParsable
 	wantBytes := tree.StrValAvailBytes
 
@@ -312,6 +315,7 @@ func typeSet(tys ...*types.T) map[*types.T]struct{} {
 // corresponding parseFunc (above).
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		c            *tree.StrVal
 		parseOptions map[*types.T]struct{}

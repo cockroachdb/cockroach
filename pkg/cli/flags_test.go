@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/spf13/cobra"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
@@ -55,6 +57,7 @@ func TestStdFlagToPflag(t *testing.T) {
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Verify that the cockroach binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach", true,
@@ -76,6 +79,7 @@ func TestNoLinkForbidden(t *testing.T) {
 
 func TestCacheFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
@@ -94,6 +98,7 @@ func TestCacheFlagValue(t *testing.T) {
 
 func TestClusterNameFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
@@ -135,6 +140,7 @@ func TestClusterNameFlag(t *testing.T) {
 
 func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
@@ -182,6 +188,7 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 
 func TestClockOffsetFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -209,6 +216,7 @@ func TestClockOffsetFlagValue(t *testing.T) {
 
 func TestClientURLFlagEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -417,6 +425,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 
 func TestServerConnSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -673,6 +682,7 @@ func TestServerConnSettings(t *testing.T) {
 
 func TestServerSocketSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -716,6 +726,7 @@ func TestServerSocketSettings(t *testing.T) {
 
 func TestLocalityAdvAddrFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -770,6 +781,7 @@ func TestLocalityAdvAddrFlag(t *testing.T) {
 
 func TestServerJoinSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -824,6 +836,7 @@ func TestServerJoinSettings(t *testing.T) {
 
 func TestClientConnSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// For some reason, when run under stress all these test cases fail due to the
 	// `--host` flag being unknown to quitCmd. Just skip this under stress.
@@ -875,6 +888,7 @@ func TestClientConnSettings(t *testing.T) {
 
 func TestHttpHostFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/lib/pq/oid"
 )
@@ -112,6 +113,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 //   cd pkg/cmd/generate-binary; go run main.go > ../../sql/pgwire/testdata/encodings.json
 func TestEncodings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := readEncodingTests(t)
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
@@ -208,6 +210,7 @@ func TestEncodings(t *testing.T) {
 // they'd still be accepted and correctly parsed by Postgres.
 func TestExoticNumericEncodings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		Value    *apd.Decimal
@@ -280,6 +283,7 @@ func BenchmarkEncodings(b *testing.B) {
 
 func TestEncodingErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
 	d, _ := tree.ParseDDecimal("Inf")

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,7 @@ import (
 
 func TestParallelUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		maxInputs  = 16
@@ -142,6 +144,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const expectedErr = "first input error"
 

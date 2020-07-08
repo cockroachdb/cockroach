@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Regression test for a bug, see:
 	// https://github.com/cockroachdb/cockroach/pull/39936#pullrequestreview-359059629

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -31,6 +32,7 @@ import (
 // a rename operation.
 func TestRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -99,6 +101,7 @@ func TestRenameTable(t *testing.T) {
 // on the old version even while the name mapping still exists.
 func TestTxnCanStillResolveOldName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var lmKnobs lease.ManagerTestingKnobs
 	// renameUnblocked is used to block the rename schema change until the test
@@ -230,6 +233,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 // better or worse.
 func TestTxnCanUseNewNameAfterRename(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -294,6 +298,7 @@ SELECT * FROM test.t2
 // series of renames in a transaction.
 func TestSeriesOfRenames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -342,6 +347,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 // all old names drained.
 func TestRenameDuringDrainingName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// two channels that signal the start of the second rename
 	// and the end of the second rename.

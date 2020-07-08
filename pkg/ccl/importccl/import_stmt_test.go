@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -65,6 +66,7 @@ import (
 
 func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skipf("failing on teamcity with testrace")
 
@@ -1016,6 +1018,7 @@ COPY t (a, b, c) FROM stdin;
 
 func TestImportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -1228,6 +1231,7 @@ ALTER TABLE ONLY public.b
 
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	if testing.Short() {
 		t.Skip("short")
 	}
@@ -1796,6 +1800,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 func TestExportImportRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -1847,6 +1852,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 // -> Rollback of a failed IMPORT INTO
 func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if testing.Short() {
 		t.Skip("short")
@@ -3143,6 +3149,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 // work as intended on import jobs.
 func TestImportControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("TODO(dt): add knob to force faster progress checks.")
 
@@ -3266,6 +3273,7 @@ func TestImportControlJob(t *testing.T) {
 // of a worker node.
 func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// TODO(mjibson): Although this test passes most of the time it still
 	// sometimes fails because not all kinds of failures caused by shutting a
@@ -3348,6 +3356,7 @@ func TestImportWorkerFailure(t *testing.T) {
 // was not able to fail in the way listed by the second bug.
 func TestImportLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("TODO(dt): this relies on chunking done by prior version of IMPORT." +
 		"Rework this test, or replace it with resume-tests + jobs infra tests.")
@@ -3481,6 +3490,7 @@ func TestImportLivenessWithRestart(t *testing.T) {
 // owning node to continue processing.
 func TestImportLivenessWithLeniency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -3584,6 +3594,7 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 // index. See #23984.
 func TestImportMVCCChecksums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
@@ -3610,6 +3621,7 @@ func TestImportMVCCChecksums(t *testing.T) {
 
 func TestImportMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/40263")
 
@@ -3738,6 +3750,7 @@ func TestImportMysql(t *testing.T) {
 
 func TestImportMysqlOutfile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		nodes = 3
@@ -3799,6 +3812,7 @@ func TestImportMysqlOutfile(t *testing.T) {
 
 func TestImportPgCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		nodes = 3
@@ -3865,6 +3879,7 @@ func TestImportPgCopy(t *testing.T) {
 
 func TestImportPgDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		nodes = 3
@@ -4022,6 +4037,7 @@ func TestImportPgDump(t *testing.T) {
 // (https://manpages.debian.org/stretch/postgis/shp2pgsql.1.en.html).
 func TestImportPgDumpGeo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const nodes = 1
 	ctx := context.Background()
@@ -4058,6 +4074,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 
 func TestImportCockroachDump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		nodes = 3
@@ -4106,6 +4123,7 @@ func TestImportCockroachDump(t *testing.T) {
 
 func TestCreateStatsAfterImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {
 		stats.DefaultRefreshInterval = oldRefreshInterval
@@ -4145,6 +4163,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 
 func TestImportAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const (
 		nodes = 3
@@ -4296,6 +4315,7 @@ func TestImportAvro(t *testing.T) {
 // for the subprocess.
 func TestImportClientDisconnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -4386,6 +4406,7 @@ func TestImportClientDisconnect(t *testing.T) {
 
 func TestDisallowsInvalidFormatOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	allOpts := make(map[string]struct{})
 	addOpts := func(opts map[string]struct{}) {

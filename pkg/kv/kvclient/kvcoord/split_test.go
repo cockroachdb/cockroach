@@ -96,6 +96,7 @@ func startTestWriter(
 // which are resolved synchronously with EndTxn and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -127,6 +128,7 @@ func TestRangeSplitMeta(t *testing.T) {
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -173,6 +175,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Override default zone config.
 	cfg := zonepb.DefaultZoneConfigRef()
 	cfg.RangeMaxBytes = proto.Int64(1 << 18)
@@ -236,6 +239,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
@@ -263,6 +267,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 //    the sticky bit of that range, but no range is split.
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,

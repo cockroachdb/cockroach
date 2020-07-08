@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -70,6 +71,7 @@ func (spec *testSpec) getConverterSpec() *execinfrapb.ReadImportDataSpec {
 
 func TestConverterFlushesBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Reset batch size setting upon test completion.
 	defer row.TestingSetDatumRowConverterBatchSize(0)()
 
@@ -222,6 +224,7 @@ var eofOffset int64 = math.MaxInt64
 
 func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	flowCtx := &execinfra.FlowCtx{
@@ -315,6 +318,7 @@ type observedKeys struct {
 
 func TestImportHonorsResumePosition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
@@ -444,6 +448,7 @@ func (a *duplicateKeyErrorAdder) Add(_ context.Context, k roachpb.Key, v []byte)
 
 func TestImportHandlesDuplicateKVs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
@@ -631,6 +636,7 @@ func queryJobUntil(
 
 func TestCSVImportCanBeResumed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
@@ -738,6 +744,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()

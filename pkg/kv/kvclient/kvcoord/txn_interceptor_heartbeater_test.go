@@ -63,6 +63,7 @@ func waitForHeartbeatLoopToStop(t *testing.T, th *txnHeartbeater) {
 // transaction key to the key of the first write that is sent through it.
 func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	txn := makeTxnProto()
 	txn.Key = nil // reset
@@ -144,6 +145,7 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 // a request that will acquire locks.
 func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
@@ -196,6 +198,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 // not start a heartbeat loop if it detects a 1PC transaction.
 func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	txn := makeTxnProto()
 	th, _, _ := makeMockTxnHeartbeater(&txn)
@@ -225,6 +228,7 @@ func TestTxnHeartbeaterLoopNotStartedFor1PC(t *testing.T) {
 // from the transaction coordinator that finalizes the transaction.
 func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "heartbeatObserved", func(t *testing.T, heartbeatObserved bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()
@@ -309,6 +313,7 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 // in the HeartbeatTxn response.
 func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "abortedErr", func(t *testing.T, abortedErr bool) {
 		ctx := context.Background()
 		txn := makeTxnProto()

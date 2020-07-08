@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -36,6 +37,7 @@ import (
 // various drivers.
 func TestParseTs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var parseTsTests = []struct {
 		strTimestamp string
@@ -62,6 +64,7 @@ func TestParseTs(t *testing.T) {
 
 func TestTimestampRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ts := time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("UTC", 0))
 
 	parse := func(encoded []byte) time.Time {
@@ -89,6 +92,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 
 func TestWriteBinaryArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Regression test for #20372. Ensure that writing twice to the same
 	// writeBuffer is equivalent to writing to two different writeBuffers and
 	// then concatenating the result.
@@ -116,6 +120,7 @@ func TestWriteBinaryArray(t *testing.T) {
 
 func TestIntArrayRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := newWriteBuffer(nil /* bytecount */)
 	buf.bytecount = metric.NewCounter(metric.Metadata{})
@@ -144,6 +149,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 func TestFloatConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testData := []struct {
 		val              float64
@@ -183,6 +189,7 @@ func TestFloatConversion(t *testing.T) {
 
 func TestByteArrayRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	randValues := make(tree.Datums, 0, 11)
@@ -228,6 +235,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 
 func TestCanWriteAllDatums(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestRangeLookupRace tests that a RangeLookup will retry its scanning process
@@ -27,6 +28,7 @@ import (
 // may race with splits.
 func TestRangeLookupRaceSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	desc1BeforeSplit := roachpb.RangeDescriptor{
 		RangeID:    1,

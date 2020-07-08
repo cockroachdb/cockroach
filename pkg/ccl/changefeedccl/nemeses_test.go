@@ -24,10 +24,9 @@ import (
 
 func TestChangefeedNemeses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 10 * time.Millisecond
-	scope := log.Scope(t)
-	defer scope.Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in

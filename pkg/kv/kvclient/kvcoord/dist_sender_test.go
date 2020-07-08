@@ -209,6 +209,7 @@ func newNodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -509,6 +510,7 @@ var threeReplicaMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
 
 func TestImmutableBatchArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -569,6 +571,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 // NotLeaseHolderError.
 func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().Voters()[1]
 	unrecognizedLeaseHolder := roachpb.ReplicaDescriptor{
@@ -655,6 +658,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 // increase in LeaseSequence.
 func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -743,6 +747,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 // it is ejected from the cache.
 func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -837,6 +842,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 // lookup on any error.
 func TestRetryOnDescriptorLookupError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -887,6 +893,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 // the first range.
 func TestEvictOnFirstRangeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -986,6 +993,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 func TestEvictCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The first attempt gets a BatchResponse with replicaError in the header, if
 	// replicaError set. If not set, the first attempt gets an RPC error. The
 	// second attempt, if any, succeeds.
@@ -1113,6 +1121,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1179,6 +1188,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 // retries upon encountering a stale entry in its range descriptor cache.
 func TestRetryOnWrongReplicaError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1279,6 +1289,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 // provides a suggestion.
 func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1376,6 +1387,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1429,6 +1441,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 // second address, the second reply should be successfully returned back.
 func TestSendRPCRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1505,6 +1518,8 @@ func TestSendRPCRetry(t *testing.T) {
 // the next Replica is tried.
 func TestSendRPCRangeNotFoundError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -1595,6 +1610,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 // looked up from Gossip.
 func TestGetNodeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1624,6 +1640,7 @@ func TestGetNodeDescriptor(t *testing.T) {
 
 func TestMultiRangeGapReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1717,6 +1734,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 // once.
 func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1822,6 +1840,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 // ReverseScan request has the useReverseScan specified.
 func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1860,6 +1879,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 // the timestamp of the remote party embedded in responses.
 func TestClockUpdateOnResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -1918,6 +1938,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 // range span and the range of a descriptor found in cache.
 func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2047,6 +2068,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 // is truncated with a range span and the range of a descriptor found in cache.
 func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2176,6 +2198,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 // commit.
 func TestMultiRangeWithEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2377,6 +2400,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 // ranges.
 func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2497,6 +2521,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 // DistSender.detectIntentMissingDueToIntentResolution.
 func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2622,6 +2647,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 
 func TestCountRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2700,6 +2726,7 @@ func TestCountRanges(t *testing.T) {
 
 func TestSenderTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	transport, err := SenderTransportFactory(
 		tracing.NewTracer(),
 		kv.SenderFunc(
@@ -2724,6 +2751,7 @@ func TestSenderTransport(t *testing.T) {
 
 func TestGatewayNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2778,6 +2806,7 @@ func TestGatewayNodeID(t *testing.T) {
 // merging the transaction metadata passed on the errors.
 func TestMultipleErrorsMerged(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -2991,6 +3020,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 // the overall batch.
 func TestErrorIndexAlignment(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -3134,6 +3164,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 // get from CanSendToFollower.
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -3252,6 +3283,8 @@ func TestCanSendToFollower(t *testing.T) {
 // from the cache.
 func TestEvictMetaRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -3440,6 +3473,7 @@ func TestEvictMetaRange(t *testing.T) {
 // the appropriate class for a given resolved range.
 func TestConnectionClass(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	// Create a mock range descriptor DB that can resolve made up meta1, node
@@ -3537,6 +3571,7 @@ func TestConnectionClass(t *testing.T) {
 // is retried.
 func TestEvictionTokenCoalesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -3663,6 +3698,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 
 func TestDistSenderSlowLogMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const (
 		dur      = 8158 * time.Millisecond
 		attempts = 120
@@ -3696,6 +3732,8 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 // smaller range, only to get an entirely predictable RangeKeyMismatchError.
 func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

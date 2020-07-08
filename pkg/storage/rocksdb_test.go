@@ -47,6 +47,7 @@ const testCacheSize = 1 << 30 // 1 GB
 // visible to reads from the batch (whereas using a snapshot, they would not).
 func TestBatchReadLaterWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	key := roachpb.Key("a")
@@ -96,6 +97,7 @@ func TestBatchReadLaterWrite(t *testing.T) {
 
 func TestBatchIterReadOwnWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	db := setupMVCCInMemRocksDB(t, "iter_read_own_write")
 	defer db.Close()
@@ -173,6 +175,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 
 func TestBatchPrefixIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	db := setupMVCCInMemRocksDB(t, "iter_read_own_write")
 	defer db.Close()
@@ -207,6 +210,7 @@ func TestBatchPrefixIter(t *testing.T) {
 
 func TestIterBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	db := setupMVCCInMemRocksDB(t, "iter_bounds")
 	defer db.Close()
@@ -403,6 +407,7 @@ func benchmarkIterOnReadWriter(
 // functions correctly.
 func TestRocksDBOpenWithVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		hasFile     bool
@@ -464,6 +469,7 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 
 func TestRocksDBApproximateDiskBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -523,6 +529,7 @@ func TestRocksDBApproximateDiskBytes(t *testing.T) {
 
 func TestInMemIllegalOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cache := NewRocksDBCache(10 << 20 /* 10mb */)
 	defer cache.Release()
@@ -546,6 +553,7 @@ func TestInMemIllegalOption(t *testing.T) {
 
 func TestConcurrentBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if testutils.NightlyStress() || util.RaceEnabled {
 		t.Skip()
@@ -637,6 +645,7 @@ func TestConcurrentBatch(t *testing.T) {
 // without ever calling Truncate.
 func TestRocksDBSstFileWriterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Truncate will be used on this writer.
 	sst1, err := MakeRocksDBSstFileWriter()
@@ -847,6 +856,7 @@ func key(s string) MVCCKey {
 // smallest candidate.
 func TestRocksDBDeleteRangeBug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
@@ -903,6 +913,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 
 func TestRocksDBOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, err := ioutil.TempDir("", "testing")
 	if err != nil {
@@ -958,6 +969,7 @@ func TestRocksDBOptions(t *testing.T) {
 // exessively large portion of the key space.
 func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	db := setupMVCCInMemRocksDB(t, "delrange")
 	defer db.Close()
@@ -1164,6 +1176,7 @@ func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
 
 func TestMakeBatchGroup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Assume every newly instantiated batch has size 12 (header only).
 	testCases := []struct {
@@ -1215,6 +1228,7 @@ func TestMakeBatchGroup(t *testing.T) {
 // Verify that RocksDBSstFileWriter works with time bounded iterators.
 func TestSstFileWriterTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	db := setupMVCCInMemRocksDB(t, "sstwriter-timebound")
@@ -1269,6 +1283,7 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 // not write an entry to RocksDB's write-ahead log.
 func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -1379,6 +1394,7 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 // Regression test for https://github.com/facebook/rocksdb/issues/6666.
 func TestRocksDBGlobalSeqnumIssue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tempDir, cleanup := testutils.TempDir(t)
 	defer cleanup()

@@ -1173,6 +1173,7 @@ func setupPartitioningTestCluster(
 
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/49909")
@@ -1211,6 +1212,7 @@ func TestInitialPartitioning(t *testing.T) {
 
 func TestSelectPartitionExprs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// TODO(dan): PartitionExprs for range partitions is waiting on the new
 	// range partitioning syntax.
@@ -1286,6 +1288,7 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Skipping as part of test-infra-team flaky test cleanup.
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/49112")
@@ -1378,6 +1381,7 @@ func TestRepartitioning(t *testing.T) {
 
 func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -1452,6 +1456,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()

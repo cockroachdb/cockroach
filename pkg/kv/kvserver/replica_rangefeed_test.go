@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -79,6 +80,7 @@ func (s *testStream) Events() []*roachpb.RangeFeedEvent {
 
 func TestReplicaRangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	sc := kvserver.TestStoreConfig(nil)
@@ -310,6 +312,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.Clock = nil // manual clock
@@ -346,6 +349,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 
 func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	startKey := []byte("a")
@@ -718,6 +722,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 // ensure that its resolved timestamp continues to advance.
 func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, db, _, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
@@ -829,6 +834,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 // from its Range's leaseholder. This is a regression test for #35142.
 func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, db, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)

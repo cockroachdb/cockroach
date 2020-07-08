@@ -81,6 +81,7 @@ func setTestJobsAdoptInterval() (reset func()) {
 // this test still even exist?
 func TestSchemaChangeProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
@@ -204,6 +205,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 // settings. Should it even still exist?
 func TestAsyncSchemaChanger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
@@ -449,6 +451,7 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
@@ -621,6 +624,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // successfully complete without deleting the data.
 func TestDropWhileBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	backfillNotification := make(chan struct{})
@@ -752,6 +756,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // proper state.
 func TestBackfillErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := tests.CreateTestServerParams()
@@ -862,6 +867,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // of data.
 func TestAbortSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var backfillNotification, commandsDone chan struct{}
 	var dontAbortBackfill uint32
 	params, _ := tests.CreateTestServerParams()
@@ -1136,6 +1142,7 @@ func dropIndexSchemaChange(
 // or an error occurs if a CHECK constraint is being added on it.
 func TestDropColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1200,6 +1207,7 @@ CREATE TABLE t.test (
 // a retry.
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
@@ -1278,6 +1286,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // the number of chunks operated on during a retry.
 func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
@@ -1383,6 +1392,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("")
 	// TODO (lucy): This test needs more complicated schema changer knobs than
 	// currently implemented. Previously this test disabled the async schema
@@ -1532,6 +1542,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // doesn't leave the DB in a bad state.
 func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
@@ -1623,6 +1634,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // correctly when one of them violates a constraint.
 func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// TODO (lucy): This test needs more complicated schema changer knobs than
 	// currently implemented. What this test should be doing is starting a schema
 	// change, and, before it hits a violation that requires a rollback, starting
@@ -1900,6 +1912,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 // a column works correctly.
 func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -2008,6 +2021,7 @@ CREATE TABLE t.test (
 // This test checks whether a column can be added using the name of a column that has just been dropped.
 func TestAddColumnDuringColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
@@ -2074,6 +2088,7 @@ CREATE TABLE t.test (
 // purges the rollback. For now this is considered acceptable.
 func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	attempts := 0
@@ -2163,6 +2178,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 // during the primary key change process.
 func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer setTestJobsAdoptInterval()()
 
@@ -2246,6 +2262,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 // successfully rewrites indexes that are being created while the primary key change starts.
 func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer setTestJobsAdoptInterval()()
 
@@ -2400,6 +2417,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT, v2 INT NOT NULL)`); err != nil {
 // changes cannot be queued while a primary key change is executing.
 func TestSchemaChangeWhileExecutingPrimaryKeyChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	backfillNotification := make(chan struct{})
@@ -2457,6 +2475,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 // while a primary key change is happening.
 func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	var chunkSize int64 = 100
@@ -2703,6 +2722,7 @@ UPDATE t.test SET z = NULL, a = $1, b = NULL, c = NULL, d = $1 WHERE y = $2`, 2*
 // change on a table created in the same transaction.
 func TestPrimaryKeyChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -2734,6 +2754,7 @@ COMMIT;
 // seem to be a better way to achieve what is needed here.
 func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	backfillNotification := make(chan struct{})
@@ -2890,6 +2911,7 @@ CREATE TABLE t.test (
 // indexes that are being rewritten eventually get cleaned up and removed.
 func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// Decrease the adopt loop interval so that retries happen quickly.
@@ -2926,6 +2948,7 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
 
 func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
@@ -3015,6 +3038,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 // a primary key change is not cancelable.
 func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var db *gosql.DB
@@ -3071,6 +3095,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 // change.
 func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
@@ -3114,6 +3139,7 @@ INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3);
 // in the middle of a column backfill.
 func TestCRUDWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer setTestJobsAdoptInterval()()
 	backfillNotification := make(chan bool)
@@ -3360,6 +3386,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 // configured chunk size.
 func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numNodes = 5
 	const chunkSize = 100
 	// The number of rows in the table is a multiple of chunkSize.
@@ -3438,6 +3465,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 func TestSchemaChangeInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -3552,6 +3580,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -3668,6 +3697,7 @@ CREATE TABLE d.t (
 // the backfilled columns.
 func TestSchemaChangeEvalContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numNodes = 3
 	const chunkSize = 200
 	const maxValue = 5000
@@ -3748,6 +3778,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // gets to run before the first schema change.
 func TestSchemaChangeCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("")
 	// TODO (lucy): This test needs more complicated schema changer knobs than is
 	// currently implemented.
@@ -3833,6 +3864,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // for the asynchronous schema changer to eventually execute it.
 func TestTruncateInternals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const maxValue = 2000
 	params, _ := tests.CreateTestServerParams()
 	// Disable schema changes.
@@ -3937,6 +3969,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 // Test that a table truncation completes properly.
 func TestTruncateCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const maxValue = 2000
 
 	defer setTestJobsAdoptInterval()()
@@ -4082,6 +4115,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 // Test TRUNCATE during a column backfill.
 func TestTruncateWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Skip("https://github.com/cockroachdb/cockroach/issues/43990")
 
@@ -4208,6 +4242,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // received as the results of the commit statement.
 func TestSchemaChangeErrorOnCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -4242,6 +4277,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 // backfill has started, it will move past the error and complete.
 func TestIndexBackfillAfterGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
@@ -4298,6 +4334,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 // for a computed column, INSERTs and UPDATEs for that column are correct.
 func TestAddComputedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var db *gosql.DB
 	done := false
@@ -4334,6 +4371,7 @@ func TestAddComputedColumn(t *testing.T) {
 
 func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -4461,6 +4499,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 // and index backfills is canceled.
 func TestCancelSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Skip("")
 
 	const (
@@ -4653,6 +4692,7 @@ func TestCancelSchemaChange(t *testing.T) {
 // currently fails because a schema changeg transaction is not retried.
 func TestSchemaChangeRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numNodes = 3
 
 	params, _ := tests.CreateTestServerParams()
@@ -4714,6 +4754,7 @@ func TestSchemaChangeRetryError(t *testing.T) {
 // the asynchronous schema changer.
 func TestCancelSchemaChangeContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const maxValue = 100
 	notifyBackfill := make(chan struct{})
@@ -4793,6 +4834,7 @@ CANCEL SESSIONS (SELECT session_id FROM [SHOW SESSIONS] WHERE last_active_query 
 
 func TestSchemaChangeGRPCError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer setTestJobsAdoptInterval()()
 
@@ -4844,6 +4886,7 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 // processing.
 func TestBlockedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const maxValue = 100
 	notifyBackfill := make(chan struct{})
@@ -4912,6 +4955,7 @@ func TestBlockedSchemaChange(t *testing.T) {
 // fails.
 func TestIndexBackfillValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	const maxValue = 1000
 	backfillCount := int64(0)
@@ -4981,6 +5025,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // value during the index backfill and checking that the validation fails.
 func TestInvertedIndexBackfillValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	const maxValue = 1000
 	backfillCount := int64(0)
@@ -5053,6 +5098,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 // same transaction.
 func TestMultipleIndexBackfills(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	const maxValue = 1000
 	params.Knobs = base.TestingKnobs{
@@ -5114,6 +5160,7 @@ CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
 
 func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {
 		stats.DefaultRefreshInterval = oldRefreshInterval
@@ -5168,6 +5215,7 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 
 func TestTableValidityWhileAddingFK(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
@@ -5258,6 +5306,7 @@ CREATE TABLE t.parent (a INT PRIMARY KEY);
 // begins. See #35258.
 func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
@@ -5356,6 +5405,7 @@ CREATE TABLE t.test (
 // begins. See #35258.
 func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	publishWriteNotification := make(chan struct{})
@@ -5452,6 +5502,7 @@ CREATE TABLE t.test (
 // that run simultaneously.
 func TestIntentRaceWithIndexBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var readyToBackfill, canStartBackfill, backfillProgressing chan struct{}
 
@@ -5588,6 +5639,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	var runBeforeConstraintValidation func() error
 	params.Knobs = base.TestingKnobs{
@@ -5638,6 +5690,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 // are only added once. This is addressed by #38377.
 func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer setTestJobsAdoptInterval()()
 	params, _ := tests.CreateTestServerParams()
@@ -5697,6 +5750,7 @@ ALTER TABLE t.test2 ADD FOREIGN KEY (k) REFERENCES t.test;
 // was backed up right after an index deletion.
 func TestOrphanedGCMutationsRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// TODO (lucy): get rid of this test once GCMutations goes away
 	t.Skip("")
 	params, _ := tests.CreateTestServerParams()
@@ -5794,6 +5848,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 // attempted to be reversed twice.
 func TestMultipleRevert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -5880,6 +5935,7 @@ ALTER TABLE t.public.test DROP COLUMN v;
 // back a schema change causes the rollback to retry and succeed.
 func TestRetriableErrorDuringRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 	ctx := context.Background()
 
@@ -5969,6 +6025,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 // is displayed in the jobs table.
 func TestPermanentErrorDuringRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 	ctx := context.Background()
 

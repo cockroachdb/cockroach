@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Test that EvalContext.GetClusterTimestamp() gets its timestamp from the
 // transaction, and also that the conversion to decimal works properly.
 func TestClusterTimestampConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		walltime int64
 		logical  int32

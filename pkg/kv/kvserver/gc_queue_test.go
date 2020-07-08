@@ -53,6 +53,7 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 
 func TestGCQueueScoreString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for i, c := range []struct {
 		r   gcQueueScore
 		exp string
@@ -84,6 +85,7 @@ likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`
 
 func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rnd, seed := randutil.NewPseudoRand()
 	cfg := quick.Config{
@@ -122,6 +124,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 
 func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	if err := quick.Check(func(keyBytes, valBytes, liveBytes int32, containsEstimates int64) bool {
 		r := makeGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
 			ContainsEstimates: containsEstimates,
@@ -137,6 +140,7 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 
 func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const seed = 1
 	var ms enginepb.MVCCStats
 	ms.SysCount += probablyLargeAbortSpanSysCountThreshold
@@ -297,6 +301,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 // and the age of unresolved intents.
 func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cws := newCachedWriteSimulator(t)
 
@@ -404,6 +409,7 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 // scales and verifies that scan queue process properly GCs test data.
 func TestGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -632,6 +638,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	manual := hlc.NewManualClock(123)
@@ -896,6 +903,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 // intents spanning just two transactions.
 func TestGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -967,6 +975,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -1027,6 +1036,7 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 // keys and also for many different versions of keys.
 func TestGCQueueChunkRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	var gcRequests int32

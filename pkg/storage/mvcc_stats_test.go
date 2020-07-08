@@ -64,6 +64,7 @@ func assertEq(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginepb.MVC
 // the intent (before resolution) and the accumulation of GCByteAge.
 func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -142,6 +143,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 // written and then committed at a later timestamp.
 func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -221,6 +223,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 // the IntentAge computation.
 func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -302,6 +305,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 // the GCBytesAge computation.
 func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -414,6 +418,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 // formerly messed up the GCBytesAge computation.
 func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -530,6 +535,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 // correct stats.
 func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -669,6 +675,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 // final correction is done in the put path and not the commit path.
 func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -838,6 +845,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 // that was exercised by running two deletions followed by a specific GC.
 func TestMVCCStatsDelDelGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -914,6 +922,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 //   version, we're upgraded to write the MVCCMetadata.Timestamp.
 func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -1005,6 +1014,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 // deletes the original write, but not the deletion tombstone.
 func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -1092,6 +1102,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 // on a sys key, would lead to overcounting `ms.SysBytes`.
 func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -1182,6 +1193,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 // `ms.IntentCount`.
 func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -1253,6 +1265,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 // value on top of an existing system key, would undercount.
 func TestMVCCStatsSysPutPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
@@ -1424,6 +1437,7 @@ func (s *randomTest) step(t *testing.T) {
 
 func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -1571,6 +1585,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 
 func TestMVCCComputeStatsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()

@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestParseArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		str      string
 		typ      *types.T
@@ -106,6 +108,7 @@ const randomStringMaxLength = 1000
 
 func TestParseArrayRandomParseArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for i := 0; i < randomArrayIterations; i++ {
 		numElems := rand.Intn(randomArrayMaxLength)
 		ary := make([][]byte, numElems)
@@ -155,6 +158,7 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 
 func TestParseArrayError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		str           string
 		typ           *types.T

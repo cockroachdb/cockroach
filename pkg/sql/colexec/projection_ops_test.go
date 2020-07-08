@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,7 @@ import (
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -54,6 +56,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -76,6 +79,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 
 func TestProjDivFloat64Float64Op(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -98,6 +102,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	binOp := tree.Mult
 	var input colexecbase.Operator
 	colIdx := 3
@@ -127,6 +132,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	binOp := tree.GE
 	var input colexecbase.Operator
 	colIdx := 3
@@ -159,6 +165,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 // of the exec projection.
 func TestRandomComparisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -250,6 +257,7 @@ func TestRandomComparisons(t *testing.T) {
 
 func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	typ := types.Int2
 	binOp := tree.Mult
 	var input colexecbase.Operator
