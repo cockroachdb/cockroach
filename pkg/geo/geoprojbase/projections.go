@@ -38,6 +38,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0 +a=6370997 +b=6370997 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid1,
+		Bounds: &Bounds{
+			MinX: -8.046094808001524e+06,
+			MaxX: 3.695915214255973e+06,
+			MinY: -2.5386543131344765e+06,
+			MaxY: 4.802459331068178e+06,
+		},
 	},
 	3031: {
 		SRID:      3031,
@@ -47,6 +53,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=stere +lat_0=-90 +lat_ts=-71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -4.081911918066544e-10,
+			MaxX: 4.081911918066544e-10,
+			MinY: -3.333134027630277e+06,
+			MaxY: 0,
+		},
 	},
 	3035: {
 		SRID:      3035,
@@ -56,6 +68,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid3,
+		Bounds: &Bounds{
+			MinX: -146473.1132416511,
+			MaxX: 7.824928564455921e+06,
+			MinY: 976656.6802774239,
+			MaxY: 6.928130515709823e+06,
+		},
 	},
 	3395: {
 		SRID:      3395,
@@ -65,6 +83,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -2.0037508342789244e+07,
+			MaxX: 2.0037508342789244e+07,
+			MinY: -1.5496570739723722e+07,
+			MaxY: 1.876465623138057e+07,
+		},
 	},
 	3408: {
 		SRID:      3408,
@@ -74,6 +98,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +a=6371228 +b=6371228 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid4,
+		Bounds: &Bounds{
+			MinX: -1.1034406944514297e-09,
+			MaxX: 1.1034406944514297e-09,
+			MinY: 0,
+			MaxY: 9.010277046571208e+06,
+		},
 	},
 	3409: {
 		SRID:      3409,
@@ -83,6 +113,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=-90 +lon_0=0 +x_0=0 +y_0=0 +a=6371228 +b=6371228 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid4,
+		Bounds: &Bounds{
+			MinX: -1.1034406944514301e-09,
+			MaxX: 1.1034406944514301e-09,
+			MinY: -9.01027704657121e+06,
+			MaxY: -7.802503976837993e-10,
+		},
 	},
 	3571: {
 		SRID:      3571,
@@ -92,6 +128,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=180 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 0,
+			MaxX: 0,
+			MinY: -4.889334802954878e+06,
+			MaxY: 0,
+		},
 	},
 	3572: {
 		SRID:      3572,
@@ -101,6 +143,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=-150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -2.444667401477438e+06,
+			MaxX: 0,
+			MinY: -4.234288146966307e+06,
+			MaxY: 0,
+		},
 	},
 	3573: {
 		SRID:      3573,
@@ -110,6 +158,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=-100 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -4.81505482102238e+06,
+			MaxX: 0,
+			MinY: -849024.0785366148,
+			MaxY: 0,
+		},
 	},
 	3574: {
 		SRID:      3574,
@@ -119,6 +173,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=-40 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -3.142803830948573e+06,
+			MaxX: 0,
+			MinY: 0,
+			MaxY: 3.7454477563518067e+06,
+		},
 	},
 	3575: {
 		SRID:      3575,
@@ -128,6 +188,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=10 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 0,
+			MaxX: 849024.078536614,
+			MinY: 0,
+			MaxY: 4.81505482102238e+06,
+		},
 	},
 	3576: {
 		SRID:      3576,
@@ -137,6 +203,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=90 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 0,
+			MaxX: 4.889334802954878e+06,
+			MinY: -2.9938541081992227e-10,
+			MaxY: 0,
+		},
 	},
 	3785: {
 		SRID:      3785,
@@ -146,6 +218,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid5,
+		Bounds: &Bounds{
+			MinX: -2.0037508342789244e+07,
+			MaxX: 2.0037508342789244e+07,
+			MinY: -2.00489661040146e+07,
+			MaxY: 2.004896610401459e+07,
+		},
 	},
 	3857: {
 		SRID:      3857,
@@ -155,6 +233,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid5,
+		Bounds: &Bounds{
+			MinX: -2.0037508342789244e+07,
+			MaxX: 2.0037508342789244e+07,
+			MinY: -2.00489661040146e+07,
+			MaxY: 2.004896610401459e+07,
+		},
 	},
 	3973: {
 		SRID:      3973,
@@ -164,6 +248,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -1.1034024505272343e-09,
+			MaxX: 1.1034024505272343e-09,
+			MinY: 0,
+			MaxY: 9.009964761231286e+06,
+		},
 	},
 	3974: {
 		SRID:      3974,
@@ -173,6 +263,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=-90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -1.1034024505272343e-09,
+			MaxX: 1.1034024505272343e-09,
+			MinY: -9.009964761231286e+06,
+			MaxY: 0,
+		},
 	},
 	3995: {
 		SRID:      3995,
@@ -182,6 +278,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=stere +lat_0=90 +lat_ts=71 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -4.081911918066544e-10,
+			MaxX: 4.081911918066544e-10,
+			MinY: 0,
+			MaxY: 3.333134027630277e+06,
+		},
 	},
 	4004: {
 		SRID:      4004,
@@ -191,6 +293,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=longlat +ellps=bessel +no_defs`),
 		IsLatLng:  true,
 		Spheroid:  spheroid6,
+		Bounds: &Bounds{
+			MinX: -180,
+			MaxX: 180,
+			MinY: -90,
+			MaxY: 90,
+		},
 	},
 	4055: {
 		SRID:      4055,
@@ -200,6 +308,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=longlat +a=6378137 +b=6378137 +towgs84=0,0,0,0,0,0,0 +no_defs`),
 		IsLatLng:  true,
 		Spheroid:  spheroid5,
+		Bounds: &Bounds{
+			MinX: -180,
+			MaxX: 180,
+			MinY: -90,
+			MaxY: 90,
+		},
 	},
 	4326: {
 		SRID:      4326,
@@ -209,6 +323,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=longlat +datum=WGS84 +no_defs`),
 		IsLatLng:  true,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -180,
+			MaxX: 180,
+			MinY: -90,
+			MaxY: 90,
+		},
 	},
 	5633: {
 		SRID:      5633,
@@ -218,6 +338,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid3,
+		Bounds: &Bounds{
+			MinX: 82549.71285824571,
+			MaxX: 2.515870100495171e+06,
+			MinY: 1.0141947558855228e+06,
+			MaxY: 3.325979329127448e+06,
+		},
 	},
 	5635: {
 		SRID:      5635,
@@ -227,6 +353,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid3,
+		Bounds: &Bounds{
+			MinX: 1.090443139749668e+06,
+			MaxX: 2.2844161025193995e+06,
+			MinY: 501635.1590838609,
+			MaxY: 1.698896679575907e+06,
+		},
 	},
 	5636: {
 		SRID:      5636,
@@ -236,6 +368,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid3,
+		Bounds: &Bounds{
+			MinX: 5.5782658782712165e+06,
+			MaxX: 7.437720992692305e+06,
+			MinY: 1.4101831575229971e+06,
+			MaxY: 2.908779050274115e+06,
+		},
 	},
 	5638: {
 		SRID:      5638,
@@ -245,6 +383,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid3,
+		Bounds: &Bounds{
+			MinX: 2.1800270871075992e+06,
+			MaxX: 3.714401461962507e+06,
+			MinY: 4.190621841431967e+06,
+			MaxY: 5.627446309879363e+06,
+		},
 	},
 	6931: {
 		SRID:      6931,
@@ -254,6 +398,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -1.1034024505272343e-09,
+			MaxX: 1.1034024505272343e-09,
+			MinY: 0,
+			MaxY: 9.009964761231286e+06,
+		},
 	},
 	6932: {
 		SRID:      6932,
@@ -263,6 +413,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=laea +lat_0=-90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: -1.1034024505272343e-09,
+			MaxX: 1.1034024505272343e-09,
+			MinY: -9.009964761231286e+06,
+			MaxY: 0,
+		},
 	},
 	26918: {
 		SRID:      26918,
@@ -272,6 +428,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=18 +datum=NAD83 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid3,
+		Bounds: &Bounds{
+			MinX: 205723.76927170617,
+			MaxX: 794276.2307282952,
+			MinY: 3.131872261800517e+06,
+			MaxY: 9.329005182354301e+06,
+		},
 	},
 	32601: {
 		SRID:      32601,
@@ -281,6 +443,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=1 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32602: {
 		SRID:      32602,
@@ -290,6 +458,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=2 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32603: {
 		SRID:      32603,
@@ -299,6 +473,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=3 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32604: {
 		SRID:      32604,
@@ -308,6 +488,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=4 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32605: {
 		SRID:      32605,
@@ -317,6 +503,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=5 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32606: {
 		SRID:      32606,
@@ -326,6 +518,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=6 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32607: {
 		SRID:      32607,
@@ -335,6 +533,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=7 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32608: {
 		SRID:      32608,
@@ -344,6 +548,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=8 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32609: {
 		SRID:      32609,
@@ -353,6 +563,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=9 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32610: {
 		SRID:      32610,
@@ -362,6 +578,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=10 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32611: {
 		SRID:      32611,
@@ -371,6 +593,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=11 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32612: {
 		SRID:      32612,
@@ -380,6 +608,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=12 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32613: {
 		SRID:      32613,
@@ -389,6 +623,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=13 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32614: {
 		SRID:      32614,
@@ -398,6 +638,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=14 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32615: {
 		SRID:      32615,
@@ -407,6 +653,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=15 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32616: {
 		SRID:      32616,
@@ -416,6 +668,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=16 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32617: {
 		SRID:      32617,
@@ -425,6 +683,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=17 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32618: {
 		SRID:      32618,
@@ -434,6 +698,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32619: {
 		SRID:      32619,
@@ -443,6 +713,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=19 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32620: {
 		SRID:      32620,
@@ -452,6 +728,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=20 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32621: {
 		SRID:      32621,
@@ -461,6 +743,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=21 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054203,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32622: {
 		SRID:      32622,
@@ -470,6 +758,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32623: {
 		SRID:      32623,
@@ -479,6 +773,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=23 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194602,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32624: {
 		SRID:      32624,
@@ -488,6 +788,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=24 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053842,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32625: {
 		SRID:      32625,
@@ -497,6 +803,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=25 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194616,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32626: {
 		SRID:      32626,
@@ -506,6 +818,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=26 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053982,
+			MaxX: 833978.5569194602,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32627: {
 		SRID:      32627,
@@ -515,6 +833,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=27 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053842,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32628: {
 		SRID:      32628,
@@ -524,6 +848,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=28 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194583,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32629: {
 		SRID:      32629,
@@ -533,6 +863,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=29 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053947,
+			MaxX: 833978.5569194604,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32630: {
 		SRID:      32630,
@@ -542,6 +878,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805386,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32631: {
 		SRID:      32631,
@@ -551,6 +893,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=31 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194613,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32632: {
 		SRID:      32632,
@@ -560,6 +908,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053958,
+			MaxX: 833978.5569194605,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32633: {
 		SRID:      32633,
@@ -569,6 +923,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054168,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32634: {
 		SRID:      32634,
@@ -578,6 +938,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=34 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194616,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32635: {
 		SRID:      32635,
@@ -587,6 +953,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=35 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053982,
+			MaxX: 833978.5569194602,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32636: {
 		SRID:      32636,
@@ -596,6 +968,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=36 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053842,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32637: {
 		SRID:      32637,
@@ -605,6 +983,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=37 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194616,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32638: {
 		SRID:      32638,
@@ -614,6 +998,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=38 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053982,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32639: {
 		SRID:      32639,
@@ -623,6 +1013,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=39 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054203,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32640: {
 		SRID:      32640,
@@ -632,6 +1028,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=40 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.556919458,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32641: {
 		SRID:      32641,
@@ -641,6 +1043,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=41 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32642: {
 		SRID:      32642,
@@ -650,6 +1058,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=42 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805362,
+			MaxX: 833978.5569194566,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32643: {
 		SRID:      32643,
@@ -659,6 +1073,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=43 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.556919458,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32644: {
 		SRID:      32644,
@@ -668,6 +1088,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=44 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32645: {
 		SRID:      32645,
@@ -677,6 +1103,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=45 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805362,
+			MaxX: 833978.5569194566,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32646: {
 		SRID:      32646,
@@ -686,6 +1118,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=46 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32647: {
 		SRID:      32647,
@@ -695,6 +1133,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32648: {
 		SRID:      32648,
@@ -704,6 +1148,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=48 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805362,
+			MaxX: 833978.5569194566,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32649: {
 		SRID:      32649,
@@ -713,6 +1163,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=49 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054342,
+			MaxX: 833978.5569194651,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32650: {
 		SRID:      32650,
@@ -722,6 +1178,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=50 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32651: {
 		SRID:      32651,
@@ -731,6 +1193,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=51 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32652: {
 		SRID:      32652,
@@ -740,6 +1208,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054342,
+			MaxX: 833978.5569194651,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32653: {
 		SRID:      32653,
@@ -749,6 +1223,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=53 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32654: {
 		SRID:      32654,
@@ -758,6 +1238,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=54 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32655: {
 		SRID:      32655,
@@ -767,6 +1253,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=55 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054342,
+			MaxX: 833978.5569194651,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32656: {
 		SRID:      32656,
@@ -776,6 +1268,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=56 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32657: {
 		SRID:      32657,
@@ -785,6 +1283,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=57 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32658: {
 		SRID:      32658,
@@ -794,6 +1298,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=58 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32659: {
 		SRID:      32659,
@@ -803,6 +1313,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=59 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32660: {
 		SRID:      32660,
@@ -812,6 +1328,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=60 +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 0,
+			MaxY: 9.329005182447437e+06,
+		},
 	},
 	32701: {
 		SRID:      32701,
@@ -821,6 +1343,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=1 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32702: {
 		SRID:      32702,
@@ -830,6 +1358,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=2 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32703: {
 		SRID:      32703,
@@ -839,6 +1373,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=3 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32704: {
 		SRID:      32704,
@@ -848,6 +1388,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=4 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32705: {
 		SRID:      32705,
@@ -857,6 +1403,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=5 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32706: {
 		SRID:      32706,
@@ -866,6 +1418,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=6 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32707: {
 		SRID:      32707,
@@ -875,6 +1433,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=7 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32708: {
 		SRID:      32708,
@@ -884,6 +1448,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=8 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32709: {
 		SRID:      32709,
@@ -893,6 +1463,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=9 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32710: {
 		SRID:      32710,
@@ -902,6 +1478,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=10 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32711: {
 		SRID:      32711,
@@ -911,6 +1493,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=11 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32712: {
 		SRID:      32712,
@@ -920,6 +1508,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=12 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32713: {
 		SRID:      32713,
@@ -929,6 +1523,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=13 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32714: {
 		SRID:      32714,
@@ -938,6 +1538,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=14 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32715: {
 		SRID:      32715,
@@ -947,6 +1553,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=15 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32716: {
 		SRID:      32716,
@@ -956,6 +1568,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=16 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32717: {
 		SRID:      32717,
@@ -965,6 +1583,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=17 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32718: {
 		SRID:      32718,
@@ -974,6 +1598,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32719: {
 		SRID:      32719,
@@ -983,6 +1613,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32720: {
 		SRID:      32720,
@@ -992,6 +1628,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=20 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32721: {
 		SRID:      32721,
@@ -1001,6 +1643,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=21 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054203,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32722: {
 		SRID:      32722,
@@ -1010,6 +1658,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=22 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32723: {
 		SRID:      32723,
@@ -1019,6 +1673,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=23 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194602,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32724: {
 		SRID:      32724,
@@ -1028,6 +1688,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=24 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053842,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32725: {
 		SRID:      32725,
@@ -1037,6 +1703,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=25 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194616,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32726: {
 		SRID:      32726,
@@ -1046,6 +1718,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=26 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053982,
+			MaxX: 833978.5569194602,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32727: {
 		SRID:      32727,
@@ -1055,6 +1733,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=27 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053842,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32728: {
 		SRID:      32728,
@@ -1064,6 +1748,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=28 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194583,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32729: {
 		SRID:      32729,
@@ -1073,6 +1763,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=29 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053947,
+			MaxX: 833978.5569194604,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32730: {
 		SRID:      32730,
@@ -1082,6 +1778,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=30 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805386,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32731: {
 		SRID:      32731,
@@ -1091,6 +1793,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=31 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194613,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32732: {
 		SRID:      32732,
@@ -1100,6 +1808,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=32 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053958,
+			MaxX: 833978.5569194605,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32733: {
 		SRID:      32733,
@@ -1109,6 +1823,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=33 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054168,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32734: {
 		SRID:      32734,
@@ -1118,6 +1838,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=34 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194616,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32735: {
 		SRID:      32735,
@@ -1127,6 +1853,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=35 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053982,
+			MaxX: 833978.5569194602,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32736: {
 		SRID:      32736,
@@ -1136,6 +1868,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=36 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053842,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32737: {
 		SRID:      32737,
@@ -1145,6 +1883,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=37 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194616,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32738: {
 		SRID:      32738,
@@ -1154,6 +1898,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=38 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053982,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32739: {
 		SRID:      32739,
@@ -1163,6 +1913,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=39 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054203,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32740: {
 		SRID:      32740,
@@ -1172,6 +1928,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=40 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.556919458,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32741: {
 		SRID:      32741,
@@ -1181,6 +1943,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=41 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32742: {
 		SRID:      32742,
@@ -1190,6 +1958,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=42 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805362,
+			MaxX: 833978.5569194566,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32743: {
 		SRID:      32743,
@@ -1199,6 +1973,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=43 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.556919458,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32744: {
 		SRID:      32744,
@@ -1208,6 +1988,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=44 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053912,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32745: {
 		SRID:      32745,
@@ -1217,6 +2003,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=45 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805362,
+			MaxX: 833978.5569194566,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32746: {
 		SRID:      32746,
@@ -1226,6 +2018,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=46 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32747: {
 		SRID:      32747,
@@ -1235,6 +2033,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=47 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194609,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32748: {
 		SRID:      32748,
@@ -1244,6 +2048,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=48 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.4430805362,
+			MaxX: 833978.5569194566,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32749: {
 		SRID:      32749,
@@ -1253,6 +2063,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=49 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054342,
+			MaxX: 833978.5569194651,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32750: {
 		SRID:      32750,
@@ -1262,6 +2078,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=50 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32751: {
 		SRID:      32751,
@@ -1271,6 +2093,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=51 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32752: {
 		SRID:      32752,
@@ -1280,6 +2108,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=52 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054342,
+			MaxX: 833978.5569194651,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32753: {
 		SRID:      32753,
@@ -1289,6 +2123,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=53 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32754: {
 		SRID:      32754,
@@ -1298,6 +2138,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=54 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32755: {
 		SRID:      32755,
@@ -1307,6 +2153,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=55 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054342,
+			MaxX: 833978.5569194651,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32756: {
 		SRID:      32756,
@@ -1316,6 +2168,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=56 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32757: {
 		SRID:      32757,
@@ -1325,6 +2183,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=57 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32758: {
 		SRID:      32758,
@@ -1334,6 +2198,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=58 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308053766,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32759: {
 		SRID:      32759,
@@ -1343,6 +2213,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=59 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194595,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	32760: {
 		SRID:      32760,
@@ -1352,6 +2228,12 @@ var Projections = map[geopb.SRID]ProjInfo{
 		Proj4Text: MakeProj4Text(`+proj=utm +zone=60 +south +datum=WGS84 +units=m +no_defs`),
 		IsLatLng:  false,
 		Spheroid:  spheroid2,
+		Bounds: &Bounds{
+			MinX: 166021.44308054046,
+			MaxX: 833978.5569194623,
+			MinY: 1.1169150440516956e+06,
+			MaxY: 1e+07,
+		},
 	},
 	102017: {
 		SRID:      102017,
