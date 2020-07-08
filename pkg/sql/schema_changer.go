@@ -1493,7 +1493,12 @@ func CreateGCJobRecord(
 // Note that this is defined here for testing purposes to avoid cyclic
 // dependencies.
 type GCJobTestingKnobs struct {
+	// RunBeforeResume is called at the start of the resumer.
 	RunBeforeResume func(jobID int64) error
+
+	// RunAfterGC is called after we've GC'ed something (and updated the job
+	// progress).
+	RunAfterGC func(jobID int64) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

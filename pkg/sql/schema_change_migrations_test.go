@@ -52,6 +52,7 @@ const (
 	AfterBackfill
 	AfterReversingMutations // Only used if the job was canceled.
 	WaitingForGC            // Only applies to DROP INDEX, DROP TABLE, TRUNCATE TABLE.
+	AfterTableGC            // Only applies to DROP DATABASE (after GCing 1 of 2 tables).
 )
 
 type SchemaChangeType int
@@ -66,13 +67,13 @@ const (
 	CreateTable
 	DropTable
 	TruncateTable
+	DropDatabase
 )
 
 const setup = `
 CREATE DATABASE t;
-USE t;
-CREATE TABLE test (k INT PRIMARY KEY, v INT, INDEX k_idx (k), CONSTRAINT k_cons CHECK (k > 0));
-INSERT INTO test VALUES (1, 2);
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, INDEX k_idx (k), CONSTRAINT k_cons CHECK (k > 0));
+INSERT INTO t.test VALUES (1, 2);
 `
 
 // runsBackfill is a set of schema change types that run a backfill.
@@ -90,7 +91,7 @@ func isDeletingTable(schemaChangeType SchemaChangeType) bool {
 func checkBlockedSchemaChange(
 	t *testing.T, runner *sqlutils.SQLRunner, testCase migrationTestCase,
 ) {
-	if testCase.blockState == WaitingForGC {
+	if testCase.blockState == WaitingForGC || testCase.blockState == AfterTableGC {
 		// Earlier we turned the 20.1 GC job into a 19.2 schema change job. Delete
 		// the original schema change job which is now succeeded, to avoid having
 		// special cases later, since we rely heavily on the index of the job row in
@@ -197,6 +198,15 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	log.Info(ctx, "waiting for migration to complete")
 	<-migrationDoneCh
 
+	if testCase.schemaChange.kind == DropDatabase {
+		// TODO(lucy): Another hardcoded table ID to hopefully someday get rid of.
+		// This is for the other table in the database that hasn't been dropped
+		// already by the GC job. We set the GC TTL for it now to get the entire
+		// drop database GC job to finish.
+		if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, sqlbase.ID(54)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// TODO(pbardea): SHOW JOBS WHEN COMPLETE SELECT does not work on some schema
 	// changes when canceling jobs, but querying until there are no jobs works.
 	//runner.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE (job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC')")
@@ -239,7 +249,7 @@ func setupServerAndStartSchemaChange(
 	blockSchemaChanges := false
 
 	migrateJob := func(jobID int64) {
-		if testCase.blockState == WaitingForGC {
+		if testCase.blockState == WaitingForGC || testCase.blockState == AfterTableGC {
 			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, testCase.schemaChange.kind); err != nil {
 				errCh <- err
 			}
@@ -280,6 +290,15 @@ func setupServerAndStartSchemaChange(
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {
+		// If we're dropping the database, also add another table to it, so that the
+		// migration runs when t.test has been GC'ed already but the other table
+		// hasn't.
+		if testCase.schemaChange.kind == DropDatabase {
+			if _, err := sqlDB.ExecContext(ctx, `CREATE TABLE t.long_gc_ttl()`); err != nil {
+				cancel()
+				return err
+			}
+		}
 		if _, err := sqlDB.ExecContext(ctx, testCase.schemaChange.query); err != nil {
 			cancel()
 			return err
@@ -402,6 +421,19 @@ func migrateGCJobToOldFormat(
 						Status: jobspb.Status_WAIT_FOR_GC_INTERVAL,
 					},
 				}
+			} else if schemaChangeType == DropDatabase {
+				details.DroppedTables = []jobspb.DroppedTableDetails{
+					{
+						Name:   "test",
+						ID:     53,
+						Status: jobspb.Status_DONE,
+					},
+					{
+						Name:   "long_ttl_table",
+						ID:     54,
+						Status: jobspb.Status_WAIT_FOR_GC_INTERVAL,
+					},
+				}
 			}
 
 			progress := jobspb.Progress{
@@ -422,7 +454,7 @@ func migrateGCJobToOldFormat(
 	}
 
 	switch schemaChangeType {
-	case DropTable:
+	case DropTable, DropDatabase:
 		// There's no table descriptor to update, so we're done.
 		return nil
 
@@ -586,6 +618,11 @@ func setupTestingKnobs(
 			t.Fatal("cannot block on waiting for GC if the job should also be canceled")
 		}
 		gcKnobs.RunBeforeResume = blockFn
+	case AfterTableGC:
+		if shouldCancel {
+			t.Fatal("cannot block after table GC if the job should also be canceled")
+		}
+		gcKnobs.RunAfterGC = blockFn
 	}
 
 	args.Knobs.SQLSchemaChanger = knobs
@@ -602,6 +639,7 @@ func getTestName(schemaChange SchemaChangeType, blockState BlockState, shouldCan
 		AfterBackfill:           "after-backfill",
 		AfterReversingMutations: "after-reversing-mutations",
 		WaitingForGC:            "waiting-for-gc",
+		AfterTableGC:            "after-table-gc",
 	}
 	schemaChangeName := map[SchemaChangeType]string{
 		AddColumn:      "add-column",
@@ -613,6 +651,7 @@ func getTestName(schemaChange SchemaChangeType, blockState BlockState, shouldCan
 		CreateTable:    "create-table",
 		TruncateTable:  "truncate-table",
 		DropTable:      "drop-table",
+		DropDatabase:   "drop-database",
 	}
 
 	testName := fmt.Sprintf("%s-blocked-at-%s", schemaChangeName[schemaChange], stateNames[blockState])
@@ -643,11 +682,18 @@ func verifySchemaChangeJobRan(
 	}
 
 	// Verify that the GC job exists and is in the correct state, if applicable.
-	if testCase.blockState == WaitingForGC {
+	if testCase.blockState == WaitingForGC || testCase.blockState == AfterTableGC {
+		descriptorIDs := getTableIDsUnderTest(testCase.schemaChange.kind)
+		if testCase.blockState == AfterTableGC {
+			// The database had two tables, but one was GC'ed before the new job was
+			// reconstituted, so the job only knows about one table.
+			descriptorIDs = sqlbase.IDs{54}
+		}
+
 		if err := jobutils.VerifySystemJob(t, runner, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 			Description:   "GC for " + description,
 			Username:      security.RootUser,
-			DescriptorIDs: getTableIDsUnderTest(testCase.schemaChange.kind),
+			DescriptorIDs: descriptorIDs,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -730,15 +776,21 @@ func verifySchemaChangeJobRan(
 		expected = [][]string{}
 		rows := runner.QueryStr(t, "SELECT table_name FROM [SHOW TABLES FROM t] ORDER BY table_name")
 		require.Equal(t, expected, rows)
+	case DropDatabase:
+		expected = [][]string{}
+		rows := runner.QueryStr(t, "SELECT * FROM system.namespace WHERE name = 't' OR name = 'test' OR name = 'long_ttl_table'")
+		require.Equal(t, expected, rows)
 	}
 }
 
 func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []sqlbase.ID {
-	tableID := sqlbase.ID(53)
 	if schemaChangeType == CreateTable {
-		tableID = sqlbase.ID(54)
+		return []sqlbase.ID{54}
+	} else if schemaChangeType == DropDatabase {
+		return []sqlbase.ID{53, 54}
+	} else {
+		return []sqlbase.ID{53}
 	}
-	return []sqlbase.ID{tableID}
 }
 
 // Helpers used to determine valid test cases.
@@ -747,7 +799,7 @@ func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []sqlbase.ID {
 // schema change) will be reached given if the job was canceled or not.
 func canBlockIfCanceled(blockState BlockState, shouldCancel bool) bool {
 	// States that are only valid when the job is canceled.
-	if blockState == WaitingForGC {
+	if blockState == WaitingForGC || blockState == AfterTableGC {
 		return !shouldCancel
 	}
 	if blockState == AfterReversingMutations {
@@ -759,11 +811,16 @@ func canBlockIfCanceled(blockState BlockState, shouldCancel bool) bool {
 // Ensures that the given schema change actually passes through the state where
 // we're proposing to block.
 func validBlockStateForSchemaChange(blockState BlockState, schemaChangeType SchemaChangeType) bool {
+	if schemaChangeType == DropDatabase {
+		return blockState == AfterTableGC
+	}
 	switch blockState {
 	case AfterBackfill:
 		return runsBackfill[schemaChangeType]
 	case WaitingForGC:
 		return schemaChangeType == DropIndex || schemaChangeType == DropTable
+	case AfterTableGC:
+		return schemaChangeType == DropDatabase
 	}
 	return true
 }
@@ -783,6 +840,7 @@ func TestMigrateSchemaChanges(t *testing.T) {
 		AfterBackfill,
 		AfterReversingMutations,
 		WaitingForGC,
+		AfterTableGC,
 	}
 
 	schemaChanges := []schemaChangeRequest{
@@ -821,6 +879,10 @@ func TestMigrateSchemaChanges(t *testing.T) {
 		{
 			DropTable,
 			"DROP TABLE t.public.test",
+		},
+		{
+			DropDatabase,
+			"DROP DATABASE t CASCADE",
 		},
 	}
 

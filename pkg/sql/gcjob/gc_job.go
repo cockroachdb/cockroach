@@ -161,6 +161,12 @@ func (r schemaChangeGCResumer) Resume(
 				return err
 			} else if didWork {
 				persistProgress(ctx, execCfg, r.jobID, progress)
+
+				if fn := execCfg.GCJobTestingKnobs.RunAfterGC; fn != nil {
+					if err := fn(r.jobID); err != nil {
+						return err
+					}
+				}
 			}
 
 			if isDoneGC(progress) {
