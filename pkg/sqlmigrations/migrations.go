@@ -1047,6 +1047,10 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 			descID := descIDs[0]
 			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, r.codec, descID)
 			if err != nil {
+				if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+					log.Warningf(ctx, "job %d: expected descriptor %d not found, marking job as failed", *job.ID(), descID)
+					return registry.Failed(ctx, txn, *job.ID(), err)
+				}
 				return err
 			}
 			return migrateMutationJobForTable(ctx, txn, registry, job, tableDesc)
