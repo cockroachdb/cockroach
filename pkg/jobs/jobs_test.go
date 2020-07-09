@@ -323,6 +323,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
 		rts.check(t, jobs.StatusSucceeded)
+		t.Log("Done")
 	})
 
 	t.Run("create separately success", func(t *testing.T) {
