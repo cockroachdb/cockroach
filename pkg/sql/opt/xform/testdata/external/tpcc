@@ -404,9 +404,9 @@ insert order_line
       │         │    └── cardinality: [6 - 6]
       │         └── filters (true)
       └── f-k-checks-item: order_line(ol_supply_w_id,ol_i_id) -> stock(s_w_id,s_i_id)
-           └── anti-join (lookup stock@stock_item_fk_idx)
+           └── anti-join (lookup stock)
                 ├── columns: column6:33!null column5:34!null
-                ├── key columns: [34 33] = [35 36]
+                ├── key columns: [33 34] = [36 35]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 6]
                 ├── with-scan &1

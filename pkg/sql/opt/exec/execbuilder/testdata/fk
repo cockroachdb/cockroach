@@ -862,7 +862,7 @@ count                  ·             ·
 ·                      into          nonunique_idx_child(k, ref1, ref2)
 ·                      strategy      inserter
 ·                      auto commit   ·
-·                      FK check      nonunique_idx_parent@nonunique_idx_parent_k2_idx
+·                      FK check      nonunique_idx_parent@primary
 ·                      size          3 columns, 1 row
 
 # Regression test for #46397: upserter was looking at the incorrect ordinal for
