@@ -623,12 +623,16 @@ func importPlanHook(
 			// expressions are nullable.
 			if len(isTargetCol) != 0 {
 				for _, col := range found.VisibleColumns() {
-					if !(isTargetCol[col.Name] || col.Nullable || col.HasDefault()) {
+					if !(isTargetCol[col.Name] || col.Nullable || col.HasDefault() || col.IsComputed()) {
 						return errors.Newf(
 							"all non-target columns in IMPORT INTO must be nullable "+
-								"or have default expressions but violated by column %q",
+								"or have default expressions, or have computed expressions"+
+								" but violated by column %q",
 							col.Name,
 						)
+					}
+					if isTargetCol[col.Name] && col.IsComputed() {
+						return sqlbase.CannotWriteToComputedColError(col.Name)
 					}
 				}
 			}
