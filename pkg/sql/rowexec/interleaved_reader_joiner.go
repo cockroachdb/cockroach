@@ -432,7 +432,6 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		flowCtx.Codec(),
 		reverseScan,
 		lockStr,
-		true, /* returnRangeInfo */
 		true, /* isCheck */
 		alloc,
 		args...,
@@ -453,7 +452,7 @@ func (irj *interleavedReaderJoiner) generateMeta(
 	var trailingMeta []execinfrapb.ProducerMetadata
 	nodeID, ok := irj.FlowCtx.NodeID.OptionalNodeID()
 	if ok {
-		ranges := execinfra.MisplannedRanges(ctx, irj.fetcher.GetRangesInfo(), nodeID)
+		ranges := execinfra.MisplannedRanges(irj.Ctx, irj.allSpans, nodeID, irj.FlowCtx.Cfg.RangeCache)
 		if ranges != nil {
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 		}

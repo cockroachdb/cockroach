@@ -14,6 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -59,14 +62,38 @@ func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) (limitHin
 	return limitHint
 }
 
-// MisplannedRanges filters out the misplanned ranges and their RangeInfo for a
-// given node.
+// MisplannedRanges queries the range cache for all the passed-in spans and
+// returns the list of ranges whose leaseholder is not on the indicated node.
+// Ranges with unknown leases are included in the result.
 func MisplannedRanges(
-	ctx context.Context, rangeInfos []roachpb.RangeInfo, nodeID roachpb.NodeID,
+	ctx context.Context,
+	spans []roachpb.Span,
+	nodeID roachpb.NodeID,
+	rdc *kvcoord.RangeDescriptorCache,
 ) (misplannedRanges []roachpb.RangeInfo) {
-	for _, ri := range rangeInfos {
-		if ri.Lease.Replica.NodeID != nodeID {
-			misplannedRanges = append(misplannedRanges, ri)
+	log.VEvent(ctx, 2, "checking range cache to see if range info updates should be communicated to the gateway")
+	var overlapping []*kvbase.RangeCacheEntry
+	for _, sp := range spans {
+		rstart, err := keys.Addr(sp.Key)
+		if err != nil {
+			panic(err)
+		}
+		rend, err := keys.Addr(sp.EndKey)
+		if err != nil {
+			panic(err)
+		}
+		rsp := roachpb.RSpan{Key: rstart, EndKey: rend}
+		overlapping = append(overlapping, rdc.GetCachedOverlapping(ctx, rsp)...)
+	}
+
+	for _, ri := range overlapping {
+		// Ranges with unknown leases are not returned, as the current node might
+		// actually have the lease without the local cache knowing about it.
+		if !ri.Lease.Empty() && ri.Lease.Replica.NodeID != nodeID {
+			misplannedRanges = append(misplannedRanges, roachpb.RangeInfo{
+				Desc:  ri.Desc,
+				Lease: ri.Lease,
+			})
 		}
 	}
 
@@ -77,8 +104,7 @@ func MisplannedRanges(
 		} else {
 			msg = fmt.Sprintf("%+v...", misplannedRanges[:3])
 		}
-		log.VEventf(ctx, 2, "tableReader pushing metadata about misplanned ranges: %s",
-			msg)
+		log.VEventf(ctx, 2, "misplanned ranges: %s", msg)
 	}
 
 	return misplannedRanges

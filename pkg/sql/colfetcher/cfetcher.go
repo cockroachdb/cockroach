@@ -182,14 +182,6 @@ type cFetcher struct {
 	// lockStr represents the row-level locking mode to use when fetching rows.
 	lockStr sqlbase.ScanLockingStrength
 
-	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
-	// information about the ranges descriptors/leases uses in servicing the
-	// requests. This has some cost, so it's only enabled by DistSQL when this
-	// info is actually useful for correcting the plan (e.g. not for the PK-side
-	// of an index-join).
-	// If set, GetRangesInfo() can be used to retrieve the accumulated info.
-	returnRangeInfo bool
-
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when beginning a new scan.
 	traceKV bool
@@ -248,7 +240,6 @@ func (rf *cFetcher) Init(
 	allocator *colmem.Allocator,
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
-	returnRangeInfo bool,
 	tables ...row.FetcherTableArgs,
 ) error {
 	rf.adapter.allocator = allocator
@@ -258,7 +249,6 @@ func (rf *cFetcher) Init(
 
 	rf.reverse = reverse
 	rf.lockStr = lockStr
-	rf.returnRangeInfo = returnRangeInfo
 
 	if len(tables) > 1 {
 		return errors.New("multiple tables not supported in cfetcher")
@@ -477,9 +467,7 @@ func (rf *cFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := row.NewKVFetcher(
-		txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.lockStr, rf.returnRangeInfo,
-	)
+	f, err := row.NewKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.lockStr)
 	if err != nil {
 		return err
 	}
@@ -1234,17 +1222,6 @@ func (rf *cFetcher) fillNulls() error {
 		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
 	}
 	return nil
-}
-
-// GetRangesInfo returns information about the ranges where the rows came from.
-// The RangeInfo's are deduped and not ordered.
-func (rf *cFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	f := rf.fetcher
-	if f == nil {
-		// Not yet initialized.
-		return nil
-	}
-	return rf.fetcher.GetRangesInfo()
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in

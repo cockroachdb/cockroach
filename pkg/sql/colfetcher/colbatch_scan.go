@@ -87,7 +87,7 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	if !s.flowCtx.Local {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, s.rf.GetRangesInfo(), nodeID)
+			ranges := execinfra.MisplannedRanges(ctx, s.spans, nodeID, s.flowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
@@ -195,9 +195,7 @@ func initCRowFetcher(
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
-	if err := fetcher.Init(
-		codec, allocator, reverseScan, lockStr, true /* returnRangeInfo */, tableArgs,
-	); err != nil {
+	if err := fetcher.Init(codec, allocator, reverseScan, lockStr, tableArgs); err != nil {
 		return nil, false, err
 	}
 
