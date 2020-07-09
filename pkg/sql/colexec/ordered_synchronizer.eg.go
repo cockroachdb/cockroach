@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // OrderedSynchronizer receives rows from multiple inputs and produces a single
@@ -341,6 +342,19 @@ func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.Produ
 		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
 	}
 	return bufferedMeta
+}
+
+func (o *OrderedSynchronizer) IdempotentClose(ctx context.Context) error {
+	for _, input := range o.inputs {
+		for _, closer := range input.ToClose {
+			if err := closer.IdempotentClose(ctx); err != nil {
+				if log.V(1) {
+					log.Infof(ctx, "ordered synchronizer error closing IdempotentCloser: %v", err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {

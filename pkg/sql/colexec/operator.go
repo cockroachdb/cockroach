@@ -129,6 +129,14 @@ type IdempotentCloser interface {
 	IdempotentClose(ctx context.Context) error
 }
 
+type CallbackCloser struct {
+	CloseCb func(context.Context) error
+}
+
+func (c *CallbackCloser) IdempotentClose(ctx context.Context) error {
+	return c.CloseCb(ctx)
+}
+
 // closerHelper is a simple helper that helps Operators implement
 // IdempotentCloser. If close returns true, resources may be released, if it
 // returns false, close has already been called.

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -119,6 +120,9 @@ type SynchronizerInput struct {
 	// MetadataSources are metadata sources in the input tree that should be
 	// drained in the same goroutine as Op.
 	MetadataSources execinfrapb.MetadataSources
+	// ToClose are IdempotentClosers in the input tree that should be closed in
+	// the same goroutine as Op.
+	ToClose []IdempotentCloser
 }
 
 func operatorsToSynchronizerInputs(ops []colexecbase.Operator) []SynchronizerInput {
@@ -214,6 +218,13 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				}
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
+				for _, closer := range input.ToClose {
+					if err := closer.IdempotentClose(ctx); err != nil {
+						if log.V(1) {
+							log.Infof(ctx, "error closing Closer: %v", err)
+						}
+					}
+				}
 			}()
 			sendErr := func(err error) {
 				if strings.Contains(err.Error(), context.Canceled.Error()) && atomic.LoadInt32(&internalCancellation) == 1 {
