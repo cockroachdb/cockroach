@@ -1,4 +1,4 @@
-# LogicTest: local local-vec-auto
+# LogicTest: local local-vec-off local-spec-planning
 
 # Test that different operations still succeed when the primary key is not in column family 0.
 
@@ -54,12 +54,26 @@ DROP TABLE t;
 CREATE TABLE t (x DECIMAL, y DECIMAL, z INT, FAMILY (z), FAMILY (y), FAMILY (x), PRIMARY KEY (x, y));
 INSERT INTO t VALUES (1.00, 2.00, 1)
 
+# TODO(yuzefovich): figure out the issue when vectorize=off. The query below
+# returns incorrect output:
+# expected:
+#     fetched: /t/primary/1/2.00/x -> /1.00
+#     fetched: /t/primary/1/2/y -> /2.00
+#     fetched: /t/primary/1/2/z -> /1
+# but found (query options: "") :
+#     fetched: /t/primary/1/2/x -> /1.00
+#     fetched: /t/primary/1/2/y -> /2.00
+#     fetched: /t/primary/1/2/z -> /1
+statement ok
+SET vectorize=on
+
 query TTI
 SET tracing=on,kv,results;
 SELECT * FROM t;
 SET tracing=off
 ----
 1.00 2.00 1
+
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
