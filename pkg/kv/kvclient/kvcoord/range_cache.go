@@ -894,7 +894,7 @@ func (rdc *RangeDescriptorCache) insertLockedInner(
 		// Before adding a new entry, make sure we clear out any
 		// pre-existing, overlapping entries which might have been
 		// re-inserted due to concurrent range lookups.
-		ok, newerEntry := rdc.clearOlderOverlapping(ctx, ent)
+		ok, newerEntry := rdc.clearOlderOverlappingLocked(ctx, ent)
 		if !ok {
 			// The descriptor we tried to insert is already in the cache, or is stale.
 			// We might have gotten a newer cache entry, if the descriptor in the
@@ -917,7 +917,15 @@ func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *kvbase.RangeCache
 	return entry.Value.(*kvbase.RangeCacheEntry)
 }
 
-// clearOlderOverlapping clears any stale cache entries which overlap the
+func (rdc *RangeDescriptorCache) clearOlderOverlapping(
+	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
+) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
+	rdc.rangeCache.Lock()
+	defer rdc.rangeCache.Unlock()
+	return rdc.clearOlderOverlappingLocked(ctx, newEntry)
+}
+
+// clearOlderOverlappingLocked clears any stale cache entries which overlap the
 // specified descriptor. Returns true if the clearing succeeds, and false if any
 // overlapping newer descriptor is found (or if the descriptor we're trying to
 // insert is already in the cache). If false is returned, a cache entry might
@@ -927,7 +935,7 @@ func (rdc *RangeDescriptorCache) getValue(entry *cache.Entry) *kvbase.RangeCache
 //
 // Note that even if false is returned, older descriptors are still cleared from
 // the cache.
-func (rdc *RangeDescriptorCache) clearOlderOverlapping(
+func (rdc *RangeDescriptorCache) clearOlderOverlappingLocked(
 	ctx context.Context, newEntry *kvbase.RangeCacheEntry,
 ) (ok bool, newerEntry *kvbase.RangeCacheEntry) {
 	startMeta := keys.RangeMetaKey(newEntry.Desc.StartKey)
