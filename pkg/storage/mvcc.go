@@ -3164,7 +3164,7 @@ func MVCCGarbageCollect(
 
 	var count int64
 	defer func(begin time.Time) {
-		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
+		log.VEventf(ctx, 2, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
 			len(keys), float64(len(keys))*1e9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
 
@@ -3328,10 +3328,19 @@ func MVCCGarbageCollect(
 					valSize, nil, fromNS))
 			}
 			count++
-			if err := rw.Clear(unsafeIterKey); err != nil {
-				return err
+			if !gcKey.UseClearRange {
+				if err := rw.Clear(unsafeIterKey); err != nil {
+					return err
+				}
 			}
 			prevNanos = unsafeIterKey.Timestamp.WallTime
+		}
+		if gcKey.UseClearRange {
+			start := MVCCKey{Key: gcKey.Key, Timestamp: gcKey.Timestamp}
+			end := MVCCKey{Key: gcKey.Key, Timestamp: hlc.Timestamp{WallTime: 1}}
+			if err := rw.ClearRange(start, end); err != nil {
+				return err
+			}
 		}
 	}
 

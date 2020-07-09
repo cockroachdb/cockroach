@@ -18,12 +18,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -47,6 +49,13 @@ const (
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	probablyLargeAbortSpanSysBytesThreshold = 16 * (1 << 20) // 16mb
 )
+
+// useClearRangeForGC is an experimental setting to utilize clear range
+// operations in the face of a large number of versions of a key.
+var useClearRangeForGC = settings.RegisterBoolSetting(
+	"kv.gc.use_clear_range.enabled",
+	"enables the use of clear range operations to delete large numbers of versions of a key",
+	false)
 
 func probablyLargeAbortSpan(ms enginepb.MVCCStats) bool {
 	// If there is "a lot" of data in Sys{Bytes,Count}, then we are likely
@@ -453,33 +462,37 @@ func (gcq *gcQueue) process(
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
 
+	cleanupIntentsFunc := func(ctx context.Context, intents []roachpb.Intent) error {
+		intentCount, err := repl.store.intentResolver.
+			CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
+		if err == nil {
+			gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
+		}
+		return err
+	}
+	cleanupTxnIntentsAsyncFunc := func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
+		err := repl.store.intentResolver.
+			CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, gcTimestamp,
+				func(pushed, succeeded bool) {
+					if pushed {
+						gcq.store.metrics.GCPushTxn.Inc(1)
+					}
+					if succeeded {
+						gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
+					}
+				})
+		if errors.Is(err, stop.ErrThrottled) {
+			log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
+			return nil
+		}
+		return err
+	}
+	canUseClearRange := useClearRangeForGC.Get(&repl.store.ClusterSettings().SV) &&
+		gcq.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClearRangeForGC)
+
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold, *zone.GC,
-		&replicaGCer{repl: repl},
-		func(ctx context.Context, intents []roachpb.Intent) error {
-			intentCount, err := repl.store.intentResolver.
-				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
-			if err == nil {
-				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
-			}
-			return err
-		},
-		func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
-			err := repl.store.intentResolver.
-				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, gcTimestamp,
-					func(pushed, succeeded bool) {
-						if pushed {
-							gcq.store.metrics.GCPushTxn.Inc(1)
-						}
-						if succeeded {
-							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
-						}
-					})
-			if errors.Is(err, stop.ErrThrottled) {
-				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
-				return nil
-			}
-			return err
-		})
+		&replicaGCer{repl: repl}, cleanupIntentsFunc, cleanupTxnIntentsAsyncFunc,
+		canUseClearRange)
 	if err != nil {
 		return false, err
 	}

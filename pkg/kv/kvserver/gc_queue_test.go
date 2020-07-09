@@ -555,14 +555,11 @@ func TestGCQueueProcess(t *testing.T) {
 
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, *zone.GC)
-		return gc.Run(ctx, desc, snap, now, newThreshold, *zone.GC,
-			gc.NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
-				return nil
-			},
-			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
-				return nil
-			})
+		return gc.Run(ctx, desc, snap, now, newThreshold, *zone.GC, gc.NoopGCer{}, func(ctx context.Context, intents []roachpb.Intent) error {
+			return nil
+		}, func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
+			return nil
+		}, false)
 	}()
 	if err != nil {
 		t.Fatal(err)
