@@ -11,6 +11,7 @@
 package colexec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -67,10 +68,9 @@ func TestTopKSorter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range topKSortTestCases {
-		t.Run(tc.description, func(t *testing.T) {
-			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k), nil
-			})
+		log.Infof(context.Background(), "%s", tc.description)
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k), nil
 		})
 	}
 }

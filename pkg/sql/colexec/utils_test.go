@@ -264,7 +264,9 @@ func runTestsWithTyps(
 ) {
 	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, constructor)
 
-	t.Run("allNullsInjection", func(t *testing.T) {
+	{
+		ctx := context.Background()
+		log.Info(ctx, "allNullsInjection")
 		// This test replaces all values in the input tuples with nulls and ensures
 		// that the output is different from the "original" output (i.e. from the
 		// one that is returned without nulls injection).
@@ -298,7 +300,6 @@ func runTestsWithTyps(
 			op.Init()
 			return op
 		}
-		ctx := context.Background()
 		originalOp := opConstructor(false /* injectAllNulls */)
 		opWithNulls := opConstructor(true /* injectAllNulls */)
 		foundDifference := false
@@ -339,7 +340,7 @@ func runTestsWithTyps(
 		if c, ok := opWithNulls.(Closer); ok {
 			require.NoError(t, c.Close(ctx))
 		}
-	})
+	}
 }
 
 // runTestsWithoutAllNullsInjection is the same as runTests, but it skips the
@@ -355,6 +356,7 @@ func runTestsWithoutAllNullsInjection(
 	verifier interface{},
 	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
 ) {
+	ctx := context.Background()
 	skipVerifySelAndNullsResets := true
 	var verifyFn verifierFn
 	switch v := verifier.(type) {
@@ -386,90 +388,89 @@ func runTestsWithoutAllNullsInjection(
 	})
 
 	if !skipVerifySelAndNullsResets {
-		t.Run("verifySelAndNullResets", func(t *testing.T) {
-			// This test ensures that operators that "own their own batches", such as
-			// any operator that has to reshape its output, are not affected by
-			// downstream modification of batches.
-			// We run the main loop twice: once to determine what the operator would
-			// output on its second Next call (we need the first call to Next to get a
-			// reference to a batch to modify), and a second time to modify the batch
-			// and verify that this does not change the operator output.
-			// NOTE: this test makes sense only if the operator returns two non-zero
-			// length batches (if not, we short-circuit the test since the operator
-			// doesn't have to restore anything on a zero-length batch).
-			var (
-				secondBatchHasSelection, secondBatchHasNulls bool
-				inputTypes                                   []*types.T
-			)
-			for round := 0; round < 2; round++ {
-				inputSources := make([]colexecbase.Operator, len(tups))
-				for i, tup := range tups {
-					if typs != nil {
-						inputTypes = typs[i]
-					}
-					inputSources[i] = newOpTestInput(1 /* batchSize */, tup, inputTypes)
+		log.Info(ctx, "verifySelAndNullResets")
+		// This test ensures that operators that "own their own batches", such as
+		// any operator that has to reshape its output, are not affected by
+		// downstream modification of batches.
+		// We run the main loop twice: once to determine what the operator would
+		// output on its second Next call (we need the first call to Next to get a
+		// reference to a batch to modify), and a second time to modify the batch
+		// and verify that this does not change the operator output.
+		// NOTE: this test makes sense only if the operator returns two non-zero
+		// length batches (if not, we short-circuit the test since the operator
+		// doesn't have to restore anything on a zero-length batch).
+		var (
+			secondBatchHasSelection, secondBatchHasNulls bool
+			inputTypes                                   []*types.T
+		)
+		for round := 0; round < 2; round++ {
+			inputSources := make([]colexecbase.Operator, len(tups))
+			for i, tup := range tups {
+				if typs != nil {
+					inputTypes = typs[i]
 				}
-				op, err := constructor(inputSources)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if vbsiOp, ok := op.(variableOutputBatchSizeInitializer); ok {
-					// initialize the operator with a very small output batch size to
-					// increase the likelihood that multiple batches will be output.
-					vbsiOp.initWithOutputBatchSize(1)
+				inputSources[i] = newOpTestInput(1 /* batchSize */, tup, inputTypes)
+			}
+			op, err := constructor(inputSources)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if vbsiOp, ok := op.(variableOutputBatchSizeInitializer); ok {
+				// initialize the operator with a very small output batch size to
+				// increase the likelihood that multiple batches will be output.
+				vbsiOp.initWithOutputBatchSize(1)
+			} else {
+				op.Init()
+			}
+			b := op.Next(ctx)
+			if b.Length() == 0 {
+				return
+			}
+			if round == 1 {
+				if secondBatchHasSelection {
+					b.SetSelection(false)
 				} else {
-					op.Init()
+					b.SetSelection(true)
 				}
-				ctx := context.Background()
-				b := op.Next(ctx)
-				if b.Length() == 0 {
-					return
-				}
-				if round == 1 {
-					if secondBatchHasSelection {
-						b.SetSelection(false)
-					} else {
-						b.SetSelection(true)
+				if secondBatchHasNulls {
+					// ResetInternalBatch will throw away the null information.
+					b.ResetInternalBatch()
+				} else {
+					for i := 0; i < b.Width(); i++ {
+						b.ColVec(i).Nulls().SetNulls()
 					}
-					if secondBatchHasNulls {
-						// ResetInternalBatch will throw away the null information.
-						b.ResetInternalBatch()
-					} else {
-						for i := 0; i < b.Width(); i++ {
-							b.ColVec(i).Nulls().SetNulls()
-						}
-					}
-				}
-				b = op.Next(ctx)
-				if b.Length() == 0 {
-					return
-				}
-				if round == 0 {
-					secondBatchHasSelection = b.Selection() != nil
-					secondBatchHasNulls = maybeHasNulls(b)
-				}
-				if round == 1 {
-					if secondBatchHasSelection {
-						assert.NotNil(t, b.Selection())
-					} else {
-						assert.Nil(t, b.Selection())
-					}
-					if secondBatchHasNulls {
-						assert.True(t, maybeHasNulls(b))
-					} else {
-						assert.False(t, maybeHasNulls(b))
-					}
-				}
-				if c, ok := op.(Closer); ok {
-					// Some operators need an explicit Close if not drained completely of
-					// input.
-					assert.NoError(t, c.Close(ctx))
 				}
 			}
-		})
+			b = op.Next(ctx)
+			if b.Length() == 0 {
+				return
+			}
+			if round == 0 {
+				secondBatchHasSelection = b.Selection() != nil
+				secondBatchHasNulls = maybeHasNulls(b)
+			}
+			if round == 1 {
+				if secondBatchHasSelection {
+					assert.NotNil(t, b.Selection())
+				} else {
+					assert.Nil(t, b.Selection())
+				}
+				if secondBatchHasNulls {
+					assert.True(t, maybeHasNulls(b))
+				} else {
+					assert.False(t, maybeHasNulls(b))
+				}
+			}
+			if c, ok := op.(Closer); ok {
+				// Some operators need an explicit Close if not drained completely of
+				// input.
+				assert.NoError(t, c.Close(ctx))
+			}
+		}
 	}
 
-	t.Run("randomNullsInjection", func(t *testing.T) {
+	{
+		log.Info(ctx, "randomNullsInjection")
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
 		inputSources := make([]colexecbase.Operator, len(tups))
@@ -487,10 +488,9 @@ func runTestsWithoutAllNullsInjection(
 			t.Fatal(err)
 		}
 		op.Init()
-		ctx := context.Background()
 		for b := op.Next(ctx); b.Length() > 0; b = op.Next(ctx) {
 		}
-	})
+	}
 }
 
 // runTestsWithFn is like runTests, but the input function is responsible for
@@ -525,27 +525,26 @@ func runTestsWithFn(
 
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
-			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
-				inputSources := make([]colexecbase.Operator, len(tups))
-				var inputTypes []*types.T
-				if useSel {
-					for i, tup := range tups {
-						if typs != nil {
-							inputTypes = typs[i]
-						}
-						rng, _ := randutil.NewPseudoRand()
-						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, inputTypes)
+			log.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
+			inputSources := make([]colexecbase.Operator, len(tups))
+			var inputTypes []*types.T
+			if useSel {
+				for i, tup := range tups {
+					if typs != nil {
+						inputTypes = typs[i]
 					}
-				} else {
-					for i, tup := range tups {
-						if typs != nil {
-							inputTypes = typs[i]
-						}
-						inputSources[i] = newOpTestInput(batchSize, tup, inputTypes)
-					}
+					rng, _ := randutil.NewPseudoRand()
+					inputSources[i] = newOpTestSelInput(rng, batchSize, tup, inputTypes)
 				}
-				test(t, inputSources)
-			})
+			} else {
+				for i, tup := range tups {
+					if typs != nil {
+						inputTypes = typs[i]
+					}
+					inputSources[i] = newOpTestInput(batchSize, tup, inputTypes)
+				}
+			}
+			test(t, inputSources)
 		}
 	}
 }
@@ -562,13 +561,12 @@ func runTestsWithFixedSel(
 	test func(t *testing.T, inputs []colexecbase.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
-		t.Run(fmt.Sprintf("batchSize=%d/fixedSel", batchSize), func(t *testing.T) {
-			inputSources := make([]colexecbase.Operator, len(tups))
-			for i, tup := range tups {
-				inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup, typs)
-			}
-			test(t, inputSources)
-		})
+		log.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
+		inputSources := make([]colexecbase.Operator, len(tups))
+		for i, tup := range tups {
+			inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup, typs)
+		}
+		test(t, inputSources)
 	}
 }
 

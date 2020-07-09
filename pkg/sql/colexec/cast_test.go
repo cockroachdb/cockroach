@@ -116,44 +116,43 @@ func TestRandomizedCast(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		t.Run(fmt.Sprintf("%sTo%s", c.fromTyp.String(), c.toTyp.String()), func(t *testing.T) {
-			n := 100
-			// Make an input vector of length n.
-			input := tuples{}
-			output := tuples{}
-			for i := 0; i < n; i++ {
-				var (
-					fromDatum, toDatum tree.Datum
-					err                error
-				)
-				if c.getValidSet != nil {
-					validFromDatums := c.getValidSet()
-					fromDatum = validFromDatums[rng.Intn(len(validFromDatums))]
-					toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
-				} else {
-					// We don't allow any NULL datums to be generated, so disable
-					// this ability in the RandDatum function.
-					fromDatum = sqlbase.RandDatum(rng, c.fromTyp, false)
-					toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
-					if c.retryGeneration {
-						for err != nil {
-							// If we are allowed to retry, make a new datum and cast it on error.
-							fromDatum = sqlbase.RandDatum(rng, c.fromTyp, false)
-							toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
-						}
+		log.Infof(ctx, "%sTo%s", c.fromTyp.String(), c.toTyp.String())
+		n := 100
+		// Make an input vector of length n.
+		input := tuples{}
+		output := tuples{}
+		for i := 0; i < n; i++ {
+			var (
+				fromDatum, toDatum tree.Datum
+				err                error
+			)
+			if c.getValidSet != nil {
+				validFromDatums := c.getValidSet()
+				fromDatum = validFromDatums[rng.Intn(len(validFromDatums))]
+				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
+			} else {
+				// We don't allow any NULL datums to be generated, so disable
+				// this ability in the RandDatum function.
+				fromDatum = sqlbase.RandDatum(rng, c.fromTyp, false)
+				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
+				if c.retryGeneration {
+					for err != nil {
+						// If we are allowed to retry, make a new datum and cast it on error.
+						fromDatum = sqlbase.RandDatum(rng, c.fromTyp, false)
+						toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
 					}
 				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				input = append(input, tuple{c.fromPhysType(fromDatum)})
-				output = append(output, tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 			}
-			runTestsWithTyps(t, []tuples{input}, [][]*types.T{{c.fromTyp}}, output, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
-				})
-		})
+			if err != nil {
+				t.Fatal(err)
+			}
+			input = append(input, tuple{c.fromPhysType(fromDatum)})
+			output = append(output, tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
+		}
+		runTestsWithTyps(t, []tuples{input}, [][]*types.T{{c.fromTyp}}, output, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
+			})
 	}
 }
 

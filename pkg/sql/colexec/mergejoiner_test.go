@@ -1667,30 +1667,29 @@ func TestMergeJoiner(t *testing.T) {
 			// We test all cases with the default memory limit (regular scenario) and a
 			// limit of 1 byte (to force the buffered groups to spill to disk).
 			for _, memoryLimit := range []int64{1, defaultMemoryLimit} {
-				t.Run(fmt.Sprintf("MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description), func(t *testing.T) {
-					runner(t, []tuples{tc.leftTuples, tc.rightTuples},
-						[][]*types.T{tc.leftTypes, tc.rightTypes},
-						tc.expected, mergeJoinVerifier,
-						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-							spec := createSpecForMergeJoiner(tc)
-							args := &NewColOperatorArgs{
-								Spec:                spec,
-								Inputs:              input,
-								StreamingMemAccount: testMemAcc,
-								DiskQueueCfg:        queueCfg,
-								FDSemaphore:         colexecbase.NewTestingSemaphore(mjFDLimit),
-							}
-							args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-							result, err := TestNewColOperator(ctx, flowCtx, args)
-							if err != nil {
-								return nil, err
-							}
-							accounts = append(accounts, result.OpAccounts...)
-							monitors = append(monitors, result.OpMonitors...)
-							return result.Op, nil
-						})
-				})
+				log.Infof(context.Background(), "MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description)
+				runner(t, []tuples{tc.leftTuples, tc.rightTuples},
+					[][]*types.T{tc.leftTypes, tc.rightTypes},
+					tc.expected, mergeJoinVerifier,
+					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+						spec := createSpecForMergeJoiner(tc)
+						args := &NewColOperatorArgs{
+							Spec:                spec,
+							Inputs:              input,
+							StreamingMemAccount: testMemAcc,
+							DiskQueueCfg:        queueCfg,
+							FDSemaphore:         colexecbase.NewTestingSemaphore(mjFDLimit),
+						}
+						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+						result, err := TestNewColOperator(ctx, flowCtx, args)
+						if err != nil {
+							return nil, err
+						}
+						accounts = append(accounts, result.OpAccounts...)
+						monitors = append(monitors, result.OpMonitors...)
+						return result.Op, nil
+					})
 			}
 		}
 	}
@@ -2115,51 +2114,49 @@ func TestMergeJoinerRandomized(t *testing.T) {
 		for _, maxRunLength := range []int64{2, 3, 100} {
 			for _, skipValues := range []bool{false, true} {
 				for _, randomIncrement := range []int64{0, 1} {
-					t.Run(fmt.Sprintf("numInputBatches=%d/maxRunLength=%d/skipValues=%t/randomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement),
-						func(t *testing.T) {
-							nTuples := coldata.BatchSize() * numInputBatches
-							typs := []*types.T{types.Int}
-							lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, maxRunLength, skipValues, randomIncrement)
-							leftSource := newChunkingBatchSource(typs, lCols, nTuples)
-							rightSource := newChunkingBatchSource(typs, rCols, nTuples)
+					log.Infof(ctx, "numInputBatches=%d/maxRunLength=%d/skipValues=%t/randomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement)
+					nTuples := coldata.BatchSize() * numInputBatches
+					typs := []*types.T{types.Int}
+					lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, maxRunLength, skipValues, randomIncrement)
+					leftSource := newChunkingBatchSource(typs, lCols, nTuples)
+					rightSource := newChunkingBatchSource(typs, rCols, nTuples)
 
-							a, err := NewMergeJoinOp(
-								testAllocator, defaultMemoryLimit,
-								queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
-								leftSource, rightSource, typs, typs,
-								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-								testDiskAcc,
-							)
+					a, err := NewMergeJoinOp(
+						testAllocator, defaultMemoryLimit,
+						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
+						leftSource, rightSource, typs, typs,
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+						testDiskAcc,
+					)
 
-							if err != nil {
-								t.Fatal("error in merge join op constructor", err)
+					if err != nil {
+						t.Fatal("error in merge join op constructor", err)
+					}
+
+					a.(*mergeJoinInnerOp).Init()
+
+					i := 0
+					count := 0
+					cpIdx := 0
+					for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+						count += b.Length()
+						outCol := b.ColVec(0).Int64()
+						for j := 0; j < b.Length(); j++ {
+							outVal := outCol[j]
+
+							if exp[cpIdx].cardinality == 0 {
+								cpIdx++
 							}
-
-							a.(*mergeJoinInnerOp).Init()
-
-							i := 0
-							count := 0
-							cpIdx := 0
-							for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-								count += b.Length()
-								outCol := b.ColVec(0).Int64()
-								for j := 0; j < b.Length(); j++ {
-									outVal := outCol[j]
-
-									if exp[cpIdx].cardinality == 0 {
-										cpIdx++
-									}
-									expVal := exp[cpIdx].val
-									exp[cpIdx].cardinality--
-									if expVal != outVal {
-										t.Fatalf("found val %d, expected %d, idx %d of batch %d",
-											outVal, expVal, j, i)
-									}
-								}
-								i++
+							expVal := exp[cpIdx].val
+							exp[cpIdx].cardinality--
+							if expVal != outVal {
+								t.Fatalf("found val %d, expected %d, idx %d of batch %d",
+									outVal, expVal, j, i)
 							}
-						})
+						}
+						i++
+					}
 				}
 			}
 		}

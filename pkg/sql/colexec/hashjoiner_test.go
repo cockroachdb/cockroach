@@ -975,9 +975,8 @@ func runHashJoinTestCase(
 	} else {
 		runner = runTestsWithTyps
 	}
-	t.Run(tc.description, func(t *testing.T) {
-		runner(t, inputs, typs, tc.expected, unorderedVerifier, hjOpConstructor)
-	})
+	log.Infof(context.Background(), "%s", tc.description)
+	runner(t, inputs, typs, tc.expected, unorderedVerifier, hjOpConstructor)
 }
 
 func TestHashJoiner(t *testing.T) {
