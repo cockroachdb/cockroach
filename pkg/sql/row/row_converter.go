@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -83,7 +84,7 @@ func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
 	insertCols []descpb.ColumnDescriptor,
-	computedCols []descpb.ColumnDescriptor,
+	computedColsLookup []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
@@ -117,16 +118,21 @@ func GenerateInsertRow(
 	if len(computeExprs) > 0 {
 		rowContainerForComputedVals.CurSourceRow = rowVals
 		evalCtx.PushIVarContainer(rowContainerForComputedVals)
-		for i := range computedCols {
+		for i := range computedColsLookup {
 			// Note that even though the row is not fully constructed at this point,
 			// since we disallow computed columns from referencing other computed
 			// columns, all the columns which could possibly be referenced *are*
 			// available.
+			if !computedColsLookup[i].IsComputed() {
+				continue
+			}
 			d, err := computeExprs[i].Eval(evalCtx)
 			if err != nil {
-				return nil, errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
+				return nil, errors.Wrapf(err,
+					"computed column %s",
+					tree.ErrString((*tree.Name)(&computedColsLookup[i].Name)))
 			}
-			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d
+			rowVals[rowContainerForComputedVals.Mapping[computedColsLookup[i].ID]] = d
 		}
 		evalCtx.PopIVarContainer()
 	}
@@ -265,10 +271,14 @@ func NewDatumRowConverter(
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(
-		ctx, targetColDescriptors, tableDesc, &txCtx, c.EvalCtx, &semaCtx)
+	relevantColumns := func(col *descpb.ColumnDescriptor) bool {
+		return col.HasDefault() || col.IsComputed()
+	}
+	cols := sqlbase.ProcessColumnSet(
+		targetColDescriptors, tableDesc, relevantColumns)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
-		return nil, errors.Wrap(err, "process default columns")
+		return nil, errors.Wrap(err, "process default and computed columns")
 	}
 
 	ri, err := MakeInserter(
@@ -336,6 +346,9 @@ func NewDatumRowConverter(
 				c.Datums = append(c.Datums, nil)
 			}
 		}
+		if col.IsComputed() && !isTargetCol(col) {
+			c.Datums = append(c.Datums, nil)
+		}
 	}
 	if len(c.Datums) != len(cols) {
 		return nil, errors.New("unexpected hidden column")
@@ -374,12 +387,33 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		}
 	}
 
-	// TODO(justin): we currently disallow computed columns in import statements.
-	var computeExprs []tree.TypedExpr
-	var computedCols []descpb.ColumnDescriptor
+	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.Columns))
+	for _, col := range c.tableDesc.Columns {
+		// We prefer to have the order of columns that will be sent into
+		// MakeComputedExprs to map that of Datums.
+		colsOrdered[c.computedIVarContainer.Mapping[col.ID]] = col
+	}
+	semaCtx := tree.MakeSemaContext()
+	// Here, computeExprs will be nil if there's no computed column, or
+	// the list of computed expressions (including nil, for those columns
+	// that are not computed) otherwise, according to colsOrdered.
+	computeExprs, err := schemaexpr.MakeComputedExprs(
+		ctx,
+		colsOrdered,
+		c.tableDesc,
+		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
+		c.EvalCtx,
+		&semaCtx)
+	if err != nil {
+		return errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+	}
+	var computedColsLookup []descpb.ColumnDescriptor
+	if len(computeExprs) > 0 {
+		computedColsLookup = colsOrdered
+	}
 
 	insertRow, err := GenerateInsertRow(
-		c.defaultCache, computeExprs, c.cols, computedCols, c.EvalCtx,
+		c.defaultCache, computeExprs, c.cols, computedColsLookup, c.EvalCtx,
 		c.tableDesc, c.Datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
