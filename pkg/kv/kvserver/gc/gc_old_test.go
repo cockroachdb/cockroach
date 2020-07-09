@@ -222,7 +222,9 @@ func runGCOld(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info, gcer)
+	if err := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info, gcer); err != nil {
+		log.Warningf(ctx, "while gc'ing abort span: %s", err)
+	}
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
 
