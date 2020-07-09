@@ -1934,10 +1934,18 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 6)
 
 	items = append(items, p.row("BACKUP", pretty.Nil))
-	if node.DescriptorCoverage == RequestedDescriptors {
+	if node.Targets != nil {
 		items = append(items, node.Targets.docRow(p))
 	}
-	items = append(items, p.row("TO", p.Doc(&node.To)))
+	if node.Nested {
+		if node.AppendToLatest {
+			items = append(items, p.row("INTO LATEST IN", p.Doc(&node.To)))
+		} else {
+			items = append(items, p.row("INTO", p.Doc(&node.To)))
+		}
+	} else {
+		items = append(items, p.row("TO", p.Doc(&node.To)))
+	}
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
@@ -1962,7 +1970,12 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	for i := range node.From {
 		from[i] = p.Doc(&node.From[i])
 	}
-	items = append(items, p.row("FROM", p.commaSeparated(from...)))
+	if node.Subdir != nil {
+		items = append(items, p.row("FROM", p.Doc(node.Subdir)))
+		items = append(items, p.row("IN", p.commaSeparated(from...)))
+	} else {
+		items = append(items, p.row("FROM", p.commaSeparated(from...)))
+	}
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
