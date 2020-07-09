@@ -59,7 +59,6 @@ type infoBuilder struct {
 	info         string
 	libraryUsage libraryUsage
 	precision    string
-	canUseIndex  bool
 }
 
 func (ib infoBuilder) String() string {
@@ -79,9 +78,6 @@ func (ib infoBuilder) String() string {
 	}
 	if ib.libraryUsage&usesPROJ != 0 {
 		sb.WriteString("\n\nThis function utilizes the PROJ library for coordinate projections.")
-	}
-	if ib.canUseIndex {
-		sb.WriteString("\n\nThis function will automatically use any available index.")
 	}
 	return sb.String()
 }
@@ -1951,7 +1947,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			infoBuilder{
 				info:         "Returns the distance in meters between geography_a and geography_b. " + usesSpheroidMessage + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib,
-				canUseIndex:  true,
 			},
 			tree.VolatilityImmutable,
 		),
@@ -1979,7 +1974,6 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			Info: infoBuilder{
 				info:         "Returns the distance in meters between geography_a and geography_b." + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib | usesS2,
-				canUseIndex:  true,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -2067,7 +2061,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			infoBuilder{
 				info:         "Returns true if no point in geometry_b is outside geometry_a.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 		geographyOverload2BinaryPredicate(
@@ -2075,7 +2068,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			infoBuilder{
 				info:         `Returns true if no point in geography_b is outside geography_a.`,
 				libraryUsage: usesS2,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2086,7 +2078,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			infoBuilder{
 				info:         `Returns true if no point in geometry_a is outside geometry_b`,
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 		geographyOverload2BinaryPredicate(
@@ -2095,7 +2086,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         `Returns true if no point in geography_a is outside geography_b.`,
 				libraryUsage: usesS2,
 				precision:    "1cm",
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2107,7 +2097,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info: "Returns true if no points of geometry_b lie in the exterior of geometry_a, " +
 					"and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2118,7 +2107,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			infoBuilder{
 				info:         "Returns true if geometry_b intersects the interior of geometry_a but not the boundary or exterior of geometry_a.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2129,7 +2117,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			infoBuilder{
 				info:         "Returns true if geometry_a has some - but not all - interior points in common with geometry_b.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2204,7 +2191,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         "Returns true if any of geography_a is within distance meters of geography_b." + usesSpheroidMessage + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib,
 				precision:    "1cm",
-				canUseIndex:  true,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -2232,7 +2218,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         "Returns true if any of geography_a is within distance meters of geography_b." + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib | usesS2,
 				precision:    "1cm",
-				canUseIndex:  true,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -2245,7 +2230,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info: "Returns true if geometry_a is spatially equal to geometry_b, " +
 					"i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2257,7 +2241,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         "Returns true if geometry_a shares any portion of space with geometry_b.",
 				libraryUsage: usesGEOS,
 				precision:    "1cm",
-				canUseIndex:  true,
 			},
 		),
 		geographyOverload2BinaryPredicate(
@@ -2266,7 +2249,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info:         `Returns true if geography_a shares any portion of space with geography_b.`,
 				libraryUsage: usesS2,
 				precision:    "1cm",
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2278,7 +2260,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info: "Returns true if geometry_a intersects but does not completely contain geometry_b, or vice versa. " +
 					`"Does not completely" implies ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = false.`,
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2290,7 +2271,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				info: "Returns true if the only points in common between geometry_a and geometry_b are on the boundary. " +
 					"Note points do not touch other points.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -2301,7 +2281,6 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			infoBuilder{
 				info:         "Returns true if geometry_a is completely inside geometry_b.",
 				libraryUsage: usesGEOS,
-				canUseIndex:  true,
 			},
 		),
 	),
@@ -3408,6 +3387,39 @@ func toUseSphereOrSpheroid(useSpheroid *tree.DBool) geogfn.UseSphereOrSpheroid {
 }
 
 func initGeoBuiltins() {
+	for _, indexBuiltinName := range []string{
+		"st_contains",
+		"st_containsproperly",
+		"st_coveredby",
+		"st_covers",
+		"st_crosses",
+		"st_dfullywithin",
+		"st_dwithin",
+		"st_equals",
+		"st_intersects",
+		"st_overlaps",
+		"st_touches",
+		"st_within",
+	} {
+		builtin, exists := geoBuiltins[indexBuiltinName]
+		if !exists {
+			panic("expected builtin: " + indexBuiltinName)
+		}
+		// Copy the builtin and add an underscore on the name.
+		overloads := make([]tree.Overload, len(builtin.overloads))
+		for i, ovCopy := range builtin.overloads {
+			builtin.overloads[i].Info += "\n\nThis function variant will attempt to utilize any available geospatial index."
+
+			ovCopy.Info += "\n\nThis function variant does not attempt to utilize any geospatial index."
+			overloads[i] = ovCopy
+		}
+		underscoreBuiltin := makeBuiltin(
+			builtin.props,
+			overloads...,
+		)
+		geoBuiltins["_"+indexBuiltinName] = underscoreBuiltin
+	}
+
 	for k, v := range geoBuiltins {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)
