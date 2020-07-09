@@ -258,9 +258,10 @@ func runPlanInsidePlan(
 
 	// Make a copy of the EvalContext so it can be safely modified.
 	evalCtx := params.p.ExtendedEvalContextCopy()
-	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(params.ctx, evalCtx, params.p.txn, false /* distribute */)
 	plannerCopy := *params.p
-	planCtx.planner = &plannerCopy
+	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
+		params.ctx, evalCtx, &plannerCopy, params.p.txn, false, /* distribute */
+	)
 	planCtx.planner.curPlan = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
 	planCtx.stmtType = recv.stmtType

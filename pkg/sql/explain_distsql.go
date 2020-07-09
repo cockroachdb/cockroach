@@ -109,9 +109,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
 	willDistribute := distribution.WillDistribute()
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn, willDistribute)
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, willDistribute)
 	planCtx.ignoreClose = true
-	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
 
 	if n.analyze && len(n.plan.cascades) > 0 {
