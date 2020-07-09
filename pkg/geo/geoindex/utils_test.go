@@ -90,6 +90,9 @@ func checkExprAndToString(expr RPKeyExpr, err error) string {
 	if err != nil {
 		return err.Error()
 	}
+	if len(expr) == 0 {
+		return ""
+	}
 	keys := make(map[Key]struct{})
 	for _, elem := range expr {
 		switch k := elem.(type) {
