@@ -729,18 +729,10 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 			return
 		}
 
-		// Wrap the filter in a FiltersExpr.
-		//
-		// Run SimplifyFilters so that adjacent top-level AND expressions are
-		// flattened into individual FiltersItems, like they would be during
-		// normalization of a SELECT query.
-		//
-		// Run ConsolidateFilters so that adjacent top-level FiltersItems that
-		// constrain a single variable are combined into a RangeExpr, like they
-		// would be during normalization of a SELECT query.
+		// Wrap the predicate filter expression in a FiltersExpr and normalize
+		// it.
 		filters := memo.FiltersExpr{filter}
-		filters = b.factory.CustomFuncs().SimplifyFilters(filters)
-		filters = b.factory.CustomFuncs().ConsolidateFilters(filters)
+		filters = b.factory.NormalizePartialIndexPredicate(filters)
 
 		// Add the filters to the table metadata.
 		tabMeta.AddPartialIndexPredicate(indexOrd, &filters)
