@@ -112,7 +112,6 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// strength here. Consider hooking this in to the same knob that will
 		// control whether we perform locking implicitly during DELETEs.
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		params.p.alloc,
 		allTables...,

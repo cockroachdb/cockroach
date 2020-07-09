@@ -1147,9 +1147,9 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 			}
 			newEntry := &kvbase.RangeCacheEntry{Desc: tc.clearDesc}
 			newest, newer := cache.clearOlderOverlapping(ctx, newEntry)
-			all := cache.all()
+			all := cache.GetCachedOverlapping(ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax})
 			var allDescs []roachpb.RangeDescriptor
-			if all != nil {
+			if len(all) != 0 {
 				allDescs = make([]roachpb.RangeDescriptor, len(all))
 				for i, e := range all {
 					allDescs[i] = e.Desc

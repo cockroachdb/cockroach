@@ -175,7 +175,6 @@ func (cb *ColumnBackfiller) Init(
 		evalCtx.Codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&cb.alloc,
 		tableArgs,
@@ -414,7 +413,6 @@ func (ib *IndexBackfiller) Init(
 		evalCtx.Codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&ib.alloc,
 		tableArgs,

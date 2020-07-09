@@ -149,7 +149,6 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// strength here. Consider hooking this in to the same knob that will
 		// control whether we perform locking implicitly during DELETEs.
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		td.alloc,
 		tableArgs,
@@ -273,7 +272,6 @@ func (td *tableDeleter) deleteIndexScan(
 		// strength here. Consider hooking this in to the same knob that will
 		// control whether we perform locking implicitly during DELETEs.
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		td.alloc,
 		tableArgs,
