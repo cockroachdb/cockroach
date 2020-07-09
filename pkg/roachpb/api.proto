@@ -874,6 +874,16 @@ message GCRequest {
 
     bytes key = 1 [(gogoproto.casttype) = "Key"];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+
+    // UseClearRange indicates that the evaluation of deleting versions of this
+    // key should utilize a ClearRange operation instead of issuing point
+    // deletes. We delegate this decision to the caller which has the visibility
+    // to determine whether there are sufficient versions to justify this
+    // approach. This field was introduced in version 20.2 and is gated on that
+    // version. Nodes at earlier versions would happily ignore this value but
+    // it remains gated to avoid the negative consequences of sending a single
+    // key with an extremely large number of versions.
+    bool use_clear_range = 3;
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.

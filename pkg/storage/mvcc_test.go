@@ -5016,17 +5016,29 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	}
 }
 
-// readWriterReturningSeekLTTrackingIterator is used in a test to inject errors
-// and ensure that SeekLT is returned an appropriate number of times.
-type readWriterReturningSeekLTTrackingIterator struct {
-	it seekLTTrackingIterator
+// trackingReadWriter is used in a test to track the number of times which
+// various methods are called on it and its returned iterator.
+type trackingReadWriter struct {
+	it               seekLTTrackingIterator
+	clearCalled      int
+	clearRangeCalled int
 	ReadWriter
 }
 
+func (trw *trackingReadWriter) Clear(key MVCCKey) error {
+	trw.clearCalled++
+	return trw.ReadWriter.Clear(key)
+}
+
+func (trw *trackingReadWriter) ClearRange(start, end MVCCKey) error {
+	trw.clearRangeCalled++
+	return trw.ReadWriter.ClearRange(start, end)
+}
+
 // NewIterator injects a seekLTTrackingIterator over the engine's real iterator.
-func (rw *readWriterReturningSeekLTTrackingIterator) NewIterator(opts IterOptions) Iterator {
-	rw.it.Iterator = rw.ReadWriter.NewIterator(opts)
-	return &rw.it
+func (trw *trackingReadWriter) NewIterator(opts IterOptions) Iterator {
+	trw.it.Iterator = trw.ReadWriter.NewIterator(opts)
+	return &trw.it
 }
 
 // seekLTTrackingIterator is used to determine the number of times seekLT is
@@ -5047,10 +5059,11 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type testCaseKey struct {
-		key         string
-		timestamps  []int
-		gcTimestamp int
-		expSeekLT   bool
+		key           string
+		timestamps    []int
+		gcTimestamp   int
+		expSeekLT     bool
+		useClearRange bool
 	}
 	type testCase struct {
 		name string
@@ -5073,6 +5086,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 	runTestCase := func(t *testing.T, tc testCase, engine Engine) {
 		ctx := context.Background()
 		ms := &enginepb.MVCCStats{}
+
 		for _, key := range tc.keys {
 			for _, seconds := range key.timestamps {
 				val := roachpb.MakeValueFromBytes(bytes)
@@ -5089,11 +5103,28 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 
 		var keys []roachpb.GCRequest_GCKey
 		var expectedSeekLTs int
+		var expectedClears int
+		var expectedClearRanges int
 		for _, key := range tc.keys {
 			keys = append(keys, roachpb.GCRequest_GCKey{
-				Key:       roachpb.Key(key.key),
-				Timestamp: toHLC(key.gcTimestamp),
+				Key:           roachpb.Key(key.key),
+				Timestamp:     toHLC(key.gcTimestamp),
+				UseClearRange: key.useClearRange,
 			})
+
+			var garbageForThisKey int
+			for _, ts := range key.timestamps {
+				if ts <= key.gcTimestamp {
+					garbageForThisKey++
+				}
+			}
+			if garbageForThisKey > 0 {
+				if key.useClearRange {
+					expectedClearRanges++
+				} else {
+					expectedClears += garbageForThisKey
+				}
+			}
 			if supportsPrev && key.expSeekLT {
 				expectedSeekLTs++
 			}
@@ -5101,10 +5132,12 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 
 		batch := engine.NewBatch()
 		defer batch.Close()
-		rw := readWriterReturningSeekLTTrackingIterator{ReadWriter: batch}
+		rw := trackingReadWriter{ReadWriter: batch}
 
 		require.NoError(t, MVCCGarbageCollect(ctx, &rw, ms, keys, toHLC(10)))
 		require.Equal(t, expectedSeekLTs, rw.it.seekLTCalled)
+		require.Equal(t, expectedClears, rw.clearCalled)
+		require.Equal(t, expectedClearRanges, rw.clearRangeCalled)
 	}
 	cases := []testCase{
 		{
@@ -5132,10 +5165,11 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 					expSeekLT:   true,
 				},
 				{
-					key:         "e",
-					timestamps:  []int{1, 2, 3, 4, 5, 6, 7, 8, 9},
-					gcTimestamp: 1,
-					expSeekLT:   true,
+					key:           "e",
+					timestamps:    []int{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					gcTimestamp:   1,
+					expSeekLT:     true,
+					useClearRange: true,
 				},
 				{
 					key:         "f",

@@ -560,7 +560,8 @@ func TestGCQueueProcess(t *testing.T) {
 			},
 			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
 				return nil
-			})
+			},
+			false /* canUseClearRange */)
 	}()
 	if err != nil {
 		t.Fatal(err)

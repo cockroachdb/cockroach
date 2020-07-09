@@ -96,19 +96,19 @@ func TestRunNewVsOld(t *testing.T) {
 			oldGCer := makeFakeGCer()
 			policy := zonepb.GCPolicy{TTLSeconds: tc.ttl}
 			newThreshold := CalculateThreshold(tc.now, policy)
+			const useClearRange = false
 			gcInfoOld, err := runGCOld(ctx, tc.ds.desc(), snap, tc.now,
 				newThreshold, policy,
 				&oldGCer,
 				oldGCer.resolveIntents,
-				oldGCer.resolveIntentsAsync)
+				oldGCer.resolveIntentsAsync,
+				useClearRange)
 			require.NoError(t, err)
 
 			newGCer := makeFakeGCer()
-			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now,
-				newThreshold, policy,
-				&newGCer,
-				newGCer.resolveIntents,
-				newGCer.resolveIntentsAsync)
+			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now, newThreshold,
+				policy, &newGCer, newGCer.resolveIntents, newGCer.resolveIntentsAsync,
+				false /* canUseClearRange */)
 			require.NoError(t, err)
 
 			oldGCer.normalize()
@@ -117,6 +117,16 @@ func TestRunNewVsOld(t *testing.T) {
 			require.EqualValues(t, oldGCer, newGCer)
 		})
 	}
+}
+
+func noopCleanupIntentsFunc(ctx context.Context, intents []roachpb.Intent) error {
+	return nil
+}
+
+func noopCleanupIntentsAsyncFunc(
+	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate,
+) error {
+	return nil
 }
 
 // BenchmarkRun benchmarks the old and implementations of Run with different
@@ -131,16 +141,14 @@ func BenchmarkRun(b *testing.B) {
 		}
 		snap := eng.NewSnapshot()
 		policy := zonepb.GCPolicy{TTLSeconds: spec.ttl}
+		const useClearRange = false
 		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
 			CalculateThreshold(spec.now, policy),
 			policy,
 			NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
-				return nil
-			},
-			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
-				return nil
-			})
+			noopCleanupIntentsFunc,
+			noopCleanupIntentsAsyncFunc,
+			useClearRange)
 	}
 	makeTest := func(old bool, spec randomRunGCTestSpec) func(b *testing.B) {
 		return func(b *testing.B) {
