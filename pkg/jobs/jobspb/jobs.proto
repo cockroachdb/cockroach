@@ -83,6 +83,12 @@ message BackupDetails {
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
+  // CollectionPath is the path componant of the original user-provided URI if
+  // the URI above has since had an automatically chosen suffix appended to it
+  // for nesting. Thus replacing the path in the above URI with this path would
+  // yield the original user supplied collection URI.
+  string collection_path = 8;
 }
 
 message BackupProgress {

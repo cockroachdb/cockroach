@@ -11,6 +11,8 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -503,6 +505,33 @@ func (b *backupResumer) Resume(
 		}
 	}
 
+	// If this is a full backup that was automatically nested in a collection of
+	// backups, record the path under which we wrote it to the LATEST_BACKUP file
+	// in the root of the collection. Note: this file *not* encrypted, as it only
+	// contains the name of another file that is in the same folder -- if you can
+	// get to this file to read it, you could already find its contents from the
+	// listing of the directory it is in -- it exists only to save us a
+	// potentially expensive listing of a giant backup collection to find the most
+	// recent completed entry.
+	if backupManifest.StartTime.IsEmpty() && details.CollectionPath != "" {
+		u, err := url.Parse(details.URI)
+		if err != nil {
+			return err
+		}
+
+		suffix := strings.TrimPrefix(u.Path, details.CollectionPath)
+		u.Path = details.CollectionPath
+
+		exportStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, u.String(), p.User())
+		if err != nil {
+			return err
+		}
+		defer exportStore.Close()
+		if err := exportStore.WriteFile(ctx, latestFileName, strings.NewReader(suffix)); err != nil {
+			return err
+		}
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(*b.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
@@ -578,14 +607,11 @@ func (b *backupResumer) deleteCheckpoint(
 		details := b.job.Details().(jobspb.BackupDetails)
 		// For all backups, partitioned or not, the main BACKUP manifest is stored at
 		// details.URI.
-		conf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, user)
+		exportStore, err := cfg.DistSQLSrv.ExternalStorageFromURI(ctx, details.URI, user)
 		if err != nil {
 			return err
 		}
-		exportStore, err := cfg.DistSQLSrv.ExternalStorage(ctx, conf)
-		if err != nil {
-			return err
-		}
+		defer exportStore.Close()
 		return exportStore.Delete(ctx, BackupManifestCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)

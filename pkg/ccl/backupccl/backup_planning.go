@@ -13,7 +13,9 @@ import (
 	"crypto"
 	cryptorand "crypto/rand"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"path"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -56,6 +58,8 @@ const (
 	backupOptWithPrivileges  = "privileges"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
+	dateBasedFolderName      = "/20060102/150405.00"
+	latestFileName           = "LATEST"
 )
 
 type encryptionMode int
@@ -309,10 +313,9 @@ func backupJobDescription(
 	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string,
 ) (string, error) {
 	b := &tree.Backup{
-		AsOf:               backup.AsOf,
-		Options:            backup.Options,
-		Targets:            backup.Targets,
-		DescriptorCoverage: backup.DescriptorCoverage,
+		AsOf:    backup.AsOf,
+		Options: backup.Options,
+		Targets: backup.Targets,
 	}
 
 	for _, t := range to {
@@ -482,6 +485,14 @@ func backupPlanHook(
 			return nil
 		}
 
+		endTime := p.ExecCfg().Clock.Now()
+		if backupStmt.AsOf.Expr != nil {
+			var err error
+			if endTime, err = p.EvalAsOfTimestamp(ctx, backupStmt.AsOf); err != nil {
+				return err
+			}
+		}
+
 		to, err := toFn()
 		if err != nil {
 			return err
@@ -497,11 +508,53 @@ func backupPlanHook(
 			return err
 		}
 
-		endTime := p.ExecCfg().Clock.Now()
-		if backupStmt.AsOf.Expr != nil {
-			var err error
-			if endTime, err = p.EvalAsOfTimestamp(ctx, backupStmt.AsOf); err != nil {
-				return err
+		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+
+		// chosenSuffix is automaically chosen sffix with a collection path if we're
+		// backing up INTO a collection.
+		var chosenSuffix string
+		// If we're going to automatically pick a nesting suffix under the provided
+		// URI(s) and update the URIs to include it, we'll record the original path
+		// for the main URI (to[0]) for the job to come back to later when writing
+		// the latest file.
+		var collectionPath string
+		if backupStmt.Nested {
+			if backupStmt.AppendToLatest {
+				collection, err := makeCloudStorage(ctx, to[0], p.User())
+				if err != nil {
+					return err
+				}
+				defer collection.Close()
+				latestFile, err := collection.ReadFile(ctx, latestFileName)
+				if err != nil {
+					if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+						return pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
+					}
+					return pgerror.WithCandidateCode(err, pgcode.Io)
+				}
+				latest, err := ioutil.ReadAll(latestFile)
+				if err != nil {
+					return err
+				}
+				if len(latest) == 0 {
+					return errors.Errorf("malformed LATEST file")
+				}
+				chosenSuffix = string(latest)
+			} else {
+				chosenSuffix = endTime.GoTime().Format(dateBasedFolderName)
+			}
+
+			for i := range to {
+				u, err := url.Parse(to[i])
+				if err != nil {
+					return err
+				}
+				// Record the original path before updating URI to point to nested path.
+				if i == 0 {
+					collectionPath = u.Path
+				}
+				u.Path = path.Join(u.Path, chosenSuffix)
+				to[i] = u.String()
 			}
 		}
 
@@ -513,8 +566,7 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime,
-			backupStmt.Targets, backupStmt.DescriptorCoverage)
+		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
 		}
@@ -546,8 +598,6 @@ func backupPlanHook(
 		if err := ensureInterleavesIncluded(tables); err != nil {
 			return err
 		}
-
-		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		var encryptionPassphrase []byte
 		var kmsURIs []string
@@ -686,7 +736,7 @@ func backupPlanHook(
 				prevBackups[0] = m
 
 				if m.DescriptorCoverage == tree.AllDescriptors &&
-					backupStmt.DescriptorCoverage != tree.AllDescriptors {
+					backupStmt.Coverage() != tree.AllDescriptors {
 					return errors.Errorf("cannot append a backup of specific tables or databases to a full-cluster backup")
 				}
 
@@ -707,7 +757,7 @@ func backupPlanHook(
 				}
 
 				// Pick a piece-specific suffix and update the destination path(s).
-				partName := endTime.GoTime().Format("/20060102/150405.00")
+				partName := endTime.GoTime().Format(dateBasedFolderName)
 				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
 				if err != nil {
 					return errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
@@ -720,6 +770,10 @@ func backupPlanHook(
 					return errors.Wrap(err, "re-opening layer-specific destination location")
 				}
 				// Note that a Close() is already deferred above.
+			} else if backupStmt.AppendToLatest {
+				// If we came here because the LATEST file told us to but didn't find an
+				// existing backup here we should raise an error.
+				pgerror.Newf(pgcode.UndefinedFile, "backup not found in location recorded latest file: %q", chosenSuffix)
 			}
 		}
 
@@ -755,7 +809,7 @@ func backupPlanHook(
 
 		var spans []roachpb.Span
 		var tenants []BackupManifest_Tenant
-		if backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
+		if backupStmt.Targets != nil && backupStmt.Targets.Tenant != (roachpb.TenantID{}) {
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
@@ -798,7 +852,7 @@ func backupPlanHook(
 				dbsInPrev[d] = struct{}{}
 			}
 
-			if backupStmt.DescriptorCoverage != tree.AllDescriptors {
+			if backupStmt.Coverage() != tree.AllDescriptors {
 				if err := checkForNewTables(ctx, p.ExecCfg().DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
 					return err
 				}
@@ -854,7 +908,7 @@ func backupPlanHook(
 			NodeID:              nodeID,
 			ClusterID:           p.ExecCfg().ClusterID(),
 			StatisticsFilenames: statsFiles,
-			DescriptorCoverage:  backupStmt.DescriptorCoverage,
+			DescriptorCoverage:  backupStmt.Coverage(),
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time
@@ -953,6 +1007,7 @@ func backupPlanHook(
 			URIsByLocalityKV: urisByLocalityKV,
 			BackupManifest:   descBytes,
 			Encryption:       encryption,
+			CollectionPath:   collectionPath,
 		}
 		if len(spans) > 0 {
 			protectedtsID := uuid.MakeV4()
@@ -991,7 +1046,7 @@ func backupPlanHook(
 			if encryption != nil {
 				telemetry.Count("backup.encrypted")
 			}
-			if backupStmt.DescriptorCoverage == tree.AllDescriptors {
+			if backupStmt.Coverage() == tree.AllDescriptors {
 				telemetry.Count("backup.targets.full_cluster")
 			}
 		}
