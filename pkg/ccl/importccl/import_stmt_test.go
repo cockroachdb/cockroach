@@ -1446,14 +1446,6 @@ func TestImportCSVStmt(t *testing.T) {
 			"invalid option \"foo\"",
 		},
 		{
-			"bad-computed-column",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2'`,
-			nil,
-			testFiles.filesWithOpts,
-			``,
-			"computed columns not supported",
-		},
-		{
 			"primary-key-dup",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
@@ -3317,6 +3309,143 @@ func TestImportDefault(t *testing.T) {
 
 		}
 	})
+}
+
+func TestImportComputed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const nodes = 3
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	avroTestHelper := newTestHelper(t,
+		&seqGen{namedField: namedField{name: "a"}},
+		&seqGen{namedField: namedField{name: "b"}})
+	var dataBuf bytes.Buffer
+	ocf, err := goavro.NewOCFWriter(goavro.OCFConfig{
+		W:     &dataBuf,
+		Codec: avroTestHelper.codec,
+	})
+	require.NoError(t, err)
+	row1 := map[string]interface{}{
+		"a": 1,
+		"b": 2,
+	}
+	row2 := map[string]interface{}{
+		"a": 3,
+		"b": 4,
+	}
+	// Add the data rows to the writer.
+	require.NoError(t, ocf.Append([]interface{}{row1, row2}))
+	// Retrieve the AVRO encoded data.
+	avroData := dataBuf.String()
+	pgdumpData := `
+CREATE TABLE users (a INT, b INT, c INT AS (a + b) STORED);
+INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
+`
+	defer srv.Close()
+	tests := []struct {
+		into       bool
+		name       string
+		data       string
+		create     string
+		targetCols string
+		format     string
+		sequence   string
+		// We expect exactly one of expectedResults and expectedError.
+		expectedResults [][]string
+		expectedError   string
+	}{
+		{
+			into:            true,
+			name:            "addition",
+			data:            "35,23\n67,10",
+			create:          "a INT, b INT, c INT AS (a + b) STORED",
+			targetCols:      "a, b",
+			format:          "CSV",
+			expectedResults: [][]string{{"35", "23", "58"}, {"67", "10", "77"}},
+		},
+		{
+			into:          true,
+			name:          "cannot-be-targeted",
+			data:          "1,2,3\n3,4,5",
+			create:        "a INT, b INT, c INT AS (a + b) STORED",
+			targetCols:    "a, b, c",
+			format:        "CSV",
+			expectedError: `cannot write directly to computed column "c"`,
+		},
+		{
+			into:            true,
+			name:            "import-into-avro",
+			data:            avroData,
+			create:          "a INT, b INT, c INT AS (a + b) STORED",
+			targetCols:      "a, b",
+			format:          "AVRO",
+			expectedResults: [][]string{{"1", "2", "3"}, {"3", "4", "7"}},
+		},
+		{
+			into:          false,
+			name:          "import-table-csv",
+			data:          "35,23\n67,10",
+			create:        "a INT, c INT AS (a + b) STORED, b INT",
+			targetCols:    "a, b",
+			format:        "CSV",
+			expectedError: "not supported by IMPORT INTO CSV",
+		},
+		{
+			into:            false,
+			name:            "import-table-avro",
+			data:            avroData,
+			create:          "a INT, b INT, c INT AS (a + b) STORED",
+			targetCols:      "a, b",
+			format:          "AVRO",
+			expectedResults: [][]string{{"1", "2", "3"}, {"3", "4", "7"}},
+		},
+		{
+			into:            false,
+			name:            "pgdump",
+			data:            pgdumpData,
+			format:          "PGDUMP",
+			expectedResults: [][]string{{"1", "2", "3"}, {"3", "4", "7"}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			defer sqlDB.Exec(t, `DROP TABLE IF EXISTS users`)
+			data = test.data
+			var importStmt string
+			if test.into {
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE users (%s)`, test.create))
+				importStmt = fmt.Sprintf(`IMPORT INTO users (%s) %s DATA (%q)`,
+					test.targetCols, test.format, srv.URL)
+			} else {
+				if test.format == "CSV" || test.format == "AVRO" {
+					importStmt = fmt.Sprintf(
+						`IMPORT TABLE users (%s) %s DATA (%q)`, test.create, test.format, srv.URL)
+				} else {
+					importStmt = fmt.Sprintf(`IMPORT %s (%q)`, test.format, srv.URL)
+				}
+			}
+			if test.expectedError != "" {
+				sqlDB.ExpectErr(t, test.expectedError, importStmt)
+			} else {
+				sqlDB.Exec(t, importStmt)
+				sqlDB.CheckQueryResults(t, `SELECT * FROM users`, test.expectedResults)
+			}
+		})
+	}
 }
 
 // goos: darwin
