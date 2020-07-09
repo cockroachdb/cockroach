@@ -97,7 +97,10 @@ type OrderedSynchronizer struct {
 	outColsMap []int
 }
 
-var _ colexecbase.Operator = &OrderedSynchronizer{}
+var (
+	_ colexecbase.Operator = &OrderedSynchronizer{}
+	_ Closer               = &OrderedSynchronizer{}
+)
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
@@ -242,12 +245,12 @@ func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.Produ
 	return bufferedMeta
 }
 
-func (o *OrderedSynchronizer) IdempotentClose(ctx context.Context) error {
+func (o *OrderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range o.inputs {
 		for _, closer := range input.ToClose {
-			if err := closer.IdempotentClose(ctx); err != nil {
+			if err := closer.Close(ctx); err != nil {
 				if log.V(1) {
-					log.Infof(ctx, "ordered synchronizer error closing IdempotentCloser: %v", err)
+					log.Infof(ctx, "ordered synchronizer error closing Closer: %v", err)
 				}
 			}
 		}
