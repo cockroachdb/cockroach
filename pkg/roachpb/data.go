@@ -90,6 +90,11 @@ func (rk RKey) Less(otherRK RKey) bool {
 	return bytes.Compare(rk, otherRK) < 0
 }
 
+// Compare compares the two RKeys.
+func (rk RKey) Compare(other RKey) int {
+	return bytes.Compare(rk, other)
+}
+
 // Equal checks for byte-wise equality.
 func (rk RKey) Equal(other []byte) bool {
 	return bytes.Equal(rk, other)
