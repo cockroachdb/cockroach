@@ -81,13 +81,13 @@ func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *
 	if distribute {
 		if e.planContexts.distPlanCtx == nil {
 			evalCtx := e.planner.ExtendedEvalContext()
-			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+			e.planContexts.distPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute)
 		}
 		return e.planContexts.distPlanCtx
 	}
 	if e.planContexts.localPlanCtx == nil {
 		evalCtx := e.planner.ExtendedEvalContext()
-		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner.txn, distribute)
+		e.planContexts.localPlanCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute)
 	}
 	return e.planContexts.localPlanCtx
 }
@@ -170,7 +170,21 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
-		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: virtual table scan")
+		return constructVirtualScan(
+			e, e.planner, table, index, needed, indexConstraint, hardLimit,
+			softLimit, reverse, reqOrdering, rowCount, locking,
+			func(d *delayedNode) (exec.Node, error) {
+				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d)
+				if err != nil {
+					return nil, err
+				}
+				physPlan.ResultColumns = d.columns
+				return planMaybePhysical{physPlan: &physicalPlanTop{
+					PhysicalPlan:     physPlan,
+					planNodesToClose: []planNode{d},
+				}}, nil
+			},
+		)
 	}
 
 	p := MakePhysicalPlan(e.gatewayNodeID)
@@ -577,7 +591,11 @@ func (e *distSQLSpecExecFactory) ConstructSetOp(
 func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: sort")
+	physPlan, plan := getPhysPlan(input)
+	e.dsp.addSorters(physPlan, ordering, alreadyOrderedPrefix)
+	// Since addition of sorters doesn't change any properties of the physical
+	// plan, we don't need to update any of those.
+	return plan, nil
 }
 
 func (e *distSQLSpecExecFactory) ConstructOrdinality(

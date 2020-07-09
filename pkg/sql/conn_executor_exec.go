@@ -875,8 +875,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
-	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn, distribute)
-	planCtx.planner = planner
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
 	if planner.collectBundle {
 		planCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
