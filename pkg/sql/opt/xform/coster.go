@@ -396,7 +396,8 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 		eqMap.Set(left, right)
 		eqMap.Set(right, left)
 	}
-	cost += c.computeFiltersCost(*on, eqMap)
+	setupCost, _ := c.computeFiltersCost(*on, eqMap)
+	cost += setupCost
 
 	return cost
 }
@@ -417,7 +418,8 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 	}
 	cost += memo.Cost(rowsProcessed) * cpuCostFactor
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	setupCost, _ := c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += setupCost
 	return cost
 }
 
@@ -490,7 +492,8 @@ func (c *coster) computeLookupJoinCost(
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	setupCost, _ := c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += setupCost
 	return cost
 }
 
@@ -540,29 +543,26 @@ func (c *coster) computeInvertedJoinCost(
 	perLookupCost *= 5
 	cost := memo.Cost(lookupCount) * perLookupCost
 
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += filterSetup
+
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
 	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
-	perRowCost := lookupJoinRetrieveRowCost +
+	perRowCost := lookupJoinRetrieveRowCost + filterPerRow +
 		c.rowScanCost(join.Table, join.Index, numLookupCols)
-	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	// We don't add the result of computeFiltersCost to perRowCost because
-	// otherwise the 1 that is added to rowsProcessed would either have
-	// to be removed or be multiplied by all of the other various costs in
-	// perRowCost. To be consistent with other joins, keep it separate.
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{}) * memo.Cost(1+rowsProcessed)
+	cost += memo.Cost(rowsProcessed) * perRowCost
 	return cost
 }
 
-// computeFiltersCost returns the per-row cost of executing a filter. Callers
-// of this function should multiply its output by the number of rows expected
-// to be filtered + 1. The + 1 accounts for a setup cost and is useful for
-// comparing costs of filters with very low row counts.
-// TODO: account for per-row costs in all callers.
-func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastIntMap) memo.Cost {
-	var cost memo.Cost
+// computeFiltersCost returns the setup and per-row cost of executing
+// a filter. Callers of this function should add setupCost and multiply
+// perRowCost by the number of rows expected to be filtered.
+func (c *coster) computeFiltersCost(
+	filters memo.FiltersExpr, eqMap util.FastIntMap,
+) (setupCost, perRowCost memo.Cost) {
 	for i := range filters {
 		f := &filters[i]
 		switch f.Condition.Op() {
@@ -584,7 +584,7 @@ func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastInt
 			}
 		case opt.FunctionOp:
 			if invertedidx.IsGeoIndexFunction(f.Condition) {
-				cost += geoFnCost
+				perRowCost += geoFnCost
 			}
 			// TODO(mjibson): do we need to cost other functions?
 		}
@@ -592,11 +592,9 @@ func (c *coster) computeFiltersCost(filters memo.FiltersExpr, eqMap util.FastInt
 		// Add a constant "setup" cost per ON condition to account for the fact that
 		// the rowsProcessed estimate alone cannot effectively discriminate between
 		// plans when RowCount is too small.
-		// TODO: perhaps separate the one-time and per-row costs and
-		// return them separately.
-		cost += cpuCostFactor
+		setupCost += cpuCostFactor
 	}
-	return cost
+	return setupCost, perRowCost
 }
 
 func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
@@ -620,7 +618,8 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	// given two indexes will be accessed.
 	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost)
 
-	cost += c.computeFiltersCost(join.On, util.FastIntMap{})
+	setupCost, _ := c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += setupCost
 	return cost
 }
 
