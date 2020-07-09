@@ -80,6 +80,20 @@ func MakeDefaultExprs(
 	return defaultExprs, nil
 }
 
+func ProcessColumns(
+	ctx context.Context,
+	cols []ColumnDescriptor,
+	tableDesc *ImmutableTableDescriptor,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	colFilter func(col *ColumnDescriptor) bool,
+) ([]ColumnDescriptor, []tree.TypedExpr, error) {
+	cols = processColumnSet(cols, tableDesc, colFilter)
+	defaultExprs, err := MakeDefaultExprs(ctx, cols, txCtx, evalCtx, semaCtx)
+	return cols, defaultExprs, err
+}
+
 // ProcessDefaultColumns adds columns with DEFAULT to cols if not present
 // and returns the defaultExprs for cols.
 func ProcessDefaultColumns(
@@ -90,11 +104,26 @@ func ProcessDefaultColumns(
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
-	cols = processColumnSet(cols, tableDesc, func(col *ColumnDescriptor) bool {
+	colFilter := func(col *ColumnDescriptor) bool {
 		return col.DefaultExpr != nil
-	})
-	defaultExprs, err := MakeDefaultExprs(ctx, cols, txCtx, evalCtx, semaCtx)
-	return cols, defaultExprs, err
+	}
+	return ProcessColumns(ctx, cols, tableDesc, txCtx, evalCtx, semaCtx, colFilter)
+}
+
+// ProcessDefaultComputedColumns adds columns with DEFAULT or COMPUTED
+// to cols if not present, and returns those expressions.
+func ProcessDefaultComputedColumns(
+	ctx context.Context,
+	cols []ColumnDescriptor,
+	tableDesc *ImmutableTableDescriptor,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+) ([]ColumnDescriptor, []tree.TypedExpr, error) {
+	colFilter := func(col *ColumnDescriptor) bool {
+		return col.DefaultExpr != nil || col.ComputeExpr != nil
+	}
+	return ProcessColumns(ctx, cols, tableDesc, txCtx, evalCtx, semaCtx, colFilter)
 }
 
 func processColumnSet(

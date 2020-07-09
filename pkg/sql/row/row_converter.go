@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -362,6 +363,9 @@ func GenerateInsertRow(
 			// since we disallow computed columns from referencing other computed
 			// columns, all the columns which could possibly be referenced *are*
 			// available.
+			if !computedCols[i].IsComputed() {
+				continue
+			}
 			d, err := computeExprs[i].Eval(evalCtx)
 			if err != nil {
 				return nil, errors.Wrapf(err, "computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
@@ -506,9 +510,10 @@ func NewDatumRowConverter(
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(ctx, targetColDescriptors, immutDesc, &txCtx, c.EvalCtx, &semaCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultComputedColumns(
+		ctx, targetColDescriptors, immutDesc, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
-		return nil, errors.Wrap(err, "process default columns")
+		return nil, errors.Wrap(err, "process default and computed columns")
 	}
 
 	ri, err := MakeInserter(
@@ -576,6 +581,9 @@ func NewDatumRowConverter(
 				c.Datums = append(c.Datums, nil)
 			}
 		}
+		if col.IsComputed() && !isTargetCol(col) {
+			c.Datums = append(c.Datums, nil)
+		}
 	}
 	if len(c.Datums) != len(cols) {
 		return nil, errors.New("unexpected hidden column")
@@ -613,10 +621,28 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			c.Datums[i] = datum
 		}
 	}
-
-	// TODO(justin): we currently disallow computed columns in import statements.
-	var computeExprs []tree.TypedExpr
-	var computedCols []sqlbase.ColumnDescriptor
+	colsForCompute := make([]sqlbase.ColumnDescriptor, len(c.tableDesc.Columns))
+	for _, col := range c.tableDesc.Columns {
+		colsForCompute[c.computedIVarContainer.Mapping[col.ID]] = col
+	}
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.TypeResolver = c.EvalCtx.TypeResolver
+	var txCtx transform.ExprTransformContext
+	computeExprs, err := schemaexpr.MakeComputedExprs(
+		ctx,
+		colsForCompute,
+		c.tableDesc,
+		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
+		&txCtx,
+		c.EvalCtx,
+		&semaCtx, true)
+	if err != nil {
+		return errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+	}
+	computedCols := make([]sqlbase.ColumnDescriptor, 0)
+	if len(computeExprs) > 0 {
+		computedCols = colsForCompute
+	}
 
 	insertRow, err := GenerateInsertRow(
 		c.defaultCache, computeExprs, c.cols, computedCols, c.EvalCtx,

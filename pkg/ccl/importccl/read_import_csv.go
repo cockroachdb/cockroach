@@ -133,6 +133,13 @@ func (p *csvRowProducer) Row() (interface{}, error) {
 	p.rowNum++
 	expectedColsLen := len(p.expectedColumns)
 	if expectedColsLen == 0 {
+		// TODO(anzoteh96): this should really be only checked once per import instead of every row.
+		for _, col := range p.importCtx.tableDesc.VisibleColumns() {
+			if col.IsComputed() {
+				return nil,
+					errors.Newf("%q is computed, which is not supported by IMPORT INTO CSV", col.Name)
+			}
+		}
 		expectedColsLen = len(p.importCtx.tableDesc.VisibleColumns())
 	}
 
