@@ -17,6 +17,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -46,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -165,6 +168,8 @@ type sqlServerArgs struct {
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
 
+	// Creates sessions
+	sqlInstance sqlliveness.SQLInstance
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
@@ -193,6 +198,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
 			regLiveness = sqlbase.MakeOptionalNodeLiveness(testingLiveness.(*jobs.FakeNodeLiveness))
 		}
+		cfg.sqlInstance = slinstance.NewSqlInstance(
+			cfg.stopper, cfg.clock, cfg.db, cfg.circularInternalExecutor, &slinstance.Options{Deadline: 30 * time.Second, Heartbeat: 40 * time.Second},
+		)
 		*jobRegistry = *jobs.MakeRegistry(
 			cfg.AmbientCtx,
 			cfg.stopper,
@@ -201,6 +209,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.db,
 			cfg.circularInternalExecutor,
 			cfg.nodeIDContainer,
+			cfg.sqlInstance,
 			cfg.Settings,
 			cfg.HistogramWindowInterval(),
 			func(opName, user string) (interface{}, func()) {

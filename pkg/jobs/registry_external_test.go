@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -72,7 +73,12 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
+		true)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: ver201})
 	defer s.Stopper().Stop(ctx)
 
 	// Disable leniency for instant expiration
@@ -89,9 +95,14 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		c.Set(ctx, id)
 		idContainer := base.NewSQLIDContainer(0, &c, true /* exposed */)
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+		sqlInstance := slinstance.NewSqlInstance(
+			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
+			&slinstance.Options{Deadline: 2 * adoptInterval, Heartbeat: adoptInterval},
+		)
 		r := jobs.MakeRegistry(
-			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db, s.InternalExecutor().(sqlutil.InternalExecutor),
-			idContainer, s.ClusterSettings(), base.DefaultHistogramWindowInterval(), jobs.FakePHS, "",
+			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db,
+			s.InternalExecutor().(sqlutil.InternalExecutor), idContainer, sqlInstance,
+			s.ClusterSettings(), base.DefaultHistogramWindowInterval(), jobs.FakePHS, "",
 		)
 		if err := r.Start(ctx, s.Stopper(), cancelInterval, adoptInterval); err != nil {
 			t.Fatal(err)
