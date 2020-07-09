@@ -626,7 +626,7 @@ func ConditionalGetTableDescFromTxn(
 func FilterTableState(tableDesc *TableDescriptor) error {
 	switch tableDesc.State {
 	case TableDescriptor_DROP:
-		return &inactiveTableError{errors.New("table is being dropped")}
+		return &inactiveTableError{ErrTableDropped}
 	case TableDescriptor_OFFLINE:
 		err := errors.Errorf("table %q is offline", tableDesc.Name)
 		if tableDesc.OfflineReason != "" {
@@ -643,6 +643,10 @@ func FilterTableState(tableDesc *TableDescriptor) error {
 }
 
 var errTableAdding = errors.New("table is being added")
+
+// ErrTableDropped is returned when the state of the table is
+// TableDescriptor_DROP.
+var ErrTableDropped = errors.New("table is being dropped")
 
 type inactiveTableError struct {
 	cause error
