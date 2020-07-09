@@ -90,14 +90,16 @@ func ProcessDefaultColumns(
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
-	cols = processColumnSet(cols, tableDesc, func(col *ColumnDescriptor) bool {
+	cols = ProcessColumnSet(cols, tableDesc, func(col *ColumnDescriptor) bool {
 		return col.DefaultExpr != nil
 	})
 	defaultExprs, err := MakeDefaultExprs(ctx, cols, txCtx, evalCtx, semaCtx)
 	return cols, defaultExprs, err
 }
 
-func processColumnSet(
+// ProcessColumnSet returns columns in cols, and other writable
+// columns in tableDesc that fulfills a given criteria in inSet.
+func ProcessColumnSet(
 	cols []ColumnDescriptor, tableDesc *ImmutableTableDescriptor, inSet func(*ColumnDescriptor) bool,
 ) []ColumnDescriptor {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
