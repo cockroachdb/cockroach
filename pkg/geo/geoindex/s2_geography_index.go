@@ -59,7 +59,7 @@ func (i *s2GeographyIndex) InvertedIndexKeys(c context.Context, g *geo.Geography
 	if err != nil {
 		return nil, err
 	}
-	return invertedIndexKeys(c, i.rc, r), nil
+	return invertedIndexKeys(c, simpleCovererImpl{rc: i.rc}, r), nil
 }
 
 // Covers implements the GeographyIndex interface.
@@ -68,7 +68,7 @@ func (i *s2GeographyIndex) Covers(c context.Context, g *geo.Geography) (UnionKey
 	if err != nil {
 		return nil, err
 	}
-	return covers(c, i.rc, r), nil
+	return covers(c, simpleCovererImpl{rc: i.rc}, r), nil
 }
 
 // CoveredBy implements the GeographyIndex interface.
@@ -86,7 +86,7 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 	if err != nil {
 		return nil, err
 	}
-	return intersects(c, i.rc, r), nil
+	return intersects(c, simpleCovererImpl{rc: i.rc}, r), nil
 }
 
 func (i *s2GeographyIndex) DWithin(
@@ -113,7 +113,7 @@ func (i *s2GeographyIndex) DWithin(
 	// desire.
 	//
 	// Construct the cell covering for the shape.
-	gCovering := covering(i.rc, r)
+	gCovering := simpleCovererImpl{rc: i.rc}.covering(r)
 	// Convert the distanceMeters to an angle, in order to expand the cell covering
 	// on the sphere by the angle.
 	multiplier := 1.0
