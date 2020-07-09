@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
 )
+
+const defaultUserfileScheme = "userfile"
 
 type fileTableStorage struct {
 	fs     *filetable.FileToTableSystem
@@ -61,7 +64,12 @@ func MakeUserFileStorageURI(qualifiedTableName, filename string) string {
 
 func makeUserFileURIWithQualifiedName(qualifiedTableName, path string) string {
 	path = strings.TrimPrefix(path, "/")
-	return fmt.Sprintf("userfile://%s/%s", qualifiedTableName, path)
+	userfileURL := url.URL{
+		Scheme: defaultUserfileScheme,
+		Host:   qualifiedTableName,
+		Path:   path,
+	}
+	return userfileURL.String()
 }
 
 // Close implements the ExternalStorage interface and is a no-op.
@@ -78,13 +86,27 @@ func (f *fileTableStorage) Conf() roachpb.ExternalStorage {
 	}
 }
 
+// We do not want to invoke path.Clean() when joining the prefix with the
+// basename because this could simplify the final URI. Since fileTableStorage
+// is not a real file system the filename written to the SQL tables must be
+// the unaltered path that the user passed in.
+func joinFilePathWithoutClean(prefix, basename string) string {
+	if basename == "" {
+		return prefix
+	}
+	prefix = strings.TrimSuffix(prefix, "/")
+	basename = strings.TrimPrefix(basename, "/")
+	return prefix + "/" + basename
+}
+
 // ReadFile implements the ExternalStorage interface and returns the contents of
 // the file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	reader, err := f.fs.ReadFile(ctx, path.Join(f.prefix, basename))
+	reader, err := f.fs.ReadFile(ctx, joinFilePathWithoutClean(f.prefix, basename))
 	if os.IsNotExist(err) {
 		return nil, errors.Wrapf(ErrFileDoesNotExist,
-			"file %s does not exist in the UserFileTableSystem", path.Join(f.prefix, basename))
+			"file %s does not exist in the UserFileTableSystem",
+			joinFilePathWithoutClean(f.prefix, basename))
 	}
 
 	return reader, err
@@ -95,7 +117,8 @@ func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.Re
 func (f *fileTableStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	writer, err := f.fs.NewFileWriter(ctx, path.Join(f.prefix, basename), filetable.ChunkDefaultSize)
+	writer, err := f.fs.NewFileWriter(ctx, joinFilePathWithoutClean(f.prefix, basename),
+		filetable.ChunkDefaultSize)
 	if err != nil {
 		return err
 	}
@@ -125,7 +148,7 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 		if containsGlob(f.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
-		pattern = path.Join(pattern, patternSuffix)
+		pattern = joinFilePathWithoutClean(pattern, patternSuffix)
 	}
 
 	for _, match := range matches {
@@ -154,11 +177,11 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 // Delete implements the ExternalStorage interface and deletes the file from the
 // user scoped FileToTableSystem.
 func (f *fileTableStorage) Delete(ctx context.Context, basename string) error {
-	return f.fs.DeleteFile(ctx, path.Join(f.prefix, basename))
+	return f.fs.DeleteFile(ctx, joinFilePathWithoutClean(f.prefix, basename))
 }
 
 // Size implements the ExternalStorage interface and returns the size of the
 // file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, error) {
-	return f.fs.FileSize(ctx, path.Join(f.prefix, basename))
+	return f.fs.FileSize(ctx, joinFilePathWithoutClean(f.prefix, basename))
 }
