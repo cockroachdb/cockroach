@@ -305,7 +305,6 @@ func (c *conn) serveImpl(
 
 	var err error
 	var terminateSeen bool
-	var doingExtendedQueryMessage bool
 
 	// We need an intSizer, which we're ultimately going to get from the
 	// authenticator once authentication succeeds (because it will actually be a
@@ -361,17 +360,6 @@ Loop:
 				&c.msgBuilder, &c.writerState.buf)
 			break Loop
 		case pgwirebase.ClientMsgSimpleQuery:
-			if doingExtendedQueryMessage {
-				if err = c.stmtBuf.Push(
-					ctx,
-					sql.SendError{
-						Err: pgwirebase.NewProtocolViolationErrorf(
-							"SimpleQuery not allowed while in extended protocol mode"),
-					},
-				); err != nil {
-					break
-				}
-			}
 			if err = c.handleSimpleQuery(
 				ctx, &c.readBuf, timeReceived, intSizer.GetUnqualifiedIntSize(),
 			); err != nil {
@@ -380,23 +368,18 @@ Loop:
 			err = c.stmtBuf.Push(ctx, sql.Sync{})
 
 		case pgwirebase.ClientMsgExecute:
-			doingExtendedQueryMessage = true
 			err = c.handleExecute(ctx, &c.readBuf, timeReceived)
 
 		case pgwirebase.ClientMsgParse:
-			doingExtendedQueryMessage = true
 			err = c.handleParse(ctx, &c.readBuf, intSizer.GetUnqualifiedIntSize())
 
 		case pgwirebase.ClientMsgDescribe:
-			doingExtendedQueryMessage = true
 			err = c.handleDescribe(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgBind:
-			doingExtendedQueryMessage = true
 			err = c.handleBind(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgClose:
-			doingExtendedQueryMessage = true
 			err = c.handleClose(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgTerminate:
@@ -404,7 +387,6 @@ Loop:
 			break Loop
 
 		case pgwirebase.ClientMsgSync:
-			doingExtendedQueryMessage = false
 			// We're starting a batch here. If the client continues using the extended
 			// protocol and encounters an error, everything until the next sync
 			// message has to be skipped. See:
@@ -413,7 +395,6 @@ Loop:
 			err = c.stmtBuf.Push(ctx, sql.Sync{})
 
 		case pgwirebase.ClientMsgFlush:
-			doingExtendedQueryMessage = true
 			err = c.handleFlush(ctx)
 
 		case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
