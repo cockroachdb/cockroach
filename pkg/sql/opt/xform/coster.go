@@ -324,7 +324,9 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {
 	// The filter has to be evaluated on each input row.
 	inputRowCount := sel.Input.Relational().Stats.RowCount
-	cost := memo.Cost(inputRowCount) * cpuCostFactor
+	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, util.FastIntMap{})
+	cost := memo.Cost(inputRowCount) * filterPerRow
+	cost += filterSetup
 	return cost
 }
 
@@ -369,15 +371,6 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	// a temp RocksDB store.
 	cost := memo.Cost(1.25*leftRowCount+1.75*rightRowCount) * cpuCostFactor
 
-	// Add the CPU cost of emitting the rows.
-	rowsProcessed, ok := c.mem.RowsProcessed(join)
-	if !ok {
-		// This can happen as part of testing. In this case just return the number
-		// of rows.
-		rowsProcessed = join.Relational().Stats.RowCount
-	}
-	cost += memo.Cost(rowsProcessed) * cpuCostFactor
-
 	// Compute filter cost. Fetch the equality columns so they can be
 	// ignored later.
 	on := join.Child(2).(*memo.FiltersExpr)
@@ -396,8 +389,17 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 		eqMap.Set(left, right)
 		eqMap.Set(right, left)
 	}
-	setupCost, _ := c.computeFiltersCost(*on, eqMap)
-	cost += setupCost
+	filterSetup, filterPerRow := c.computeFiltersCost(*on, util.FastIntMap{})
+	cost += filterSetup
+
+	// Add the CPU cost of emitting the rows.
+	rowsProcessed, ok := c.mem.RowsProcessed(join)
+	if !ok {
+		// This can happen as part of testing. In this case just return the number
+		// of rows.
+		rowsProcessed = join.Relational().Stats.RowCount
+	}
+	cost += memo.Cost(rowsProcessed) * filterPerRow
 
 	return cost
 }
@@ -408,6 +410,9 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 
 	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
 
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += filterSetup
+
 	// Add the CPU cost of emitting the rows.
 	rowsProcessed, ok := c.mem.RowsProcessed(join)
 	if !ok {
@@ -416,10 +421,7 @@ func (c *coster) computeMergeJoinCost(join *memo.MergeJoinExpr) memo.Cost {
 		// logPropsBuilder.clear() is called.
 		panic(errors.AssertionFailedf("could not get rows processed for merge join"))
 	}
-	cost += memo.Cost(rowsProcessed) * cpuCostFactor
-
-	setupCost, _ := c.computeFiltersCost(join.On, util.FastIntMap{})
-	cost += setupCost
+	cost += memo.Cost(rowsProcessed) * filterPerRow
 	return cost
 }
 
@@ -483,17 +485,17 @@ func (c *coster) computeLookupJoinCost(
 	}
 	cost := memo.Cost(lookupCount) * perLookupCost
 
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+	cost += filterSetup
+
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
 	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
-	perRowCost := lookupJoinRetrieveRowCost +
+	perRowCost := lookupJoinRetrieveRowCost + filterPerRow +
 		c.rowScanCost(join.Table, join.Index, numLookupCols)
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
-
-	setupCost, _ := c.computeFiltersCost(join.On, util.FastIntMap{})
-	cost += setupCost
 	return cost
 }
 
@@ -563,6 +565,9 @@ func (c *coster) computeInvertedJoinCost(
 func (c *coster) computeFiltersCost(
 	filters memo.FiltersExpr, eqMap util.FastIntMap,
 ) (setupCost, perRowCost memo.Cost) {
+	// Add a base perRowCost so that callers do not need to have their own
+	// base per-row cost.
+	perRowCost += cpuCostFactor
 	for i := range filters {
 		f := &filters[i]
 		switch f.Condition.Op() {
@@ -614,12 +619,12 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	scanCost := c.rowScanCost(join.LeftTable, join.LeftIndex, leftCols.Len())
 	scanCost += c.rowScanCost(join.RightTable, join.RightIndex, rightCols.Len())
 
+	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntMap{})
+
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.
-	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost)
-
-	setupCost, _ := c.computeFiltersCost(join.On, util.FastIntMap{})
-	cost += setupCost
+	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost + filterPerRow)
+	cost += filterSetup
 	return cost
 }
 
