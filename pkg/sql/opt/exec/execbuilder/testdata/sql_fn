@@ -248,3 +248,8 @@ query T
 SELECT addgeometrycolumn('a', 'b', 3, NULL, 2);
 ----
 NULL
+
+query T
+SELECT addgeometrycolumn('a', 'b', NULL::string, 'c', 9223372036854775807:::INT8, 'd', NULL::int)
+----
+NULL

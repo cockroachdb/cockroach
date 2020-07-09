@@ -164,7 +164,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	hardLimit int64,
 	softLimit int64,
 	reverse bool,
-	maxResults uint64,
+	parallelize bool,
 	reqOrdering exec.OutputOrdering,
 	rowCount float64,
 	locking *tree.LockingItem,
@@ -204,9 +204,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return e.ConstructValues([][]tree.TypedExpr{} /* rows */, p.ResultColumns)
 	}
 
-	// TODO(yuzefovich): scanNode adds "parallel" attribute in walk.go when
-	// scanNode.canParallelize() returns true. We should plumb that info from
-	// here somehow as well.
 	var spans roachpb.Spans
 	if invertedConstraint != nil {
 		spans, err = GenerateInvertedSpans(invertedConstraint, sb)
@@ -277,7 +274,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			spans:                  spans,
 			reverse:                reverse,
 			scanVisibility:         colCfg.visibility,
-			maxResults:             maxResults,
+			parallelize:            parallelize,
 			estimatedRowCount:      uint64(rowCount),
 			reqOrdering:            ReqOrdering(reqOrdering),
 			cols:                   cols,

@@ -1,0 +1,18 @@
+# Send a simple query in the middle of extended protocol, which is apparently
+# allowed. (See #41511, #33693)
+send
+Parse {"Name": "S_3", "Query": "BEGIN"}
+Bind {"PreparedStatement": "S_3"}
+Execute
+Query {"String": "SAVEPOINT PGJDBC_AUTOSAVE"}
+----
+
+until
+CommandComplete
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}

@@ -63,8 +63,10 @@ type Factory interface {
 	//   - If softLimit > 0, then the scan may be required to return up to all
 	//     of its rows (or up to the hardLimit if it is set), but can be optimized
 	//     under the assumption that only softLimit rows will be needed.
-	//   - If maxResults > 0, the scan is guaranteed to return at most maxResults
-	//     rows.
+	//   - If parallelize is true, the scan will scan all spans in parallel. It
+	//     should only be set to true if there is a known upper bound on the
+	//     number of rows that will be scanned. It should not be set if there is
+	//     a hard or soft limit.
 	//   - If locking is provided, the scan should use the specified row-level
 	//     locking mode.
 	ConstructScan(
@@ -76,7 +78,7 @@ type Factory interface {
 		hardLimit int64,
 		softLimit int64,
 		reverse bool,
-		maxResults uint64,
+		parallelize bool,
 		reqOrdering OutputOrdering,
 		rowCount float64,
 		locking *tree.LockingItem,

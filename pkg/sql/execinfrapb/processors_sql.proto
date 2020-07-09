@@ -88,9 +88,15 @@ message TableReaderSpec {
   // schema changes.
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 
-  // If non-zero, this is a guarantee for the upper bound of rows a TableReader
-  // will read. If 0, the number of results is unbounded.
-  optional uint64 max_results = 8 [(gogoproto.nullable) = false];
+  // This field used to be an upper bound for the number of rows we will read;
+  // replaced by the parallelize field. 
+  reserved 8;
+
+  // If set, the TableReader can read all the spans in parallel, without any
+  // batch limits. This should only be the case when there is a known upper
+  // bound on the number of rows we can read, and when there is no limit or
+  // limit hint.
+  optional bool parallelize = 12 [(gogoproto.nullable) = false];
 
   // If non-zero, this enables inconsistent historical scanning where different
   // batches can be read with different timestamps. This is used for

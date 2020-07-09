@@ -62,6 +62,9 @@ func (b *Builder) buildSQLFn(
 			))
 		}
 		exprs[i] = memo.ExtractConstDatum(info.args[i])
+		if exprs[i] == tree.DNull && !info.def.Properties.NullableArgs {
+			return b.factory.ConstructNull(info.ResolvedType())
+		}
 	}
 
 	// Get the SQL statement and parse it.

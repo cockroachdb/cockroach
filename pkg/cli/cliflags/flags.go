@@ -1201,4 +1201,14 @@ other items retrieved by the zip command may still consider
 confidential data or PII.
 `,
 	}
+
+	StmtDiagDeleteAll = FlagInfo{
+		Name:        "all",
+		Description: `Delete all bundles.`,
+	}
+
+	StmtDiagCancelAll = FlagInfo{
+		Name:        "all",
+		Description: `Cancel all outstanding requests.`,
+	}
 )
