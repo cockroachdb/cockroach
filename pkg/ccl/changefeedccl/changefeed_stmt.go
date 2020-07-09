@@ -159,7 +159,7 @@ func changefeedPlanHook(
 
 		// This grabs table descriptors once to get their ids.
 		targetDescs, _, err := backupccl.ResolveTargetsToDescriptors(
-			ctx, p, statementTime, changefeedStmt.Targets, tree.RequestedDescriptors)
+			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
 			return err
 		}

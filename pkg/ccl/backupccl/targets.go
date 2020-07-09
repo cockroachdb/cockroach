@@ -570,24 +570,20 @@ func loadAllDescs(
 // ResolveTargetsToDescriptors performs name resolution on a set of targets and
 // returns the resulting descriptors.
 func ResolveTargetsToDescriptors(
-	ctx context.Context,
-	p sql.PlanHookState,
-	endTime hlc.Timestamp,
-	targets tree.TargetList,
-	descriptorCoverage tree.DescriptorCoverage,
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
 ) ([]sqlbase.Descriptor, []descpb.ID, error) {
 	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if descriptorCoverage == tree.AllDescriptors {
+	if targets == nil {
 		return fullClusterTargetsBackup(allDescs)
 	}
 
 	var matched descriptorsMatched
 	if matched, err = descriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets); err != nil {
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets); err != nil {
 		return nil, nil, err
 	}
 

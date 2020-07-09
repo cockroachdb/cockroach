@@ -10,6 +10,8 @@ package backupccl
 
 import (
 	"context"
+	"net/url"
+	"path"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -937,6 +939,14 @@ func restorePlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	subdirFn := func() (string, error) { return "", nil }
+	if restoreStmt.Subdir != nil {
+		subdirFn, err = p.TypeAsString(ctx, restoreStmt.Subdir, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -950,11 +960,29 @@ func restorePlanHook(
 			return errors.Errorf("RESTORE cannot be used inside a transaction")
 		}
 
+		subdir, err := subdirFn()
+		if err != nil {
+			return err
+		}
+
 		from := make([][]string, len(fromFns))
 		for i := range fromFns {
 			from[i], err = fromFns[i]()
 			if err != nil {
 				return err
+			}
+		}
+		if subdir != "" {
+			if len(from) != 1 {
+				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
+			}
+			for i := range from[0] {
+				parsed, err := url.Parse(from[0][i])
+				if err != nil {
+					return err
+				}
+				parsed.Path = path.Join(parsed.Path, subdir)
+				from[0][i] = parsed.String()
 			}
 		}
 		var endTime hlc.Timestamp
