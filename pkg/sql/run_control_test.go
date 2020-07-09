@@ -376,19 +376,19 @@ func TestIdleInSessionTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = conn.ExecContext(ctx, `SET idle_in_session_timeout = '4s'`)
+	_, err = conn.ExecContext(ctx, `SET idle_in_session_timeout = '2s'`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Second)
 	// Make sure executing a statement resets the idle timer.
 	_, err = conn.ExecContext(ctx, `SELECT 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Second)
 	// The connection should still be alive.
 	err = conn.PingContext(ctx)
 	if err != nil {
@@ -403,7 +403,7 @@ func TestIdleInSessionTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Second)
 	// The connection should still be alive.
 	err = conn.PingContext(ctx)
 	if err != nil {
@@ -411,7 +411,7 @@ func TestIdleInSessionTimeout(t *testing.T) {
 			"is dead, %v", err)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
 	err = conn.PingContext(ctx)
 
 	if err == nil {
