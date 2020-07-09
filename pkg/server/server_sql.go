@@ -610,6 +610,18 @@ func (s *sqlServer) start(
 			// present situation).
 			DistSQLMode: sessiondata.DistSQLOff,
 		})
+	{
+		// The server's internalExecutor might be used as a side effect of
+		// migrations, so disable distribution for the same reason as above until
+		// all migrations have been run.
+		s.internalExecutor.SetSessionData(
+			&sessiondata.SessionData{
+				DistSQLMode: sessiondata.DistSQLOff,
+			})
+		defer func() {
+			s.internalExecutor.SetSessionData(&sessiondata.SessionData{})
+		}()
+	}
 	migMgr := sqlmigrations.NewManager(
 		stopper,
 		s.execCfg.DB,

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -60,7 +61,10 @@ type InternalExecutor struct {
 	// sessionData, if not nil, represents the session variables used by
 	// statements executed on this internalExecutor. Note that queries executed by
 	// the executor will run on copies of this data.
-	sessionData *sessiondata.SessionData
+	mu struct {
+		syncutil.Mutex
+		sessionData *sessiondata.SessionData
+	}
 
 	// The internal executor uses its own Collection. A Collection
 	// is a schema cache for each transaction and contains data like the schema
@@ -98,7 +102,9 @@ func MakeInternalExecutor(
 // SetSessionData cannot be called concurently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionData = sessionData
+	ie.mu.Lock()
+	ie.mu.sessionData = sessionData
+	ie.mu.Unlock()
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -341,17 +347,19 @@ func applyOverrides(o sqlbase.InternalExecutorSessionDataOverride, sd *sessionda
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
 	opName string,
 ) sqlbase.InternalExecutorSessionDataOverride {
-	if ie.sessionData == nil {
+	ie.mu.Lock()
+	defer ie.mu.Unlock()
+	if ie.mu.sessionData == nil {
 		return sqlbase.InternalExecutorSessionDataOverride{
 			User:            security.RootUser,
 			ApplicationName: sqlbase.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sqlbase.InternalExecutorSessionDataOverride{}
-	if ie.sessionData.User == "" {
+	if ie.mu.sessionData.User == "" {
 		o.User = security.RootUser
 	}
-	if ie.sessionData.ApplicationName == "" {
+	if ie.mu.sessionData.ApplicationName == "" {
 		o.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
 	}
 	return o
@@ -373,13 +381,15 @@ func (ie *InternalExecutor) execInternal(
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
-	if ie.sessionData != nil {
+	ie.mu.Lock()
+	if ie.mu.sessionData != nil {
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
-		sdCopy := *ie.sessionData
+		sdCopy := *ie.mu.sessionData
 		sd = &sdCopy
 	} else {
 		sd = ie.s.newSessionData(SessionArgs{})
 	}
+	ie.mu.Unlock()
 	applyOverrides(sessionDataOverride, sd)
 	if sd.User == "" {
 		return result{}, errors.AssertionFailedf("no user specified for internal query")
