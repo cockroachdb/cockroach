@@ -199,7 +199,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = firstListener
 			serverArgs.Addr = firstListener.Addr().String()
 		} else {
-			//serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
+			serverArgs.NoAutoInitializeCluster = true
 			serverArgs.JoinAddr = firstListener.Addr().String()
 		}
 
@@ -322,6 +322,9 @@ func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
 
 func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs) error {
 	serverArgs.PartOfCluster = true
+	if serverArgs.JoinAddr != "" {
+		serverArgs.NoAutoInitializeCluster = true
+	}
 	// Check args even though they might have been checked in StartTestCluster;
 	// this method might be called for servers being added after the cluster was
 	// started, in which case the check has not been performed.

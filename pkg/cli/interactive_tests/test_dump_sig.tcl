@@ -8,7 +8,7 @@ send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
 start_test "Check that the server emits a goroutine dump upon receiving signal"
-send "$argv start --insecure --pid-file=server_pid --log-dir=logs --logtostderr\r"
+send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs --logtostderr\r"
 eexpect "CockroachDB node starting"
 
 system "kill -QUIT `cat server_pid`"

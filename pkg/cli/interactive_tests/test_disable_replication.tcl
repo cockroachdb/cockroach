@@ -36,8 +36,9 @@ stop_server $argv
 start_test "Check that start-single-node on a regular cluster does not reset the replication factor"
 # make a fresh server but using the regular 'start'
 system "rm -rf logs/db"
-system "$argv start --insecure --pid-file=server_pid --background -s=path=logs/db >>logs/expect-cmd.log 2>&1;
-        $argv sql -e 'select 1'"
+system "$argv start --insecure --pid-file=server_pid --background -s=path=logs/db --join=:26257 >>logs/expect-cmd.log 2>&1"
+system "$argv init --insecure"
+system "$argv sql -e 'select 1'"
 # restart with start-single-node
 stop_server $argv
 start_server $argv

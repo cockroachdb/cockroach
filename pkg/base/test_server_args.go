@@ -89,6 +89,11 @@ type TestServerArgs struct {
 	SQLMemoryPoolSize           int64
 	CacheSize                   int64
 
+	// By default, test servers have AutoInitializeCluster=true set in
+	// their config. If NoAutoInitializeCluster is set, that behavior is disabled
+	// and the test becomes responsible for initializing the cluster.
+	NoAutoInitializeCluster bool
+
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running
 	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
