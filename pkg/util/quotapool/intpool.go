@@ -110,8 +110,9 @@ func (ia *IntAlloc) from(p *IntPool) bool {
 type intAlloc IntAlloc
 
 // Merge makes intAlloc a Resource.
-func (ia *intAlloc) Merge(val interface{}) {
+func (ia *intAlloc) Merge(val interface{}) (shouldNotify bool) {
 	(*IntAlloc)(ia).Merge((*IntAlloc)(val.(*intAlloc)))
+	return true
 }
 
 // NewIntPool creates a new named IntPool.
