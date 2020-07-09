@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -59,6 +60,10 @@ func TestRegistryCancelation(t *testing.T) {
 	// Insulate this test from wall time.
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
+	sqlInstance := slinstance.NewSqlInstance(
+		stopper, clock, db, nil,
+		&slinstance.Options{Deadline: DefaultAdoptInterval + 10*time.Second, Heartbeat: time.Second},
+	)
 	registry := MakeRegistry(
 		log.AmbientContext{},
 		stopper,
@@ -67,7 +72,11 @@ func TestRegistryCancelation(t *testing.T) {
 		db,
 		nil, /* ex */
 		base.TestingIDContainer,
-		cluster.NoSettings,
+		sqlInstance,
+		cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 19, Minor: 2},
+			roachpb.Version{Major: 19, Minor: 2},
+			true),
 		histogramWindowInterval,
 		FakePHS,
 		"",

@@ -974,5 +974,5 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	require.NoError(t, mt.runMigration(ctx, migration))
 	newJobsTableAgain := sqlbase.TestingGetTableDescriptor(
 		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
-	require.True(t, proto.Equal(newJobsTable, newJobsTableAgain))
+	require.Equal(t, newJobsTable, newJobsTableAgain)
 }
