@@ -1321,7 +1321,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
 		if err != nil {
-			t.Fatal(err)
+			panic(err)
 		}
 		if kv.TestingIsRangeLookup(ba) {
 			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
@@ -1329,7 +1329,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 				r := &roachpb.ScanResponse{}
 				var kv roachpb.KeyValue
 				if err := kv.Value.SetProto(&testMetaRangeDescriptor); err != nil {
-					t.Fatal(err)
+					panic(err)
 				}
 				r.Rows = append(r.Rows, kv)
 				br.Add(r)
@@ -1337,7 +1337,9 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 			}
 
 			if !firstLookup {
-				t.Fatalf("unexpected extra lookup for non-stale replica descriptor at %s", rs.Key)
+				br := &roachpb.BatchResponse{}
+				br.Error = roachpb.NewErrorf("unexpected extra lookup for non-stale replica descriptor at %s", rs.Key)
+				return br, nil
 			}
 			firstLookup = false
 
@@ -1345,7 +1347,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 			r := &roachpb.ScanResponse{}
 			var kv roachpb.KeyValue
 			if err := kv.Value.SetProto(&staleDesc); err != nil {
-				t.Fatal(err)
+				panic(err)
 			}
 			r.Rows = append(r.Rows, kv)
 			br.Add(r)
@@ -1377,6 +1379,9 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 		FirstRangeProvider: g,
 		Settings:           cluster.MakeTestingClusterSettings(),
+		// By default the DistSender retries some things infinitely, like range
+		// lookups. However if our sender returns an error, this test wants to fail.
+		RPCRetryOptions: &retry.Options{MaxRetries: 1},
 	}
 	ds := NewDistSender(cfg)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
