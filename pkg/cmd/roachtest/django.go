@@ -225,6 +225,9 @@ RUNNING_COCKROACH_BACKEND_TESTS=1 python3 runtests.py %[1]s --settings cockroach
 `
 
 const cockroachDjangoSettings = `
+from django.test.runner import DiscoverRunner
+
+
 DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
@@ -247,4 +250,14 @@ SECRET_KEY = 'django_tests_secret_key'
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
+TEST_RUNNER = '.cockroach_settings.NonDescribingDiscoverRunner'
+
+class NonDescribingDiscoverRunner(DiscoverRunner):
+    def get_test_runner_kwargs(self):
+        return {
+            'failfast': self.failfast,
+            'resultclass': self.get_resultclass(),
+            'verbosity': self.verbosity,
+            'descriptions': False,
+        }
 `

@@ -17,7 +17,7 @@ import (
 	"regexp"
 )
 
-var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^ ']*)(?: u?['"](?P<reason>.*)['"])?`)
+var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*)(?: u?['"](?P<reason>.*)['"])?`)
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(
 	input []byte, expectedFailures blocklist, ignoredList blocklist,
@@ -31,11 +31,12 @@ func (r *ormTestsResults) parsePythonUnitTestOutput(
 				groups[pythonUnitTestOutputRegex.SubexpNames()[i]] = name
 			}
 			test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
-			var skipReason string
-			if groups["result"] == "skipped" {
+			skipped := groups["result"] == "skipped" || groups["result"] == "expected failure"
+			skipReason := ""
+			if skipped {
 				skipReason = groups["reason"]
 			}
-			pass := groups["result"] == "ok"
+			pass := groups["result"] == "ok" || groups["result"] == "unexpected success"
 			r.allTests = append(r.allTests, test)
 
 			ignoredIssue, expectedIgnored := ignoredList[test]
