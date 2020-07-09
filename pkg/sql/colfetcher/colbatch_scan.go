@@ -140,9 +140,13 @@ func NewColBatchScan(
 
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	fetcher := cFetcher{}
+	if spec.IsCheck {
+		// cFetchers don't support these checks.
+		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
+	}
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
-		spec.Reverse, neededColumns, spec.IsCheck, spec.Visibility, spec.LockingStrength,
+		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength,
 	); err != nil {
 		return nil, err
 	}
@@ -171,7 +175,6 @@ func initCRowFetcher(
 	colIdxMap map[sqlbase.ColumnID]int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
-	isCheck bool,
 	scanVisibility execinfrapb.ScanVisibility,
 	lockStr sqlbase.ScanLockingStrength,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
@@ -194,7 +197,7 @@ func initCRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		codec, allocator, reverseScan, lockStr, true /* returnRangeInfo */, isCheck, tableArgs,
+		codec, allocator, reverseScan, lockStr, true /* returnRangeInfo */, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}
