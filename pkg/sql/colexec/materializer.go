@@ -61,9 +61,8 @@ type Materializer struct {
 	// including those started asynchronously.
 	cancelFlow func() context.CancelFunc
 
-	// closers is a slice of IdempotentClosers that should be Closed on
-	// termination.
-	closers []IdempotentCloser
+	// closers is a slice of Closers that should be Closed on termination.
+	closers []Closer
 }
 
 // drainHelper is a utility struct that wraps MetadataSources in a RowSource
@@ -143,7 +142,7 @@ func NewMaterializer(
 	typs []*types.T,
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []IdempotentCloser,
+	toClose []Closer,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
@@ -259,7 +258,7 @@ func (m *Materializer) InternalClose() bool {
 			m.cancelFlow()()
 		}
 		for _, closer := range m.closers {
-			if err := closer.IdempotentClose(m.Ctx); err != nil {
+			if err := closer.Close(m.Ctx); err != nil {
 				if log.V(1) {
 					log.Infof(m.Ctx, "error closing Closer: %v", err)
 				}

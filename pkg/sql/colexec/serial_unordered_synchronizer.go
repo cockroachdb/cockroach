@@ -32,8 +32,11 @@ type SerialUnorderedSynchronizer struct {
 	curSerialInputIdx int
 }
 
-var _ colexecbase.Operator = &SerialUnorderedSynchronizer{}
-var _ execinfra.OpNode = &SerialUnorderedSynchronizer{}
+var (
+	_ colexecbase.Operator = &SerialUnorderedSynchronizer{}
+	_ execinfra.OpNode     = &SerialUnorderedSynchronizer{}
+	_ Closer               = &SerialUnorderedSynchronizer{}
+)
 
 // ChildCount implements the execinfra.OpNode interface.
 func (s *SerialUnorderedSynchronizer) ChildCount(verbose bool) int {
@@ -86,13 +89,13 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 	return bufferedMeta
 }
 
-// IdempotentClose is part of the IdempotentCloser interface.
-func (s *SerialUnorderedSynchronizer) IdempotentClose(ctx context.Context) error {
+// Close is part of the Closer interface.
+func (s *SerialUnorderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range s.inputs {
 		for _, closer := range input.ToClose {
-			if err := closer.IdempotentClose(ctx); err != nil {
+			if err := closer.Close(ctx); err != nil {
 				if log.V(1) {
-					log.Infof(ctx, "serial unordered synchronizer error closing IdempotentCloser: %v", err)
+					log.Infof(ctx, "serial unordered synchronizer error closing Closer: %v", err)
 				}
 			}
 		}

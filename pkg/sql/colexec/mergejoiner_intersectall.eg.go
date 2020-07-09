@@ -33616,8 +33616,6 @@ func (o *mergeJoinIntersectAllOp) build(ctx context.Context) {
 }
 
 func (o *mergeJoinIntersectAllOp) Next(ctx context.Context) coldata.Batch {
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.output.ResetInternalBatch()
 	for {
 		switch o.state {

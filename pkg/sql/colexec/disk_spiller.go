@@ -242,12 +242,12 @@ func (d *diskSpillerBase) reset(ctx context.Context) {
 //  from some runTests subtests when not draining the input fully. The test
 //  should pass in the testing.T object used so that the caller can decide to
 //  explicitly close the input after checking the test.
-func (d *diskSpillerBase) IdempotentClose(ctx context.Context) error {
+func (d *diskSpillerBase) Close(ctx context.Context) error {
 	if !d.close() {
 		return nil
 	}
-	if c, ok := d.diskBackedOp.(IdempotentCloser); ok {
-		return c.IdempotentClose(ctx)
+	if c, ok := d.diskBackedOp.(Closer); ok {
+		return c.Close(ctx)
 	}
 	return nil
 }

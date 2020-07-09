@@ -120,9 +120,9 @@ type SynchronizerInput struct {
 	// MetadataSources are metadata sources in the input tree that should be
 	// drained in the same goroutine as Op.
 	MetadataSources execinfrapb.MetadataSources
-	// ToClose are IdempotentClosers in the input tree that should be closed in
-	// the same goroutine as Op.
-	ToClose []IdempotentCloser
+	// ToClose are Closers in the input tree that should be closed in the same
+	// goroutine as Op.
+	ToClose []Closer
 }
 
 func operatorsToSynchronizerInputs(ops []colexecbase.Operator) []SynchronizerInput {
@@ -219,7 +219,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 				for _, closer := range input.ToClose {
-					if err := closer.IdempotentClose(ctx); err != nil {
+					if err := closer.Close(ctx); err != nil {
 						if log.V(1) {
 							log.Infof(ctx, "error closing Closer: %v", err)
 						}
