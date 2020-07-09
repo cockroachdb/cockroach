@@ -82,14 +82,14 @@ type rateBucket struct {
 
 var _ Resource = (*rateBucket)(nil)
 
-func (i *rateBucket) Merge(val interface{}) {
+func (i *rateBucket) Merge(val interface{}) (shouldNotify bool) {
 	v := val.(*rateAlloc)
 	i.cur += float64(v.alloc)
 	v.rl.putRateAlloc(v)
-
 	if i.cur > float64(i.p.burst) {
 		i.cur = float64(i.p.burst)
 	}
+	return true
 }
 
 // RateAlloc is an allocated quantity of quota which can be released back into
