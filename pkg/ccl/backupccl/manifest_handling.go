@@ -57,6 +57,9 @@ const (
 	// BackupStatisticsFileName is the file name used to store the serialized table
 	// statistics for the tables being backed up.
 	BackupStatisticsFileName = "BACKUP-STATISTICS"
+
+	dateBasedFolderName = "/20060102/150405.00"
+	latestFileName      = "LATEST"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.

@@ -1481,6 +1481,8 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL, CONSTRAINT ALL`},
 
 		{`BACKUP TABLE foo TO 'bar'`},
+		{`BACKUP TABLE foo INTO 'bar'`},
+		{`BACKUP TABLE foo INTO LATEST IN 'bar'`},
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo TO 'bar' RECURRING NEVER`},
 		{`CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE foo TO 'bar' RECURRING NEVER`},
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo TO 'bar' RECURRING '@daily'`},
@@ -1514,7 +1516,10 @@ func TestParse(t *testing.T) {
 		{`RESTORE TABLE foo FROM 'bar'`},
 		{`EXPLAIN RESTORE TABLE foo FROM 'bar'`},
 		{`RESTORE TABLE foo FROM $1`},
+		{`RESTORE TABLE foo FROM $2 IN $1`},
 		{`RESTORE TABLE foo FROM $1, $2, 'bar'`},
+		{`RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'`},
+		{`RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'`},
 		{`RESTORE TABLE foo, baz FROM 'bar'`},
 		{`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 
