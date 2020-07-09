@@ -6361,12 +6361,19 @@ class GCRequest_GCKey : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::util::hlc::Timestamp* mutable_timestamp();
   void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
 
+  // bool use_clear_range = 3;
+  void clear_use_clear_range();
+  static const int kUseClearRangeFieldNumber = 3;
+  bool use_clear_range() const;
+  void set_use_clear_range(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.GCRequest.GCKey)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
+  bool use_clear_range_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -21510,6 +21517,20 @@ inline void GCRequest_GCKey::set_allocated_timestamp(::cockroach::util::hlc::Tim
   }
   timestamp_ = timestamp;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GCRequest.GCKey.timestamp)
+}
+
+// bool use_clear_range = 3;
+inline void GCRequest_GCKey::clear_use_clear_range() {
+  use_clear_range_ = false;
+}
+inline bool GCRequest_GCKey::use_clear_range() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.GCRequest.GCKey.use_clear_range)
+  return use_clear_range_;
+}
+inline void GCRequest_GCKey::set_use_clear_range(bool value) {
+  
+  use_clear_range_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.GCRequest.GCKey.use_clear_range)
 }
 
 // -------------------------------------------------------------------

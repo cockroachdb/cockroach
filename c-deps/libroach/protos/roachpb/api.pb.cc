@@ -14162,6 +14162,7 @@ void GCRequest_GCKey::clear_timestamp() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int GCRequest_GCKey::kKeyFieldNumber;
 const int GCRequest_GCKey::kTimestampFieldNumber;
+const int GCRequest_GCKey::kUseClearRangeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 GCRequest_GCKey::GCRequest_GCKey()
@@ -14184,12 +14185,15 @@ GCRequest_GCKey::GCRequest_GCKey(const GCRequest_GCKey& from)
   } else {
     timestamp_ = NULL;
   }
+  use_clear_range_ = from.use_clear_range_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.GCRequest.GCKey)
 }
 
 void GCRequest_GCKey::SharedCtor() {
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  timestamp_ = NULL;
+  ::memset(&timestamp_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&use_clear_range_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(use_clear_range_));
 }
 
 GCRequest_GCKey::~GCRequest_GCKey() {
@@ -14222,6 +14226,7 @@ void GCRequest_GCKey::Clear() {
     delete timestamp_;
   }
   timestamp_ = NULL;
+  use_clear_range_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -14257,6 +14262,20 @@ bool GCRequest_GCKey::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool use_clear_range = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &use_clear_range_)));
         } else {
           goto handle_unusual;
         }
@@ -14299,6 +14318,11 @@ void GCRequest_GCKey::SerializeWithCachedSizes(
       2, this->_internal_timestamp(), output);
   }
 
+  // bool use_clear_range = 3;
+  if (this->use_clear_range() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->use_clear_range(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.GCRequest.GCKey)
@@ -14320,6 +14344,11 @@ size_t GCRequest_GCKey::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *timestamp_);
+  }
+
+  // bool use_clear_range = 3;
+  if (this->use_clear_range() != 0) {
+    total_size += 1 + 1;
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -14346,6 +14375,9 @@ void GCRequest_GCKey::MergeFrom(const GCRequest_GCKey& from) {
   if (from.has_timestamp()) {
     mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
   }
+  if (from.use_clear_range() != 0) {
+    set_use_clear_range(from.use_clear_range());
+  }
 }
 
 void GCRequest_GCKey::CopyFrom(const GCRequest_GCKey& from) {
@@ -14368,6 +14400,7 @@ void GCRequest_GCKey::InternalSwap(GCRequest_GCKey* other) {
   key_.Swap(&other->key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(timestamp_, other->timestamp_);
+  swap(use_clear_range_, other->use_clear_range_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
