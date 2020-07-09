@@ -64,7 +64,10 @@ func TestRegistryCancelation(t *testing.T) {
 		db,
 		nil, /* ex */
 		base.TestingIDContainer,
-		cluster.NoSettings,
+		cluster.MakeTestingClusterSettingsWithVersions(
+			roachpb.Version{Major: 19, Minor: 2},
+			roachpb.Version{Major: 19, Minor: 2},
+			true),
 		histogramWindowInterval,
 		FakePHS,
 		"",
