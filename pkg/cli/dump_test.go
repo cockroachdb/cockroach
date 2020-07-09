@@ -13,6 +13,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDumpData uses the testdata/dump directory to execute SQL statements
@@ -855,6 +857,174 @@ INSERT INTO foo (id) VALUES
 					t.Fatal(err)
 				}
 			}
+		})
+	}
+}
+
+func TestDumpTempTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testInput := []struct {
+		name     string
+		create   string
+		expected string
+		args     []string
+	}{
+		{
+			name: "dump_db_only_temp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
+INSERT INTO tmpbar VALUES (1);
+
+CREATE TEMP VIEW tmpview (id) AS SELECT id FROM tmpbar;
+CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
+`,
+			expected: ``,
+			args:     []string{"foo"},
+		},
+		{
+			name: "dump_db_mix_permanent_and_temp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+CREATE TABLE bar (id int primary key, text string not null);
+INSERT INTO bar VALUES (1, 'a');
+
+CREATE TEMP TABLE tmpbar (id int primary key);
+`,
+			expected: `CREATE TABLE bar (
+	id INT8 NOT NULL,
+	text STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, text)
+);
+
+INSERT INTO bar (id, text) VALUES
+	(1, 'a');
+`,
+			args: []string{"foo"},
+		},
+		{
+			name: "dump_tmp_table_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+		
+CREATE TABLE bar (id INT PRIMARY KEY);
+		
+CREATE TEMP TABLE tmpbar (id INT PRIMARY KEY);
+INSERT INTO tmpbar VALUES (1);
+`,
+			expected: "ERROR: cannot dump temp table tmpbar\n",
+			args:     []string{"foo", "bar", "tmpbar"},
+		},
+		{
+			name: "dump_tmp_view_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+		
+CREATE TABLE bar (id INT PRIMARY KEY);
+		
+CREATE TEMP VIEW tmpview (id) AS SELECT id FROM bar;
+`,
+			expected: "ERROR: cannot dump temp table tmpview\n",
+			args:     []string{"foo", "tmpview"},
+		},
+		{
+			name: "dump_tmp_sequence_explicit",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE foo;
+USE foo;
+
+CREATE TEMP SEQUENCE tmpseq START 1 INCREMENT 1;
+`,
+			expected: "ERROR: cannot dump temp table tmpseq\n",
+			args:     []string{"foo", "tmpseq"},
+		},
+		{
+			name: "dump_all_with_tmp",
+			create: `
+SET experimental_enable_temp_tables = 'on';
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TEMP TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+CREATE TABLE t3(id INT NOT NULL, pkey STRING PRIMARY KEY);
+INSERT INTO t3(id, pkey) VALUES(1, 'db2-aaaa');
+`,
+			expected: `
+CREATE DATABASE IF NOT EXISTS db1;
+USE db1;
+
+CREATE TABLE t1 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO t1 (id, pkey) VALUES
+	(1, 'db1-aaaa');
+
+CREATE DATABASE IF NOT EXISTS db2;
+USE db2;
+
+CREATE TABLE t3 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO t3 (id, pkey) VALUES
+	(1, 'db2-aaaa');
+`,
+			args: []string{"--dump-all"},
+		},
+	}
+
+	for _, test := range testInput {
+		t.Run(test.name, func(t *testing.T) {
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			pgURL, cleanupFunc := sqlutils.PGUrl(
+				t, c.ServingSQLAddr(), "TestDumpTemp-root",
+				url.User(security.RootUser),
+			)
+			defer cleanupFunc()
+			db, err := gosql.Open("postgres", pgURL.String())
+			require.NoError(t, err)
+
+			// Create the tables.
+			_, err = db.Exec(test.create)
+			require.NoError(t, err)
+
+			var args []string
+			args = append(args, "dump")
+			args = append(args, test.args...)
+			args = append(args, "--dump-mode=both")
+			dump, err := c.RunWithCaptureArgs(args)
+			require.NoError(t, err)
+			if dump != test.expected {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+
+			require.NoError(t, db.Close())
 		})
 	}
 }
