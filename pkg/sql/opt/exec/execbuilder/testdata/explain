@@ -938,7 +938,7 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:4 v:5
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(4)=99, null(4)=0]
- ├── cost: 2219.95
+ ├── cost: 2219.96
  ├── fd: (4)-->(5), (1)==(4), (4)==(1)
  ├── prune: (2,5)
  ├── scan tc
@@ -979,7 +979,7 @@ sort
  ├── columns: a:1 b:2  [hidden: column4:4]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1179.25548
+ ├── cost: 1179.26548
  ├── fd: (1,2)-->(4)
  ├── ordering: +4
  ├── prune: (1,2,4)
@@ -988,7 +988,7 @@ sort
       ├── columns: column4:4 a:1 b:2
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1116.70667
+      ├── cost: 1116.71667
       ├── fd: (1,2)-->(4)
       ├── prune: (1,2,4)
       ├── interesting orderings: (+1)
@@ -996,7 +996,7 @@ sort
       │    ├── columns: a:1 b:2
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1110.03
+      │    ├── cost: 1110.04
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
@@ -1016,7 +1016,7 @@ sort
  ├── columns: a:1(int) b:2(int)  [hidden: column4:4(int)]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1179.25548
+ ├── cost: 1179.26548
  ├── fd: (1,2)-->(4)
  ├── ordering: +4
  ├── prune: (1,2,4)
@@ -1025,7 +1025,7 @@ sort
       ├── columns: column4:4(int) a:1(int) b:2(int)
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1116.70667
+      ├── cost: 1116.71667
       ├── fd: (1,2)-->(4)
       ├── prune: (1,2,4)
       ├── interesting orderings: (+1)
@@ -1033,7 +1033,7 @@ sort
       │    ├── columns: a:1(int) b:2(int)
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1110.03
+      │    ├── cost: 1110.04
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)

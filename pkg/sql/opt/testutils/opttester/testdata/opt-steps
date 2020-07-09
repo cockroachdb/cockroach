@@ -55,7 +55,7 @@ SELECT * FROM ab WHERE b=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1050.03
+  Cost: 1050.04
 ================================================================================
   select
    ├── columns: a:1(int!null) b:2(int!null)
@@ -151,7 +151,7 @@ SELECT * FROM orders LEFT JOIN customers ON customer_id = customers.id
 ----
 ================================================================================
 Initial expression
-  Cost: 2160.05
+  Cost: 2160.06
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
@@ -179,7 +179,7 @@ Initial expression
              └── variable: customers.id:4 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 2160.05
+  Cost: 2160.06
 ================================================================================
    left-join (hash)
     ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
@@ -324,7 +324,7 @@ GenerateMergeJoins (higher cost)
     └── filters (true)
 ================================================================================
 Final best expression
-  Cost: 2160.05
+  Cost: 2160.06
 ================================================================================
   left-join (hash)
    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:4(int) name:5(string) address:6(string)
@@ -367,7 +367,7 @@ SELECT * FROM comp WHERE k=1
 ----
 ================================================================================
 Initial expression
-  Cost: 1070.14
+  Cost: 1070.15
 ================================================================================
   project
    ├── columns: k:1(int!null) c:2(bool)
@@ -394,7 +394,7 @@ Initial expression
                   └── const: 1 [type=int]
 ================================================================================
 NormalizeInConst
-  Cost: 1070.14
+  Cost: 1070.15
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
@@ -423,7 +423,7 @@ NormalizeInConst
                    └── const: 1 [type=int]
 ================================================================================
 PruneSelectCols
-  Cost: 1060.14
+  Cost: 1060.15
 ================================================================================
    project
     ├── columns: k:1(int!null) c:2(bool)
@@ -461,7 +461,7 @@ PruneSelectCols
                    └── const: 1 [type=int]
 ================================================================================
 EliminateProject
-  Cost: 1060.03
+  Cost: 1060.04
 ================================================================================
   -project
   +select
