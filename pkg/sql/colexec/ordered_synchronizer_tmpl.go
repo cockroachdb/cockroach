@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // {{/*
@@ -247,13 +246,7 @@ func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.Produ
 
 func (o *OrderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range o.inputs {
-		for _, closer := range input.ToClose {
-			if err := closer.Close(ctx); err != nil {
-				if log.V(1) {
-					log.Infof(ctx, "ordered synchronizer error closing Closer: %v", err)
-				}
-			}
-		}
+		input.ToClose.CloseAndLogOnErr(ctx, "ordered synchronizer")
 	}
 	return nil
 }

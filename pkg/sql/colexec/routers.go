@@ -495,7 +495,7 @@ type HashRouter struct {
 	metadataSources execinfrapb.MetadataSources
 	// closers is a slice of Closers that need to be closed when the hash router
 	// terminates.
-	closers []Closer
+	closers Closers
 
 	// unblockedEventsChan is a channel shared between the HashRouter and its
 	// outputs. outputs send events on this channel when they are unblocked by a
@@ -710,13 +710,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 	r.waitForMetadata <- r.bufferedMeta
 	close(r.waitForMetadata)
 
-	for _, closer := range r.closers {
-		if err := closer.Close(ctx); err != nil {
-			if log.V(1) {
-				log.Infof(ctx, "error closing Closer: %v", err)
-			}
-		}
-	}
+	r.closers.CloseAndLogOnErr(ctx, "hash router")
 }
 
 // processNextBatch reads the next batch from its input, hashes it and adds
