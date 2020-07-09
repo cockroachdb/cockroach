@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // SerialUnorderedSynchronizer is an Operator that combines multiple Operator
@@ -92,13 +91,7 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 // Close is part of the Closer interface.
 func (s *SerialUnorderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range s.inputs {
-		for _, closer := range input.ToClose {
-			if err := closer.Close(ctx); err != nil {
-				if log.V(1) {
-					log.Infof(ctx, "serial unordered synchronizer error closing Closer: %v", err)
-				}
-			}
-		}
+		input.ToClose.CloseAndLogOnErr(ctx, "serial unordered synchronizer")
 	}
 	return nil
 }

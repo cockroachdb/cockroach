@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // OperatorInitStatus indicates whether Init method has already been called on
@@ -126,6 +127,20 @@ type ResettableOperator interface {
 // Closer is an object that releases resources when Close is called.
 type Closer interface {
 	Close(ctx context.Context) error
+}
+
+// Closers is a slice of Closers.
+type Closers []Closer
+
+// CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
+// is 1 or higher. The given prefix is prepended to the log message.
+func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
+	prefix += ":"
+	for _, closer := range c {
+		if err := closer.Close(ctx); err != nil && log.V(1) {
+			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
+		}
+	}
 }
 
 // CallbackCloser is a utility struct that implements the Closer interface by
