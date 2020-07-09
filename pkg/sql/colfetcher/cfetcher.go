@@ -249,7 +249,6 @@ func (rf *cFetcher) Init(
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,
-	isCheck bool,
 	tables ...row.FetcherTableArgs,
 ) error {
 	rf.adapter.allocator = allocator
