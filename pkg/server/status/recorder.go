@@ -517,19 +517,22 @@ type registryRecorder struct {
 }
 
 func extractValue(mtr interface{}) (float64, error) {
-	// TODO(tschottdorf|mrtracy): consider moving this switch to an interface
-	// implemented by the individual metric types.
+	// TODO(tschottdorf,ajwerner): consider moving this switch to a single
+	// interface implemented by the individual metric types.
+	type (
+		float64Valuer interface{ Value() float64 }
+		int64Valuer   interface{ Value() int64 }
+		int64Counter  interface{ Count() int64 }
+	)
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.Counter:
-		return float64(mtr.Count()), nil
-	case *metric.Gauge:
+	case float64Valuer:
+		return mtr.Value(), nil
+	case int64Valuer:
 		return float64(mtr.Value()), nil
-	case *metric.Rate:
-		return mtr.Value(), nil
-	case *metric.GaugeFloat64:
-		return mtr.Value(), nil
+	case int64Counter:
+		return float64(mtr.Count()), nil
 	default:
 		return 0, errors.Errorf("cannot extract value for type %T", mtr)
 	}
