@@ -87,8 +87,12 @@ func (cp *backupDataProcessor) Run(ctx context.Context) {
 
 	if err != nil {
 		cp.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
 	}
+}
+
+type spanAndTime struct {
+	span       roachpb.Span
+	start, end hlc.Timestamp
 }
 
 func runBackupProcessor(
@@ -99,28 +103,23 @@ func runBackupProcessor(
 ) error {
 	settings := flowCtx.Cfg.Settings
 
-	allSpans := make([]spanAndTime, 0, len(spec.Spans)+len(spec.IntroducedSpans))
+	todo := make(chan spanAndTime, len(spec.Spans)+len(spec.IntroducedSpans))
 	for _, s := range spec.IntroducedSpans {
-		allSpans = append(allSpans, spanAndTime{span: s, start: hlc.Timestamp{}, end: spec.BackupStartTime})
+		todo <- spanAndTime{span: s, start: hlc.Timestamp{}, end: spec.BackupStartTime}
 	}
 	for _, s := range spec.Spans {
-		allSpans = append(allSpans, spanAndTime{span: s, start: spec.BackupStartTime, end: spec.BackupEndTime})
+		todo <- spanAndTime{span: s, start: spec.BackupStartTime, end: spec.BackupEndTime}
 	}
 
 	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
 	//  *2). See #49798.
-	maxConcurrentExports := kvserver.ExportRequestsLimit.Get(&settings.SV)
-	exportsSem := make(chan struct{}, maxConcurrentExports)
+	numSenders := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
 	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(spec.DefaultURI, spec.User)
 	if err != nil {
-		return errors.Wrapf(err, "export configuration")
-	}
-	defaultStore, err := flowCtx.Cfg.ExternalStorage(ctx, defaultConf)
-	if err != nil {
-		return errors.Wrapf(err, "make storage")
+		return err
 	}
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range spec.URIsByLocalityKV {
@@ -131,31 +130,19 @@ func runBackupProcessor(
 		storageByLocalityKV[kv] = &conf
 	}
 
-	g := ctxgroup.WithContext(ctx)
-
-	g.GoCtx(func(ctx context.Context) error {
-		for i := range allSpans {
-			{
-				select {
-				case exportsSem <- struct{}{}:
-				case <-ctx.Done():
-					// Break the for loop to avoid creating more work - the backup
-					// has failed because either the context has been canceled or an
-					// error has been returned. Either way, Wait() is guaranteed to
-					// return an error now.
-					return ctx.Err()
-				}
-			}
-
-			span := allSpans[i]
-			// TODO(pbardea): It would be nice if we could avoid producing many small
-			//  SSTs. See #44480.
-			g.GoCtx(func(ctx context.Context) error {
-				defer func() { <-exportsSem }()
+	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
+		done := ctx.Done()
+		for {
+			select {
+			case <-done:
+				return ctx.Err()
+			case span := <-todo:
+				// TODO(pbardea): It would be nice if we could avoid producing many small
+				//  SSTs. See #44480.
 				header := roachpb.Header{Timestamp: span.end}
 				req := &roachpb.ExportRequest{
 					RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
-					Storage:                             defaultStore.Conf(),
+					Storage:                             defaultConf,
 					StorageByLocalityKV:                 storageByLocalityKV,
 					StartTime:                           span.start,
 					EnableTimeBoundIteratorOptimization: useTBI.Get(&settings.SV),
@@ -168,7 +155,6 @@ func runBackupProcessor(
 					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
-
 				files := make([]BackupManifest_File, 0)
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 				progDetails := BackupManifest_Progress{}
@@ -194,16 +180,15 @@ func runBackupProcessor(
 				}
 				prog.ProgressDetails = *details
 				progCh <- prog
+			default:
+				// No work left to do, so we can exit. Note that another worker could
+				// still be running and may still push new work (a retry) on to todo but
+				// that is OK, since that also means it is still running and thus can
+				// pick up that work on its next iteration.
 				return nil
-			})
+			}
 		}
-		return nil
 	})
-
-	if err := g.Wait(); err != nil {
-		return errors.Wrapf(err, "exporting %d ranges", errors.Safe(len(allSpans)))
-	}
-	return nil
 }
 
 func init() {
