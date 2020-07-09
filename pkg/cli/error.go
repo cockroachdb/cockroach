@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -346,6 +347,16 @@ func MaybeDecorateGRPCError(
 			return fmt.Errorf(
 				"server requires GSSAPI authentication for this user.\n" +
 					"The CockroachDB CLI does not support GSSAPI authentication; use 'psql' instead")
+		}
+
+		// Are we trying to re-initialize an initialized cluster?
+		if strings.Contains(err.Error(), server.ErrClusterInitialized.Error()) {
+			// We really want to use errors.Is() here but this would require
+			// error serialization support in gRPC.
+			// This is not yet performed in CockroachDB even though the error
+			// library now has infrastructure to do so, see:
+			// https://github.com/cockroachdb/errors/pull/14
+			return server.ErrClusterInitialized
 		}
 
 		// Nothing we can special case, just return what we have.
