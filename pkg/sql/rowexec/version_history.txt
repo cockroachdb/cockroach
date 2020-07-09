@@ -116,3 +116,7 @@
     - The Sampler and SampleAggregator specs for optimizer statistics have
       added fields for inverted sketches. Two new row types are produced by
       Samplers, which are not backward compatible with the previous version.
+- Version: 31 (MinAcceptedVersion: 30)
+    - The TableReader field MaxResults was retired in favor of the new field
+      Parallelize. The change is backwards compatible (mixed versions will
+      prevent parallelization).

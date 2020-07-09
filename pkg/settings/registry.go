@@ -70,6 +70,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.distsql.merge_joins.enabled":                                  {},
 	"sql.defaults.optimizer_foreign_keys.enabled":                      {},
 	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled": {},
+	"sql.parallel_scans.enabled":                                       {},
 }
 
 // register adds a setting to the registry.

@@ -492,6 +492,20 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		locking = forUpdateLocking
 	}
 
+	parallelize := false
+	if hardLimit == 0 && softLimit == 0 {
+		maxResults := b.indexConstraintMaxResults(scan)
+		if maxResults != 0 && maxResults < ParallelScanResultThreshold {
+			// Don't set the flag when we have a single span which returns a single
+			// row: it does nothing in this case except litter EXPLAINs.
+			// There are still cases where the flag doesn't do anything when the spans
+			// cover a single range, but there is nothing we can do about that.
+			if !(maxResults == 1 && scan.Constraint.Spans.Count() == 1) {
+				parallelize = true
+			}
+		}
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
@@ -502,7 +516,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		softLimit,
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
-		b.indexConstraintMaxResults(scan),
+		parallelize,
 		res.reqOrdering(scan),
 		rowCount,
 		locking,

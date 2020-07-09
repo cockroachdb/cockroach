@@ -21,6 +21,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ParallelScanResultThreshold is the number of results up to which, if the
+// maximum number of results returned by a scan is known, the scan disables
+// batch limits in the dist sender. This results in the parallelization of these
+// scans.
+const ParallelScanResultThreshold = 10000
+
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
 type Builder struct {

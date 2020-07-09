@@ -60,7 +60,7 @@ var (
 	}
 	metaCommits1PCRates = metric.Metadata{
 		Name:        "txn.commits1PC",
-		Help:        "Number of KV transaction on-phase commit attempts",
+		Help:        "Number of KV transaction one-phase commit attempts",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}

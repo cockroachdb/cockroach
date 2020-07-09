@@ -43,7 +43,6 @@ count                     ·             ·                          ()         
                 └── scan  ·             ·                          (a, b, d)                      ·
 ·                         table         t9@primary                 ·                              ·
 ·                         spans         /5/0-/5/1/2 /5/3/1-/5/3/2  ·                              ·
-·                         parallel      ·                          ·                              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
