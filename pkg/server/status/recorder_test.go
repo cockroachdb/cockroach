@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -202,6 +203,8 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testCounter", "counter", 5},
 		{"testHistogram", "histogram", 10},
 		{"testLatency", "latency", 10},
+		{"testAggGauge", "agggauge", 4},
+		{"testAggCounter", "aggcounter", 7},
 
 		// Stats needed for store summaries.
 		{"ranges", "counter", 1},
@@ -270,6 +273,18 @@ func TestMetricsRecorder(t *testing.T) {
 			case "counter":
 				c := metric.NewCounter(metric.Metadata{Name: reg.prefix + data.name})
 				reg.reg.AddMetric(c)
+				c.Inc((data.val))
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
+			case "aggcounter":
+				ac := aggmetric.NewCounter(metric.Metadata{Name: reg.prefix + data.name}, "foo")
+				reg.reg.AddMetric(ac)
+				c := ac.AddChild("bar")
+				c.Inc((data.val))
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
+			case "agggauge":
+				ac := aggmetric.NewGauge(metric.Metadata{Name: reg.prefix + data.name}, "foo")
+				reg.reg.AddMetric(ac)
+				c := ac.AddChild("bar")
 				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":
