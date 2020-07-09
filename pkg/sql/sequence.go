@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -334,6 +335,12 @@ func removeSequenceOwnerIfExists(
 	}
 	tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
 	if err != nil {
+		// Special case error swallowing for #50711 and #50781, which can cause a
+		// column to own sequences that have been dropped/do not exist.
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			log.Eventf(ctx, "swallowing error during sequence ownership unlinking: %s", err.Error())
+			return nil
+		}
 		return err
 	}
 	// If the table descriptor has already been dropped, there is no need to
@@ -480,7 +487,13 @@ func (p *planner) dropSequencesOwnedByCol(
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqDesc, err := p.Tables().getMutableTableVersionByID(ctx, sequenceID, p.txn)
+		// Special case error swallowing for #50781, which can cause a
+		// column to own sequences that do not exist.
 		if err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				log.Eventf(ctx, "swallowing error dropping owned sequences: %s", err.Error())
+				continue
+			}
 			return err
 		}
 		// This sequence is already getting dropped. Don't do it twice.
@@ -489,8 +502,10 @@ func (p *planner) dropSequencesOwnedByCol(
 		}
 		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
 			seqDesc.Name, col.ColName())
+		// TODO(arul): This should really be queueJob instead of a hard-coded true
+		// but can't be because of #51782.
 		if err := p.dropSequenceImpl(
-			ctx, seqDesc, queueJob, jobDesc, tree.DropRestrict,
+			ctx, seqDesc, true /* queueJob */, jobDesc, tree.DropRestrict,
 		); err != nil {
 			return err
 		}

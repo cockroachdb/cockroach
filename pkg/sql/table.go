@@ -57,6 +57,7 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 }
 
 var errTableAdding = errors.New("table is being added")
+var errTableDropped = errors.New("table is being dropped")
 
 type inactiveTableError struct {
 	error
@@ -67,7 +68,7 @@ type inactiveTableError struct {
 func FilterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch tableDesc.State {
 	case sqlbase.TableDescriptor_DROP:
-		return inactiveTableError{errors.New("table is being dropped")}
+		return inactiveTableError{errTableDropped}
 	case sqlbase.TableDescriptor_OFFLINE:
 		err := errors.Errorf("table %q is offline", tableDesc.Name)
 		if tableDesc.OfflineReason != "" {

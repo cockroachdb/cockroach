@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type dropSequenceNode struct {
@@ -159,6 +160,13 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqLookup, err := p.LookupTableByID(ctx, sequenceID)
 		if err != nil {
+			// Special case error swallowing for #50711 and #50781, which can cause a
+			// column to own sequences that have been dropped/do not exist.
+			if err.Error() == errTableDropped.Error() ||
+				pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+				log.Eventf(ctx, "swallowing error ensuring owned sequences can be removed: %s", err.Error())
+				continue
+			}
 			return err
 		}
 		seqDesc := seqLookup.Desc

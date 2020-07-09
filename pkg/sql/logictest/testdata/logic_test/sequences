@@ -1170,7 +1170,6 @@ DROP DATABASE db_50712 CASCADE
 
 statement ok
 DROP TABLE t_50712
-<<<<<<< HEAD
 
 # previously, changing ownership of a sequence between columns of the same table
 # was causing the sequenceID to appear in multiple column's ownedSequences list.
