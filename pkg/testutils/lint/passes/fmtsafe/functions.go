@@ -196,4 +196,6 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.unimplementedInternal": true,
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate.inputErrorf": true,
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl.newErrorf": true,
 }
