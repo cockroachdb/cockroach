@@ -26,6 +26,8 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -171,15 +173,21 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			panic(fmt.Sprintf("float with an unexpected width %d", typ.Width()))
 		}
 	case types.GeographyFamily:
-		// TODO(otan): generate fake data properly.
-		return tree.NewDGeography(
-			geo.MustParseGeographyFromEWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")),
-		)
+		gm, err := typ.GeoMetadata()
+		if err != nil {
+			panic(err)
+		}
+		srid := gm.SRID
+		if srid == 0 {
+			srid = geopb.DefaultGeographySRID
+		}
+		return tree.NewDGeography(geogen.RandomGeography(rng, srid))
 	case types.GeometryFamily:
-		// TODO(otan): generate fake data properly.
-		return tree.NewDGeometry(
-			geo.MustParseGeometryFromEWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")),
-		)
+		gm, err := typ.GeoMetadata()
+		if err != nil {
+			panic(err)
+		}
+		return tree.NewDGeometry(geogen.RandomGeometry(rng, gm.SRID))
 	case types.DecimalFamily:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
