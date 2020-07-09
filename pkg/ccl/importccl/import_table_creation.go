@@ -120,11 +120,6 @@ func MakeSimpleTableDescriptor(
 			*tree.UniqueConstraintTableDef:
 			// ignore
 		case *tree.ColumnTableDef:
-			if def.Computed.Expr != nil {
-				return nil, unimplemented.NewWithIssueDetailf(42846, "import.computed",
-					"computed columns not supported: %s", tree.AsString(def))
-			}
-
 			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
 				return nil, err
 			}
