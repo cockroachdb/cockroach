@@ -109,8 +109,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		keys.SystemSQLCodec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
-		true,  /* isCheck */
+		true, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		args...,
 	); err != nil {

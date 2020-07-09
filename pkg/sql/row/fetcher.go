@@ -43,7 +43,6 @@ type kvBatchFetcher interface {
 	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
 		batchResponse []byte, origSpan roachpb.Span, err error)
-	GetRangesInfo() []roachpb.RangeInfo
 }
 
 type tableInfo struct {
@@ -196,14 +195,6 @@ type Fetcher struct {
 	// lockStr represents the row-level locking mode to use when fetching rows.
 	lockStr sqlbase.ScanLockingStrength
 
-	// returnRangeInfo, if set, causes the underlying kvBatchFetcher to return
-	// information about the ranges descriptors/leases uses in servicing the
-	// requests. This has some cost, so it's only enabled by DistSQL when this
-	// info is actually useful for correcting the plan (e.g. not for the PK-side
-	// of an index-join).
-	// If set, GetRangesInfo() can be used to retrieve the accumulated info.
-	returnRangeInfo bool
-
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when beginning a new scan.
 	traceKV bool
@@ -251,7 +242,6 @@ func (rf *Fetcher) Init(
 	codec keys.SQLCodec,
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
-	returnRangeInfo bool,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	tables ...FetcherTableArgs,
@@ -263,7 +253,6 @@ func (rf *Fetcher) Init(
 	rf.codec = codec
 	rf.reverse = reverse
 	rf.lockStr = lockStr
-	rf.returnRangeInfo = returnRangeInfo
 	rf.alloc = alloc
 	rf.isCheck = isCheck
 
@@ -483,7 +472,6 @@ func (rf *Fetcher) StartScan(
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
 		rf.lockStr,
-		rf.returnRangeInfo,
 	)
 	if err != nil {
 		return err
@@ -563,7 +551,6 @@ func (rf *Fetcher) StartInconsistentScan(
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
 		rf.lockStr,
-		rf.returnRangeInfo,
 	)
 	if err != nil {
 		return err
@@ -1486,17 +1473,6 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 		return nil, err
 	}
 	return rf.kv.Key[:n+rf.currentTable.knownPrefixLength], nil
-}
-
-// GetRangesInfo returns information about the ranges where the rows came from.
-// The RangeInfo's are deduped and not ordered.
-func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
-	f := rf.kvFetcher
-	if f == nil {
-		// Not yet initialized.
-		return nil
-	}
-	return f.GetRangesInfo()
 }
 
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.

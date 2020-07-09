@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/errors"
 )
 
 // KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
@@ -41,10 +40,9 @@ func NewKVFetcher(
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr sqlbase.ScanLockingStrength,
-	returnRangeInfo bool,
 ) (*KVFetcher, error) {
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr, returnRangeInfo,
+		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }
@@ -112,9 +110,4 @@ func (f *SpanKVFetcher) nextBatch(
 	res := f.KVs
 	f.KVs = nil
 	return true, res, nil, roachpb.Span{}, nil
-}
-
-// GetRangesInfo implements the kvBatchFetcher interface.
-func (f *SpanKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	panic(errors.AssertionFailedf("GetRangesInfo() called on SpanKVFetcher"))
 }
