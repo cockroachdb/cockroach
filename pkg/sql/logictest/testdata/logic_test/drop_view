@@ -95,6 +95,9 @@ DROP VIEW testuser3
 query TTTI
 SHOW TABLES FROM test
 ----
+public  d          view
+public  testuser1  view
+public  testuser2  view
 
 statement error cannot drop relation "testuser1" because view "testuser2" depends on it
 DROP VIEW testuser1
@@ -108,6 +111,7 @@ DROP VIEW testuser1 CASCADE
 query TTTI
 SHOW TABLES FROM test
 ----
+public  d          view
 
 statement error pgcode 42P01 relation "testuser2" does not exist
 DROP VIEW testuser2

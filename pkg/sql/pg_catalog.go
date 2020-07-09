@@ -1919,7 +1919,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
 				return forEachSchemaName(ctx, p, db, func(s string, _ bool) error {
 					return addRow(

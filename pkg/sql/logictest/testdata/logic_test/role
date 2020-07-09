@@ -1174,6 +1174,7 @@ public  publictable  table  NULL
 query TTTI
 SHOW TABLES FROM privatedb
 ----
+public  publictable  table
 
 statement ok
 SELECT * FROM publicdb.publictable
