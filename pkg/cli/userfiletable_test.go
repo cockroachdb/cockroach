@@ -14,15 +14,14 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,41 +33,47 @@ func Example_userfile() {
 	defer cleanUp()
 
 	c.Run(fmt.Sprintf("userfile upload %s /test/file1.csv", file))
-	c.Run(fmt.Sprintf("userfile upload %s /test/file2.csv", file))
+	c.Run(fmt.Sprintf("userfile upload %s test/file2.csv", file))
+	c.Run(fmt.Sprintf("userfile upload %s file2.csv", file))
 	c.Run(fmt.Sprintf("userfile upload %s /test/file1.csv", file))
+	// User passes no destination so we use the basename of the source as the
+	// filename.
+	c.Run(fmt.Sprintf("userfile upload %s", file))
+	// Userfile storage does not do any path cleaning, the filename is the full
+	// string passed as the destination arg.
 	c.Run(fmt.Sprintf("userfile upload %s /test/../../file1.csv", file))
-	c.Run(fmt.Sprintf("userfile upload %s test/file1.csv", file))
 	c.Run(fmt.Sprintf("userfile upload notexist.csv /test/file1.csv"))
+	// Test fully qualified URI specifying db.schema.tablename_prefix.
+	c.Run(fmt.Sprintf("userfile upload %s userfile://defaultdb.public.foo/test/file1.csv", file))
 
 	// Output:
 	// userfile upload test.csv /test/file1.csv
-	// successfully uploaded to userfile://defaultdb.public.root/test/file1.csv
-	// userfile upload test.csv /test/file2.csv
-	// successfully uploaded to userfile://defaultdb.public.root/test/file2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/file1.csv
+	// userfile upload test.csv test/file2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/file2.csv
+	// userfile upload test.csv file2.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/file2.csv
 	// userfile upload test.csv /test/file1.csv
 	// ERROR: destination file already exists for /test/file1.csv
+	// userfile upload test.csv
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test-temp-prefix-test.csv
 	// userfile upload test.csv /test/../../file1.csv
-	// ERROR: path /test/../../file1.csv has a `..` in its path which is an invalid construct for userfile upload destinations
-	// userfile upload test.csv test/file1.csv
-	// ERROR: userfile upload destination path must begin with /
+	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/../../file1.csv
 	// userfile upload notexist.csv /test/file1.csv
 	// ERROR: open notexist.csv: no such file or directory
+	// userfile upload test.csv userfile://defaultdb.public.foo/test/file1.csv
+	// successfully uploaded to userfile://defaultdb.public.foo/test/file1.csv
 }
 
 func checkUserFileContent(
 	ctx context.Context,
 	t *testing.T,
 	execcCfg interface{},
-	user, filename string,
+	user, userfileURI string,
 	expectedContent []byte,
 ) {
-	if !strings.HasPrefix(filename, "/") {
-		t.Fatal(errors.New("userfile destination must start with a /"))
-	}
-	uri := fmt.Sprintf("userfile://%s%s",
-		defaultQualifiedDBSchemaName+user, filename)
-	store, err := execcCfg.(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx, uri,
-		user)
+	store, err := execcCfg.(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
+		userfileURI, user)
 	require.NoError(t, err)
 	reader, err := store.ReadFile(ctx, "")
 	require.NoError(t, err)
@@ -112,12 +117,14 @@ func TestUserFileUpload(t *testing.T) {
 			make([]byte, chunkSize+100),
 		},
 	} {
+		// Write local file.
+		filePath := filepath.Join(dir, fmt.Sprintf("file%d.csv", i))
+		err := ioutil.WriteFile(filePath, tc.fileContent, 0666)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
 		t.Run(tc.name, func(t *testing.T) {
-			filePath := filepath.Join(dir, fmt.Sprintf("file%d.csv", i))
-			err := ioutil.WriteFile(filePath, tc.fileContent, 0666)
-			if err != nil {
-				t.Fatal(err)
-			}
 			destination := fmt.Sprintf("/test/file%d.csv", i)
 
 			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath, destination))
@@ -125,7 +132,21 @@ func TestUserFileUpload(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser, destination, tc.fileContent)
+			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser,
+				constructUserfileDestinationURI("", destination, security.RootUser),
+				tc.fileContent)
+		})
+
+		t.Run(tc.name+"_fullURI", func(t *testing.T) {
+			destination := fmt.Sprintf("userfile://defaultdb.public.foo/test/file%d.csv", i)
+			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
+				destination))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser,
+				destination, tc.fileContent)
 		})
 	}
 }
