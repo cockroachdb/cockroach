@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // SerialUnorderedSynchronizer is an Operator that combines multiple Operator
@@ -83,4 +84,18 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
 	}
 	return bufferedMeta
+}
+
+// IdempotentClose is part of the IdempotentCloser interface.
+func (s *SerialUnorderedSynchronizer) IdempotentClose(ctx context.Context) error {
+	for _, input := range s.inputs {
+		for _, closer := range input.ToClose {
+			if err := closer.IdempotentClose(ctx); err != nil {
+				if log.V(1) {
+					log.Infof(ctx, "serial unordered synchronizer error closing IdempotentCloser: %v", err)
+				}
+			}
+		}
+	}
+	return nil
 }

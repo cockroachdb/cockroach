@@ -211,6 +211,10 @@ type TestingKnobs struct {
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
 
+	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
+	// were closed explicitly in flow.Cleanup.
+	CheckVectorizedFlowIsClosedCorrectly bool
+
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
 
