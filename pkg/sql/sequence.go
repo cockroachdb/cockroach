@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
@@ -336,6 +337,12 @@ func removeSequenceOwnerIfExists(
 	}
 	tableDesc, err := p.Tables().GetMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
 	if err != nil {
+		// Special case error swallowing for #50711 and #50781, which can cause a
+		// column to own sequences that have been dropped/do not exist.
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			log.Eventf(ctx, "swallowing error during sequence ownership unlinking: %s", err.Error())
+			return nil
+		}
 		return err
 	}
 	// If the table descriptor has already been dropped, there is no need to
@@ -485,7 +492,13 @@ func (p *planner) dropSequencesOwnedByCol(
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqDesc, err := p.Tables().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
+		// Special case error swallowing for #50781, which can cause a
+		// column to own sequences that do not exist.
 		if err != nil {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				log.Eventf(ctx, "swallowing error dropping owned sequences: %s", err.Error())
+				return nil
+			}
 			return err
 		}
 		// This sequence is already getting dropped. Don't do it twice.

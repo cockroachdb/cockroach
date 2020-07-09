@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -187,5 +188,366 @@ func assertColumnOwnsSequences(
 				tableDesc.GetID(), ownerTableID, col.ID, ownerColID,
 			)
 		}
+	}
+}
+
+// Tests for allowing drops on sequence descriptors in a bad state due to
+// ownership bugs. It should be possible to drop tables/sequences that have
+// descriptors in an invalid state. See tracking issue #51770 for more details.
+// Relevant sub-issues are referenced in test names/inline comments.
+func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Tests simulating #50711 by breaking the invariant that sequences are owned
+	// by at most one column at a time.
+
+	// Dropping the table should work when the table descriptor is in an invalid
+	// state. The owned sequence should also be dropped.
+	t.Run("#50711 drop table", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+		sqlDB := sqlutils.MakeSQLRunner(sqlConn)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP TABLE t.test"); err != nil {
+			t.Fatal(err)
+		}
+
+		// The sequence should have been dropped as well.
+		sqlDB.ExpectErr(t, `pq: relation "t.seq" does not exist`, "SELECT * FROM t.seq")
+	})
+
+	// Same setup as above, except now we drop the sequence first and then
+	// the table.
+	t.Run("#50711 drop sequence followed by drop table", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP SEQUENCE t.seq"); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlConn.Exec("DROP TABLE t.test"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Same setup as above, except the database is dropped instead of individual
+	// elements.
+	t.Run("#50711 drop database cascade", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP DATABASE t CASCADE"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Drop database operates on object names lexicographically. This test uses a
+	// different sequence name to ensure drop database works regardless.
+	t.Run("#50711 drop database cascade different object names", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.useq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "useq")
+
+		if _, err := sqlConn.Exec("DROP DATABASE t CASCADE"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Tests simulating #50781 by modifying the sequence's owner to a table that
+	// doesn't exist and column's `ownsSequenceIDs` to sequences that don't exist.
+
+	t.Run("#50781 drop table followed by drop sequence", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP TABLE t.test"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlConn.Exec("DROP SEQUENCE t.seq"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("#50781 drop sequence followed by drop table", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP SEQUENCE t.seq"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlConn.Exec("DROP TABLE t.test"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Same setup as above, except drop objects together using DROP DATABASE
+	// CASCADE.
+	t.Run("#50781 drop database cascade", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP DATABASE t CASCADE"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Setup the test with a sequence name which is lexicographically greater than
+	// the table name as DROP DATABASE CASCADE operates on objects
+	// lexicographically.
+	t.Run("#50781 drop database cascade different object names", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.useq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakOwnershipMapping(t, kvDB, "t", "test", "useq")
+
+		if _, err := sqlConn.Exec("DROP DATABASE t CASCADE"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Combine both #50711 and #50781.
+	t.Run("combined #50711 #50781 drop table followed by sequence", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+		breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP TABLE t.test"); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlConn.Exec("DROP SEQUENCE t.seq"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("combined #50711 #50781 drop sequence followed by table", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+		breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP SEQUENCE t.seq"); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlConn.Exec("DROP TABLE t.test"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("combined #50711 #50781 drop database cascade", func(t *testing.T) {
+		ctx := context.Background()
+		params := base.TestServerArgs{}
+		s, sqlConn, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+			t.Fatal(err)
+		}
+
+		breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+		breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+		if _, err := sqlConn.Exec("DROP DATABASE t CASCADE"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// DROP DATABASE CASCADE processes objects in lexicographical order. This test
+	// is like the one above except the sequence is lexicographically greater than
+	// the table.
+	t.Run("combined #50711 #50781 drop database cascade different object names",
+		func(t *testing.T) {
+			ctx := context.Background()
+			params := base.TestServerArgs{}
+			s, sqlConn, kvDB := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
+
+			if _, err := sqlConn.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
+CREATE SEQUENCE t.seq OWNED BY t.test.a`); err != nil {
+				t.Fatal(err)
+			}
+
+			breakNumberOfSequenceOwnersInvariant(t, kvDB, "t", "test", "seq")
+			breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+
+			if _, err := sqlConn.Exec("DROP DATABASE t CASCADE"); err != nil {
+				t.Fatal(err)
+			}
+		})
+}
+
+// breakNumberOfSequenceOwnersInvariant simulates #50711 by adding the
+// sequenceID to two columns of a table, thereby breaking the invariant that a
+// sequence is uniquely owned by at most 1 column. Table passed in should have
+// at-least 2 columns.
+func breakNumberOfSequenceOwnersInvariant(
+	t *testing.T, kvDB *kv.DB, dbName string, tableName string, seqName string,
+) {
+	seqDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, dbName, tableName)
+
+	// table.Col1.OwnsSequenceIDs = [seqID, seqID]
+	// table.Col2.OwnsSequenceIDs = [seqID]
+	tableDesc.GetColumns()[0].OwnsSequenceIds = append(
+		tableDesc.GetColumns()[0].OwnsSequenceIds, seqDesc.ID)
+	tableDesc.GetColumns()[1].OwnsSequenceIds = append(
+		tableDesc.GetColumns()[1].OwnsSequenceIds, seqDesc.ID)
+
+	if err := kvDB.Put(
+		context.Background(),
+		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		tableDesc.DescriptorProto(),
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// breakOwnershipMapping simulates #50781 by setting the sequence's owner table
+// to a non-existent tableID and setting the column's `ownsSequenceID` to a
+// non-existent sequenceID.
+func breakOwnershipMapping(
+	t *testing.T, kvDB *kv.DB, dbName string, tableName string, seqName string,
+) {
+	seqDesc := sqlbase.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := sqlbase.TestingGetMutableExistingTableDescriptor(
+		kvDB, keys.SystemSQLCodec, dbName, tableName)
+
+	// Go through all the columns of the table and set the sequenceID owned by
+	// the column to seqID + 10.
+	for colIdx := range tableDesc.GetColumns() {
+		for i := range tableDesc.GetColumns()[colIdx].OwnsSequenceIds {
+			tableDesc.GetColumns()[colIdx].OwnsSequenceIds[i] += 10
+		}
+	}
+	// Set the sequence's owner table ID to tableID + 20.
+	seqDesc.SequenceOpts.SequenceOwner.OwnerTableID += 20
+
+	if err := kvDB.Put(
+		context.Background(),
+		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		tableDesc.DescriptorProto(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := kvDB.Put(
+		context.Background(),
+		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),
+		seqDesc.DescriptorProto(),
+	); err != nil {
+		t.Fatal(err)
 	}
 }
