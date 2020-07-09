@@ -28,12 +28,6 @@ func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry,
 	if !ok {
 		return nil, errors.Newf("argument must be LINESTRING geometries")
 	}
-	if outerRing.NumCoords() < 4 {
-		return nil, errors.Newf("shell must have at least 4 points")
-	}
-	if !isClosed(layout, outerRing) {
-		return nil, errors.Newf("shell must be closed")
-	}
 	srid := outerRing.SRID()
 	coords := make([][]geom.Coord, len(interior)+1)
 	coords[0] = outerRing.Coords()
@@ -49,12 +43,6 @@ func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry,
 		if interiorRing.SRID() != srid {
 			return nil, errors.Newf("mixed SRIDs are not allowed")
 		}
-		if interiorRing.NumCoords() < 4 {
-			return nil, errors.Newf("holes must have at least 4 points")
-		}
-		if !isClosed(layout, interiorRing) {
-			return nil, errors.Newf("holes must be closed")
-		}
 		coords[i+1] = interiorRing.Coords()
 	}
 
@@ -63,10 +51,4 @@ func MakePolygon(outer *geo.Geometry, interior ...*geo.Geometry) (*geo.Geometry,
 		return nil, err
 	}
 	return geo.NewGeometryFromGeomT(polygon)
-}
-
-// isClosed checks if a LineString is closed to make a valid Polygon.
-// Returns whether the last coordinate is the same as the first.
-func isClosed(layout geom.Layout, g *geom.LineString) bool {
-	return g.Coord(0).Equal(layout, g.Coord(g.NumCoords()-1))
 }
