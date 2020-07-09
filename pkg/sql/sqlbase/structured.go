@@ -212,6 +212,10 @@ type ImmutableTableDescriptor struct {
 	// progress, as mutation columns may have NULL values.
 	ReadableColumns []ColumnDescriptor
 
+	// columnsWithUDTs is a set of indexes into publicAndNonPublicCols containing
+	// indexes of columns that contain user defined types.
+	columnsWithUDTs []int
+
 	// TODO (lucy): populate these and use them
 	// inboundFKs  []*ForeignKeyConstraint
 	// outboundFKs []*ForeignKeyConstraint
@@ -339,6 +343,13 @@ func NewImmutableTableDescriptor(tbl TableDescriptor) *ImmutableTableDescriptor 
 	desc.allChecks = make([]TableDescriptor_CheckConstraint, len(tbl.Checks))
 	for i, c := range tbl.Checks {
 		desc.allChecks[i] = *c
+	}
+
+	// Remember what columns have user defined types.
+	for i := range desc.publicAndNonPublicCols {
+		if desc.publicAndNonPublicCols[i].Type.UserDefined() {
+			desc.columnsWithUDTs = append(desc.columnsWithUDTs, i)
+		}
 	}
 
 	return desc
@@ -2833,6 +2844,12 @@ func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescripto
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+}
+
+// ContainsUserDefinedTypes returns whether or not this table descriptor has
+// any columns of user defined types.
+func (desc *ImmutableTableDescriptor) ContainsUserDefinedTypes() bool {
+	return len(desc.columnsWithUDTs) > 0
 }
 
 // FindReadableColumnByID finds the readable column with specified ID. The
