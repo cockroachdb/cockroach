@@ -41,11 +41,6 @@ func (f *singleKVFetcher) nextBatch(
 	return true, f.kvs[:], nil, roachpb.Span{}, nil
 }
 
-// GetRangesInfo implements the kvBatchFetcher interface.
-func (f *singleKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	panic(errors.AssertionFailedf("GetRangesInfo() called on singleKVFetcher"))
-}
-
 // ConvertBatchError returns a user friendly constraint violation error.
 func ConvertBatchError(
 	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
@@ -118,7 +113,6 @@ func NewUniquenessConstraintViolationError(
 		codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		tableArgs,

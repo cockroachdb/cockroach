@@ -57,9 +57,6 @@ type txnKVFetcher struct {
 	reverse         bool
 	// lockStr represents the locking mode to use when fetching KVs.
 	lockStr sqlbase.ScanLockingStrength
-	// returnRangeInfo, if set, causes the kvBatchFetcher to populate rangeInfos.
-	// See also rowFetcher.returnRangeInfo.
-	returnRangeInfo bool
 
 	fetchEnd bool
 	batchIdx int
@@ -71,24 +68,11 @@ type txnKVFetcher struct {
 	requestSpans roachpb.Spans
 	responses    []roachpb.ResponseUnion
 
-	// As the kvBatchFetcher fetches batches of kvs, it accumulates information on the
-	// replicas where the batches came from. This info can be retrieved through
-	// getRangeInfo(), to be used for updating caches.
-	// rangeInfos are deduped, so they're not ordered in any particular way and
-	// they don't map to kvBatchFetcher.spans in any particular way.
-	rangeInfos       []roachpb.RangeInfo
 	origSpan         roachpb.Span
 	remainingBatches [][]byte
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
-
-func (f *txnKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	if !f.returnRangeInfo {
-		panic(errors.AssertionFailedf("GetRangesInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo"))
-	}
-	return f.rangeInfos
-}
 
 // getBatchSize returns the max size of the next batch.
 func (f *txnKVFetcher) getBatchSize() int64 {
@@ -178,7 +162,6 @@ func makeKVBatchFetcher(
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr sqlbase.ScanLockingStrength,
-	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
@@ -188,7 +171,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr, returnRangeInfo,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
 	)
 }
 
@@ -201,7 +184,6 @@ func makeKVBatchFetcherWithSendFunc(
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	lockStr sqlbase.ScanLockingStrength,
-	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -253,7 +235,6 @@ func makeKVBatchFetcherWithSendFunc(
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
 		lockStr:         lockStr,
-		returnRangeInfo: returnRangeInfo,
 	}, nil
 }
 
@@ -271,7 +252,6 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// TargetBytes would interfere with.
 		ba.Header.TargetBytes = 10 * (1 << 20)
 	}
-	ba.Header.ReturnRangeInfo = f.returnRangeInfo
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
 	if f.reverse {
@@ -342,13 +322,6 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			f.spans = append(f.spans, *resumeSpan)
 			// Verify we don't receive results for any remaining spans.
 			sawResumeSpan = true
-		}
-
-		// Fill up the RangeInfos, in case we got any.
-		if f.returnRangeInfo {
-			for _, ri := range br.RangeInfos {
-				f.rangeInfos = roachpb.InsertRangeInfo(f.rangeInfos, ri)
-			}
 		}
 	}
 
