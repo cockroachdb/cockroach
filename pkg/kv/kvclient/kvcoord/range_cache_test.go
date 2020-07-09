@@ -1063,7 +1063,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Fatalf("invocation of clearOlderOverlapping panicked: %v", r)
+				t.Fatalf("invocation of clearOlderOverlappingLocked panicked: %v", r)
 			}
 		}()
 		cache.clearOlderOverlapping(ctx, &kvbase.RangeCacheEntry{Desc: metaSplitDesc})
