@@ -246,6 +246,14 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var clusterIdleInSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+	"sql.defaults.idle_in_session_timeout",
+	"default value for the idle_in_session_timeout; "+
+		"enables automatically killing sessions that exceed the "+
+		"idle_in_session_timeout threshold",
+	0,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
