@@ -14,8 +14,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
 )
+
+const defaultUserfileScheme = "userfile"
 
 type fileTableStorage struct {
 	fs     *filetable.FileToTableSystem
@@ -78,7 +82,12 @@ func MakeUserFileStorageURI(qualifiedTableName, filename string) string {
 
 func makeUserFileURIWithQualifiedName(qualifiedTableName, path string) string {
 	path = strings.TrimPrefix(path, "/")
-	return fmt.Sprintf("userfile://%s/%s", qualifiedTableName, path)
+	userfileURL := url.URL{
+		Scheme: defaultUserfileScheme,
+		Host:   qualifiedTableName,
+		Path:   path,
+	}
+	return userfileURL.String()
 }
 
 // Close implements the ExternalStorage interface and is a no-op.
@@ -95,13 +104,34 @@ func (f *fileTableStorage) Conf() roachpb.ExternalStorage {
 	}
 }
 
+// Userfile storage does not provide file system semantics and thus to prevent
+// user surprises we reject file paths which are different pre- and
+// post-normalization. We already enforce this on prefix when the
+// fileTableStorage is instantiated, so this method enforces the same on
+// basename.
+func checkBaseAndJoinFilePath(prefix, basename string) (string, error) {
+	if basename == "" {
+		return prefix, nil
+	}
+
+	if path.Clean(basename) != basename {
+		return "", errors.Newf("basename %s changes to %s on normalization. "+
+			"userfile does not permit such constructs.", basename, path.Clean(basename))
+	}
+	return filepath.Join(prefix, basename), nil
+}
+
 // ReadFile implements the ExternalStorage interface and returns the contents of
 // the file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	reader, err := f.fs.ReadFile(ctx, path.Join(f.prefix, basename))
+	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := f.fs.ReadFile(ctx, filepath)
 	if os.IsNotExist(err) {
 		return nil, errors.Wrapf(ErrFileDoesNotExist,
-			"file %s does not exist in the UserFileTableSystem", path.Join(f.prefix, basename))
+			"file %s does not exist in the UserFileTableSystem", filepath)
 	}
 
 	return reader, err
@@ -112,7 +142,11 @@ func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.Re
 func (f *fileTableStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	writer, err := f.fs.NewFileWriter(ctx, path.Join(f.prefix, basename), filetable.ChunkDefaultSize)
+	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
+	if err != nil {
+		return err
+	}
+	writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
 	if err != nil {
 		return err
 	}
@@ -142,7 +176,10 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 		if containsGlob(f.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
-		pattern = path.Join(pattern, patternSuffix)
+		pattern, err = checkBaseAndJoinFilePath(pattern, patternSuffix)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, match := range matches {
@@ -171,11 +208,19 @@ func (f *fileTableStorage) ListFiles(ctx context.Context, patternSuffix string) 
 // Delete implements the ExternalStorage interface and deletes the file from the
 // user scoped FileToTableSystem.
 func (f *fileTableStorage) Delete(ctx context.Context, basename string) error {
-	return f.fs.DeleteFile(ctx, path.Join(f.prefix, basename))
+	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
+	if err != nil {
+		return err
+	}
+	return f.fs.DeleteFile(ctx, filepath)
 }
 
 // Size implements the ExternalStorage interface and returns the size of the
 // file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, error) {
-	return f.fs.FileSize(ctx, path.Join(f.prefix, basename))
+	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
+	if err != nil {
+		return 0, err
+	}
+	return f.fs.FileSize(ctx, filepath)
 }
