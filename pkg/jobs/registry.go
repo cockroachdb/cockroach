@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -30,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -42,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 const defaultLeniencySetting = 60 * time.Second
@@ -63,6 +66,14 @@ var (
 		"the amount of time to retain records for completed jobs before",
 		time.Hour*24*14)
 )
+
+// adoptedJobs represents a the epoch and cancelation of a job id being run
+// by the registry.
+type adoptedJob struct {
+	sid sqlliveness.SessionID
+	// Calling the func will cancel the context the job was resumed with.
+	cancel context.CancelFunc
+}
 
 // Registry creates Jobs and manages their leases and cancelation.
 //
@@ -90,17 +101,18 @@ var (
 // node simply behaves as though its leniency period is 0. Epoch-based
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
-	ac         log.AmbientContext
-	stopper    *stop.Stopper
-	nl         sqlbase.OptionalNodeLiveness
-	db         *kv.DB
-	ex         sqlutil.InternalExecutor
-	clock      *hlc.Clock
-	nodeID     *base.SQLIDContainer
-	settings   *cluster.Settings
-	planFn     planHookMaker
-	metrics    Metrics
-	adoptionCh chan struct{}
+	ac          log.AmbientContext
+	stopper     *stop.Stopper
+	nl          sqlbase.OptionalNodeLiveness
+	db          *kv.DB
+	ex          sqlutil.InternalExecutor
+	clock       *hlc.Clock
+	nodeID      *base.SQLIDContainer
+	settings    *cluster.Settings
+	planFn      planHookMaker
+	metrics     Metrics
+	adoptionCh  chan struct{}
+	sqlInstance sqlliveness.SQLInstance
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
@@ -140,7 +152,14 @@ type Registry struct {
 		// are normally canceled on any node by the CANCEL JOB statement, which is
 		// propagated to jobs via the .Progressed call. This function should not be
 		// used to cancel a job in that way.
+		// TODO(spaskob): add deprecated notice.
 		jobs map[int64]context.CancelFunc
+
+		// adoptedJobs holds a map from job id to its context cancel func and epoch.
+		// It contains the that are adopted and rpobably being run. One exception is
+		// jobs scheduled inside a transaction, they will show in this map but will
+		// only be run when the transaction commits.
+		adoptedJobs map[int64]*adoptedJob
 	}
 
 	TestingResumerCreationKnobs map[jobspb.Type]func(Resumer) Resumer
@@ -192,9 +211,13 @@ func MakeRegistry(
 		planFn:              planFn,
 		preventAdoptionFile: preventAdoptionFile,
 		adoptionCh:          make(chan struct{}),
+		sqlInstance: slinstance.NewSqlInstance(
+			stopper, clock, db, ex, DefaultAdoptInterval+10*time.Duration(time.Second), time.Second,
+		),
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
+	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
 	r.metrics.InitHooks(histogramWindowInterval)
 	return r
 }
@@ -227,6 +250,12 @@ func (r *Registry) CurrentlyRunningJobs() []int64 {
 		i++
 	}
 	return jobs
+}
+
+// ID returns a unique during the lifetume of the registry id that is
+// used for keying sqlliveness claims held by the registry.
+func (r *Registry) ID() base.SQLInstanceID {
+	return r.nodeID.SQLInstanceID()
 }
 
 // lenientNow returns the timestamp after which we should attempt
@@ -366,14 +395,47 @@ func (r *Registry) NewJob(record Record) *Job {
 	return job
 }
 
-// CreateJobWithTxn creates a job to be started later with StartJob.
-// It stores the job in the jobs table, marks it running and gives the
-// current node a lease.
+// CreateJobWithTxn creates a job to be started later with StartJob. It stores
+// the job in the jobs table, marks it pending and gives the current node a
+// lease.
 func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.Txn) (*Job, error) {
 	j := r.NewJob(record)
-	if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
+	if !r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+		// TODO(spaskob): remove in 20.2 as this code path is only needed while
+		// migrating to 20.2 cluster.
+		if err := j.WithTxn(txn).insert(ctx, r.makeJobID(), r.newLease()); err != nil {
+			return nil, err
+		}
+		return j, nil
+	}
+
+	s, err := r.sqlInstance.Session(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting live session")
+	}
+	jobID := r.makeJobID()
+	start := time.Now()
+	if txn != nil {
+		start = txn.ReadTimestamp().GoTime()
+	}
+	j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(start)
+	payloadBytes, err := protoutil.Marshal(&j.mu.payload)
+	if err != nil {
 		return nil, err
 	}
+	progressBytes, err := protoutil.Marshal(&j.mu.progress)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
+INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
+VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID(), r.ID(),
+	); err != nil {
+		return nil, err
+	}
+
+	j.id = &jobID
 	return j, nil
 }
 
@@ -426,9 +488,29 @@ func (r *Registry) CreateStartableJobWithTxn(
 		return nil, err
 	}
 	resumerCtx, cancel := r.makeCtx()
-	if err := r.register(*j.ID(), cancel); err != nil {
-		return nil, err
+
+	if r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if _, alreadyRegistered := r.mu.adoptedJobs[*j.ID()]; alreadyRegistered {
+			// TODO(spaskob): think about this invariant, can this ever happen?
+			// Probably not, so we should fail hard in this case.
+			panic("old job!")
+		}
+		s, err := r.sqlInstance.Session(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r.mu.adoptedJobs[*j.ID()] = &adoptedJob{sid: s.ID(), cancel: cancel}
+	} else {
+		// TODO(spaskob): remove in 20.2 as this code path is only needed while
+		// migrating to 20.2 cluster.
+		if err := r.register(*j.ID(), cancel); err != nil {
+			return nil, err
+		}
 	}
+
 	return &StartableJob{
 		Job:        j,
 		txn:        txn,
@@ -482,6 +564,10 @@ const gcInterval = 1 * time.Hour
 func (r *Registry) Start(
 	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
 ) error {
+	if r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+		r.sqlInstance.Start(ctx)
+	}
 	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
 	// liveness epoch before we wait out the first cancelInterval.
 	r.maybeCancelJobs(ctx, r.nl)
@@ -521,6 +607,52 @@ func (r *Registry) Start(
 		}
 	}
 
+	claimAndProcessJobs := func(ctx context.Context) {
+		if r.adoptionDisabled(ctx) {
+			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
+			r.cancelAllAdoptedJobs()
+			return
+		}
+		// TODO(spaskob): the interval should be a tad longer than the adoption cycle.
+		s, err := r.sqlInstance.Session(ctx)
+		if err != nil {
+			log.Errorf(ctx, "error getting live session: %s", err)
+			return
+		}
+		log.Infof(ctx, "Registry live claim (instance_id: %s, sid: %s).\n",
+			r.ID(), s.ID())
+
+		// TODO(spaskob): this is just a hack for now to make all tests pass. In
+		// reality there may be claims whose sessions rows have been deleted by
+		// someone else and we should be able to claim these jobs.
+		now := tree.TimestampToDecimal(r.db.Clock().Now())
+		if _, err := r.ex.QueryRowEx(
+			ctx, "expire-sessions", nil,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser}, `
+WITH deleted_sessions AS (
+	DELETE FROM system.sqlliveness WHERE expiration < $1 RETURNING session_id
+)
+UPDATE system.jobs SET claim_session_id = NULL
+WHERE claim_session_id IN (SELECT * FROM deleted_sessions)`,
+			now,
+		); err != nil {
+			log.Errorf(ctx, "error expiring job sessions: %s", err)
+			return
+		}
+
+		if err := r.claimJobs(ctx, s); err != nil {
+			log.Errorf(ctx, "error claiming jobs: %s", err)
+		}
+
+		if err := r.servePauseAndCancelRequests(ctx, s); err != nil {
+			log.Errorf(ctx, "error processing cancel/pause requests: %s", err)
+		}
+
+		if err := r.processClaimedJobs(ctx, s); err != nil {
+			log.Errorf(ctx, "error processing claimed jobs: %s", err)
+		}
+	}
+
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for {
 			select {
@@ -528,12 +660,27 @@ func (r *Registry) Start(
 				return
 			case <-r.adoptionCh:
 				// Try to adopt the most recently created job.
-				maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
+				if r.settings.Version.IsActive(
+					ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+					claimAndProcessJobs(ctx)
+				} else {
+					// TODO(spaskob): remove in 20.2 as this code path is only needed while
+					// migrating to 20.2 cluster.
+					maybeAdoptJobs(ctx, false /* randomizeJobOrder */)
+				}
 			case <-time.After(adoptInterval):
-				maybeAdoptJobs(ctx, true /* randomizeJobOrder */)
+				if r.settings.Version.IsActive(
+					ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
+					claimAndProcessJobs(ctx)
+				} else {
+					// TODO(spaskob): remove in 20.2 as this code path is only needed while
+					// migrating to 20.2 cluster.
+					maybeAdoptJobs(ctx, true /* randomizeJobOrder */)
+				}
 			}
 		}
 	})
+
 	return nil
 }
 
@@ -542,37 +689,68 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNode
 	select {
 	case <-r.stopper.ShouldQuiesce():
 		r.cancelAll(ctx)
+		log.Warningf(ctx, "canceling all adopted jobs due to stopper quiescing")
+		r.cancelAllAdoptedJobs()
 		return
 	default:
 	}
 
-	nl, ok := nlw.Optional(47892)
-	if !ok {
-		// At most one container is running on behalf of a SQL tenant, so it must be
-		// this one, and there's no point canceling anything.
-		//
-		// TODO(ajwerner): don't rely on this. Instead fix this issue:
-		// https://github.com/cockroachdb/cockroach/issues/47892
-		return
-	}
-	liveness, err := nl.Self()
-	if err != nil {
-		if nodeLivenessLogLimiter.ShouldLog() {
-			log.Warningf(ctx, "unable to get node liveness: %s", err)
-		}
-		// Conservatively assume our lease has expired. Abort all jobs.
-		r.cancelAll(ctx)
-		return
-	}
-
-	// If we haven't persisted a liveness record within the leniency
-	// interval, we'll cancel all of our jobs.
-	if !liveness.IsLive(r.lenientNow()) {
+	if r.settings.Version.IsActive(
+		ctx, clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		// If the cluster is finalized, kill any remaining legacy jobs. They will be
+		// re-adopted with the new epoch based leasing.
 		r.cancelAllLocked(ctx)
-		r.mu.epoch = liveness.Epoch
-		return
+
+		// This gets the current live epoch and pushes forward its expiration. If
+		// another regitry has bumped it, we don;t need to know - as it suffices to
+		// cancel all jobs with lower epoch from than the one returned.
+		s, err := r.sqlInstance.Session(ctx)
+		if err != nil {
+			// We may be failing due to a partition, it odes not make sense to
+			// preemptively kill the jobs because when we egt online again we will
+			// query the new epoch and will cancel jobs with older epochs after that.
+			return
+		}
+		for id, aj := range r.mu.adoptedJobs {
+			if !aj.sid.Equals(s.ID()) {
+				log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
+				aj.cancel()
+				delete(r.mu.adoptedJobs, id)
+			}
+		}
+	} else {
+		// TODO(spaskob): remove in 20.2 as this code path is only needed while
+		// migrating to 20.2 cluster.
+		nl, ok := nlw.Optional(47892)
+		if !ok {
+			// At most one container is running on behalf of a SQL tenant, so it must be
+			// this one, and there's no point canceling anything.
+			//
+			// TODO(ajwerner): don't rely on this. Instead fix this issue:
+			// https://github.com/cockroachdb/cockroach/issues/47892
+			return
+		}
+		liveness, err := nl.Self()
+		if err != nil {
+			if nodeLivenessLogLimiter.ShouldLog() {
+				log.Warningf(ctx, "unable to get node liveness: %s", err)
+			}
+			// Conservatively assume our lease has expired. Abort all jobs.
+			r.cancelAll(ctx)
+			return
+		}
+
+		// If we haven't persisted a liveness record within the leniency
+		// interval, we'll cancel all of our jobs.
+		if !liveness.IsLive(r.lenientNow()) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			r.cancelAllLocked(ctx)
+			r.mu.epoch = liveness.Epoch
+			return
+		}
 	}
 }
 
@@ -1259,6 +1437,15 @@ func (r *Registry) cancelAll(ctx context.Context) {
 	r.cancelAllLocked(ctx)
 }
 
+func (r *Registry) cancelAllAdoptedJobs() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, aj := range r.mu.adoptedJobs {
+		aj.cancel()
+	}
+	r.mu.adoptedJobs = make(map[int64]*adoptedJob)
+}
+
 func (r *Registry) cancelAllLocked(ctx context.Context) {
 	r.mu.AssertHeld()
 	for jobID, cancel := range r.mu.jobs {
@@ -1292,6 +1479,15 @@ func (r *Registry) unregister(jobID int64) {
 	if ok {
 		cancel()
 		delete(r.mu.jobs, jobID)
+		return
+	}
+	aj, ok := r.mu.adoptedJobs[jobID]
+	// It is possible for a job to be double unregistered. unregister is always
+	// called at the end of resume. But it can also be called during cancelAll
+	// and in the adopt loop under certain circumstances.
+	if ok {
+		aj.cancel()
+		delete(r.mu.adoptedJobs, jobID)
 	}
 }
 

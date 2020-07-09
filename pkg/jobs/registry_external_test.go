@@ -72,7 +72,12 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
+		true)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: ver201})
 	defer s.Stopper().Stop(ctx)
 
 	// Disable leniency for instant expiration
