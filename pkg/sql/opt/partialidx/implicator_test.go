@@ -101,7 +101,7 @@ func TestImplicator(t *testing.T) {
 			}
 
 			// Build the predicate from the second split, everything after "=>".
-			pred, err := makeScalarExpr(splitInput[1], &semaCtx, &evalCtx, &f)
+			pred, err := makeFiltersExpr(splitInput[1], &semaCtx, &evalCtx, &f)
 			if err != nil {
 				d.Fatalf(t, "unexpected error while building predicate: %v\n", err)
 			}
@@ -266,7 +266,7 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		// Build the predicate.
-		pred, err := makeScalarExpr(tc.pred, &semaCtx, &evalCtx, &f)
+		pred, err := makeFiltersExpr(tc.pred, &semaCtx, &evalCtx, &f)
 		if err != nil {
 			b.Fatalf("unexpected error while building predicate: %v\n", err)
 		}

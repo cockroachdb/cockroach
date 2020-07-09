@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Implicator is used to 1) prove that query filters imply a partial index
@@ -152,59 +153,92 @@ func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.Eval
 // proven, nil and false are returned. See Implicator for more details on how
 // implication is proven and how the remaining filters are determined.
 func (im *Implicator) FiltersImplyPredicate(
-	filters memo.FiltersExpr, pred opt.ScalarExpr,
+	filters memo.FiltersExpr, pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
-	// Empty filters are equivalent to True, which only implies True.
-	if len(filters) == 0 && pred == memo.TrueSingleton {
-		return filters, true
+	// An empty FiltersExpr is equivalent to True, which is only implied by
+	// True.
+	if len(pred) == 0 {
+		return filters, len(filters) == 0
 	}
 
-	// Next, check for exact matches at the root FiltersExpr. This check is not
+	// Check for exact matches for all FiltersItems in pred. This check is not
 	// necessary for correctness because the recursive approach below handles
 	// all cases. However, this is a faster path for common cases where
 	// expressions in filters are exact matches to the entire predicate.
-	for i := range filters {
-		c := filters[i].Condition
-
-		// If the FiltersItem's condition is an exact match to the predicate,
-		// remove the FilterItem from the remaining filters and return true.
-		if c == pred {
-			return filters.RemoveFiltersItem(&filters[i]), true
-		}
-
-		// If the FiltersItem's condition is a RangeExpr, unbox it and check for
-		// an exact match. RangeExprs are only created in the
-		// ConsolidateSelectFilters normalization rule and only exist as direct
-		// children of a FiltersItem. The predicate will not contain a
-		// RangeExpr, but the predicate may be an exact match to a RangeExpr's
-		// child.
-		if r, ok := c.(*memo.RangeExpr); ok {
-			if r.And == pred {
-				return filters.RemoveFiltersItem(&filters[i]), true
-			}
-		}
+	if remFilters, ok := im.filtersImplyPredicateFastPath(filters, pred); ok {
+		return remFilters, true
 	}
 
 	// Populate the constraint cache with any constraints already generated for
 	// FiltersItems that are atoms.
-	for _, f := range filters {
-		op := f.Condition.Op()
-		if f.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
-			im.cacheConstraint(f.Condition, f.ScalarProps().Constraints, f.ScalarProps().TightConstraints)
-		}
-	}
+	im.warmCache(filters)
+	im.warmCache(pred)
 
 	// If no exact match was found, recursively check the sub-expressions of the
 	// filters and predicate. Use exactMatches to keep track of expressions in
 	// filters that exactly matches expressions in pred, so that the can be
 	// removed from the remaining filters.
 	exactMatches := make(map[opt.Expr]struct{})
-	if im.scalarExprImpliesPredicate(&filters, pred, exactMatches) {
+	if im.scalarExprImpliesPredicate(&filters, &pred, exactMatches) {
 		remainingFilters = im.simplifyFiltersExpr(filters, exactMatches)
 		return remainingFilters, true
 	}
 
 	return nil, false
+}
+
+// filtersImplyPredicateFastPath returns remaining filters and true if every
+// FiltersItem condition in pred exists in filters. This is a faster path for
+// proving implication in common cases where expressions in filters are exact
+// matches to expressions in the predicate.
+//
+// If this function returns false it is NOT proven that the filters do not imply
+// pred. Instead, it indicates that the slower recursive walk of both expression
+// trees is required to prove or disprove implication.
+func (im *Implicator) filtersImplyPredicateFastPath(
+	filters memo.FiltersExpr, pred memo.FiltersExpr,
+) (remainingFilters memo.FiltersExpr, ok bool) {
+	var filtersToRemove util.FastIntSet
+
+	// For every FiltersItem in pred, search for a matching FiltersItem in
+	// filters.
+	for i := range pred {
+		predCondition := pred[i].Condition
+		exactMatchFound := false
+		for j := range filters {
+			filterCondition := filters[j].Condition
+
+			// If there is a match, track the index of the filter so that it can
+			// be removed from the remaining filters and move on to the next
+			// predicate FiltersItem.
+			if predCondition == filterCondition {
+				exactMatchFound = true
+				filtersToRemove.Add(j)
+				break
+			}
+		}
+
+		// If an exact match to the predicate filter was not found in filters,
+		// then implication cannot be proven.
+		if !exactMatchFound {
+			return nil, false
+		}
+	}
+
+	// Return an empty FiltersExpr if all filters are to be removed.
+	if len(filters) == filtersToRemove.Len() {
+		return memo.FiltersExpr{}, true
+	}
+
+	// Build the remaining filters from FiltersItems in filters which did not
+	// have matches in the predicate.
+	remainingFilters = make(memo.FiltersExpr, 0, len(filters)-filtersToRemove.Len())
+	for i := range filters {
+		if !filtersToRemove.Contains(i) {
+			remainingFilters = append(remainingFilters, filters[i])
+		}
+	}
+	return remainingFilters, true
 }
 
 // scalarExprImpliesPredicate returns true if the expression e implies the
@@ -256,6 +290,21 @@ func (im *Implicator) filtersExprImpliesPredicate(
 	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	switch pt := pred.(type) {
+	case *memo.FiltersExpr:
+		// AND-expr A => AND-expr B iff A => each of B's children.
+		for i := range *pt {
+			if !im.filtersExprImpliesPredicate(e, (*pt)[i].Condition, exactMatches) {
+				return false
+			}
+		}
+		return true
+
+	case *memo.RangeExpr:
+		// AND-expr A => AND-expr B iff A => each of B's children.
+		and := pt.And.(*memo.AndExpr)
+		return im.filtersExprImpliesPredicate(e, and.Left, exactMatches) &&
+			im.filtersExprImpliesPredicate(e, and.Right, exactMatches)
+
 	case *memo.AndExpr:
 		// AND-expr A => AND-expr B iff A => each of B's children.
 		return im.filtersExprImpliesPredicate(e, pt.Left, exactMatches) &&
@@ -317,6 +366,21 @@ func (im *Implicator) andExprImpliesPredicate(
 // exactMatches. See FiltersImplyPredicate (rule #3) for more details.
 func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr) bool {
 	switch pt := pred.(type) {
+	case *memo.FiltersExpr:
+		// OR-expr A => AND-expr B iff A => each of B's children.
+		for i := range *pt {
+			if !im.orExprImpliesPredicate(e, (*pt)[i].Condition) {
+				return false
+			}
+		}
+		return true
+
+	case *memo.RangeExpr:
+		// OR-expr A => AND-expr B iff A => each of B's children.
+		and := pt.And.(*memo.AndExpr)
+		return im.orExprImpliesPredicate(e, and.Left) &&
+			im.orExprImpliesPredicate(e, and.Right)
+
 	case *memo.AndExpr:
 		// OR-expr A => AND-expr B iff A => each of B's children.
 		return im.orExprImpliesPredicate(e, pt.Left) &&
@@ -358,11 +422,25 @@ func (im *Implicator) atomImpliesPredicate(
 	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
 ) bool {
 	switch pt := pred.(type) {
+	case *memo.FiltersExpr:
+		// atom A => AND-expr B iff A => each of B's children.
+		for i := range *pt {
+			if !im.atomImpliesPredicate(e, (*pt)[i].Condition, exactMatches) {
+				return false
+			}
+		}
+		return true
+
+	case *memo.RangeExpr:
+		// atom A => AND-expr B iff A => each of B's children.
+		and := pt.And.(*memo.AndExpr)
+		return im.atomImpliesPredicate(e, and.Left, exactMatches) &&
+			im.atomImpliesPredicate(e, and.Right, exactMatches)
+
 	case *memo.AndExpr:
 		// atom A => AND-expr B iff A => each of B's children.
-		leftPredImplied := im.atomImpliesPredicate(e, pt.Left, exactMatches)
-		rightPredImplied := im.atomImpliesPredicate(e, pt.Right, exactMatches)
-		return leftPredImplied && rightPredImplied
+		return im.atomImpliesPredicate(e, pt.Left, exactMatches) &&
+			im.atomImpliesPredicate(e, pt.Right, exactMatches)
 
 	case *memo.OrExpr:
 		// atom A => OR-expr B iff A => any of B's children.
@@ -450,6 +528,18 @@ func (im *Implicator) fetchConstraint(e opt.ScalarExpr) (_ *constraint.Set, tigh
 		return res.c, res.tight, true
 	}
 	return nil, false, false
+}
+
+// warmCache adds top-level atom constraints of filters to the cache. This
+// prevents rebuilding constraints that have already have been built, reducing
+// the overhead of proving implication.
+func (im *Implicator) warmCache(filters memo.FiltersExpr) {
+	for _, f := range filters {
+		op := f.Condition.Op()
+		if f.ScalarProps().Constraints != nil && op != opt.AndOp && op != opt.OrOp && op != opt.RangeOp {
+			im.cacheConstraint(f.Condition, f.ScalarProps().Constraints, f.ScalarProps().TightConstraints)
+		}
+	}
 }
 
 // simplifyFiltersExpr returns a new FiltersExpr with any expressions in e that
