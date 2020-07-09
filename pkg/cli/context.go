@@ -91,6 +91,7 @@ func setServerContextDefaults() {
 
 	serverCfg.KVConfig.GoroutineDumpDirName = ""
 	serverCfg.KVConfig.HeapProfileDirName = ""
+	serverCfg.AutoInitializeCluster = false
 	serverCfg.KVConfig.ReadyFn = nil
 	serverCfg.KVConfig.DelayedBootstrapFn = nil
 	serverCfg.KVConfig.JoinList = nil

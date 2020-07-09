@@ -112,17 +112,17 @@ func argExists(args []string, target string) int {
 
 // Start implements the ClusterImpl.NodeDir interface.
 func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
-	// Check to see if node 1 was started indicating the cluster was
+	// Check to see if node 1 was started, indicating the cluster is to be
 	// bootstrapped.
-	var bootstrapped bool
+	var bootstrap bool
 	for _, i := range c.ServerNodes() {
 		if i == 1 {
-			bootstrapped = true
+			bootstrap = true
 			break
 		}
 	}
 
-	if c.Secure && bootstrapped {
+	if c.Secure && bootstrap {
 		c.DistributeCerts()
 	}
 
@@ -217,7 +217,8 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 				args = append(args, "--locality="+locality)
 			}
 		}
-		if nodes[i] != 1 {
+		// `cockroach start` without `--join` is no longer supported as 20.2.
+		if nodes[i] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
 			args = append(args, fmt.Sprintf("--join=%s:%d", host1, r.NodePort(c, 1)))
 		}
 		if advertisePublicIP {
@@ -271,11 +272,13 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		// unhelpful empty error (since everything has been redirected away). This is
 		// unfortunately equally awkward to address.
 		cmd := "ulimit -c unlimited; mkdir -p " + logDir + "; "
+
 		// TODO(peter): The ps and lslocks stuff is intended to debug why killing
 		// of a cockroach process sometimes doesn't release file locks immediately.
 		cmd += `echo ">>> roachprod start: $(date)" >> ` + logDir + "/roachprod.log; " +
 			`ps axeww -o pid -o command >> ` + logDir + "/roachprod.log; " +
 			`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
+
 		cmd += keyCmd +
 			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[i], c.Tag) +
 			"GOTRACEBACK=crash " +
@@ -297,14 +300,54 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		return nil, nil
 	})
 
-	if bootstrapped {
+	if bootstrap {
+		var initOut string
+		display = fmt.Sprintf("%s: bootstrapping cluster", c.Name)
+		c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
+			vers, err := getCockroachVersion(c, nodes[i])
+			if err != nil {
+				return nil, err
+			}
+			if !vers.AtLeast(version.MustParse("v20.1.0")) {
+				return nil, nil
+			}
+			sess, err := c.newSession(1)
+			if err != nil {
+				return nil, err
+			}
+			defer sess.Close()
+
+			var cmd string
+			if c.IsLocal() {
+				cmd = `cd ${HOME}/local/1 ; `
+			}
+			path := fmt.Sprintf("%s/%s", c.Impl.NodeDir(c, nodes[i]), "cluster-bootstrapped")
+			binary := cockroachNodeBinary(c, 1)
+			url := r.NodeURL(c, "localhost", r.NodePort(c, 1))
+			cmd += fmt.Sprintf(`
+			if ! test -e %s ; then
+				COCKROACH_CONNECT_TIMEOUT=0 %s init --url %s && touch %s
+			fi`, path, binary, url, path)
+
+			out, err := sess.CombinedOutput(cmd)
+			if err != nil {
+				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+			}
+			initOut = strings.TrimSpace(string(out))
+			return nil, nil
+		})
+
+		if initOut != "" {
+			fmt.Println(initOut)
+		}
+
 		license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 		if license == "" {
 			fmt.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
 				c.Name)
 		}
 
-		var msg string
+		var clusterSettingsOut string
 		display = fmt.Sprintf("%s: initializing cluster settings", c.Name)
 		c.Parallel(display, 1, 0, func(i int) ([]byte, error) {
 			sess, err := c.newSession(1)
@@ -333,12 +376,12 @@ fi
 			if err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}
-			msg = strings.TrimSpace(string(out))
+			clusterSettingsOut = strings.TrimSpace(string(out))
 			return nil, nil
 		})
 
-		if msg != "" {
-			fmt.Println(msg)
+		if clusterSettingsOut != "" {
+			fmt.Println(clusterSettingsOut)
 		}
 	}
 }

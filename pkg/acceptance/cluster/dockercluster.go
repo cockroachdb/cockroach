@@ -480,10 +480,12 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		}
 		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
-	// Append --join flag (for all nodes except first in bootstrap-node-zero mode)
-	if node.index > 0 || l.config.InitMode != INIT_BOOTSTRAP_NODE_ZERO {
-		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.DefaultPort))
+	// Append --join flag for all nodes.
+	firstNodeAddr := ""
+	if node.index > 0 {
+		firstNodeAddr = l.Nodes[0].nodeStr
 	}
+	cmd = append(cmd, "--join="+net.JoinHostPort(firstNodeAddr, base.DefaultPort))
 
 	dockerLogDir := "/logs/" + node.nodeStr
 	localLogDir := filepath.Join(l.volumesDir, "logs", node.nodeStr)

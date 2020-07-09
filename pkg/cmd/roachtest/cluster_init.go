@@ -38,42 +38,8 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 		t.Fatal("no address for first node")
 	}
 
-	// Legacy-style init where we start node 1 without a join flag and then point
-	// the other nodes at it.
-	func() {
-		var g errgroup.Group
-		g.Go(func() error {
-			return c.RunE(ctx, c.Node(1),
-				`mkdir -p {log-dir} && `+
-					`./cockroach start --insecure --background --store={store-dir} `+
-					`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
-					`--listen-addr=:{pgport:1} --http-port=$[{pgport:1}+1] `+
-					`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
-		})
-		for i := 2; i <= c.spec.NodeCount; i++ {
-			i := i
-			g.Go(func() error {
-				return c.RunE(ctx, c.Node(i),
-					fmt.Sprintf(
-						`mkdir -p {log-dir} && `+
-							`./cockroach start --insecure --background --store={store-dir} `+
-							`--log-dir={log-dir} --cache=10%% --max-sql-memory=10%% `+
-							`--listen-addr=:{pgport:%[1]d} --http-port=$[{pgport:%[1]d}+1] `+
-							`--join=`+addrs[0]+
-							`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`, i))
-			})
-		}
-		if err := g.Wait(); err != nil {
-			t.Fatal(err)
-		}
-
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-		waitForFullReplication(t, db)
-	}()
-
-	// New-style init where we start all nodes with the same join flags and then
-	// issue an "init" command to one of the nodes.
+	// We start all nodes with the same join flags and then issue an "init"
+	// command to one of the nodes.
 	for _, initNode := range []int{1, 2} {
 		c.Wipe(ctx)
 

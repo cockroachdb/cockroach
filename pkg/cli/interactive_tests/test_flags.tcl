@@ -72,15 +72,6 @@ eexpect {Failed running "cockroach"}
 eexpect ":/# "
 end_test
 
-start_test "Check that start without --join reports a deprecation warning"
-send "$argv start --insecure\r"
-eexpect "running 'cockroach start' without --join is deprecated."
-eexpect "node starting"
-interrupt
-eexpect ":/# "
-end_test
-
-
 start_server $argv
 
 start_test "Check that a client can connect using the URL env var"

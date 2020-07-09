@@ -146,6 +146,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.ClusterName = params.ClusterName
 	cfg.Insecure = params.Insecure
+	cfg.AutoInitializeCluster = !params.WaitForBootstrap
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality

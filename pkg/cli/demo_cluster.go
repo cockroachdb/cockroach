@@ -120,11 +120,15 @@ func setupTransientCluster(
 	for i := 0; i < demoCtx.nodes; i++ {
 		// All the nodes connect to the address of the first server created.
 		var joinAddr string
-		if c.s != nil {
+		if i != 0 {
 			joinAddr = c.s.ServingRPCAddr()
 		}
 		nodeID := roachpb.NodeID(i + 1)
 		args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir)
+		if i == 0 {
+			// The first node also auto-inits the cluster.
+			args.WaitForBootstrap = false
+		}
 
 		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
 		// successfully computed its RPC address.
@@ -143,7 +147,6 @@ func setupTransientCluster(
 		}
 
 		serv := serverFactory.New(args).(*server.TestServer)
-
 		if i == 0 {
 			c.s = serv
 		}
@@ -301,6 +304,7 @@ func testServerArgsForTransientCluster(
 		StoreSpecs:        []base.StoreSpec{storeSpec},
 		SQLMemoryPoolSize: demoCtx.sqlPoolMemorySize,
 		CacheSize:         demoCtx.cacheSize,
+		WaitForBootstrap:  true,
 	}
 
 	if demoCtx.localities != nil {

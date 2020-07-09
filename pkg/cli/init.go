@@ -14,10 +14,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -34,11 +32,7 @@ Perform one-time-only initialization of a CockroachDB cluster.
 
 After starting one or more nodes with --join flags, run the init
 command on one node (passing the same --host and certificate flags
-you would use for the sql command). The target of the init command
-must appear in the --join flags of other nodes.
-
-A node started without the --join flag initializes itself as a
-single-node cluster, so the init command is not used in that case.
+you would use for the sql command).
 `,
 	Args: cobra.NoArgs,
 	RunE: maybeShoutError(MaybeDecorateGRPCError(runInit)),
@@ -59,15 +53,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	c := serverpb.NewInitClient(conn)
 
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
-		if strings.Contains(err.Error(), server.ErrClusterInitialized.Error()) {
-			// We really want to use errors.Is() here but this would require
-			// error serialization support in gRPC.
-			// This is not yet performed in CockroachDB even though
-			// the error library now has infrastructure to do so, see:
-			// https://github.com/cockroachdb/errors/pull/14
-			return errors.WithHint(err,
-				"Please ensure all your start commands are using --join.")
-		}
 		return err
 	}
 

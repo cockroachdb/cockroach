@@ -76,10 +76,6 @@ Specify the --join flag to point to another node or nodes that are
 part of the same cluster. The other nodes do not need to be started
 yet, and if the address of the other nodes to be added are not yet
 known it is legal for the first node to join itself.
-
-If --join is not specified, the cluster will also be initialized.
-THIS BEHAVIOR IS DEPRECATED; consider using 'cockroach init' or
-'cockroach start-single-node' instead.
 `,
 	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 --join=host:port,[host:port]`,
 	Args:    cobra.NoArgs,
@@ -446,9 +442,10 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 	if joinFlag.Changed {
 		return errCannotUseJoin
 	}
-	// Now actually set the flag as changed so that the start code
-	// doesn't warn that it was not set.
-	joinFlag.Changed = true
+
+	// Make the node auto-init the cluster if not done already.
+	serverCfg.AutoInitializeCluster = true
+
 	return runStart(cmd, args, true /*disableReplication*/)
 }
 
@@ -461,9 +458,8 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 //
-// If the argument disableReplication is true and we are starting
-// a fresh cluster, the replication factor will be disabled in
-// all zone configs.
+// If the argument disableReplication is set the replication factor
+// will be set to 1 all zone configs.
 func runStart(cmd *cobra.Command, args []string, disableReplication bool) error {
 	tBegin := timeutil.Now()
 
@@ -536,13 +532,6 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
 	grpcutil.SetSeverity(log.Severity_WARNING)
-
-	// Check the --join flag.
-	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
-		log.Shout(ctx, log.Severity_WARNING,
-			"running 'cockroach start' without --join is deprecated.\n"+
-				"Consider using 'cockroach start-single-node' or 'cockroach init' instead.")
-	}
 
 	// Now perform additional configuration tweaks specific to the start
 	// command.

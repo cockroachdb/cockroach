@@ -44,6 +44,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				DisableTLSForHTTP: true,
 				SQLMemoryPoolSize: 2 << 10,
 				CacheSize:         1 << 10,
+				WaitForBootstrap:  true,
 			},
 		},
 		{
@@ -57,6 +58,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				DisableTLSForHTTP: true,
 				SQLMemoryPoolSize: 4 << 10,
 				CacheSize:         4 << 10,
+				WaitForBootstrap:  true,
 			},
 		},
 	}
