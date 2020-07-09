@@ -199,6 +199,12 @@ func (j *Job) CreatedBy() *CreatedByInfo {
 	return j.createdBy
 }
 
+// taskName is the name for the async task on the registry stopper that will
+// execute this job.
+func (j *Job) taskName() string {
+	return fmt.Sprintf(`job-%d`, *j.ID())
+}
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
 // from the Record field at the time Created is called.
@@ -877,11 +883,16 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 	if err := sj.started(ctx); err != nil {
 		return nil, err
 	}
-	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job, sj.cleanup)
-	if err != nil {
+	ec := make(chan error, 1)
+	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
+		sj.registry.runJob(
+			sj.resumerCtx, sj.resumer, sj.resultsCh, ec, sj.Job, StatusRunning, sj.taskName(), sj.cleanup,
+		)
+	}); err != nil {
+		sj.cleanup()
 		return nil, err
 	}
-	return errCh, nil
+	return ec, nil
 }
 
 // Run will resume the job and wait for it to finish or the context to be
