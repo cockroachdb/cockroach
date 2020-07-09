@@ -307,12 +307,25 @@ func (x RPKeyExpr) String() string {
 // Helper functions for index implementations that use the S2 geometry
 // library.
 
-func covering(rc *s2.RegionCoverer, regions []s2.Region) s2.CellUnion {
+// covererInterface provides a covering for a set of regions.
+type covererInterface interface {
+	covering(regions []s2.Region) s2.CellUnion
+}
+
+// simpleCovererImpl is an implementation of covererInterface that delegates
+// to s2.RegionCoverer.
+type simpleCovererImpl struct {
+	rc *s2.RegionCoverer
+}
+
+var _ covererInterface = simpleCovererImpl{}
+
+func (rc simpleCovererImpl) covering(regions []s2.Region) s2.CellUnion {
 	// TODO(sumeer): Add a max cells constraint for the whole covering,
 	// to respect the index configuration.
 	var u s2.CellUnion
 	for _, r := range regions {
-		u = append(u, rc.Covering(r)...)
+		u = append(u, rc.rc.Covering(r)...)
 	}
 	// Ensure the cells are non-overlapping.
 	u.Normalize()
@@ -440,8 +453,8 @@ func ancestorCells(cells []s2.CellID) []s2.CellID {
 }
 
 // Helper for InvertedIndexKeys.
-func invertedIndexKeys(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) []Key {
-	covering := covering(rc, r)
+func invertedIndexKeys(_ context.Context, rc covererInterface, r []s2.Region) []Key {
+	covering := rc.covering(r)
 	keys := make([]Key, len(covering))
 	for i, cid := range covering {
 		keys[i] = Key(cid)
@@ -454,7 +467,7 @@ func invertedIndexKeys(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) [
 // remove the need for TestingInnerCovering().
 //
 // Helper for Covers.
-func covers(c context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpans {
+func covers(c context.Context, rc covererInterface, r []s2.Region) UnionKeySpans {
 	// We use intersects since geometries covered by r may have been indexed
 	// using cells that are ancestors of the covering of r. We could avoid
 	// reading ancestors if we had a stronger covering invariant, such as by
@@ -464,8 +477,8 @@ func covers(c context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpan
 
 // Helper for Intersects. Returns spans in sorted order for convenience of
 // scans.
-func intersects(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpans {
-	covering := covering(rc, r)
+func intersects(_ context.Context, rc covererInterface, r []s2.Region) UnionKeySpans {
+	covering := rc.covering(r)
 	return intersectsUsingCovering(covering)
 }
 
