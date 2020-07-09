@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 // managerImpl implements the Manager interface.
@@ -261,7 +260,7 @@ func (m *managerImpl) HandleWriterIntentError(
 		intent := &t.Intents[i]
 		added, err := m.lt.AddDiscoveredLock(intent, g.ltg)
 		if err != nil {
-			log.Fatalf(ctx, "%v", errors.HandleAsAssertionFailure(err))
+			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
 			wait = true
@@ -308,14 +307,14 @@ func (m *managerImpl) HandleTransactionPushError(
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
 	if err := m.lt.AcquireLock(&acq.Txn, acq.Key, lock.Exclusive, acq.Durability); err != nil {
-		log.Fatalf(ctx, "%v", errors.HandleAsAssertionFailure(err))
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
 	if err := m.lt.UpdateLocks(up); err != nil {
-		log.Fatalf(ctx, "%v", errors.HandleAsAssertionFailure(err))
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 

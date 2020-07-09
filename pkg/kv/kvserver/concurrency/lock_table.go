@@ -1188,8 +1188,7 @@ func (l *lockState) acquireLock(
 		// Already held.
 		beforeTxn, beforeTs := l.getLockHolder()
 		if txn.ID != beforeTxn.ID {
-			return errors.Errorf("caller violated contract: " +
-				"existing lock cannot be acquired by different transaction")
+			return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 		}
 		seqs := l.holder.holder[durability].seqs
 		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
@@ -1318,8 +1317,7 @@ func (l *lockState) discoveredLock(
 
 	if l.holder.locked {
 		if !l.isLockedBy(txn.ID) {
-			return errors.Errorf("caller violated contract: " +
-				"discovered lock by different transaction than existing lock")
+			return errors.AssertionFailedf("discovered lock by different transaction than existing lock")
 		}
 	} else {
 		l.holder.locked = true
@@ -1355,7 +1353,7 @@ func (l *lockState) discoveredLock(
 		// the first place. Bugs here would cause infinite loops where the same
 		// lock is repeatedly re-discovered.
 		if g.readTS.Less(ts) {
-			return errors.Errorf("caller violated contract: discovered non-conflicting lock")
+			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
 
 	case spanset.SpanReadWrite:
@@ -1888,7 +1886,7 @@ func (t *lockTableImpl) AcquireLock(
 		return nil
 	}
 	if strength != lock.Exclusive {
-		return errors.Errorf("caller violated contract: lock strength not Exclusive")
+		return errors.AssertionFailedf("lock strength not Exclusive")
 	}
 	ss := spanset.SpanGlobal
 	if keys.IsLocal(key) {
@@ -1997,7 +1995,7 @@ func findAccessInSpans(
 			return sa, ss, nil
 		}
 	}
-	return 0, 0, errors.Errorf("caller violated contract: could not find access in spans")
+	return 0, 0, errors.AssertionFailedf("could not find access in spans")
 }
 
 // Tries to GC locks that were previously known to have become empty.
