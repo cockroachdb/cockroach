@@ -140,18 +140,77 @@ func BoundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
 	return bbox
 }
 
-// boundingBoxFromGeomTGeographyType returns an appropriate bounding box for a Geography type.
+// boundingBoxFromGeomTGeographyType returns an appropriate bounding box for a
+// Geography type. There are marginally invalid shapes for which we want
+// bounding boxes that are correct regardless of the validity of the shape,
+// since validity checks may return slightly different results in S2 and the
+// other libraries we use. Therefore, instead of constructing s2.Region(s)
+// from the shape, which will expose us to S2's validity checks, we use the
+// points and lines directly to compute the bounding box.
 func boundingBoxFromGeomTGeographyType(g geom.T) (s2.Rect, error) {
 	if g.Empty() {
 		return s2.EmptyRect(), nil
 	}
-	regions, err := S2RegionsFromGeomT(g, EmptyBehaviorOmit)
-	if err != nil {
-		return s2.EmptyRect(), err
-	}
 	rect := s2.EmptyRect()
-	for _, region := range regions {
-		rect = rect.Union(region.RectBound())
+	switch g := g.(type) {
+	case *geom.Point:
+		return flatBBox(g), nil
+	case *geom.MultiPoint:
+		return flatBBox(g), nil
+	case *geom.LineString:
+		return lineBBox(g, false /* isRing */), nil
+	case *geom.MultiLineString:
+		for i := 0; i < g.NumLineStrings(); i++ {
+			rect = rect.Union(lineBBox(g.LineString(i), false /* isRing */))
+		}
+	case *geom.Polygon:
+		for i := 0; i < g.NumLinearRings(); i++ {
+			rect = rect.Union(lineBBox(g.LinearRing(i), true /* isRing */))
+		}
+	case *geom.MultiPolygon:
+		for i := 0; i < g.NumPolygons(); i++ {
+			polyRect, err := boundingBoxFromGeomTGeographyType(g.Polygon(i))
+			if err != nil {
+				return s2.EmptyRect(), err
+			}
+			rect = rect.Union(polyRect)
+		}
+	case *geom.GeometryCollection:
+		for i := 0; i < g.NumGeoms(); i++ {
+			collRect, err := boundingBoxFromGeomTGeographyType(g.Geom(i))
+			if err != nil {
+				return s2.EmptyRect(), err
+			}
+			rect = rect.Union(collRect)
+		}
+	default:
+		return s2.EmptyRect(), errors.Errorf("unknown type %T", g)
 	}
 	return rect, nil
+}
+
+type flatGeom interface {
+	FlatCoords() []float64
+	Stride() int
+}
+
+func flatBBox(g flatGeom) s2.Rect {
+	rect := s2.EmptyRect()
+	flatCoords := g.FlatCoords()
+	for i := 0; i < len(flatCoords); i += g.Stride() {
+		rect = rect.AddPoint(s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i]))
+	}
+	return rect
+}
+
+func lineBBox(g flatGeom, isRing bool) s2.Rect {
+	bounder := s2.NewRectBounder()
+	flatCoords := g.FlatCoords()
+	for i := 0; i < len(flatCoords); i += g.Stride() {
+		bounder.AddPoint(s2.PointFromLatLng(s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i])))
+	}
+	if isRing && len(flatCoords) > 0 {
+		bounder.AddPoint(s2.PointFromLatLng(s2.LatLngFromDegrees(flatCoords[1], flatCoords[0])))
+	}
+	return bounder.RectBound()
 }
