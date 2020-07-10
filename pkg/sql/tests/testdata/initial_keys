@@ -68,7 +68,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"users"/4/1
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
-28 splits:
+27 splits:
  /Table/11
  /Table/12
  /Table/13
@@ -87,7 +87,6 @@ initial-keys tenant=system
  /Table/26
  /Table/27
  /Table/28
- /Table/29
  /NamespaceTable/30
  /NamespaceTable/Max
  /Table/32

@@ -571,12 +571,6 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.LocationsTableID), keys.LocationsTableID},
 		{tkey(keys.NamespaceTableID), keys.NamespaceTableID},
 
-		// Pseudo-tables should refer to the SystemDatabaseID.
-		{tkey(keys.MetaRangesID), keys.SystemDatabaseID},
-		{tkey(keys.SystemRangesID), keys.SystemDatabaseID},
-		{tkey(keys.TimeseriesRangesID), keys.SystemDatabaseID},
-		{tkey(keys.LivenessRangesID), keys.SystemDatabaseID},
-
 		// User tables should refer to themselves.
 		{tkey(keys.MinUserDescID), keys.MinUserDescID},
 		{tkey(keys.MinUserDescID + 22), keys.MinUserDescID + 22},
