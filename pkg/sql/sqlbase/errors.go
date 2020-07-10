@@ -129,6 +129,13 @@ func NewDatabaseAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateDatabase, "database %q already exists", name)
 }
 
+// WrapErrorWhileConstructingObjectAlreadyExistsErr is used to wrap an error
+// when an error occurs while trying to get the colliding object for an
+// ObjectAlreadyExistsErr.
+func WrapErrorWhileConstructingObjectAlreadyExistsErr(err error) error {
+	return errors.Wrap(err, "object already exists")
+}
+
 // MakeObjectAlreadyExistsError creates an error for a namespace collision
 // with an arbitrary descriptor type.
 func MakeObjectAlreadyExistsError(collidingObject *Descriptor, name string) error {
