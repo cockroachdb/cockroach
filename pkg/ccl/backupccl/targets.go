@@ -705,7 +705,7 @@ func CheckObjectExists(
 		// Find what object we collided with.
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id)
 		if err != nil {
-			return err
+			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
 		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
 	}

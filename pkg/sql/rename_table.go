@@ -170,7 +170,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
-			return err
+			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
 		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
 	} else if err != nil {
