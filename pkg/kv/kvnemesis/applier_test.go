@@ -61,9 +61,9 @@ func TestApplier(t *testing.T) {
 	check(t, step(get(`b`)), `db0.Get(ctx, "b") // ("2", nil)`)
 	check(t, step(scan(`a`, `c`)), `db1.Scan(ctx, "a", "c", 0) // (["a":"1", "b":"2"], nil)`)
 
-	checkErr(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, aborted in distSender: context canceled)`)
-	checkErr(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // aborted in distSender: context canceled`)
-	checkErr(t, step(scanForUpdate(`a`, `c`)), `db0.ScanForUpdate(ctx, "a", "c", 0) // (nil, aborted in distSender: context canceled)`)
+	checkErr(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, aborted during DistSender.Send: context canceled)`)
+	checkErr(t, step(put(`a`, `1`)), `db1.Put(ctx, "a", 1) // aborted during DistSender.Send: context canceled`)
+	checkErr(t, step(scanForUpdate(`a`, `c`)), `db0.ScanForUpdate(ctx, "a", "c", 0) // (nil, aborted during DistSender.Send: context canceled)`)
 
 	// Batch
 	check(t, step(batch(put(`b`, `2`), get(`a`), scan(`a`, `c`))), `
@@ -78,10 +78,10 @@ func TestApplier(t *testing.T) {
 	checkErr(t, step(batch(put(`b`, `2`), get(`a`), scanForUpdate(`a`, `c`))), `
 {
   b := &Batch{}
-  b.Put(ctx, "b", 2) // aborted in distSender: context canceled
-  b.Get(ctx, "a") // (nil, aborted in distSender: context canceled)
-  b.ScanForUpdate(ctx, "a", "c") // (nil, aborted in distSender: context canceled)
-  db0.Run(ctx, b) // aborted in distSender: context canceled
+  b.Put(ctx, "b", 2) // aborted during DistSender.Send: context canceled
+  b.Get(ctx, "a") // (nil, aborted during DistSender.Send: context canceled)
+  b.ScanForUpdate(ctx, "a", "c") // (nil, aborted during DistSender.Send: context canceled)
+  db0.Run(ctx, b) // aborted during DistSender.Send: context canceled
 }
 `)
 
@@ -130,7 +130,7 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 	check(t, step(split(`foo`)), `db1.AdminSplit(ctx, "foo") // nil`)
 	check(t, step(merge(`foo`)), `db0.AdminMerge(ctx, "foo") // nil`)
 	checkErr(t, step(split(`foo`)),
-		`db1.AdminSplit(ctx, "foo") // aborted in distSender: context canceled`)
+		`db1.AdminSplit(ctx, "foo") // aborted during DistSender.Send: context canceled`)
 	checkErr(t, step(merge(`foo`)),
-		`db0.AdminMerge(ctx, "foo") // aborted in distSender: context canceled`)
+		`db0.AdminMerge(ctx, "foo") // aborted during DistSender.Send: context canceled`)
 }
